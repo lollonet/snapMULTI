@@ -11,6 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create dummy .env for validation
+        run: cp .env.example .env
+
       - name: Validate docker-compose syntax
         run: docker compose config > /dev/null
 
