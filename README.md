@@ -8,7 +8,7 @@ Multiroom audio streaming server using Snapcast with MPD as the audio source. Se
 
 - **Snapserver**: Audio streaming server that distributes synchronized audio to multiple clients
 - **MPD**: Music Player Daemon that plays local audio files and outputs to Snapcast via FIFO
-- **Autodiscovery**: Snapcast's proprietary network scanning protocol (Avahi-compiled for compatibility)
+- **Autodiscovery**: mDNS/Bonjour services via Avahi (_snapcast._tcp, _snapcast-http._tcp)
 - **Architecture**: Both services run in Docker containers with host networking (Alpine Linux)
 - **Music Library**: Configured via environment variables (see `.env.example`)
 
@@ -99,43 +99,55 @@ printf 'status\n' | nc localhost 6600 | grep updating_db
 
 ## Autodiscovery
 
-Snapcast uses a **proprietary discovery protocol** that allows clients to automatically find the server on the local network.
+Snapcast uses **mDNS/Bonjour via Avahi** to publish services on the local network, allowing clients to automatically discover the server.
 
 ### How It Works
 
-**Snapcast Discovery Protocol** (not mDNS/Bonjour):
-- **Snapserver** runs on host network mode, listening on ports 1704/1705
-- **Snapclients** automatically discover and connect to servers on the local network
-- **No manual IP configuration needed** - just run `snapclient`
-- Avahi/mDNS support is compiled in but **not required** for discovery
+**mDNS/Bonjour Service Publishing**:
+- **Snapserver** publishes mDNS services via Avahi daemon
+- **Host networking** is required for mDNS broadcast/multicast traffic
+- Services are published as:
+  - `_snapcast._tcp` on port 1704 (audio streaming)
+  - `_snapcast-http._tcp` on port 1780 (JSON-RPC API)
+  - `_snapcast-https._tcp` on port 1780 (JSON-RPC API over SSL, if enabled)
 
-### Architecture Decision: Why Avahi is Included
+**Source**: [Snapcast server code](https://github.com/badaix/snapcast/blob/develop/server/snapserver.cpp)
 
-Snapcast is compiled with Avahi support (`avahi-client` dependency) but:
-- ✅ **Avahi daemon runs** in container for potential mDNS/Bonjour compatibility
-- ✅ **Host networking** allows both Snapcast's protocol and mDNS broadcasts
-- ⚠️ **Primary discovery method**: Snapcast's own network scanning (not mDNS)
+### Architecture: Why Avahi + D-Bus
 
-This hybrid approach ensures maximum compatibility with different client types.
+Snapcast **requires Avahi** for mDNS publishing:
+- ✅ **Avahi daemon**: Publishes mDNS/Bonjour services
+- ✅ **D-Bus**: Required for Avahi to communicate
+- ✅ **Host networking**: Allows mDNS broadcast packets to reach network
+- ✅ **Compiled with avahi-client**: Snapcast links against Avahi libraries
 
-### Verify Autodiscovery
+**Configuration** (controlled by `snapserver.conf`):
+- `mdns_enabled = true` enables mDNS publishing (default: enabled)
+- `tcp-stream.publish = true` publishes streaming service
+- `http.publish_http = true` publishes HTTP control service
+- `http.publish_https = true` publishes HTTPS control service
+
+### Verify mDNS Services
 
 ```bash
+# Check if Avahi is running in container
+docker exec snapserver ps aux | grep avahi
+
 # Check if Snapserver is listening (should show host network)
 docker ps --filter "name=snapserver" --format "{{.Networks}}"
 
 # Check if ports are accessible from network
-ss -tlnp | grep -E "1704|1705"
+ss -tlnp | grep -E "1704|1705|1780"
 
-# Test connection from a client machine
-snapclient --host <server_ip>
-# Client will connect automatically to server
+# Browse mDNS services from host (if avahi-utils installed)
+avahi-browse -r _snapcast._tcp --terminate
 ```
 
 ### Client Connection Methods
 
-**Method 1: Automatic** (recommended - discovers server on local network):
+**Method 1: Automatic mDNS discovery** (recommended):
 ```bash
+# Client discovers server via mDNS/Bonjour
 snapclient
 ```
 
@@ -149,30 +161,47 @@ snapclient --host 192.168.63.3
 snapclient --host 192.168.63.3 --port 1704
 ```
 
-**Note**: Snapcast uses its own protocol for discovery. The `--list` option lists PCM sound devices, not servers.
+**Note**: The `--list` option lists PCM sound devices on the client, not servers on the network.
 
 ### Troubleshooting Autodiscovery
 
 **Clients can't find the server:**
 
-1. **Check network mode:**
+1. **Check if Avahi is running:**
+```bash
+docker exec snapserver ps aux | grep -E "avahi|dbus"
+# Should see avahi-daemon and dbus-daemon
+```
+
+2. **Check network mode:**
 ```bash
 docker inspect snapserver | grep NetworkMode
 # Should output: "NetworkMode": "host"
 ```
 
-2. **Verify ports are listening:**
+3. **Verify ports are listening:**
 ```bash
-ss -tlnp | grep -E "1704|1705"
+ss -tlnp | grep -E "1704|1705|1780"
 # Should see snapserver listening on 0.0.0.0
 ```
 
-3. **Test from client machine:**
+4. **Test mDNS from host:**
+```bash
+# Install avahi-utils if needed
+sudo apt install avahi-utils
+
+# Browse for Snapcast services
+avahi-browse -a | grep snapcast
+# or
+avahi-browse -r _snapcast._tcp --terminate
+```
+
+5. **Test direct connection:**
 ```bash
 # Can you reach the server?
 telnet <server_ip> 1705
 
-# Try to connect
+# Try manual connection
 snapclient --host <server_ip>
 ```
 
@@ -186,12 +215,41 @@ sudo ufw allow 1704/tcp  # Snapcast stream
 sudo ufw allow 1705/tcp  # Snapcast control
 ```
 
-**Firewall blocking discovery:**
+**Firewall blocking mDNS:**
 ```bash
-# Snapcast uses TCP, not UDP like mDNS
-sudo ufw allow 1704/tcp
-sudo ufw allow 1705/tcp
+# Allow mDNS traffic (UDP 5353) for service discovery
+sudo ufw allow 5353/udp
+
+# Allow Snapcast TCP ports
+sudo ufw allow 1704/tcp  # Snapcast stream
+sudo ufw allow 1705/tcp  # Snapcast control
+sudo ufw allow 1780/tcp  # HTTP API
 ```
+
+### Advanced: Configure mDNS
+
+By default, Snapcast publishes all mDNS services. To customize, edit `snapserver.conf`:
+
+```ini
+[server]
+# Enable/disable mDNS publishing
+mdns_enabled = true
+
+[stream]
+# Publish audio streaming service via mDNS
+publish = true
+
+[http]
+# Publish HTTP control service via mDNS
+publish_http = true
+publish_https = false  # Enable if using SSL
+
+[tcp]
+# Publish TCP control service via mDNS
+publish = true
+```
+
+**Note**: Default configuration already enables mDNS for all services. Only modify if you need to disable specific services.
 
 ## Deployment
 
