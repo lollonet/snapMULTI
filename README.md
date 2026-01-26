@@ -8,7 +8,7 @@ Multiroom audio streaming server using Snapcast with MPD as the audio source. Se
 
 - **Snapserver**: Audio streaming server that distributes synchronized audio to multiple clients
 - **MPD**: Music Player Daemon that plays local audio files and outputs to Snapcast via FIFO
-- **Autodiscovery**: mDNS/Bonjour support for automatic client discovery (`snapcast.local`)
+- **Autodiscovery**: Snapcast's proprietary network scanning protocol (Avahi-compiled for compatibility)
 - **Architecture**: Both services run in Docker containers with host networking (Alpine Linux)
 - **Music Library**: Configured via environment variables (see `.env.example`)
 
@@ -99,45 +99,102 @@ printf 'status\n' | nc localhost 6600 | grep updating_db
 
 ## Autodiscovery
 
-Snapcast uses **mDNS/Bonjour** (Avahi) for automatic client discovery on the local network.
+Snapcast uses a **proprietary discovery protocol** that allows clients to automatically find the server on the local network.
 
 ### How It Works
 
-- **Snapserver** advertises itself via mDNS as `snapcast.local`
-- **Snapclients** automatically discover the server without manual IP configuration
-- Uses **host networking** to allow mDNS broadcast traffic
+**Snapcast Discovery Protocol** (not mDNS/Bonjour):
+- **Snapserver** runs on host network mode, listening on ports 1704/1705
+- **Snapclients** scan the local network (subnet) for Snapcast servers
+- **No manual IP configuration needed** when using `--discover` flag
+- Avahi/mDNS support is compiled in but **not required** for discovery
+
+### Architecture Decision: Why Avahi is Included
+
+Snapcast is compiled with Avahi support (`avahi-client` dependency) but:
+- ✅ **Avahi daemon runs** in container for potential mDNS/Bonjour compatibility
+- ✅ **Host networking** allows both Snapcast's protocol and mDNS broadcasts
+- ⚠️ **Primary discovery method**: Snapcast's own network scanning (not mDNS)
+
+This hybrid approach ensures maximum compatibility with different client types.
 
 ### Verify Autodiscovery
 
 ```bash
-# Check if Avahi is running in the container
-docker exec snapserver ps aux | grep avahi
+# Check if Snapserver is listening (should show host network)
+docker ps --filter "name=snapserver" --format "{{.Networks}}"
 
-# Check mDNS advertisements from host
+# Check if ports are accessible from network
+ss -tlnp | grep -E "1704|1705"
+
+# Test from a client machine (run on client, not server)
+snapclient --list
+# This scans for Snapcast servers on the local network
+```
+
+### Client Discovery Methods
+
+**Method 1: Automatic discovery** (recommended):
+```bash
+# Client scans network and connects automatically
+snapclient
+```
+
+**Method 2: Explicit discovery**:
+```bash
+# List all servers on network
+snapclient --list
+
+# Connect to specific server
+snapclient --host <server_ip>
+```
+
+**Method 3: mDNS/Bonjour** (if supported):
+```bash
+# Some clients support Bonjour discovery
 avahi-browse -r _snapcast._tcp --terminate
-
-# Check published services
-docker exec snapserver avahi-browse -a | grep snapcast
 ```
 
 ### Troubleshooting Autodiscovery
 
 **Clients can't find the server:**
+
+1. **Check network mode:**
 ```bash
-# Verify Avahi is running
-docker exec snapserver rc-status | grep avahi
-
-# Check host can see mDNS
-avahi-browse -a | grep snapcast
-
-# Restart Avahi
-docker exec snapserver avahi-daemon -r
+docker inspect snapserver | grep NetworkMode
+# Should output: "NetworkMode": "host"
 ```
 
-**Firewall blocking mDNS:**
+2. **Verify ports are listening:**
 ```bash
-# Allow mDNS traffic (UDP 5353)
-sudo ufw allow 5353/udp
+ss -tlnp | grep -E "1704|1705"
+# Should see snapserver listening on 0.0.0.0
+```
+
+3. **Test from client machine:**
+```bash
+# Can you reach the server?
+telnet <server_ip> 1705
+
+# Scan for servers
+snapclient --list
+```
+
+4. **Check firewall:**
+```bash
+# Ensure Snapcast ports are allowed
+sudo ufw status | grep -E "1704|1705"
+
+# Add rules if needed
+sudo ufw allow 1704/tcp  # Snapcast stream
+sudo ufw allow 1705/tcp  # Snapcast control
+```
+
+**Firewall blocking discovery:**
+```bash
+# Snapcast uses TCP, not UDP like mDNS
+sudo ufw allow 1704/tcp
+sudo ufw allow 1705/tcp
 ```
 
 ## Deployment

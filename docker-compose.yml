@@ -16,7 +16,9 @@ services:
       - TZ=${TZ:-Europe/Berlin}
     command: >
       sh -c "
+        mkdir -p /run/dbus &&
         dbus-daemon --system --fork &&
+        sleep 1 &&
         avahi-daemon -D &&
         snapserver -c /etc/snapserver.conf
       "
