@@ -5,7 +5,10 @@
 config/
 data/
 audio/
+
+# MPD runtime data (but not config)
 mpd/data/
+mpd/playlists/
 
 # MPD database and logs
 mpd/data/mpd.db
