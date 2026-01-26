@@ -105,8 +105,8 @@ Snapcast uses a **proprietary discovery protocol** that allows clients to automa
 
 **Snapcast Discovery Protocol** (not mDNS/Bonjour):
 - **Snapserver** runs on host network mode, listening on ports 1704/1705
-- **Snapclients** scan the local network (subnet) for Snapcast servers
-- **No manual IP configuration needed** when using `--discover` flag
+- **Snapclients** automatically discover and connect to servers on the local network
+- **No manual IP configuration needed** - just run `snapclient`
 - Avahi/mDNS support is compiled in but **not required** for discovery
 
 ### Architecture Decision: Why Avahi is Included
@@ -127,33 +127,29 @@ docker ps --filter "name=snapserver" --format "{{.Networks}}"
 # Check if ports are accessible from network
 ss -tlnp | grep -E "1704|1705"
 
-# Test from a client machine (run on client, not server)
-snapclient --list
-# This scans for Snapcast servers on the local network
+# Test connection from a client machine
+snapclient --host <server_ip>
+# Client will connect automatically to server
 ```
 
-### Client Discovery Methods
+### Client Connection Methods
 
-**Method 1: Automatic discovery** (recommended):
+**Method 1: Automatic** (recommended - discovers server on local network):
 ```bash
-# Client scans network and connects automatically
 snapclient
 ```
 
-**Method 2: Explicit discovery**:
+**Method 2: Manual IP**:
 ```bash
-# List all servers on network
-snapclient --list
-
-# Connect to specific server
-snapclient --host <server_ip>
+snapclient --host 192.168.63.3
 ```
 
-**Method 3: mDNS/Bonjour** (if supported):
+**Method 3: Custom port**:
 ```bash
-# Some clients support Bonjour discovery
-avahi-browse -r _snapcast._tcp --terminate
+snapclient --host 192.168.63.3 --port 1704
 ```
+
+**Note**: Snapcast uses its own protocol for discovery. The `--list` option lists PCM sound devices, not servers.
 
 ### Troubleshooting Autodiscovery
 
@@ -176,8 +172,8 @@ ss -tlnp | grep -E "1704|1705"
 # Can you reach the server?
 telnet <server_ip> 1705
 
-# Scan for servers
-snapclient --list
+# Try to connect
+snapclient --host <server_ip>
 ```
 
 4. **Check firewall:**
@@ -328,18 +324,29 @@ docker run -d --name snapclient \
 
 ### Starting Snapclient
 
-**With autodiscovery** (recommended - no IP needed):
+**Automatic connection** (discovers server on local network):
 ```bash
-# Automatically finds snapcast.local
 snapclient
-
-# Or specify discovery method explicitly
-snapclient --discover
 ```
 
-**Manual IP configuration** (if autodiscovery fails):
+**Manual IP configuration**:
 ```bash
 snapclient --host 192.168.63.3
+```
+
+**Specify custom port**:
+```bash
+snapclient --host 192.168.63.3 --port 1704
+```
+
+**List available sound cards**:
+```bash
+snapclient --list
+```
+
+**Run as daemon**:
+```bash
+snapclient --host 192.168.63.3 --daemon
 ```
 
 ### Using Browser as Client
