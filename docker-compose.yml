@@ -8,22 +8,18 @@ services:
     hostname: snapcast
     restart: unless-stopped
     network_mode: host
+    security_opt:
+      - apparmor:unconfined
+    user: "1000:1000"
     volumes:
       - ./snapserver.conf:/etc/snapserver.conf:ro
       - ./config:/config
       - ./data:/data
       - ./audio:/audio
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
-    command: >
-      sh -c "
-        mkdir -p /run/dbus &&
-        rm -f /run/dbus/pid /run/dbus/dbus.pid &&
-        dbus-daemon --system --fork &&
-        sleep 1 &&
-        avahi-daemon -D &&
-        snapserver -c /etc/snapserver.conf
-      "
+    command: ["snapserver", "-c", "/etc/snapserver.conf"]
 
   mpd:
     build:
