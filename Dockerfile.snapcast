@@ -1,0 +1,50 @@
+FROM alpine:latest
+
+# Install build dependencies
+RUN apk add --no-cache \
+    alsa-lib-dev \
+    avahi-dev \
+    boost-dev \
+    build-base \
+    cmake \
+    expat-dev \
+    flac-dev \
+    git \
+    libvorbis-dev \
+    nlohmann-json \
+    openssl-dev \
+    opus-dev \
+    soxr-dev
+
+# Build and install Snapcast
+WORKDIR /build
+RUN git clone https://github.com/badaix/snapcast.git . && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr .. && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && \
+    rm -rf /build
+
+# Install runtime dependencies only
+RUN apk add --no-cache \
+    alsa-lib \
+    libvorbis \
+    flac \
+    opus \
+    soxr \
+    avahi-libs \
+    nlohmann-json \
+    boost-program_options
+
+# Create directories
+RUN mkdir -p /var/lib/snapserver /config /data /audio
+
+# Copy default config
+COPY snapserver.conf /etc/snapserver.conf
+
+# Expose ports
+EXPOSE 1704 1705 1780
+
+# Run snapserver
+CMD ["snapserver", "-c", "/etc/snapserver.conf"]

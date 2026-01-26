@@ -1,0 +1,29 @@
+# Environment variables
+.env
+
+# Snapcast runtime data
+config/
+data/
+audio/
+mpd/data/
+
+# MPD database and logs
+mpd/data/mpd.db
+mpd/data/mpd.log
+mpd/data/mpd.state
+mpd/data/sticker.sql
+
+# Docker volumes
+*.log
+
+# Editor files
+.*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude session files
+.claude/

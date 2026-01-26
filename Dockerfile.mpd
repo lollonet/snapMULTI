@@ -1,0 +1,19 @@
+FROM alpine:latest
+
+# Install MPD and ffmpeg for codec support
+RUN apk add --no-cache \
+    mpd \
+    ffmpeg \
+    ffmpeg-libavcodec
+
+# Create directories
+RUN mkdir -p /music /playlists /data /audio
+
+# Copy MPD configuration
+COPY mpd/config/mpd.conf /etc/mpd.conf
+
+# Expose ports
+EXPOSE 6600 8000
+
+# Run MPD in foreground (no daemon mode)
+CMD ["mpd", "--no-daemon", "/etc/mpd.conf"]

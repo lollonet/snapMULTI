@@ -1,0 +1,25 @@
+name: Test Docker Builds
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [snapcast, mpd]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ${{ matrix.service }}
+        run: |
+          docker build -f Dockerfile.${{ matrix.service }} \
+            --tag test-${{ matrix.service }}:latest .
+
+      - name: Test container
+        run: |
+          docker run --rm test-${{ matrix.service }}:latest \
+            sh -c "which snapserver || which mpd"

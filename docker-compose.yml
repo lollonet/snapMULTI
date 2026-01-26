@@ -1,0 +1,41 @@
+services:
+  snapcast:
+    build:
+      context: .
+      dockerfile: Dockerfile.snapcast
+    image: snapcast:latest
+    container_name: snapserver
+    hostname: snapcast
+    restart: unless-stopped
+    ports:
+      - "1704:1704"  # TCP - Snapserver protocol
+      - "1705:1705"  # HTTP - JSON-RPC API
+      - "1780:1780"  # HTTP - Snapweb management interface
+    volumes:
+      - ./config:/config
+      - ./data:/data
+      - ./audio:/audio
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+
+  mpd:
+    build:
+      context: .
+      dockerfile: Dockerfile.mpd
+    image: mpd:latest
+    container_name: mpd
+    restart: unless-stopped
+    ports:
+      - "6600:6600"  # MPD protocol
+      - "8000:8000"  # HTTP audio stream (optional)
+    volumes:
+      - ./audio:/audio
+      - ${MUSIC_LOSSLESS_PATH}:/music/Lossless:ro
+      - ${MUSIC_LOSSY_PATH}:/music/Lossy:ro
+      - ./mpd/config:/etc/mpd.d
+      - ./mpd/playlists:/playlists
+      - ./mpd/data:/data
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+    depends_on:
+      - snapcast
