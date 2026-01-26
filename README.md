@@ -226,6 +226,31 @@ sudo ufw allow 1705/tcp  # Snapcast control
 sudo ufw allow 1780/tcp  # HTTP API
 ```
 
+### Known Issues
+
+**⚠️ mDNS services not visible on network** (2026-01-27):
+- Status: Avahi daemon running, Snapcast compiled with support, configuration enabled
+- Problem: No `_snapcast._tcp` services visible via `avahi-browse`
+- Investigation: Snapcast binary has `PublishAvahi` symbols, but no publication logs appear
+- **Workaround**: Use manual IP connection: `snapclient --host <server_ip>`
+- Possible causes:
+  - Snapcast mDNS publishing not triggered despite `mdns_enabled = true`
+  - Host networking may require additional multicast configuration
+  - Avahi Docker integration issue
+
+**Verification steps:**
+```bash
+# Avahi is running and listening
+docker exec snapserver ps aux | grep avahi
+docker exec snapserver netstat -an | grep 5353
+
+# Snapcast has mDNS support
+docker exec snapserver ldd /usr/bin/snapserver | grep avahi
+
+# But services not published
+avahi-browse -r _snapcast._tcp --terminate  # No results
+```
+
 ### Advanced: Configure mDNS
 
 By default, Snapcast publishes all mDNS services. To customize, edit `snapserver.conf`:
