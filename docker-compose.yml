@@ -9,6 +9,7 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
+      - ./snapserver.conf:/etc/snapserver.conf:ro
       - ./config:/config
       - ./data:/data
       - ./audio:/audio
@@ -17,6 +18,7 @@ services:
     command: >
       sh -c "
         mkdir -p /run/dbus &&
+        rm -f /run/dbus/pid /run/dbus/dbus.pid &&
         dbus-daemon --system --fork &&
         sleep 1 &&
         avahi-daemon -D &&
