@@ -33,7 +33,9 @@ RUN apk add --no-cache \
     flac \
     opus \
     soxr \
+    avahi \
     avahi-libs \
+    dbus \
     nlohmann-json \
     boost-program_options
 

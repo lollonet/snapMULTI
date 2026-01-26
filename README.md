@@ -1,6 +1,6 @@
 # Snapcast + MPD Multiroom Audio Server
 
-[![CI/CD](https://github.com/YOUR_USERNAME/snapcast/actions/workflows/deploy.yml/badge.svg)](https://github.com/YOUR_USERNAME/snapcast/actions/workflows/deploy.yml)
+[![CI/CD](https://github.com/lollonet/snapcast/actions/workflows/deploy.yml/badge.svg)](https://github.com/lollonet/snapcast/actions/workflows/deploy.yml)
 
 Multiroom audio streaming server using Snapcast with MPD as the audio source. Serves synchronized audio to up to 5 clients on the local network.
 
@@ -8,7 +8,8 @@ Multiroom audio streaming server using Snapcast with MPD as the audio source. Se
 
 - **Snapserver**: Audio streaming server that distributes synchronized audio to multiple clients
 - **MPD**: Music Player Daemon that plays local audio files and outputs to Snapcast via FIFO
-- **Architecture**: Both services run in Docker containers built from source (Alpine Linux)
+- **Autodiscovery**: mDNS/Bonjour support for automatic client discovery (`snapcast.local`)
+- **Architecture**: Both services run in Docker containers with host networking (Alpine Linux)
 - **Music Library**: Configured via environment variables (see `.env.example`)
 
 ## Architecture
@@ -94,6 +95,49 @@ printf 'update\n' | nc localhost 6600
 
 # Check update progress
 printf 'status\n' | nc localhost 6600 | grep updating_db
+```
+
+## Autodiscovery
+
+Snapcast uses **mDNS/Bonjour** (Avahi) for automatic client discovery on the local network.
+
+### How It Works
+
+- **Snapserver** advertises itself via mDNS as `snapcast.local`
+- **Snapclients** automatically discover the server without manual IP configuration
+- Uses **host networking** to allow mDNS broadcast traffic
+
+### Verify Autodiscovery
+
+```bash
+# Check if Avahi is running in the container
+docker exec snapserver ps aux | grep avahi
+
+# Check mDNS advertisements from host
+avahi-browse -r _snapcast._tcp --terminate
+
+# Check published services
+docker exec snapserver avahi-browse -a | grep snapcast
+```
+
+### Troubleshooting Autodiscovery
+
+**Clients can't find the server:**
+```bash
+# Verify Avahi is running
+docker exec snapserver rc-status | grep avahi
+
+# Check host can see mDNS
+avahi-browse -a | grep snapcast
+
+# Restart Avahi
+docker exec snapserver avahi-daemon -r
+```
+
+**Firewall blocking mDNS:**
+```bash
+# Allow mDNS traffic (UDP 5353)
+sudo ufw allow 5353/udp
 ```
 
 ## Deployment
@@ -211,21 +255,34 @@ Snapclient devices connect to the Snapserver to receive synchronized audio.
 **On Debian/Ubuntu**:
 ```bash
 sudo apt install snapclient
-snapclient --host 192.168.63.3
 ```
 
 **On Arch Linux**:
 ```bash
 sudo pacman -S snapcast
-snapclient --host 192.168.63.3
 ```
 
 **Using Docker**:
 ```bash
 docker run -d --name snapclient \
   --device /dev/snd \
-  sweisgerber/snapcast:latest \
-  snapclient --host 192.168.63.3
+  sweisgerber/snapcast:latest
+```
+
+### Starting Snapclient
+
+**With autodiscovery** (recommended - no IP needed):
+```bash
+# Automatically finds snapcast.local
+snapclient
+
+# Or specify discovery method explicitly
+snapclient --discover
+```
+
+**Manual IP configuration** (if autodiscovery fails):
+```bash
+snapclient --host 192.168.63.3
 ```
 
 ### Using Browser as Client

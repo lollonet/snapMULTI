@@ -14,6 +14,12 @@ services:
       - ./audio:/audio
     environment:
       - TZ=${TZ:-Europe/Berlin}
+    command: >
+      sh -c "
+        dbus-daemon --system --fork &&
+        avahi-daemon -D &&
+        snapserver -c /etc/snapserver.conf
+      "
 
   mpd:
     build:
