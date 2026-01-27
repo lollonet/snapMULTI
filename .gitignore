@@ -2,7 +2,6 @@
 .env
 
 # Snapcast runtime data
-config/
 data/
 audio/
 
@@ -30,3 +29,6 @@ Thumbs.db
 
 # Claude session files
 .claude/
+
+# Backup files
+.backups/
