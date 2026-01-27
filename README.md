@@ -23,7 +23,7 @@ Multiroom audio streaming server using Snapcast with MPD as the audio source. Se
          ▼
 ┌─────────────────┐     ┌──────────────┐
 │  Docker: MPD    │────▶│ /audio/fifo  │
-│  (localhost:6600)│     └──────┬───────┘
+│ (localhost:6600)│     └──────┬───────┘
 └─────────────────┘            │
                                ▼
                      ┌──────────────────┐
