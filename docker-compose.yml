@@ -12,7 +12,7 @@ services:
       - apparmor:unconfined
     user: "1000:1000"
     volumes:
-      - ./snapserver.conf:/etc/snapserver.conf:ro
+      - ./config/snapserver.conf:/etc/snapserver.conf:ro
       - ./config:/config
       - ./data:/data
       - ./audio:/audio
@@ -33,7 +33,7 @@ services:
       - ./audio:/audio
       - ${MUSIC_LOSSLESS_PATH}:/music/Lossless:ro
       - ${MUSIC_LOSSY_PATH}:/music/Lossy:ro
-      - ./mpd/config:/etc/mpd.d
+      - ./config/mpd.conf:/etc/mpd.d/mpd.conf:ro
       - ./mpd/playlists:/playlists
       - ./mpd/data:/data
     environment:
