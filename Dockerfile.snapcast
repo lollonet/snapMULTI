@@ -37,7 +37,8 @@ RUN apk add --no-cache \
     avahi-libs \
     dbus \
     nlohmann-json \
-    boost-program_options
+    boost-program_options \
+    shairport-sync
 
 # Create directories
 RUN mkdir -p /var/lib/snapserver /config /data /audio

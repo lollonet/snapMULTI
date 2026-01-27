@@ -7,10 +7,212 @@ Multiroom audio streaming server using Snapcast with MPD as the audio source. Se
 ## Overview
 
 - **Snapserver**: Audio streaming server that distributes synchronized audio to multiple clients
+- **Multi-source support**: Three audio sources available - MPD, TCP input, and AirPlay
 - **MPD**: Music Player Daemon that plays local audio files and outputs to Snapcast via FIFO
-- **Autodiscovery**: mDNS/Bonjour services via Avahi (_snapcast._tcp, _snapcast-http._tcp)
+- **AirPlay**: Apple's proprietary wireless audio streaming protocol (via shairport-sync)
+- **TCP input**: Stream audio from any application via TCP port 4953
+- **Autodiscovery**: mDNS/Bonjour services via Avahi (_snapcast._tcp, _snapcast-http._tcp, _raop._tcp)
 - **Architecture**: Both services run in Docker containers with host networking (Alpine Linux)
 - **Music Library**: Configured via environment variables (see `.env.example`)
+
+## Multi-Source Audio Support
+
+Snapcast is configured with **three audio sources** that clients can choose from:
+
+| Source | Description | Stream ID | Use Case |
+|--------|-------------|-----------|----------|
+| **MPD** | Local music library | `MPD` | Default - plays your local music collection |
+| **TCP** | Network audio input | `TCP-Input` | Stream from any app via TCP (port 4953) |
+| **AirPlay** | Apple devices | `AirPlay` | Stream from iPhone/iPad/Mac via AirPlay |
+
+### Source Details
+
+#### 1. MPD (Default - Local Music Library)
+
+**Plays your local music collection** controlled via MPD.
+
+**Control MPD using:**
+```bash
+# Command line
+mpc play                    # Start playback
+mpc add "Artist/Album"      # Add album to queue
+mpc volume 50               # Set volume
+
+# Desktop clients
+cantata                    # Qt-based client (recommended)
+ncmpcpp                    # Terminal-based client
+
+# Mobile apps
+MPDroid (Android)          # Free, open-source
+MPD Remote (iOS)           # Paid, full-featured
+```
+
+**Connect to MPD:** `192.168.63.3:6600`
+
+#### 2. TCP Input (Stream from Any App)
+
+**Any application can stream audio** to port 4953.
+
+**Example usage:**
+```bash
+# Stream internet radio
+ffmpeg -i http://stream.example.com/radio \
+  -f s16le -ar 48000 -ac 2 \
+  tcp://192.168.63.3:4953
+
+# Stream from file
+ffmpeg -i music.mp3 \
+  -f s16le -ar 48000 -ac 2 \
+  tcp://192.168.63.3:4953
+
+# Stream from URL
+ffmpeg -re -i http://example.com/stream.mp3 \
+  -f s16le -ar 48000 -ac 2 \
+  tcp://192.168.63.3:4953
+```
+
+**Audio format required:**
+- Sample rate: 48000 Hz
+- Bit depth: 16 bit
+- Channels: 2 (stereo)
+- Format: Raw PCM (s16le)
+
+#### 3. AirPlay (Apple Devices)
+
+**Stream from iPhone, iPad, or Mac** using AirPlay.
+
+**Connect from iOS:**
+1. Open **Control Center** on iPhone/iPad
+2. Tap **AirPlay** icon
+3. Select **"Snapcast"** from the list
+4. Play music from Apple Music, Spotify, YouTube, etc.
+
+**Verify AirPlay is visible:**
+```bash
+avahi-browse -r _raop._tcp --terminate
+```
+
+Should show "Snapcast" as an available AirPlay receiver.
+
+### How Stream Selection Works
+
+**By default**, all clients play from the **MPD** source.
+
+**To switch sources**, use the Snapcast JSON-RPC API:
+
+```bash
+# Get available streams
+curl -s http://192.168.63.3:1780/jsonrpc \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"jsonrpc":"2.0","method":"Server.GetStatus"}' \
+  | jq '.result.streams'
+
+# Switch a group to a different stream
+curl -s http://192.168.63.3:1780/jsonrpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id":1,
+    "jsonrpc":"2.0",
+    "method":"Group.SetStream",
+    "params":{
+      "id":"<GROUP_ID>",
+      "stream_id":"TCP-Input"
+    }
+  }'
+```
+
+**Stream IDs:** `MPD`, `TCP-Input`, `AirPlay`
+
+### Troubleshooting
+
+#### AirPlay not visible on iOS
+```bash
+# Verify shairport-sync is installed
+docker exec snapserver which shairport-sync
+
+# Check if shairport-sync is running
+docker exec snapserver ps aux | grep shairport
+
+# Verify mDNS service is published
+avahi-browse -r _raop._tcp --terminate
+```
+
+#### TCP stream not receiving audio
+```bash
+# Check if port 4953 is listening
+ss -tlnp | grep 4953
+
+# Test with example stream
+ffmpeg -f lavfi -i anullsrc=r=48000:cl=stereo \
+  -f s16le -ar 48000 -ac 2 \
+  tcp://localhost:4953
+```
+
+#### MPD not playing
+```bash
+# Check MPD status
+mpc status
+
+# Update MPD database
+printf 'update\n' | nc localhost 6600
+
+# Check FIFO pipe exists
+ls -la /audio/snapcast_fifo
+```
+
+### Configuration
+
+All three sources are configured in `snapserver.conf`:
+
+```ini
+[stream]
+# Source 1: MPD (local music library)
+source = pipe:////audio/snapcast_fifo?name=MPD
+
+# Source 2: TCP input (any app)
+source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
+
+# Source 3: AirPlay (Apple devices)
+source = airplay:///usr/bin/shairport-sync?name=AirPlay&devicename=Snapcast
+
+# Common settings
+sampleformat = 48000:16:2
+codec = flac
+buffer = 1000
+```
+
+To add more sources, simply add additional `source =` lines to the `[stream]` section.
+
+**AirPlay service not visible on iOS:**
+```bash
+# Verify shairport-sync is installed
+docker exec snapserver which shairport-sync
+
+# Check if Snapserver launched shairport-sync
+docker logs snapserver | grep -i airplay
+
+# Verify mDNS service is published
+avahi-browse -r _raop._tcp --terminate
+```
+
+**No audio from AirPlay:**
+- Verify snapserver.conf has AirPlay source configured (not MPD)
+- Check `docker logs snapserver` for "AirPlay" state changes
+- Ensure iPhone volume is up and not muted
+- Verify music is actually playing on iPhone (play button, timer moving)
+
+**Configuration error after editing:**
+```bash
+# Check syntax
+docker compose config
+
+# View logs
+docker logs snapserver | tail -50
+
+# Revert to backup if needed
+cp snapserver.conf.backup snapserver.conf
+docker compose restart snapcast
+```
 
 ## Architecture
 
@@ -99,249 +301,69 @@ printf 'status\n' | nc localhost 6600 | grep updating_db
 
 ## Autodiscovery
 
-Snapcast uses **mDNS/Bonjour via Avahi** to publish services on the local network, allowing clients to automatically discover the server.
+Snapcast uses **mDNS/Bonjour via Avahi** for automatic client discovery on the local network.
 
-### How It Works
+### Critical Requirements
 
-**mDNS/Bonjour Service Publishing**:
-- **Snapserver** publishes mDNS services via Avahi daemon
-- **Host networking** is required for mDNS broadcast/multicast traffic
-- Services are published as:
-  - `_snapcast._tcp` on port 1704 (audio streaming)
-  - `_snapcast-http._tcp` on port 1780 (JSON-RPC API)
-  - `_snapcast-https._tcp` on port 1780 (JSON-RPC API over SSL, if enabled)
+Snapcast requires these docker-compose settings for mDNS:
 
-**Source**: [Snapcast server code](https://github.com/badaix/snapcast/blob/develop/server/snapserver.cpp)
-
-### Architecture: Why Avahi + D-Bus
-
-Snapcast **requires Avahi** for mDNS publishing:
-- ✅ **Host's Avahi daemon**: Publishes mDNS/Bonjour services (NOT container's Avahi)
-- ✅ **D-Bus socket**: Container connects to host's Avahi via mounted socket
-- ✅ **Host networking**: Required for mDNS broadcast packets to reach network
-- ✅ **AppArmor disabled**: Critical for D-Bus socket access from container
-- ✅ **Non-root user**: UID 1000 for D-Bus policy compliance
-- ✅ **Compiled with avahi-client**: Snapcast links against Avahi libraries
-
-**Critical docker-compose requirements**:
 ```yaml
-network_mode: host                    # Required for mDNS
+network_mode: host                    # Required for mDNS broadcasts
 security_opt:
   - apparmor:unconfined               # CRITICAL: allows D-Bus socket access
-user: "1000:1000"                     # Required for D-Bus
+user: "1000:1000"                     # Required for D-Bus policy
 volumes:
   - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket  # Host's Avahi
 ```
 
-**⚠️ IMPORTANT**: Do NOT run `avahi-daemon` inside container! It will conflict with host's Avahi on port 5353.
+**⚠️ Do NOT run `avahi-daemon` inside container** - it will conflict with host's Avahi on port 5353.
 
-**Configuration** (in `snapserver.conf`):
-- `mdns_enabled = true` enables mDNS publishing
-- `tcp-streaming.publish = true` publishes streaming service
-- `http.publish_http = true` publishes HTTP control service
-- `http.publish_https = true` publishes HTTPS control service
-
-### Verify mDNS Services
+### Verification
 
 ```bash
-# Check if Avahi is running in container
-docker exec snapserver ps aux | grep avahi
-
-# Check if Snapserver is listening (should show host network)
-docker ps --filter "name=snapserver" --format "{{.Networks}}"
-
-# Check if ports are accessible from network
-ss -tlnp | grep -E "1704|1705|1780"
-
-# Browse mDNS services from host (if avahi-utils installed)
+# Check if Snapserver is publishing mDNS services
 avahi-browse -r _snapcast._tcp --terminate
+
+# Check container network mode
+docker inspect snapserver | grep NetworkMode  # Should be "host"
+
+# Check D-Bus socket access
+docker exec snapserver ls -la /run/dbus/system_bus_socket
+
+# Verify ports listening
+ss -tlnp | grep -E "1704|1705|1780"
 ```
 
-### Client Connection Methods
+### Client Connection
 
-**Method 1: Automatic mDNS discovery** (recommended):
+**Automatic discovery** (recommended):
 ```bash
-# Client discovers server via mDNS/Bonjour
 snapclient
 ```
 
-**Method 2: Manual IP**:
+**Manual connection**:
 ```bash
 snapclient --host 192.168.63.3
-```
-
-**Method 3: Custom port**:
-```bash
 snapclient --host 192.168.63.3 --port 1704
 ```
 
-**Note**: The `--list` option lists PCM sound devices on the client, not servers on the network.
+### Troubleshooting
 
-### Troubleshooting Autodiscovery
+**No mDNS services visible:**
+1. Verify docker-compose has all critical requirements above
+2. Check logs: `docker logs snapserver | grep -i "avahi"`
+3. Test direct connection: `snapclient --host <server_ip>`
+4. Allow firewall ports: `sudo ufw allow 1704/tcp 1705/tcp 1780/tcp 5353/udp`
 
-**Clients can't find the server:**
+**Common errors:**
+- `"Failed to create client: Access denied"` → Missing `security_opt: [apparmor:unconfined]`
+- `"Avahi already running"` → Remove `avahi-daemon` from container command
+- No services found → Check `network_mode: host` is set
 
-1. **Check if Avahi is running:**
-```bash
-docker exec snapserver ps aux | grep -E "avahi|dbus"
-# Should see avahi-daemon and dbus-daemon
-```
+### Resources
 
-2. **Check network mode:**
-```bash
-docker inspect snapserver | grep NetworkMode
-# Should output: "NetworkMode": "host"
-```
-
-3. **Verify ports are listening:**
-```bash
-ss -tlnp | grep -E "1704|1705|1780"
-# Should see snapserver listening on 0.0.0.0
-```
-
-4. **Test mDNS from host:**
-```bash
-# Install avahi-utils if needed
-sudo apt install avahi-utils
-
-# Browse for Snapcast services
-avahi-browse -a | grep snapcast
-# or
-avahi-browse -r _snapcast._tcp --terminate
-```
-
-5. **Test direct connection:**
-```bash
-# Can you reach the server?
-telnet <server_ip> 1705
-
-# Try manual connection
-snapclient --host <server_ip>
-```
-
-4. **Check firewall:**
-```bash
-# Ensure Snapcast ports are allowed
-sudo ufw status | grep -E "1704|1705"
-
-# Add rules if needed
-sudo ufw allow 1704/tcp  # Snapcast stream
-sudo ufw allow 1705/tcp  # Snapcast control
-```
-
-**Firewall blocking mDNS:**
-```bash
-# Allow mDNS traffic (UDP 5353) for service discovery
-sudo ufw allow 5353/udp
-
-# Allow Snapcast TCP ports
-sudo ufw allow 1704/tcp  # Snapcast stream
-sudo ufw allow 1705/tcp  # Snapcast control
-sudo ufw allow 1780/tcp  # HTTP API
-```
-
-### Common Issues and Solutions
-
-**Container fails to start - "Avahi already running":**
-
-**Cause**: Two Avahi daemons trying to bind to port 5353 (mDNS):
-- Host's Avahi: `avahi 3534603` → `raspy.local`
-- Container's Avahi: tries to start → CONFLICT
-
-**Solution**: Do NOT run `avahi-daemon` inside container. Use host's Avahi via D-Bus socket:
-```yaml
-# CORRECT - use host's Avahi
-volumes:
-  - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
-
-# WRONG - creates conflict
-command: ["avahi-daemon", "-D"]
-```
-
-**Error: "Failed to create client: Access denied":**
-
-**Cause**: AppArmor blocks container from accessing host's D-Bus socket.
-
-**Solution**: Add `security_opt: [apparmor:unconfined]` to docker-compose.yml:
-```yaml
-security_opt:
-  - apparmor:unconfined
-```
-
-**No mDNS services visible despite configuration:**
-
-**Check 1 - Snapcast logs**:
-```bash
-docker logs snapserver | grep "Avahi.*service"
-# Should see: "Adding service 'Snapcast'"
-```
-
-**Check 2 - Avahi connection**:
-```bash
-docker logs snapserver | grep -i "avahi.*error\|fail"
-# Should be NO errors
-```
-
-**Check 3 - D-Bus socket access**:
-```bash
-docker exec snapserver ls -la /run/dbus/system_bus_socket
-# Should be accessible (no "No such device" error)
-```
-
-### Additional Resources
-
-**Snapcast Documentation:**
+- [Snapcast mDNS Setup](https://github.com/badaix/snapcast/wiki/Client-server-communication)
 - [Server Configuration](https://github.com/badaix/snapcast/blob/develop/server/snapserver.conf)
-- [mDNS/Bonjour Setup](https://github.com/badaix/snapcast/wiki/Client-server-communication)
-
-**Docker Networking:**
-- [Host Networking](https://docs.docker.com/network/host/)
-- [Avahi in Docker](https://docs.docker.com/network/network-tutorial/#host-driver)
-
-**mDNS Verification:**
-```bash
-# Browse all services
-avahi-browse -a
-
-# Browse specific service
-avahi-browse -r _snapcast._tcp
-
-# Check host's Avahi
-systemctl status avahi-daemon
-```
-
-### Advanced: Configure mDNS
-
-By default, Snapcast publishes all mDNS services. To customize, edit `snapserver.conf`:
-
-```ini
-[server]
-# Enable/disable mDNS publishing
-mdns_enabled = true
-
-[tcp-streaming]
-enabled = true
-# Publish audio streaming service via mDNS
-publish = true
-
-[stream]
-# Source configuration (still required, defines the actual stream)
-source = pipe:////audio/snapcast_fifo?name=MPD
-# Note: Uses 4 slashes (////) for pipe path, not 3 (///)
-
-[http]
-# Publish HTTP control service via mDNS
-publish_http = true
-publish_https = false  # Enable if using SSL
-
-[tcp-control]
-# Publish TCP control service via mDNS
-publish = true
-```
-
-**⚠️ Important**: Keep both `[tcp-streaming]` (new) and `[stream]` (legacy) sections. Snapcast reads both.
-
-**Note**: Default configuration already enables mDNS for all services. Only modify if you need to disable specific services.
 
 ## Deployment
 
@@ -510,7 +532,7 @@ http://192.168.63.3:8000
 
 ### docker-compose.yml
 
-Defines both services and their configuration:
+Defines both services with host networking for mDNS:
 
 ```yaml
 services:
@@ -518,192 +540,38 @@ services:
     build:
       dockerfile: Dockerfile.snapcast
     image: snapcast:latest
-    ports:
-      - "1704:1704"
-      - "1705:1705"
-      - "1780:1780"
+    container_name: snapserver
+    hostname: snapcast
+    restart: unless-stopped
+    network_mode: host
+    security_opt:
+      - apparmor:unconfined
+    user: "1000:1000"
     volumes:
+      - ./snapserver.conf:/etc/snapserver.conf:ro
       - ./config:/config
       - ./data:/data
       - ./audio:/audio
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+    command: ["snapserver", "-c", "/etc/snapserver.conf"]
 
   mpd:
     build:
       dockerfile: Dockerfile.mpd
     image: mpd:latest
-    ports:
-      - "6600:6600"
-      - "8000:8000"
+    container_name: mpd
+    restart: unless-stopped
+    network_mode: host
     volumes:
       - ./audio:/audio
-      - /data8T/music/Lossless:/music/Lossless:ro
-      - /data8T/music/Lossy:/music/Lossy:ro
+      - ${MUSIC_LOSSLESS_PATH}:/music/Lossless:ro
+      - ${MUSIC_LOSSY_PATH}:/music/Lossy:ro
       - ./mpd/config:/etc/mpd.d
       - ./mpd/playlists:/playlists
       - ./mpd/data:/data
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
 ```
-
 ### snapserver.conf
-
-Key settings:
-```ini
-[stream]
-source = pipe:////audio/snapcast_fifo?name=MPD
-sampleformat = 48000:16:2
-codec = flac
-buffer = 1000
-max_clients = 5
-```
-
-### mpd.conf
-
-Key settings:
-```ini
-music_directory         "/music"
-audio_output {
-        type            "fifo"
-        name            "Snapcast"
-        path            "/audio/snapcast_fifo"
-        format          "48000:16:2"
-}
-```
-
-## Troubleshooting
-
-### Snapserver
-
-**No audio streaming**:
-```bash
-# Check if FIFO exists and has data
-ls -l audio/snapcast_fifo
-
-# Check Snapserver logs
-docker logs snapserver | tail -50
-
-# Verify MPD is writing to FIFO
-docker exec mpd lsof /audio/snapcast_fifo
-```
-
-**Clients can't connect**:
-```bash
-# Check if ports are listening
-ss -tlnp | grep -E "1704|1705|1780"
-
-# Test from client machine
-telnet 192.168.63.3 1704
-```
-
-### MPD
-
-**Database not updating**:
-```bash
-# Check log for errors
-docker exec mpd tail -100 /data/mpd.log | grep -i error
-
-# Verify music directories are mounted
-docker exec mpd ls -la /music
-
-# Force database update
-printf 'update\n' | nc localhost 6600
-```
-
-**No audio output**:
-```bash
-# Check if FIFO is being written to
-docker exec mpd ls -l /audio/snapcast_fifo
-
-# Check MPD status
-printf 'status\n' | nc localhost 6600
-
-# Check for errors in log
-docker logs mpd | tail -50
-```
-
-### Container Issues
-
-**Container won't start**:
-```bash
-# Check container logs
-docker logs snapserver
-docker logs mpd
-
-# Rebuild images
-docker compose build --no-cache
-
-# Check resource usage
-docker stats
-```
-
-## Performance
-
-### Resource Usage
-
-- **Snapserver**: ~50MB RAM, minimal CPU when idle
-- **MPD**: ~100MB RAM, low CPU during playback
-- **Bandwidth**: ~1-2 Mbps per client (FLAC codec)
-
-### Scaling
-
-- **Max clients**: Configured for 5 (can increase in `snapserver.conf`)
-- **Codec**: FLAC provides good quality/bandwidth balance
-- **Alternatives**: Use PCM for max quality, Opus for lower bandwidth
-
-## Development
-
-### Rebuild Images
-
-```bash
-# Rebuild Snapcast
-docker compose build --no-cache snapcast
-
-# Rebuild MPD
-docker compose build --no-cache mpd
-
-# Rebuild both
-docker compose build --no-cache
-```
-
-### Update Snapcast Version
-
-Edit `Dockerfile.snapcast`, change git clone command to specify tag/branch, then rebuild:
-
-```dockerfile
-RUN git clone --branch v0.35.0 https://github.com/badaix/snapcast.git . && \
-```
-
-## Network Access
-
-- **Server IP**: `192.168.63.3` (adjust as needed)
-- **Snapserver**: Ports 1704 (stream), 1705 (control), 1780 (web)
-- **MPD**: Ports 6600 (control), 8000 (stream)
-
-### Firewall Configuration
-
-If using UFW:
-```bash
-sudo ufw allow 1704/tcp  # Snapcast stream
-sudo ufw allow 1705/tcp  # Snapcast control
-sudo ufw allow 6600/tcp  # MPD
-sudo ufw allow 8000/tcp  # MPD stream
-```
-
-## TODO
-
-- [ ] Install and configure Cantata client
-- [ ] Complete MPD database update (70k songs)
-- [ ] Optionally install Snapweb UI files
-- [ ] Configure auto-start on boot
-- [ ] Set up backup for MPD database and playlists
-- [ ] Document client setup for various devices
-
-## License
-
-This setup uses:
-- **Snapcast**: GPLv3 (https://github.com/badaix/snapcast)
-- **MPD**: GPL (https://www.musicpd.org/)
-
-## References
-
-- [Snapcast Documentation](https://github.com/badaix/snapcast)
-- [MPD Documentation](https://www.musicpd.org/doc/html/)
-- [Docker Snapcast Images](https://github.com/sweisgerber/docker-snapcast)
