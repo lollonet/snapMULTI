@@ -116,14 +116,28 @@ Snapcast uses **mDNS/Bonjour via Avahi** to publish services on the local networ
 ### Architecture: Why Avahi + D-Bus
 
 Snapcast **requires Avahi** for mDNS publishing:
-- ✅ **Avahi daemon**: Publishes mDNS/Bonjour services
-- ✅ **D-Bus**: Required for Avahi to communicate
-- ✅ **Host networking**: Allows mDNS broadcast packets to reach network
+- ✅ **Host's Avahi daemon**: Publishes mDNS/Bonjour services (NOT container's Avahi)
+- ✅ **D-Bus socket**: Container connects to host's Avahi via mounted socket
+- ✅ **Host networking**: Required for mDNS broadcast packets to reach network
+- ✅ **AppArmor disabled**: Critical for D-Bus socket access from container
+- ✅ **Non-root user**: UID 1000 for D-Bus policy compliance
 - ✅ **Compiled with avahi-client**: Snapcast links against Avahi libraries
 
-**Configuration** (controlled by `snapserver.conf`):
-- `mdns_enabled = true` enables mDNS publishing (default: enabled)
-- `tcp-stream.publish = true` publishes streaming service
+**Critical docker-compose requirements**:
+```yaml
+network_mode: host                    # Required for mDNS
+security_opt:
+  - apparmor:unconfined               # CRITICAL: allows D-Bus socket access
+user: "1000:1000"                     # Required for D-Bus
+volumes:
+  - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket  # Host's Avahi
+```
+
+**⚠️ IMPORTANT**: Do NOT run `avahi-daemon` inside container! It will conflict with host's Avahi on port 5353.
+
+**Configuration** (in `snapserver.conf`):
+- `mdns_enabled = true` enables mDNS publishing
+- `tcp-streaming.publish = true` publishes streaming service
 - `http.publish_http = true` publishes HTTP control service
 - `http.publish_https = true` publishes HTTPS control service
 
@@ -226,29 +240,74 @@ sudo ufw allow 1705/tcp  # Snapcast control
 sudo ufw allow 1780/tcp  # HTTP API
 ```
 
-### Known Issues
+### Common Issues and Solutions
 
-**⚠️ mDNS services not visible on network** (2026-01-27):
-- Status: Avahi daemon running, Snapcast compiled with support, configuration enabled
-- Problem: No `_snapcast._tcp` services visible via `avahi-browse`
-- Investigation: Snapcast binary has `PublishAvahi` symbols, but no publication logs appear
-- **Workaround**: Use manual IP connection: `snapclient --host <server_ip>`
-- Possible causes:
-  - Snapcast mDNS publishing not triggered despite `mdns_enabled = true`
-  - Host networking may require additional multicast configuration
-  - Avahi Docker integration issue
+**Container fails to start - "Avahi already running":**
 
-**Verification steps:**
+**Cause**: Two Avahi daemons trying to bind to port 5353 (mDNS):
+- Host's Avahi: `avahi 3534603` → `raspy.local`
+- Container's Avahi: tries to start → CONFLICT
+
+**Solution**: Do NOT run `avahi-daemon` inside container. Use host's Avahi via D-Bus socket:
+```yaml
+# CORRECT - use host's Avahi
+volumes:
+  - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+
+# WRONG - creates conflict
+command: ["avahi-daemon", "-D"]
+```
+
+**Error: "Failed to create client: Access denied":**
+
+**Cause**: AppArmor blocks container from accessing host's D-Bus socket.
+
+**Solution**: Add `security_opt: [apparmor:unconfined]` to docker-compose.yml:
+```yaml
+security_opt:
+  - apparmor:unconfined
+```
+
+**No mDNS services visible despite configuration:**
+
+**Check 1 - Snapcast logs**:
 ```bash
-# Avahi is running and listening
-docker exec snapserver ps aux | grep avahi
-docker exec snapserver netstat -an | grep 5353
+docker logs snapserver | grep "Avahi.*service"
+# Should see: "Adding service 'Snapcast'"
+```
 
-# Snapcast has mDNS support
-docker exec snapserver ldd /usr/bin/snapserver | grep avahi
+**Check 2 - Avahi connection**:
+```bash
+docker logs snapserver | grep -i "avahi.*error\|fail"
+# Should be NO errors
+```
 
-# But services not published
-avahi-browse -r _snapcast._tcp --terminate  # No results
+**Check 3 - D-Bus socket access**:
+```bash
+docker exec snapserver ls -la /run/dbus/system_bus_socket
+# Should be accessible (no "No such device" error)
+```
+
+### Additional Resources
+
+**Snapcast Documentation:**
+- [Server Configuration](https://github.com/badaix/snapcast/blob/develop/server/snapserver.conf)
+- [mDNS/Bonjour Setup](https://github.com/badaix/snapcast/wiki/Client-server-communication)
+
+**Docker Networking:**
+- [Host Networking](https://docs.docker.com/network/host/)
+- [Avahi in Docker](https://docs.docker.com/network/network-tutorial/#host-driver)
+
+**mDNS Verification:**
+```bash
+# Browse all services
+avahi-browse -a
+
+# Browse specific service
+avahi-browse -r _snapcast._tcp
+
+# Check host's Avahi
+systemctl status avahi-daemon
 ```
 
 ### Advanced: Configure mDNS
@@ -260,19 +319,27 @@ By default, Snapcast publishes all mDNS services. To customize, edit `snapserver
 # Enable/disable mDNS publishing
 mdns_enabled = true
 
-[stream]
+[tcp-streaming]
+enabled = true
 # Publish audio streaming service via mDNS
 publish = true
+
+[stream]
+# Source configuration (still required, defines the actual stream)
+source = pipe:////audio/snapcast_fifo?name=MPD
+# Note: Uses 4 slashes (////) for pipe path, not 3 (///)
 
 [http]
 # Publish HTTP control service via mDNS
 publish_http = true
 publish_https = false  # Enable if using SSL
 
-[tcp]
+[tcp-control]
 # Publish TCP control service via mDNS
 publish = true
 ```
+
+**⚠️ Important**: Keep both `[tcp-streaming]` (new) and `[stream]` (legacy) sections. Snapcast reads both.
 
 **Note**: Default configuration already enables mDNS for all services. Only modify if you need to disable specific services.
 
