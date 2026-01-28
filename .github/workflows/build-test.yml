@@ -16,10 +16,10 @@ jobs:
 
       - name: Build ${{ matrix.service }}
         run: |
-          docker build -f Dockerfile.${{ matrix.service }} \
-            --tag test-${{ matrix.service }}:latest .
+          TAG=$(echo "test-${{ matrix.service }}" | tr '[:upper:]' '[:lower:]')
+          docker build -f Dockerfile.${{ matrix.service }} --tag ${TAG}:latest .
 
       - name: Test container
         run: |
-          docker run --rm test-${{ matrix.service }}:latest \
-            sh -c "which snapserver || which mpd"
+          TAG=$(echo "test-${{ matrix.service }}" | tr '[:upper:]' '[:lower:]')
+          docker run --rm ${TAG}:latest sh -c "which snapserver || which mpd"
