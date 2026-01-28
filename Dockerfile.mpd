@@ -10,7 +10,7 @@ RUN apk add --no-cache \
 RUN mkdir -p /music /playlists /data /audio
 
 # Copy MPD configuration
-COPY mpd/config/mpd.conf /etc/mpd.conf
+COPY config/mpd.conf /etc/mpd.conf
 
 # Expose ports
 EXPOSE 6600 8000

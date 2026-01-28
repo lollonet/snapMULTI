@@ -4,7 +4,7 @@
 [![SnapForge](https://img.shields.io/badge/part%20of-SnapForge-blue)](https://github.com/lollonet/snapforge)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Multiroom audio streaming server using Snapcast with MPD as the audio source. Serves synchronized audio to up to 5 clients on the local network.
+Multiroom audio streaming server using Snapcast with MPD as the audio source. Serves synchronized audio to multiple clients on the local network.
 
 ## Overview
 
@@ -249,7 +249,8 @@ docker compose restart snapMULTI
 
 - Docker and Docker Compose installed
 - Host directories with music files
-- Ports available: 1704, 1705, 1780, 6600, 8000
+- Ports available: 1704, 1705, 1780, 4953, 6600, 8000
+- Supported platforms: linux/amd64, linux/arm64 (Raspberry Pi 4+)
 
 ### Configuration
 
@@ -266,11 +267,10 @@ MUSIC_LOSSY_PATH=/path/to/your/music/Lossy
 
 # Server configuration
 SERVER_IP=your-server-ip
-MAX_CLIENTS=5
 TZ=Your/Timezone
 ```
 
-3. (Optional) Adjust `max_clients` in `snapserver.conf` if needed
+3. (Optional) Adjust `max_clients` in `config/snapserver.conf` to limit connections (default: unlimited)
 
 ### Start Services
 

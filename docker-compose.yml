@@ -33,7 +33,7 @@ services:
       - ./audio:/audio
       - ${MUSIC_LOSSLESS_PATH}:/music/Lossless:ro
       - ${MUSIC_LOSSY_PATH}:/music/Lossy:ro
-      - ./config/mpd.conf:/etc/mpd.d/mpd.conf:ro
+      - ./config/mpd.conf:/etc/mpd.conf:ro
       - ./mpd/playlists:/playlists
       - ./mpd/data:/data
     environment:
