@@ -1,9 +1,6 @@
 services:
   snapmulti:
-    build:
-      context: .
-      dockerfile: Dockerfile.snapMULTI
-    image: snapmulti:latest
+    image: ghcr.io/lollonet/snapmulti:latest
     container_name: snapserver
     hostname: snapmulti
     restart: unless-stopped
@@ -22,10 +19,7 @@ services:
     command: ["snapserver", "-c", "/etc/snapserver.conf"]
 
   mpd:
-    build:
-      context: .
-      dockerfile: Dockerfile.mpd
-    image: mpd:latest
+    image: ghcr.io/lollonet/snapmulti-mpd:latest
     container_name: mpd
     restart: unless-stopped
     network_mode: host

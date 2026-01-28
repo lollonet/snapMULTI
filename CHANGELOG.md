@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Configuration reorganization** — Moved config files into `config/` directory — Jan 27
 - **Host networking** — Switched to `network_mode: host` for mDNS broadcast support — Jan 26
 - **Self-hosted CI runner** — All workflows now run on custom `snapcast-runner` instead of GitHub-hosted runners — Jan 28
+- **Container registry** ([#3](https://github.com/lollonet/snapMULTI/issues/3)) — Multi-arch images (amd64 + arm64) built in CI and pushed to ghcr.io; deploy pulls pre-built images instead of building on server — Jan 28
 
 ### Fixed
 - **Deploy workflow** — Target only app services (`snapmulti`, `mpd`), build images locally instead of pulling, proper error handling with `set -euo pipefail` — Jan 28

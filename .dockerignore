@@ -1,0 +1,9 @@
+.git
+.github
+*.md
+LICENSE
+.env*
+mpd/data
+mpd/playlists
+data
+audio

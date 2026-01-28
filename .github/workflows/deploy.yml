@@ -13,10 +13,13 @@ jobs:
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.0
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
           key: ${{ secrets.SSH_KEY }}
+          envs: GHCR_TOKEN
           script: |
             set -euo pipefail
 
@@ -31,12 +34,14 @@ jobs:
             NEW_COMMIT=$(git rev-parse HEAD)
             echo "New commit: $NEW_COMMIT"
 
-            echo "Stopping app containers..."
-            docker compose stop snapmulti mpd 2>/dev/null || true
-            docker compose rm -f snapmulti mpd 2>/dev/null || true
+            echo "Logging in to ghcr.io..."
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u lollonet --password-stdin || { echo "ERROR: ghcr.io login failed"; exit 1; }
 
-            echo "Building and starting app containers..."
-            docker compose up -d --build snapmulti mpd || { echo "ERROR: docker compose up failed"; exit 1; }
+            echo "Pulling latest images..."
+            docker compose pull snapmulti mpd || { echo "ERROR: docker compose pull failed"; exit 1; }
+
+            echo "Restarting app containers..."
+            docker compose up -d snapmulti mpd || { echo "ERROR: docker compose up failed"; exit 1; }
 
             echo "Verifying deployment..."
             sleep 5
