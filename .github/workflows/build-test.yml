@@ -14,12 +14,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set image tag
+        id: vars
+        run: echo "TAG=$(echo 'test-${{ matrix.service }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Build ${{ matrix.service }}
         run: |
-          TAG=$(echo "test-${{ matrix.service }}" | tr '[:upper:]' '[:lower:]')
-          docker build -f Dockerfile.${{ matrix.service }} --tag ${TAG}:latest .
+          echo "Building image: ${{ steps.vars.outputs.TAG }}:latest"
+          docker build -f Dockerfile.${{ matrix.service }} \
+            --tag ${{ steps.vars.outputs.TAG }}:latest . || {
+            echo "ERROR: Docker build failed for ${{ matrix.service }}"
+            exit 1
+          }
 
       - name: Test container
         run: |
-          TAG=$(echo "test-${{ matrix.service }}" | tr '[:upper:]' '[:lower:]')
-          docker run --rm ${TAG}:latest sh -c "which snapserver || which mpd"
+          echo "Testing container: ${{ steps.vars.outputs.TAG }}:latest"
+          docker run --rm ${{ steps.vars.outputs.TAG }}:latest sh -c "which snapserver || which mpd" || {
+            echo "ERROR: Container test failed for ${{ matrix.service }}"
+            exit 1
+          }
+          echo "✓ Container test passed"

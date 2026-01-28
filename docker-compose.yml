@@ -1,16 +1,16 @@
 services:
-  snapMULTI:
+  snapmulti:
     build:
       context: .
       dockerfile: Dockerfile.snapMULTI
-    image: snapMULTI:latest
+    image: snapmulti:latest
     container_name: snapserver
-    hostname: snapMULTI
+    hostname: snapmulti
     restart: unless-stopped
     network_mode: host
     security_opt:
       - apparmor:unconfined
-    user: "1000:1000"
+    user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./config/snapserver.conf:/etc/snapserver.conf:ro
       - ./config:/config

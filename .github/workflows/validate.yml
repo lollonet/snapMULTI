@@ -12,17 +12,27 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Create dummy .env for validation
-        run: cp .env.example .env
-
-      - name: Validate docker-compose syntax
-        run: docker compose config > /dev/null
-
-      - name: Check environment template
         run: |
           if [ ! -f .env.example ]; then
             echo "ERROR: .env.example missing"
             exit 1
           fi
+          cp .env.example .env
+          echo "✓ Created .env from .env.example"
+
+      - name: Validate docker-compose syntax
+        run: |
+          echo "Validating docker-compose configuration..."
+          if ! docker compose config > /dev/null 2>&1; then
+            echo "ERROR: docker-compose configuration invalid"
+            docker compose config
+            exit 1
+          fi
+          echo "✓ docker-compose configuration valid"
+
+      - name: Check environment template
+        run: |
           source .env.example
           : ${MUSIC_LOSSLESS_PATH:?Missing MUSIC_LOSSLESS_PATH}
           : ${MUSIC_LOSSY_PATH:?Missing MUSIC_LOSSY_PATH}
+          echo "✓ Required environment variables defined"

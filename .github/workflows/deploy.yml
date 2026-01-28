@@ -18,8 +18,24 @@ jobs:
           username: ${{ secrets.USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            cd /home/claudio/Code/snapMULTI
-            git pull
-            docker compose pull
-            docker compose up -d
-            docker ps
+            set -euo pipefail
+
+            cd /home/claudio/Code/snapMULTI || { echo "ERROR: Directory not found"; exit 1; }
+
+            CURRENT_COMMIT=$(git rev-parse HEAD)
+            echo "Current commit: $CURRENT_COMMIT"
+
+            echo "Pulling latest changes..."
+            git pull || { echo "ERROR: git pull failed"; exit 1; }
+
+            echo "Pulling container images..."
+            docker compose pull || { echo "ERROR: docker compose pull failed"; exit 1; }
+
+            echo "Starting containers..."
+            docker compose up -d || { echo "ERROR: docker compose up failed"; exit 1; }
+
+            echo "Verifying deployment..."
+            sleep 5
+            docker ps --format "table {{.Names}}\t{{.Status}}"
+
+            echo "✓ Deployment complete"

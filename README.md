@@ -213,7 +213,7 @@ docker logs snapserver | tail -50
 
 # Revert to backup if needed
 cp snapserver.conf.backup snapserver.conf
-docker compose restart snapMULTI
+docker compose restart snapmulti
 ```
 
 ## Architecture
@@ -538,12 +538,12 @@ Defines both services with host networking for mDNS:
 
 ```yaml
 services:
-  snapMULTI:
+  snapmulti:
     build:
       dockerfile: Dockerfile.snapMULTI
-    image: snapMULTI:latest
+    image: snapmulti:latest
     container_name: snapserver
-    hostname: snapMULTI
+    hostname: snapmulti
     restart: unless-stopped
     network_mode: host
     security_opt:
