@@ -34,6 +34,9 @@ jobs:
             echo "Restoring local changes..."
             git stash pop --quiet || true
 
+            echo "Stopping existing containers..."
+            docker compose down --remove-orphans || true
+
             echo "Building and starting containers..."
             docker compose up -d --build || { echo "ERROR: docker compose up failed"; exit 1; }
 
