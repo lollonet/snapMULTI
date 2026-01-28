@@ -44,7 +44,7 @@ RUN apk add --no-cache \
 RUN mkdir -p /var/lib/snapserver /config /data /audio
 
 # Copy default config
-COPY snapserver.conf /etc/snapserver.conf
+COPY config/snapserver.conf /etc/snapserver.conf
 
 # Expose ports
 EXPOSE 1704 1705 1780
