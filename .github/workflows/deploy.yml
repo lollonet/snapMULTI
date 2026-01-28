@@ -25,23 +25,21 @@ jobs:
             CURRENT_COMMIT=$(git rev-parse HEAD)
             echo "Current commit: $CURRENT_COMMIT"
 
-            echo "Stashing local changes..."
-            git stash --quiet || true
-
             echo "Pulling latest changes..."
             git pull || { echo "ERROR: git pull failed"; exit 1; }
 
-            echo "Restoring local changes..."
-            git stash pop --quiet || true
+            NEW_COMMIT=$(git rev-parse HEAD)
+            echo "New commit: $NEW_COMMIT"
 
-            echo "Stopping existing containers..."
-            docker compose down --remove-orphans || true
+            echo "Stopping app containers..."
+            docker compose stop snapmulti mpd 2>/dev/null || true
+            docker compose rm -f snapmulti mpd 2>/dev/null || true
 
-            echo "Building and starting containers..."
-            docker compose up -d --build || { echo "ERROR: docker compose up failed"; exit 1; }
+            echo "Building and starting app containers..."
+            docker compose up -d --build snapmulti mpd || { echo "ERROR: docker compose up failed"; exit 1; }
 
             echo "Verifying deployment..."
             sleep 5
             docker ps --format "table {{.Names}}\t{{.Status}}"
 
-            echo "✓ Deployment complete"
+            echo "✓ Deployment complete ($CURRENT_COMMIT → $NEW_COMMIT)"
