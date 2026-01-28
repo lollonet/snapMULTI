@@ -1,0 +1,51 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill out the information below.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear description of the bug
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this issue?
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Please provide your environment details
+      placeholder: |
+        - OS: [e.g., Raspberry Pi OS 64-bit]
+        - Hardware: [e.g., Pi 4 4GB + HiFiBerry DAC+]
+        - Version: [e.g., v1.0.0]
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: Please paste any relevant log output
+      render: shell
