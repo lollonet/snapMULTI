@@ -2,8 +2,16 @@ name: Deploy to Home Server
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
+  workflow_call:
+    secrets:
+      HOST:
+        required: true
+      USER:
+        required: true
+      SSH_KEY:
+        required: true
+      GHCR_TOKEN:
+        required: true
 
 jobs:
   deploy:

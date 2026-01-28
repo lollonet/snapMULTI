@@ -86,3 +86,12 @@ jobs:
           docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-mpd:latest \
             $REGISTRY/lollonet/snapmulti-mpd:amd64 \
             $REGISTRY/lollonet/snapmulti-mpd:arm64
+
+  deploy:
+    needs: manifest
+    uses: ./.github/workflows/deploy.yml
+    secrets:
+      HOST: ${{ secrets.HOST }}
+      USER: ${{ secrets.USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
