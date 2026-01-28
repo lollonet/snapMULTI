@@ -34,11 +34,8 @@ jobs:
             echo "Restoring local changes..."
             git stash pop --quiet || true
 
-            echo "Pulling container images..."
-            docker compose pull || { echo "ERROR: docker compose pull failed"; exit 1; }
-
-            echo "Starting containers..."
-            docker compose up -d || { echo "ERROR: docker compose up failed"; exit 1; }
+            echo "Building and starting containers..."
+            docker compose up -d --build || { echo "ERROR: docker compose up failed"; exit 1; }
 
             echo "Verifying deployment..."
             sleep 5
