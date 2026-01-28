@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [snapcast, mpd]
+        service: [snapMULTI, mpd]
     steps:
       - uses: actions/checkout@v4
 

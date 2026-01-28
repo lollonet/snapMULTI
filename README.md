@@ -1,6 +1,8 @@
-# Snapcast + MPD Multiroom Audio Server
+# snapMULTI - Multiroom Audio Server
 
-[![CI/CD](https://github.com/lollonet/snapcast/actions/workflows/deploy.yml/badge.svg)](https://github.com/lollonet/snapcast/actions/workflows/deploy.yml)
+[![CI/CD](https://github.com/lollonet/snapMULTI/actions/workflows/deploy.yml/badge.svg)](https://github.com/lollonet/snapMULTI/actions/workflows/deploy.yml)
+[![SnapForge](https://img.shields.io/badge/part%20of-SnapForge-blue)](https://github.com/lollonet/snapforge)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Multiroom audio streaming server using Snapcast with MPD as the audio source. Serves synchronized audio to up to 5 clients on the local network.
 
@@ -84,7 +86,7 @@ ffmpeg -re -i http://example.com/stream.mp3 \
 **Connect from iOS:**
 1. Open **Control Center** on iPhone/iPad
 2. Tap **AirPlay** icon
-3. Select **"Snapcast"** from the list
+3. Select **"snapMULTI"** from the list
 4. Play music from Apple Music, Spotify, YouTube, etc.
 
 **Verify AirPlay is visible:**
@@ -92,7 +94,7 @@ ffmpeg -re -i http://example.com/stream.mp3 \
 avahi-browse -r _raop._tcp --terminate
 ```
 
-Should show "Snapcast" as an available AirPlay receiver.
+Should show "snapMULTI" as an available AirPlay receiver.
 
 ### How Stream Selection Works
 
@@ -173,7 +175,7 @@ source = pipe:////audio/snapcast_fifo?name=MPD
 source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
 
 # Source 3: AirPlay (Apple devices)
-source = airplay:///usr/bin/shairport-sync?name=AirPlay&devicename=Snapcast
+source = airplay:///usr/bin/shairport-sync?name=AirPlay&devicename=snapMULTI
 
 # Common settings
 sampleformat = 48000:16:2
@@ -211,7 +213,7 @@ docker logs snapserver | tail -50
 
 # Revert to backup if needed
 cp snapserver.conf.backup snapserver.conf
-docker compose restart snapcast
+docker compose restart snapMULTI
 ```
 
 ## Architecture
@@ -381,7 +383,7 @@ Push to `main` branch → Auto-deploys to home server via GitHub Actions.
 ### Manual Deployment
 
 ```bash
-cd /home/claudio/Code/snapcast
+cd /home/claudio/Code/snapMULTI
 docker compose up -d
 ```
 
@@ -536,12 +538,12 @@ Defines both services with host networking for mDNS:
 
 ```yaml
 services:
-  snapcast:
+  snapMULTI:
     build:
-      dockerfile: Dockerfile.snapcast
-    image: snapcast:latest
+      dockerfile: Dockerfile.snapMULTI
+    image: snapMULTI:latest
     container_name: snapserver
-    hostname: snapcast
+    hostname: snapMULTI
     restart: unless-stopped
     network_mode: host
     security_opt:

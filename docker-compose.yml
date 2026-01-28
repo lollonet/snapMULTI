@@ -1,11 +1,11 @@
 services:
-  snapcast:
+  snapMULTI:
     build:
       context: .
-      dockerfile: Dockerfile.snapcast
-    image: snapcast:latest
+      dockerfile: Dockerfile.snapMULTI
+    image: snapMULTI:latest
     container_name: snapserver
-    hostname: snapcast
+    hostname: snapMULTI
     restart: unless-stopped
     network_mode: host
     security_opt:

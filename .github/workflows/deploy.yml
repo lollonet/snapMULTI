@@ -18,7 +18,7 @@ jobs:
           username: ${{ secrets.USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            cd /home/claudio/Code/snapcast
+            cd /home/claudio/Code/snapMULTI
             git pull
             docker compose pull
             docker compose up -d
