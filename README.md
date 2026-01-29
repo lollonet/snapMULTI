@@ -294,8 +294,7 @@ cp .env.example .env
 MUSIC_LOSSLESS_PATH=/path/to/your/music/Lossless
 MUSIC_LOSSY_PATH=/path/to/your/music/Lossy
 
-# Server configuration
-SERVER_IP=your-server-ip
+# Timezone
 TZ=Your/Timezone
 
 # User/Group for container processes (match your host user)
@@ -501,7 +500,7 @@ mpc playlist                # Show current queue
 
 # Status
 mpc status                  # Show playback status
-mpd current                 # Show current song
+mpc current                 # Show current song
 ```
 
 ### Using Desktop Clients
@@ -621,4 +620,3 @@ services:
     environment:
       - TZ=${TZ:-Europe/Berlin}
 ```
-### snapserver.conf

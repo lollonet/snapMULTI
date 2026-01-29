@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Container registry** ([#3](https://github.com/lollonet/snapMULTI/issues/3)) — Multi-arch images (amd64 + arm64) built in CI and pushed to ghcr.io; deploy pulls pre-built images instead of building on server — Jan 28
 
 ### Fixed
-- **Deploy workflow** — Target only app services (`snapmulti`, `mpd`), build images locally instead of pulling, proper error handling with `set -euo pipefail` — Jan 28
+- **Deploy workflow** — Target only app services (`snapmulti`, `mpd`), pull pre-built images from ghcr.io, proper error handling with `set -euo pipefail` — Jan 28
 - **Docker image tags** — Lowercase image names to comply with Docker naming rules — Jan 28
 - **Dockerfile config paths** — Fixed `COPY` paths after config directory reorganization — Jan 28
 - **Validation workflow** — Proper error output instead of suppressing to `/dev/null` — Jan 28
