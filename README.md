@@ -4,7 +4,7 @@
 [![SnapForge](https://img.shields.io/badge/part%20of-SnapForge-blue)](https://github.com/lollonet/snapforge)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Multiroom audio streaming server using Snapcast with MPD as the audio source. Serves synchronized audio to multiple clients on the local network.
+Multiroom audio streaming server using Snapcast with four audio sources: MPD, TCP input, AirPlay, and Spotify Connect. Serves synchronized audio to multiple clients on the local network. Pre-built multi-arch Docker images (amd64 + arm64) available on GitHub Container Registry.
 
 ## Overview
 
@@ -13,7 +13,9 @@ Multiroom audio streaming server using Snapcast with MPD as the audio source. Se
 - **MPD**: Music Player Daemon that plays local audio files and outputs to Snapcast via FIFO
 - **AirPlay**: Apple's proprietary wireless audio streaming protocol (via shairport-sync)
 - **TCP input**: Stream audio from any application via TCP port 4953
+- **Spotify Connect**: Stream from the Spotify app on any device (via librespot, requires Premium)
 - **Autodiscovery**: mDNS/Bonjour services via Avahi (_snapcast._tcp, _snapcast-http._tcp, _raop._tcp)
+- **Multi-arch images**: Pre-built Docker images for `linux/amd64` and `linux/arm64` on [ghcr.io](https://github.com/lollonet/snapMULTI/pkgs/container/snapmulti)
 - **Architecture**: Both services run in Docker containers with host networking (Alpine Linux)
 - **Music Library**: Configured via environment variables (see `.env.example`)
 
@@ -229,8 +231,8 @@ docker compose config
 # View logs
 docker logs snapserver | tail -50
 
-# Revert to backup if needed
-cp snapserver.conf.backup snapserver.conf
+# Revert config to last committed version if needed
+git checkout config/snapserver.conf
 docker compose restart snapmulti
 ```
 
@@ -244,21 +246,30 @@ docker compose restart snapmulti
          │
          ▼
 ┌─────────────────┐     ┌──────────────┐
-│  Docker: MPD    │────▶│ /audio/fifo  │
-│ (localhost:6600)│     └──────┬───────┘
-└─────────────────┘            │
-                               ▼
-                     ┌──────────────────┐
-                     │ Docker: Snapcast │
-                     │ (port 1704)      │
-                     └────────┬─────────┘
-                              │
-                ┌─────────────┼─────────────┐
-                ▼             ▼             ▼
-           ┌────────┐    ┌────────┐   ┌────────┐
-           │Client 1│    │Client 2│   │Client 3│
-           │(Snap)  │    │(Snap)  │   │(Snap)  │
-           └────────┘    └────────┘   └────────┘
+│  Docker: MPD    │────▶│ /audio/fifo  │──┐
+│ (localhost:6600)│     └──────────────┘  │
+└─────────────────┘                       │
+                                          ▼
+┌─────────────────┐              ┌──────────────────┐
+│ TCP Input       │─────────────▶│                  │
+│ (port 4953)     │              │ Docker: Snapcast │
+└─────────────────┘              │ (port 1704)      │
+                                 │                  │
+┌─────────────────┐              │ Sources:         │
+│ AirPlay         │─────────────▶│  - MPD (FIFO)    │
+│ (shairport-sync)│              │  - TCP-Input     │
+└─────────────────┘              │  - AirPlay       │
+                                 │  - Spotify       │
+┌─────────────────┐              │                  │
+│ Spotify Connect │─────────────▶│                  │
+│ (librespot)     │              └────────┬─────────┘
+└─────────────────┘                       │
+                            ┌─────────────┼─────────────┐
+                            ▼             ▼             ▼
+                       ┌────────┐    ┌────────┐   ┌────────┐
+                       │Client 1│    │Client 2│   │Client 3│
+                       │(Snap)  │    │(Snap)  │   │(Snap)  │
+                       └────────┘    └────────┘   └────────┘
 ```
 
 ## Quick Start
@@ -268,7 +279,7 @@ docker compose restart snapmulti
 - Docker and Docker Compose installed
 - Host directories with music files
 - Ports available: 1704, 1705, 1780, 4953, 6600, 8000
-- Supported platforms: linux/amd64, linux/arm64 (Raspberry Pi 4+)
+- Supported platforms: `linux/amd64`, `linux/arm64` — pre-built images pulled from ghcr.io
 
 ### Configuration
 
@@ -286,6 +297,10 @@ MUSIC_LOSSY_PATH=/path/to/your/music/Lossy
 # Server configuration
 SERVER_IP=your-server-ip
 TZ=Your/Timezone
+
+# User/Group for container processes (match your host user)
+PUID=1000
+PGID=1000
 ```
 
 3. (Optional) Adjust `max_clients` in `config/snapserver.conf` to limit connections (default: unlimited)
@@ -331,7 +346,7 @@ Snapcast requires these docker-compose settings for mDNS:
 network_mode: host                    # Required for mDNS broadcasts
 security_opt:
   - apparmor:unconfined               # CRITICAL: allows D-Bus socket access
-user: "1000:1000"                     # Required for D-Bus policy
+user: "${PUID:-1000}:${PGID:-1000}"    # Required for D-Bus policy
 volumes:
   - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket  # Host's Avahi
 ```
@@ -389,27 +404,43 @@ snapclient --host 192.168.63.3 --port 1704
 
 ### Automated Deployment (Recommended)
 
-Push to `main` branch → Auto-deploys to home server via GitHub Actions.
+Push to `main` branch triggers the full CI/CD pipeline:
 
-1. Make changes locally
-2. Commit and push: `git push origin main`
-3. GitHub Actions automatically:
-   - Validates configuration
-   - Tests Docker builds
-   - Deploys to server via SSH
+1. **Build** — Multi-arch Docker images built natively on two self-hosted runners (amd64 + arm64)
+2. **Manifest** — Per-arch images merged into multi-arch `:latest` tags on ghcr.io
+3. **Deploy** — Images pulled and containers restarted on the home server via SSH
+
+```
+push to main → build-push.yml → build (amd64 + arm64) → manifest → deploy.yml → server updated
+```
 
 ### Manual Deployment
 
 ```bash
 cd /home/claudio/Code/snapMULTI
+docker compose pull
 docker compose up -d
 ```
 
 ### CI/CD Workflows
 
-- **Validate**: Checks docker-compose syntax and environment template
-- **Build Test**: Tests Docker images build correctly
-- **Deploy**: Auto-deploys to home server on push to main
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| **Build & Push** | Push to `main` | Build multi-arch images, push to ghcr.io, trigger deploy |
+| **Deploy** | Called by Build & Push | Pull images and restart containers on server via SSH |
+| **Validate** | Push to any branch, pull requests | Check docker-compose syntax and environment template |
+| **Build Test** | Pull requests | Validate Docker images build correctly (no push) |
+
+### Container Registry
+
+Docker images are hosted on GitHub Container Registry:
+
+| Image | Description |
+|-------|-------------|
+| `ghcr.io/lollonet/snapmulti:latest` | Snapserver + shairport-sync + librespot |
+| `ghcr.io/lollonet/snapmulti-mpd:latest` | Music Player Daemon |
+
+Both images support `linux/amd64` and `linux/arm64` architectures.
 
 See GitHub Actions tab for workflow status and logs.
 
@@ -420,10 +451,10 @@ See GitHub Actions tab for workflow status and logs.
 | Port | Protocol | Purpose |
 |------|----------|---------|
 | 1704 | TCP | Audio streaming to clients |
-| 1705 | HTTP | JSON-RPC API |
+| 1705 | TCP | JSON-RPC control |
 | 1780 | HTTP | Snapweb UI (not installed) |
 
-**Configuration**: `snapserver.conf`
+**Configuration**: `config/snapserver.conf`
 - Max clients: 0 (unlimited, adjust in config as needed)
 - Codec: FLAC
 - Sample format: 48000:16:2
@@ -436,7 +467,7 @@ See GitHub Actions tab for workflow status and logs.
 | 6600 | TCP | MPD protocol (client control) |
 | 8000 | HTTP | Audio stream (direct access) |
 
-**Configuration**: `mpd/config/mpd.conf`
+**Configuration**: `config/mpd.conf`
 - Output: FIFO to `/audio/snapcast_fifo`
 - Music directories: `/music/Lossless`, `/music/Lossy`
 - Database: `/data/mpd.db`
@@ -552,23 +583,21 @@ http://192.168.63.3:8000
 
 ### docker-compose.yml
 
-Defines both services with host networking for mDNS:
+Defines both services with pre-built ghcr.io images and host networking for mDNS:
 
 ```yaml
 services:
   snapmulti:
-    build:
-      dockerfile: Dockerfile.snapMULTI
-    image: snapmulti:latest
+    image: ghcr.io/lollonet/snapmulti:latest
     container_name: snapserver
     hostname: snapmulti
     restart: unless-stopped
     network_mode: host
     security_opt:
       - apparmor:unconfined
-    user: "1000:1000"
+    user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
-      - ./snapserver.conf:/etc/snapserver.conf:ro
+      - ./config/snapserver.conf:/etc/snapserver.conf:ro
       - ./config:/config
       - ./data:/data
       - ./audio:/audio
@@ -578,9 +607,7 @@ services:
     command: ["snapserver", "-c", "/etc/snapserver.conf"]
 
   mpd:
-    build:
-      dockerfile: Dockerfile.mpd
-    image: mpd:latest
+    image: ghcr.io/lollonet/snapmulti-mpd:latest
     container_name: mpd
     restart: unless-stopped
     network_mode: host
@@ -588,7 +615,7 @@ services:
       - ./audio:/audio
       - ${MUSIC_LOSSLESS_PATH}:/music/Lossless:ro
       - ${MUSIC_LOSSY_PATH}:/music/Lossy:ro
-      - ./mpd/config:/etc/mpd.d
+      - ./config/mpd.conf:/etc/mpd.conf:ro
       - ./mpd/playlists:/playlists
       - ./mpd/data:/data
     environment:
