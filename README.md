@@ -9,7 +9,7 @@ Multiroom audio streaming server using Snapcast with MPD as the audio source. Se
 ## Overview
 
 - **Snapserver**: Audio streaming server that distributes synchronized audio to multiple clients
-- **Multi-source support**: Three audio sources available - MPD, TCP input, and AirPlay
+- **Multi-source support**: Four audio sources available - MPD, TCP input, AirPlay, and Spotify Connect
 - **MPD**: Music Player Daemon that plays local audio files and outputs to Snapcast via FIFO
 - **AirPlay**: Apple's proprietary wireless audio streaming protocol (via shairport-sync)
 - **TCP input**: Stream audio from any application via TCP port 4953
@@ -19,13 +19,14 @@ Multiroom audio streaming server using Snapcast with MPD as the audio source. Se
 
 ## Multi-Source Audio Support
 
-Snapcast is configured with **three audio sources** that clients can choose from:
+Snapcast is configured with **four audio sources** that clients can choose from:
 
 | Source | Description | Stream ID | Use Case |
 |--------|-------------|-----------|----------|
 | **MPD** | Local music library | `MPD` | Default - plays your local music collection |
 | **TCP** | Network audio input | `TCP-Input` | Stream from any app via TCP (port 4953) |
 | **AirPlay** | Apple devices | `AirPlay` | Stream from iPhone/iPad/Mac via AirPlay |
+| **Spotify** | Spotify Connect | `Spotify` | Stream from Spotify app (requires Premium) |
 
 ### Source Details
 
@@ -96,6 +97,20 @@ avahi-browse -r _raop._tcp --terminate
 
 Should show "snapMULTI" as an available AirPlay receiver.
 
+#### 4. Spotify Connect (Spotify Premium)
+
+**Stream from the Spotify app** on any device.
+
+**Connect from Spotify:**
+1. Open **Spotify** on phone, tablet, or desktop
+2. Start playing a song
+3. Tap the **Connect to a device** icon
+4. Select **"snapMULTI"** from the list
+
+**Requirements:**
+- Spotify Premium account (free tier not supported by librespot)
+- Bitrate: 320 kbps (highest quality)
+
 ### How Stream Selection Works
 
 **By default**, all clients play from the **MPD** source.
@@ -123,7 +138,7 @@ curl -s http://192.168.63.3:1780/jsonrpc \
   }'
 ```
 
-**Stream IDs:** `MPD`, `TCP-Input`, `AirPlay`
+**Stream IDs:** `MPD`, `TCP-Input`, `AirPlay`, `Spotify`
 
 ### Troubleshooting
 
@@ -164,7 +179,7 @@ ls -la /audio/snapcast_fifo
 
 ### Configuration
 
-All three sources are configured in `snapserver.conf`:
+All four sources are configured in `snapserver.conf`:
 
 ```ini
 [stream]
@@ -176,6 +191,9 @@ source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
 
 # Source 3: AirPlay (Apple devices)
 source = airplay:///usr/bin/shairport-sync?name=AirPlay&devicename=snapMULTI
+
+# Source 4: Spotify Connect (requires Premium)
+source = librespot:///usr/bin/librespot?name=Spotify&devicename=snapMULTI&bitrate=320
 
 # Common settings
 sampleformat = 48000:16:2

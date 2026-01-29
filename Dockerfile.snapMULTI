@@ -38,7 +38,9 @@ RUN apk add --no-cache \
     dbus \
     nlohmann-json \
     boost-program_options \
-    shairport-sync
+    shairport-sync \
+    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing \
+    librespot
 
 # Create directories
 RUN mkdir -p /var/lib/snapserver /config /data /audio

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **mDNS autodiscovery** ([#1](https://github.com/lollonet/snapMULTI/pull/1)) — Automatic client discovery via Avahi/Bonjour using host D-Bus socket — Jan 26–27
 - **Multi-source audio** — Three audio sources: MPD (local library), TCP input (port 4953), and AirPlay (via shairport-sync) — Jan 27
 - **Issue templates** — Bug report and feature request templates for GitHub — Jan 28
+- **Spotify Connect** ([#2](https://github.com/lollonet/snapMULTI/issues/2)) — Fourth audio source via librespot (Spotify Premium required, 320 kbps) — Jan 29
 
 ### Changed
 - **Project rename** — Renamed from `snapcast` to `snapMULTI` across all files, configs, Docker images, and GitHub repo — Jan 28
