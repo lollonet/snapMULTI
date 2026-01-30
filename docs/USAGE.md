@@ -56,7 +56,7 @@ For audio source types and JSON-RPC API, see [SOURCES.md](SOURCES.md).
 - Max clients: 0 (unlimited, adjust in config as needed)
 - Codec: FLAC
 - Sample format: 48000:16:2
-- Buffer: 1000ms
+- Buffer: 2400ms (chunk_ms: 40)
 
 ### MPD
 
@@ -185,7 +185,7 @@ ss -tlnp | grep -E "1704|1705|1780"
 1. Verify docker-compose has all critical requirements above
 2. Check logs: `docker logs snapserver | grep -i "avahi"`
 3. Test direct connection: `snapclient --host <server_ip>`
-4. Allow firewall ports: `sudo ufw allow 1704/tcp 1705/tcp 1780/tcp 5353/udp`
+4. Allow firewall ports (see [HARDWARE.md — Firewall Rules](HARDWARE.md#firewall-rules))
 
 **Common errors:**
 - `"Failed to create client: Access denied"` → Missing `security_opt: [apparmor:unconfined]`

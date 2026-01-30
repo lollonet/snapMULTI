@@ -133,7 +133,7 @@ Audio format: 48000 Hz, 16-bit, stereo (default FLAC codec).
 ### Synchronization
 
 - Snapcast achieves **sub-millisecond sync** across clients
-- Default buffer: 1000 ms (configurable in `snapserver.conf`)
+- Default buffer: 2400 ms (configurable in `snapserver.conf`)
 - Larger buffer = more stable on poor networks, but adds playback delay
 - WiFi jitter is compensated automatically — clients adjust playback speed
 
