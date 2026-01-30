@@ -20,231 +20,32 @@ Multiroom audio streaming server using Snapcast with four audio sources: MPD, TC
 - **Architecture**: Both services run in Docker containers with host networking (Alpine Linux)
 - **Music Library**: Configured via environment variables (see `.env.example`)
 
-## Multi-Source Audio Support
+## Audio Sources
 
-Snapcast is configured with **four audio sources** that clients can choose from:
+Four active sources, plus four additional types ready to enable. All clients can switch sources at any time.
 
-| Source | Description | Stream ID | Use Case |
-|--------|-------------|-----------|----------|
-| **MPD** | Local music library | `MPD` | Default - plays your local music collection |
-| **TCP** | Network audio input | `TCP-Input` | Stream from any app via TCP (port 4953) |
-| **AirPlay** | Apple devices | `AirPlay` | Stream from iPhone/iPad/Mac via AirPlay |
-| **Spotify** | Spotify Connect | `Spotify` | Stream from Spotify app (requires Premium) |
+| Source | Stream ID | How to Connect |
+|--------|-----------|----------------|
+| **MPD** | `MPD` | MPD client (mpc, Cantata, MPDroid) → `<server-ip>:6600` |
+| **TCP Input** | `TCP-Input` | Send PCM audio to `<server-ip>:4953` via ffmpeg or any app |
+| **AirPlay** | `AirPlay` | iOS/macOS Control Center → AirPlay → "snapMULTI" |
+| **Spotify** | `Spotify` | Spotify app → Connect to a device → "snapMULTI" (Premium required) |
+| **Android / Tidal** | via TCP or AirPlay | See [Streaming from Android](docs/SOURCES.md#streaming-from-android) |
 
-### Source Details
+Additional source types (ALSA capture, meta stream, file playback, TCP client) are available as commented-out examples in `config/snapserver.conf`.
 
-#### 1. MPD (Default - Local Music Library)
+For full technical details, parameters, JSON-RPC API, and source type schema, see **[docs/SOURCES.md](docs/SOURCES.md)**.
 
-**Plays your local music collection** controlled via MPD.
-
-**Control MPD using:**
-```bash
-# Command line
-mpc play                    # Start playback
-mpc add "Artist/Album"      # Add album to queue
-mpc volume 50               # Set volume
-
-# Desktop clients
-cantata                    # Qt-based client (recommended)
-ncmpcpp                    # Terminal-based client
-
-# Mobile apps
-MPDroid (Android)          # Free, open-source
-MPD Remote (iOS)           # Paid, full-featured
-```
-
-**Connect to MPD:** `192.168.63.3:6600`
-
-#### 2. TCP Input (Stream from Any App)
-
-**Any application can stream audio** to port 4953.
-
-**Example usage:**
-```bash
-# Stream internet radio
-ffmpeg -i http://stream.example.com/radio \
-  -f s16le -ar 48000 -ac 2 \
-  tcp://192.168.63.3:4953
-
-# Stream from file
-ffmpeg -i music.mp3 \
-  -f s16le -ar 48000 -ac 2 \
-  tcp://192.168.63.3:4953
-
-# Stream from URL
-ffmpeg -re -i http://example.com/stream.mp3 \
-  -f s16le -ar 48000 -ac 2 \
-  tcp://192.168.63.3:4953
-```
-
-**Audio format required:**
-- Sample rate: 48000 Hz
-- Bit depth: 16 bit
-- Channels: 2 (stereo)
-- Format: Raw PCM (s16le)
-
-#### 3. AirPlay (Apple Devices)
-
-**Stream from iPhone, iPad, or Mac** using AirPlay.
-
-**Connect from iOS:**
-1. Open **Control Center** on iPhone/iPad
-2. Tap **AirPlay** icon
-3. Select **"snapMULTI"** from the list
-4. Play music from Apple Music, Spotify, YouTube, etc.
-
-**Verify AirPlay is visible:**
-```bash
-avahi-browse -r _raop._tcp --terminate
-```
-
-Should show "snapMULTI" as an available AirPlay receiver.
-
-#### 4. Spotify Connect (Spotify Premium)
-
-**Stream from the Spotify app** on any device.
-
-**Connect from Spotify:**
-1. Open **Spotify** on phone, tablet, or desktop
-2. Start playing a song
-3. Tap the **Connect to a device** icon
-4. Select **"snapMULTI"** from the list
-
-**Requirements:**
-- Spotify Premium account (free tier not supported by librespot)
-- Bitrate: 320 kbps (highest quality)
-
-#### Streaming from Android (Tidal, YouTube Music, etc.)
-
-Android has no built-in AirPlay equivalent. To stream apps like **Tidal** to snapMULTI:
-
-1. **AirPlay emulation** (easiest) — Install an AirPlay sender app (e.g. AirMusic) and select "snapMULTI" as target
-2. **TCP Input via BubbleUPnP** — Use BubbleUPnP's Audio Cast to capture app audio and relay to port 4953
-3. **Direct TCP** — Use Termux + ffmpeg to capture system audio
-
-See [docs/SOURCES.md — Streaming from Android](docs/SOURCES.md#streaming-from-android) for detailed setup instructions.
-
-### How Stream Selection Works
-
-**By default**, all clients play from the **MPD** source.
-
-**To switch sources**, use the Snapcast JSON-RPC API:
+### Switch Sources
 
 ```bash
-# Get available streams
-curl -s http://192.168.63.3:1780/jsonrpc \
-  -H "Content-Type: application/json" \
-  -d '{"id":1,"jsonrpc":"2.0","method":"Server.GetStatus"}' \
-  | jq '.result.streams'
+# List available streams
+curl -s http://<server-ip>:1780/jsonrpc \
+  -d '{"id":1,"jsonrpc":"2.0","method":"Server.GetStatus"}' | jq '.result.server.streams'
 
 # Switch a group to a different stream
-curl -s http://192.168.63.3:1780/jsonrpc \
-  -H "Content-Type: application/json" \
-  -d '{
-    "id":1,
-    "jsonrpc":"2.0",
-    "method":"Group.SetStream",
-    "params":{
-      "id":"<GROUP_ID>",
-      "stream_id":"TCP-Input"
-    }
-  }'
-```
-
-**Stream IDs:** `MPD`, `TCP-Input`, `AirPlay`, `Spotify`
-
-### Troubleshooting
-
-#### AirPlay not visible on iOS
-```bash
-# Verify shairport-sync is installed
-docker exec snapserver which shairport-sync
-
-# Check if shairport-sync is running
-docker exec snapserver ps aux | grep shairport
-
-# Verify mDNS service is published
-avahi-browse -r _raop._tcp --terminate
-```
-
-#### TCP stream not receiving audio
-```bash
-# Check if port 4953 is listening
-ss -tlnp | grep 4953
-
-# Test with example stream
-ffmpeg -f lavfi -i anullsrc=r=48000:cl=stereo \
-  -f s16le -ar 48000 -ac 2 \
-  tcp://localhost:4953
-```
-
-#### MPD not playing
-```bash
-# Check MPD status
-mpc status
-
-# Update MPD database
-printf 'update\n' | nc localhost 6600
-
-# Check FIFO pipe exists
-ls -la /audio/snapcast_fifo
-```
-
-### Configuration
-
-All four sources are configured in `snapserver.conf`:
-
-```ini
-[stream]
-# Source 1: MPD (local music library)
-source = pipe:////audio/snapcast_fifo?name=MPD
-
-# Source 2: TCP input (any app)
-source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
-
-# Source 3: AirPlay (Apple devices)
-source = airplay:///usr/bin/shairport-sync?name=AirPlay&devicename=snapMULTI
-
-# Source 4: Spotify Connect (requires Premium)
-source = librespot:///usr/bin/librespot?name=Spotify&devicename=snapMULTI&bitrate=320
-
-# Common settings
-sampleformat = 48000:16:2
-codec = flac
-buffer = 1000
-```
-
-To add more sources, simply add additional `source =` lines to the `[stream]` section.
-
-**AirPlay service not visible on iOS:**
-```bash
-# Verify shairport-sync is installed
-docker exec snapserver which shairport-sync
-
-# Check if Snapserver launched shairport-sync
-docker logs snapserver | grep -i airplay
-
-# Verify mDNS service is published
-avahi-browse -r _raop._tcp --terminate
-```
-
-**No audio from AirPlay:**
-- Verify snapserver.conf has AirPlay source configured (not MPD)
-- Check `docker logs snapserver` for "AirPlay" state changes
-- Ensure iPhone volume is up and not muted
-- Verify music is actually playing on iPhone (play button, timer moving)
-
-**Configuration error after editing:**
-```bash
-# Check syntax
-docker compose config
-
-# View logs
-docker logs snapserver | tail -50
-
-# Revert config to last committed version if needed
-git checkout config/snapserver.conf
-docker compose restart snapmulti
+curl -s http://<server-ip>:1780/jsonrpc \
+  -d '{"id":1,"jsonrpc":"2.0","method":"Group.SetStream","params":{"id":"<GROUP_ID>","stream_id":"Spotify"}}'
 ```
 
 ## Architecture
