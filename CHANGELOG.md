@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Multi-source audio** — Three audio sources: MPD (local library), TCP input (port 4953), and AirPlay (via shairport-sync) — Jan 27
 - **Issue templates** — Bug report and feature request templates for GitHub — Jan 28
 - **Spotify Connect** ([#2](https://github.com/lollonet/snapMULTI/issues/2)) — Fourth audio source via librespot (Spotify Premium required, 320 kbps) — Jan 29
+- **Audio sources reference** — `docs/SOURCES.md` with full technical reference for all 8 source types (pipe, tcp, airplay, librespot, alsa, meta, file, tcp client), JSON-RPC API, source type schema for management apps, and Android/Tidal streaming guide — Jan 30
+- **Additional source examples** — ALSA capture, meta stream, file playback, and TCP client added as commented-out examples in `snapserver.conf` — Jan 30
 
 ### Changed
 - **Project rename** — Renamed from `snapcast` to `snapMULTI` across all files, configs, Docker images, and GitHub repo — Jan 28

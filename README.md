@@ -16,6 +16,7 @@ Multiroom audio streaming server using Snapcast with four audio sources: MPD, TC
 - **Spotify Connect**: Stream from the Spotify app on any device (via librespot, requires Premium)
 - **Autodiscovery**: mDNS/Bonjour services via Avahi (_snapcast._tcp, _snapcast-http._tcp, _raop._tcp)
 - **Multi-arch images**: Pre-built Docker images for `linux/amd64` and `linux/arm64` on [ghcr.io](https://github.com/lollonet/snapMULTI/pkgs/container/snapmulti)
+- **Extensible sources**: Additional source types available — ALSA capture, meta stream, file playback, TCP client (see [docs/SOURCES.md](docs/SOURCES.md))
 - **Architecture**: Both services run in Docker containers with host networking (Alpine Linux)
 - **Music Library**: Configured via environment variables (see `.env.example`)
 
@@ -112,6 +113,16 @@ Should show "snapMULTI" as an available AirPlay receiver.
 **Requirements:**
 - Spotify Premium account (free tier not supported by librespot)
 - Bitrate: 320 kbps (highest quality)
+
+#### Streaming from Android (Tidal, YouTube Music, etc.)
+
+Android has no built-in AirPlay equivalent. To stream apps like **Tidal** to snapMULTI:
+
+1. **AirPlay emulation** (easiest) — Install an AirPlay sender app (e.g. AirMusic) and select "snapMULTI" as target
+2. **TCP Input via BubbleUPnP** — Use BubbleUPnP's Audio Cast to capture app audio and relay to port 4953
+3. **Direct TCP** — Use Termux + ffmpeg to capture system audio
+
+See [docs/SOURCES.md — Streaming from Android](docs/SOURCES.md#streaming-from-android) for detailed setup instructions.
 
 ### How Stream Selection Works
 
