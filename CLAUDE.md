@@ -9,20 +9,23 @@ Each topic has ONE authoritative document. Other files link to it — never dupl
 | Audio sources (config, params, schema, API) | `docs/SOURCES.md` | Technical reference for all source types |
 | Android / Tidal streaming | `docs/SOURCES.md` | Setup guides for non-native casting |
 | JSON-RPC API | `docs/SOURCES.md` | Stream management endpoints |
-| User quickstart | `README.md` | How to get running, connect clients |
-| MPD control (mpc, clients, apps) | `README.md` | User-facing usage guide |
-| Snapclient setup | `README.md` | Client installation and connection |
-| Autodiscovery / mDNS | `README.md` | Docker requirements, troubleshooting |
-| Deployment / CI/CD | `README.md` | Pipeline, workflows, container registry |
-| docker-compose.yml reference | `README.md` | Full example with annotations |
+| Architecture, services, ports | `docs/USAGE.md` | System diagram, port tables, config details |
+| MPD control (mpc, clients, apps) | `docs/USAGE.md` | Command-line and GUI client usage |
+| Autodiscovery / mDNS | `docs/USAGE.md` | Docker requirements, troubleshooting |
+| Deployment / CI/CD | `docs/USAGE.md` | Pipeline, workflows, container registry |
+| docker-compose.yml reference | `docs/USAGE.md` | Full example with annotations |
+| Snapclient advanced options | `docs/USAGE.md` | Daemon mode, Docker, sound cards, browser |
+| User quickstart | `README.md` | How to get running (essential steps only) |
+| Client basic setup | `README.md` | Install snapclient + connect (minimal) |
 | Changelog | `CHANGELOG.md` | Historical log, not duplicated |
 | Source config (inline) | `config/snapserver.conf` | Comments per-source, links to docs/ |
 
 **Rules:**
+- README is an appliance manual — what it does, how to install, how to connect. No jargon.
 - When adding a new source type: update `docs/SOURCES.md` (full details) + `config/snapserver.conf` (commented example) + `README.md` source table (one-liner)
 - When changing source parameters: update `docs/SOURCES.md` only
-- When changing deployment: update `README.md` only
-- README audio section is a summary table + link to SOURCES.md — no detailed source configs or troubleshooting
+- When changing services, ports, deployment, mDNS: update `docs/USAGE.md` only
+- README links to docs/ for anything technical — never inline technical details
 
 ## Project Structure
 
@@ -32,6 +35,7 @@ snapMULTI/
     snapserver.conf    # Snapcast server config (4 active + 4 commented sources)
     mpd.conf           # MPD config (FIFO + HTTP outputs)
   docs/
+    USAGE.md           # Technical operations guide (architecture, services, MPD, mDNS, CI/CD)
     SOURCES.md         # Audio sources technical reference (SSOT for sources)
   .github/workflows/
     build-push.yml     # Native dual-arch build + push to ghcr.io
@@ -43,7 +47,7 @@ snapMULTI/
   docker-compose.yml   # App services (ghcr.io images, host networking)
   .env.example         # Environment template
   .dockerignore        # Build context exclusions
-  README.md            # User-facing docs (quickstart, clients, deployment)
+  README.md            # Essential user guide (quickstart, connect, links to docs/)
   CHANGELOG.md         # Project history
 ```
 
