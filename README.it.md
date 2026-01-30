@@ -102,6 +102,7 @@ snapclient --host <ip-del-server>
 
 | Guida | Contenuto |
 |-------|-----------|
+| [Hardware e Rete](docs/HARDWARE.it.md) | Requisiti server/client, configurazioni Raspberry Pi, banda di rete, setup consigliati |
 | [Uso e Operazioni](docs/USAGE.it.md) | Architettura, servizi, controllo MPD, configurazione mDNS, deployment, CI/CD |
 | [Sorgenti Audio](docs/SOURCES.it.md) | Tutti i tipi di sorgente, parametri, API JSON-RPC, streaming da Android/Tidal |
 | [Changelog](CHANGELOG.md) | Cronologia delle versioni |
