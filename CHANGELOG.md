@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Operations guide** — `docs/USAGE.md` with architecture, services, MPD control, mDNS setup, deployment, CI/CD, and configuration reference — Jan 30
 - **Italian translations** — Bilingual repo: `README.it.md`, `docs/USAGE.it.md`, `docs/SOURCES.it.md` with language switchers on all docs — Jan 30
+- **Hardware & network guide** — `docs/HARDWARE.md` (EN + IT) with server/client requirements, Raspberry Pi models, audio output options, network bandwidth calculations, WiFi vs Ethernet, recommended setups (budget/mid/enthusiast), and known limitations — Jan 30
 
 ### Changed
 - **Essential README** — Slimmed README from 435 to ~100 lines; technical content moved to `docs/USAGE.md`; README now reads as a simple appliance manual for non-technical users — Jan 30

@@ -18,6 +18,7 @@ Each topic has ONE authoritative document. Other files link to it — never dupl
 | User quickstart | `README.md` | How to get running (essential steps only) |
 | Client basic setup | `README.md` | Install snapclient + connect (minimal) |
 | Changelog | `CHANGELOG.md` | Historical log, not duplicated |
+| Hardware requirements, network, setups | `docs/HARDWARE.md` | Server/client specs, Pi models, bandwidth, configs |
 | Source config (inline) | `config/snapserver.conf` | Comments per-source, links to docs/ |
 
 **Rules:**
@@ -25,6 +26,7 @@ Each topic has ONE authoritative document. Other files link to it — never dupl
 - When adding a new source type: update `docs/SOURCES.md` (full details) + `config/snapserver.conf` (commented example) + `README.md` source table (one-liner)
 - When changing source parameters: update `docs/SOURCES.md` only
 - When changing services, ports, deployment, mDNS: update `docs/USAGE.md` only
+- When changing hardware specs, network, or recommended setups: update `docs/HARDWARE.md` only
 - README links to docs/ for anything technical — never inline technical details
 
 ## Project Structure
@@ -35,6 +37,7 @@ snapMULTI/
     snapserver.conf    # Snapcast server config (4 active + 4 commented sources)
     mpd.conf           # MPD config (FIFO + HTTP outputs)
   docs/
+    HARDWARE.md        # Hardware & network guide (server/client specs, Pi, bandwidth, setups)
     USAGE.md           # Technical operations guide (architecture, services, MPD, mDNS, CI/CD)
     SOURCES.md         # Audio sources technical reference (SSOT for sources)
   .github/workflows/
