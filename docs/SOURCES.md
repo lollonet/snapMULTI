@@ -1,3 +1,5 @@
+🇬🇧 **English** | 🇮🇹 [Italiano](SOURCES.it.md)
+
 # Audio Sources Reference
 
 Technical reference for all Snapcast audio source types supported by snapMULTI.
