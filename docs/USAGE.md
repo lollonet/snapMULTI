@@ -1,3 +1,5 @@
+🇬🇧 **English** | 🇮🇹 [Italiano](USAGE.it.md)
+
 # Usage & Operations Guide
 
 Technical reference for snapMULTI — architecture, services, MPD control, autodiscovery, deployment, and configuration.

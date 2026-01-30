@@ -1,3 +1,5 @@
+🇬🇧 **English** | 🇮🇹 [Italiano](README.it.md)
+
 # snapMULTI - Multiroom Audio Server
 
 [![CI/CD](https://github.com/lollonet/snapMULTI/actions/workflows/deploy.yml/badge.svg)](https://github.com/lollonet/snapMULTI/actions/workflows/deploy.yml)

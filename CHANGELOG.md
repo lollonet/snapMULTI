@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Additional source examples** — ALSA capture, meta stream, file playback, and TCP client added as commented-out examples in `snapserver.conf` — Jan 30
 
 - **Operations guide** — `docs/USAGE.md` with architecture, services, MPD control, mDNS setup, deployment, CI/CD, and configuration reference — Jan 30
+- **Italian translations** — Bilingual repo: `README.it.md`, `docs/USAGE.it.md`, `docs/SOURCES.it.md` with language switchers on all docs — Jan 30
 
 ### Changed
 - **Essential README** — Slimmed README from 435 to ~100 lines; technical content moved to `docs/USAGE.md`; README now reads as a simple appliance manual for non-technical users — Jan 30
