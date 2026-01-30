@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Container registry** ([#3](https://github.com/lollonet/snapMULTI/issues/3)) — Multi-arch images (amd64 + arm64) built in CI and pushed to ghcr.io; deploy pulls pre-built images instead of building on server — Jan 28
 
 ### Fixed
+- **Server buffer configuration** — Increased buffer from 1000ms to 2400ms and chunk_ms from 20ms to 40ms to compensate for clock drift and network jitter on WiFi connections; see [rpi-snapclient-usb#9](https://github.com/lollonet/rpi-snapclient-usb/issues/9) — Jan 30
 - **Deploy workflow** — Target only app services (`snapmulti`, `mpd`), pull pre-built images from ghcr.io, proper error handling with `set -euo pipefail` — Jan 28
 - **Docker image tags** — Lowercase image names to comply with Docker naming rules — Jan 28
 - **Dockerfile config paths** — Fixed `COPY` paths after config directory reorganization — Jan 28
