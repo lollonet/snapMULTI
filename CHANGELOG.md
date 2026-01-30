@@ -17,7 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Audio sources reference** — `docs/SOURCES.md` with full technical reference for all 8 source types (pipe, tcp, airplay, librespot, alsa, meta, file, tcp client), JSON-RPC API, source type schema for management apps, and Android/Tidal streaming guide — Jan 30
 - **Additional source examples** — ALSA capture, meta stream, file playback, and TCP client added as commented-out examples in `snapserver.conf` — Jan 30
 
+- **Operations guide** — `docs/USAGE.md` with architecture, services, MPD control, mDNS setup, deployment, CI/CD, and configuration reference — Jan 30
+
 ### Changed
+- **Essential README** — Slimmed README from 435 to ~100 lines; technical content moved to `docs/USAGE.md`; README now reads as a simple appliance manual for non-technical users — Jan 30
 - **Project rename** — Renamed from `snapcast` to `snapMULTI` across all files, configs, Docker images, and GitHub repo — Jan 28
 - **Configuration reorganization** — Moved config files into `config/` directory — Jan 27
 - **Host networking** — Switched to `network_mode: host` for mDNS broadcast support — Jan 26
