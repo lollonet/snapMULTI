@@ -37,7 +37,7 @@ jobs:
       - name: Test container
         run: |
           echo "Testing container: ${{ steps.vars.outputs.TAG }}:latest"
-          docker run --rm ${{ steps.vars.outputs.TAG }}:latest which ${{ matrix.binary }} || {
+          docker run --rm --entrypoint which ${{ steps.vars.outputs.TAG }}:latest ${{ matrix.binary }} || {
             echo "ERROR: Container test failed for ${{ matrix.dockerfile }}"
             exit 1
           }
