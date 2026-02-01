@@ -23,6 +23,8 @@ services:
     container_name: shairport-sync
     restart: unless-stopped
     network_mode: host
+    security_opt:
+      - apparmor:unconfined
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./audio:/audio
@@ -37,6 +39,8 @@ services:
     container_name: librespot
     restart: unless-stopped
     network_mode: host
+    security_opt:
+      - apparmor:unconfined
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./audio:/audio
