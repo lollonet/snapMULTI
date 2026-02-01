@@ -70,7 +70,7 @@ docker compose up -d
 docker ps
 ```
 
-You should see three running containers: `snapserver`, `mympd`, and `mpd`.
+You should see five running containers: `snapserver`, `shairport-sync`, `librespot`, `mpd`, and `mympd`.
 
 ### 5. Control your music
 

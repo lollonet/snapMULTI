@@ -1,0 +1,10 @@
+FROM alpine:latest
+
+RUN apk add --no-cache shairport-sync
+
+RUN mkdir -p /audio
+
+COPY config/shairport-sync.conf /etc/shairport-sync.conf
+
+ENTRYPOINT ["shairport-sync"]
+CMD ["-c", "/etc/shairport-sync.conf"]

@@ -1,6 +1,5 @@
-FROM alpine:latest
+FROM alpine:latest AS builder
 
-# Install build dependencies
 RUN apk add --no-cache \
     alsa-lib-dev \
     avahi-dev \
@@ -16,40 +15,34 @@ RUN apk add --no-cache \
     opus-dev \
     soxr-dev
 
-# Build and install Snapcast
 WORKDIR /build
-RUN git clone https://github.com/badaix/snapcast.git . && \
+RUN git clone https://github.com/lollonet/santcasp.git . && \
     mkdir build && cd build && \
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr .. && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+          -DBUILD_CLIENT=OFF .. && \
     make -j$(nproc) && \
-    make install && \
-    cd / && \
-    rm -rf /build
+    make install
 
-# Install runtime dependencies only
+FROM alpine:latest
+
 RUN apk add --no-cache \
     alsa-lib \
-    libvorbis \
-    flac \
-    opus \
-    soxr \
     avahi \
     avahi-libs \
-    dbus \
-    nlohmann-json \
     boost-program_options \
-    shairport-sync \
-    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing \
-    librespot
+    dbus \
+    flac \
+    libvorbis \
+    nlohmann-json \
+    opus \
+    soxr
 
-# Create directories
+COPY --from=builder /usr/bin/snapserver /usr/bin/snapserver
+
 RUN mkdir -p /var/lib/snapserver /config /data /audio
 
-# Copy default config
 COPY config/snapserver.conf /etc/snapserver.conf
 
-# Expose ports
 EXPOSE 1704 1705 1780
 
-# Run snapserver
 CMD ["snapserver", "-c", "/etc/snapserver.conf"]

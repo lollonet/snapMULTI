@@ -11,8 +11,8 @@ Progettato per applicazioni di gestione remota e configurazione avanzata.
 |---|----------|------|-----------|-------|---------------------|
 | 1 | MPD | `pipe` | `MPD` | Attiva | — (FIFO) |
 | 2 | Ingresso TCP | `tcp` (server) | `TCP-Input` | Attiva | — (integrato) |
-| 3 | AirPlay | `airplay` | `AirPlay` | Attiva | `shairport-sync` |
-| 4 | Spotify Connect | `librespot` | `Spotify` | Attiva | `librespot` |
+| 3 | AirPlay | `pipe` | `AirPlay` | Attiva | `shairport-sync` (container separato) |
+| 4 | Spotify Connect | `pipe` | `Spotify` | Attiva | `librespot` (container separato) |
 | 5 | Cattura ALSA | `alsa` | `LineIn` | Disponibile | Dispositivo ALSA |
 | 6 | Meta Stream | `meta` | `AutoSwitch` | Disponibile | — (integrato) |
 | 7 | Riproduzione File | `file` | `Alert` | Disponibile | — (integrato) |
@@ -109,13 +109,13 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=5" \
 
 ---
 
-### 3. AirPlay (airplay)
+### 3. AirPlay (pipe da shairport-sync)
 
-Avvia shairport-sync per ricevere audio AirPlay dai dispositivi Apple. Il server appare come ricevitore AirPlay sulla rete locale.
+Il container shairport-sync riceve audio AirPlay dai dispositivi Apple e scrive PCM grezzo su una named pipe. Snapserver legge dalla pipe.
 
 **Configurazione:**
 ```ini
-source = airplay:///usr/bin/shairport-sync?name=AirPlay&devicename=snapMULTI
+source = pipe:////audio/airplay_fifo?name=AirPlay
 ```
 
 **Parametri:**
@@ -123,9 +123,13 @@ source = airplay:///usr/bin/shairport-sync?name=AirPlay&devicename=snapMULTI
 | Parametro | Valore | Descrizione |
 |-----------|--------|-------------|
 | `name` | `AirPlay` | ID dello stream |
-| `devicename` | `snapMULTI` | Nome mostrato sui dispositivi Apple |
-| `port` | `5000` (predefinito) | Porta RTSP (5000=AirPlay 1, 7000=AirPlay 2) |
-| `password` | — | Password di accesso opzionale |
+
+**Configurazione shairport-sync** (`config/shairport-sync.conf`):
+
+| Impostazione | Valore | Descrizione |
+|--------------|--------|-------------|
+| `general.name` | `snapMULTI` | Nome mostrato sui dispositivi Apple |
+| `pipe.name` | `/audio/airplay_fifo` | Percorso della named pipe per l'output audio |
 
 **Formato campionamento:** 44100:16:2 (fisso, impostato da shairport-sync)
 
@@ -139,17 +143,17 @@ source = airplay:///usr/bin/shairport-sync?name=AirPlay&devicename=snapMULTI
 avahi-browse -r _raop._tcp --terminate
 ```
 
-**Requisiti Docker:** Modalità rete host + socket D-Bus per Avahi/mDNS.
+**Requisiti Docker:** Modalità rete host per mDNS. Volume `/audio` condiviso con snapserver.
 
 ---
 
-### 4. Spotify Connect (librespot)
+### 4. Spotify Connect (pipe da librespot)
 
-Avvia librespot per funzionare come ricevitore Spotify Connect. Il server appare come dispositivo Spotify nell'app Spotify.
+Il container librespot funziona come ricevitore Spotify Connect e scrive PCM grezzo su una named pipe. Snapserver legge dalla pipe.
 
 **Configurazione:**
 ```ini
-source = librespot:///usr/bin/librespot?name=Spotify&devicename=snapMULTI&bitrate=320
+source = pipe:////audio/spotify_fifo?name=Spotify
 ```
 
 **Parametri:**
@@ -157,14 +161,15 @@ source = librespot:///usr/bin/librespot?name=Spotify&devicename=snapMULTI&bitrat
 | Parametro | Valore | Descrizione |
 |-----------|--------|-------------|
 | `name` | `Spotify` | ID dello stream |
-| `devicename` | `snapMULTI` | Nome mostrato nell'app Spotify |
-| `bitrate` | `320` | Qualità audio: 96, 160 o 320 kbps |
-| `volume` | `100` (predefinito) | Volume iniziale (0-100) |
-| `normalize` | `false` (predefinito) | Normalizzazione volume |
-| `username` | — | Credenziali Spotify opzionali |
-| `password` | — | Credenziali Spotify opzionali |
-| `cache` | — | Directory cache opzionale |
-| `killall` | `false` (predefinito) | Termina altre istanze librespot |
+
+**Impostazioni container librespot** (Dockerfile.librespot CMD):
+
+| Flag | Valore | Descrizione |
+|------|--------|-------------|
+| `--name` | `snapMULTI` | Nome mostrato nell'app Spotify |
+| `--bitrate` | `320` | Qualità audio: 96, 160 o 320 kbps |
+| `--backend` | `pipe` | Output su named pipe |
+| `--device` | `/audio/spotify_fifo` | Percorso della named pipe per l'output audio |
 
 **Formato campionamento:** 44100:16:2 (fisso, impostato da librespot)
 
@@ -208,7 +213,7 @@ source = alsa:///?name=LineIn&device=hw:0,0
 
 **Requisiti Docker:**
 ```yaml
-# Aggiungere al servizio snapmulti in docker-compose.yml:
+# Aggiungere al servizio snapserver in docker-compose.yml:
 devices:
   - /dev/snd:/dev/snd
 ```
@@ -490,22 +495,26 @@ Riferimento leggibile da macchina per ogni tipo di sorgente. Usare per costruire
 | **Formato campionamento** | Configurabile (predefinito: globale) |
 | **Parametri** | `name` (obbligatorio), `mode` (server\|client), `port` |
 
-### airplay
+### airplay (non usato — snapMULTI usa pipe)
+
+Il tipo sorgente `airplay://` integrato in Snapcast avvia shairport-sync come processo figlio. snapMULTI esegue shairport-sync in un container separato e usa `pipe://` per leggerne l'output.
 
 | Proprietà | Valore |
 |-----------|--------|
 | **Formato** | `airplay:///<binario>?name=<id>&devicename=<nome>[&port=5000]` |
-| **Binari richiesti** | `shairport-sync` |
+| **Binari richiesti** | `shairport-sync` (nello stesso container) |
 | **Requisiti Docker** | Rete host + socket D-Bus + Avahi |
 | **Formato campionamento** | 44100:16:2 (fisso) |
 | **Parametri** | `name`, `devicename`, `port` (5000\|7000), `password` |
 
-### librespot
+### librespot (non usato — snapMULTI usa pipe)
+
+Il tipo sorgente `librespot://` integrato in Snapcast avvia librespot come processo figlio. snapMULTI esegue librespot in un container separato e usa `pipe://` per leggerne l'output.
 
 | Proprietà | Valore |
 |-----------|--------|
 | **Formato** | `librespot:///<binario>?name=<id>&devicename=<nome>[&bitrate=320]` |
-| **Binari richiesti** | `librespot` |
+| **Binari richiesti** | `librespot` (nello stesso container) |
 | **Requisiti Docker** | Accesso rete per API Spotify |
 | **Formato campionamento** | 44100:16:2 (fisso) |
 | **Parametri** | `name`, `devicename`, `bitrate` (96\|160\|320), `volume`, `normalize`, `username`, `password`, `cache`, `killall` |

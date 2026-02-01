@@ -1,0 +1,10 @@
+FROM alpine:latest
+
+RUN apk add --no-cache \
+    --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing \
+    librespot
+
+RUN mkdir -p /audio
+
+ENTRYPOINT ["librespot"]
+CMD ["--name", "snapMULTI", "--bitrate", "320", "--backend", "pipe", "--device", "/audio/spotify_fifo"]

@@ -45,18 +45,44 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push snapmulti
+      - name: Build and push snapserver
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.snapMULTI
+          file: Dockerfile.snapserver
           platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            ${{ env.REGISTRY }}/lollonet/snapmulti:${{ matrix.suffix }}
-            ${{ steps.version.outputs.tag && format('{0}/lollonet/snapmulti:{1}-{2}', env.REGISTRY, steps.version.outputs.tag, matrix.suffix) || '' }}
-          cache-from: type=gha,scope=snapmulti-${{ matrix.suffix }}
-          cache-to: type=gha,mode=max,scope=snapmulti-${{ matrix.suffix }}
+            ${{ env.REGISTRY }}/lollonet/snapmulti-server:${{ matrix.suffix }}
+            ${{ steps.version.outputs.tag && format('{0}/lollonet/snapmulti-server:{1}-{2}', env.REGISTRY, steps.version.outputs.tag, matrix.suffix) || '' }}
+          cache-from: type=gha,scope=snapserver-${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=snapserver-${{ matrix.suffix }}
+
+      - name: Build and push shairport-sync
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.shairport-sync
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/lollonet/snapmulti-airplay:${{ matrix.suffix }}
+            ${{ steps.version.outputs.tag && format('{0}/lollonet/snapmulti-airplay:{1}-{2}', env.REGISTRY, steps.version.outputs.tag, matrix.suffix) || '' }}
+          cache-from: type=gha,scope=airplay-${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=airplay-${{ matrix.suffix }}
+
+      - name: Build and push librespot
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.librespot
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/lollonet/snapmulti-spotify:${{ matrix.suffix }}
+            ${{ steps.version.outputs.tag && format('{0}/lollonet/snapmulti-spotify:{1}-{2}', env.REGISTRY, steps.version.outputs.tag, matrix.suffix) || '' }}
+          cache-from: type=gha,scope=spotify-${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=spotify-${{ matrix.suffix }}
 
       - name: Build and push mpd
         uses: docker/build-push-action@v6
@@ -97,19 +123,47 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create multi-arch manifest for snapmulti
+      - name: Create multi-arch manifest for snapserver
         run: |
-          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti:latest \
-            $REGISTRY/lollonet/snapmulti:amd64 \
-            $REGISTRY/lollonet/snapmulti:arm64
+          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-server:latest \
+            $REGISTRY/lollonet/snapmulti-server:amd64 \
+            $REGISTRY/lollonet/snapmulti-server:arm64
 
-      - name: Create versioned manifest for snapmulti
+      - name: Create versioned manifest for snapserver
         if: steps.version.outputs.tag != ''
         run: |
           VERSION=${{ steps.version.outputs.tag }}
-          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti:$VERSION \
-            $REGISTRY/lollonet/snapmulti:$VERSION-amd64 \
-            $REGISTRY/lollonet/snapmulti:$VERSION-arm64
+          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-server:$VERSION \
+            $REGISTRY/lollonet/snapmulti-server:$VERSION-amd64 \
+            $REGISTRY/lollonet/snapmulti-server:$VERSION-arm64
+
+      - name: Create multi-arch manifest for airplay
+        run: |
+          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-airplay:latest \
+            $REGISTRY/lollonet/snapmulti-airplay:amd64 \
+            $REGISTRY/lollonet/snapmulti-airplay:arm64
+
+      - name: Create versioned manifest for airplay
+        if: steps.version.outputs.tag != ''
+        run: |
+          VERSION=${{ steps.version.outputs.tag }}
+          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-airplay:$VERSION \
+            $REGISTRY/lollonet/snapmulti-airplay:$VERSION-amd64 \
+            $REGISTRY/lollonet/snapmulti-airplay:$VERSION-arm64
+
+      - name: Create multi-arch manifest for spotify
+        run: |
+          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-spotify:latest \
+            $REGISTRY/lollonet/snapmulti-spotify:amd64 \
+            $REGISTRY/lollonet/snapmulti-spotify:arm64
+
+      - name: Create versioned manifest for spotify
+        if: steps.version.outputs.tag != ''
+        run: |
+          VERSION=${{ steps.version.outputs.tag }}
+          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-spotify:$VERSION \
+            $REGISTRY/lollonet/snapmulti-spotify:$VERSION-amd64 \
+            $REGISTRY/lollonet/snapmulti-spotify:$VERSION-arm64
 
       - name: Create multi-arch manifest for mpd
         run: |
