@@ -1,10 +1,29 @@
+FROM rust:1-alpine AS builder
+
+RUN apk add --no-cache \
+    avahi-dev \
+    build-base \
+    dbus-dev \
+    git \
+    openssl-dev \
+    protobuf-dev
+
+WORKDIR /build
+RUN git clone --depth=1 --branch=v0.8.0 \
+    https://github.com/librespot-org/librespot.git . && \
+    cargo build --release --no-default-features \
+      --features "with-avahi,rustls-tls-webpki-roots"
+
 FROM alpine:latest
 
 RUN apk add --no-cache \
-    --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing \
-    librespot
+    avahi-libs \
+    dbus-libs
+
+COPY --from=builder /build/target/release/librespot /usr/bin/librespot
 
 RUN mkdir -p /audio
 
 ENTRYPOINT ["librespot"]
-CMD ["--name", "snapMULTI", "--bitrate", "320", "--backend", "pipe", "--device", "/audio/spotify_fifo"]
+CMD ["--name", "snapMULTI", "--bitrate", "320", "--backend", "pipe", \
+     "--device", "/audio/spotify_fifo", "--zeroconf-backend", "avahi"]

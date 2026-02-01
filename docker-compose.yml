@@ -26,6 +26,7 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./audio:/audio
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
     depends_on:
@@ -39,6 +40,7 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./audio:/audio
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
     depends_on:
