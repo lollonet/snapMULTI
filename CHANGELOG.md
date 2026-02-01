@@ -7,16 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-02-01
+
 ### Added
-- **myMPD web GUI** — Mobile-ready web interface for MPD control via [myMPD](https://github.com/jcorporation/myMPD) on port 8180 (PWA, album art, playlists)
+- **myMPD web GUI** ([#11](https://github.com/lollonet/snapMULTI/pull/11)) — Mobile-ready web interface for MPD control via [myMPD](https://github.com/jcorporation/myMPD) on port 8180 (PWA, album art, playlists)
 
 ### Changed
-- **Container architecture** — Split monolith image into separate containers: snapserver (from [santcasp](https://github.com/lollonet/santcasp)), shairport-sync (AirPlay), and librespot (Spotify Connect), communicating via named pipes in shared `/audio` volume
+- **Container architecture** ([#13](https://github.com/lollonet/snapMULTI/pull/13)) — Split monolith image into separate containers: snapserver (from [santcasp](https://github.com/lollonet/santcasp)), shairport-sync (AirPlay), and librespot (Spotify Connect), communicating via named pipes in shared `/audio` volume
 - **Snapserver source** — Built from `lollonet/santcasp` fork instead of `badaix/snapcast`
 - **Audio sources** — AirPlay and Spotify sources changed from process-managed (`airplay://`, `librespot://`) to pipe-based (`pipe://`) for inter-container communication
 - **CI/CD pipeline** — Now builds 4 images (snapmulti-server, snapmulti-airplay, snapmulti-spotify, snapmulti-mpd) and deploys 5 containers
-- **CI trigger** — Build & Push workflow now triggers on version tag push (`v*`) instead of every push to `main`; Docker images are tagged with both `:latest` and the version number (e.g. `:1.0.1`)
-- **Deploy script** — Replaced `git pull` with `git fetch && git reset --hard` to prevent conflicts from local config overrides on the server
+
+### Fixed
+- **myMPD deploy** ([#12](https://github.com/lollonet/snapMULTI/pull/12)) — Include myMPD in deploy workflow (pull + start + create directories)
 
 ### Removed
 - **Monolith image** — `Dockerfile.snapMULTI` replaced by `Dockerfile.snapserver`, `Dockerfile.shairport-sync`, and `Dockerfile.librespot`
