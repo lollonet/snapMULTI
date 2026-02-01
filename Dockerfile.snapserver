@@ -16,6 +16,8 @@ RUN apk add --no-cache \
     soxr-dev
 
 WORKDIR /build
+# SANTCASP_SHA busts the Docker cache when santcasp has new commits
+ARG SANTCASP_SHA=latest
 RUN git clone https://github.com/lollonet/santcasp.git . && \
     mkdir build && cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \

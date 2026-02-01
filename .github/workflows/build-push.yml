@@ -45,6 +45,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get latest santcasp commit SHA
+        id: santcasp
+        run: |
+          SHA=$(git ls-remote https://github.com/lollonet/santcasp.git HEAD | cut -f1)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "santcasp HEAD: $SHA"
+
       - name: Build and push snapserver
         uses: docker/build-push-action@v6
         with:
@@ -52,6 +59,8 @@ jobs:
           file: Dockerfile.snapserver
           platforms: ${{ matrix.platform }}
           push: true
+          build-args: |
+            SANTCASP_SHA=${{ steps.santcasp.outputs.sha }}
           tags: |
             ${{ env.REGISTRY }}/lollonet/snapmulti-server:${{ matrix.suffix }}
             ${{ steps.version.outputs.tag && format('{0}/lollonet/snapmulti-server:{1}-{2}', env.REGISTRY, steps.version.outputs.tag, matrix.suffix) || '' }}

@@ -25,10 +25,21 @@ jobs:
         id: vars
         run: echo "TAG=test-$(basename ${{ matrix.dockerfile }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
+      - name: Get latest santcasp commit SHA
+        if: matrix.dockerfile == 'Dockerfile.snapserver'
+        id: santcasp
+        run: |
+          SHA=$(git ls-remote https://github.com/lollonet/santcasp.git HEAD | cut -f1)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
       - name: Build ${{ matrix.dockerfile }}
         run: |
           echo "Building image: ${{ steps.vars.outputs.TAG }}:latest"
-          docker build -f ${{ matrix.dockerfile }} \
+          BUILD_ARGS=""
+          if [ -n "${{ steps.santcasp.outputs.sha }}" ]; then
+            BUILD_ARGS="--build-arg SANTCASP_SHA=${{ steps.santcasp.outputs.sha }}"
+          fi
+          docker build -f ${{ matrix.dockerfile }} $BUILD_ARGS \
             --tag ${{ steps.vars.outputs.TAG }}:latest . || {
             echo "ERROR: Docker build failed for ${{ matrix.dockerfile }}"
             exit 1
