@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-02-02
+
+### Fixed
+- **AirPlay mDNS discovery** ([#15](https://github.com/lollonet/snapMULTI/pull/15)) — Mount host D-Bus socket for shairport-sync so it can reach the host's Avahi daemon for AirPlay advertisement
+- **Spotify Connect discovery** ([#15](https://github.com/lollonet/snapMULTI/pull/15)) — Rebuild librespot from source with Avahi Zeroconf backend (`with-avahi`) instead of Alpine package; the default `libmdns` backend requires IPv6 sockets, which fails on hosts with `ipv6.disable=1`
+
 ## [1.2.0] — 2026-02-01
 
 ### Added
