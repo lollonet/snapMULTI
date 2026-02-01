@@ -52,7 +52,10 @@ jobs:
             echo "Creating required directories..."
             mkdir -p mympd/workdir mympd/cachedir audio
 
-            echo "Restarting app containers..."
+            echo "Stopping old containers..."
+            docker compose down --remove-orphans || true
+
+            echo "Starting app containers..."
             docker compose up -d snapserver shairport-sync librespot mpd mympd || { echo "ERROR: docker compose up failed"; exit 1; }
 
             echo "Verifying deployment..."
