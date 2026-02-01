@@ -172,11 +172,13 @@ Impostazioni docker-compose necessarie:
 
 ```yaml
 network_mode: host                    # Necessario per i broadcast mDNS
+security_opt:
+  - apparmor:unconfined               # Necessario per accesso D-Bus (AppArmor lo blocca altrimenti)
 volumes:
   - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket  # Avahi dell'host
 ```
 
-Snapserver richiede inoltre `security_opt: [apparmor:unconfined]` per l'accesso alla policy D-Bus.
+Tutti e tre i container (snapserver, shairport-sync, librespot) necessitano di tutte e tre le impostazioni sopra.
 
 **Requisito host**: `avahi-daemon` deve essere in esecuzione sull'host (`systemctl status avahi-daemon`).
 
@@ -308,6 +310,8 @@ services:
     container_name: shairport-sync
     restart: unless-stopped
     network_mode: host
+    security_opt:
+      - apparmor:unconfined
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./audio:/audio
@@ -322,6 +326,8 @@ services:
     container_name: librespot
     restart: unless-stopped
     network_mode: host
+    security_opt:
+      - apparmor:unconfined
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./audio:/audio
