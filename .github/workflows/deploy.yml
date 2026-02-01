@@ -47,10 +47,13 @@ jobs:
             echo "$GHCR_TOKEN" | docker login ghcr.io -u lollonet --password-stdin || { echo "ERROR: ghcr.io login failed"; exit 1; }
 
             echo "Pulling latest images..."
-            docker compose pull snapmulti mpd || { echo "ERROR: docker compose pull failed"; exit 1; }
+            docker compose pull snapmulti mpd mympd || { echo "ERROR: docker compose pull failed"; exit 1; }
+
+            echo "Creating myMPD directories..."
+            mkdir -p mympd/workdir mympd/cachedir
 
             echo "Restarting app containers..."
-            docker compose up -d snapmulti mpd || { echo "ERROR: docker compose up failed"; exit 1; }
+            docker compose up -d snapmulti mpd mympd || { echo "ERROR: docker compose up failed"; exit 1; }
 
             echo "Verifying deployment..."
             sleep 5
