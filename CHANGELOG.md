@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **myMPD web GUI** — Mobile-ready web interface for MPD control via [myMPD](https://github.com/jcorporation/myMPD) on port 8180 (PWA, album art, playlists)
+
 ### Changed
 - **CI trigger** — Build & Push workflow now triggers on version tag push (`v*`) instead of every push to `main`; Docker images are tagged with both `:latest` and the version number (e.g. `:1.0.1`)
 - **Deploy script** — Replaced `git pull` with `git fetch && git reset --hard` to prevent conflicts from local config overrides on the server

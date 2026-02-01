@@ -146,6 +146,7 @@ Audio format: 48000 Hz, 16-bit, stereo (default FLAC codec).
 | 1704 | TCP | Server → Clients | Audio streaming |
 | 1705 | TCP | Bidirectional | JSON-RPC control |
 | 1780 | HTTP | Bidirectional | HTTP API |
+| 8180 | HTTP | Bidirectional | myMPD web UI |
 | 5353 | UDP | Multicast | mDNS autodiscovery |
 
 **Router requirements:**
@@ -160,6 +161,7 @@ Audio format: 48000 Hz, 16-bit, stereo (default FLAC codec).
 sudo ufw allow 1704/tcp   # Audio streaming
 sudo ufw allow 1705/tcp   # JSON-RPC control
 sudo ufw allow 1780/tcp   # HTTP API
+sudo ufw allow 8180/tcp   # myMPD web UI
 sudo ufw allow 5353/udp   # mDNS discovery
 ```
 
