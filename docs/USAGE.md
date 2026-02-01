@@ -165,18 +165,23 @@ Snapcast uses **mDNS/Bonjour via Avahi** for automatic client discovery on the l
 
 ### Critical Requirements
 
-Snapcast requires these docker-compose settings for mDNS:
+Three containers need mDNS for service discovery: **snapserver** (Snapcast client discovery), **shairport-sync** (AirPlay advertisement), and **librespot** (Spotify Connect advertisement). All three use the host's Avahi daemon via D-Bus — no Avahi runs inside containers.
+
+Required docker-compose settings:
 
 ```yaml
 network_mode: host                    # Required for mDNS broadcasts
-security_opt:
-  - apparmor:unconfined               # CRITICAL: allows D-Bus socket access
-user: "${PUID:-1000}:${PGID:-1000}"    # Required for D-Bus policy
 volumes:
   - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket  # Host's Avahi
 ```
 
-**Do NOT run `avahi-daemon` inside container** — it will conflict with host's Avahi on port 5353.
+Snapserver additionally needs `security_opt: [apparmor:unconfined]` for D-Bus policy access.
+
+**Host requirement**: `avahi-daemon` must be running on the host (`systemctl status avahi-daemon`).
+
+**Do NOT run `avahi-daemon` inside containers** — it will conflict with the host's Avahi on port 5353.
+
+**Note on librespot**: The image is built from source with the `with-avahi` Zeroconf backend (instead of the default `libmdns`). This avoids requiring IPv6 socket support on the host — `libmdns` fails on systems with `ipv6.disable=1`.
 
 ### Verification
 
@@ -198,12 +203,24 @@ ss -tlnp | grep -E "1704|1705|1780"
 
 **No mDNS services visible:**
 1. Verify docker-compose has all critical requirements above
-2. Check logs: `docker logs snapserver | grep -i "avahi"`
-3. Test direct connection: `snapclient --host <server_ip>`
-4. Allow firewall ports (see [HARDWARE.md — Firewall Rules](HARDWARE.md#firewall-rules))
+2. Check host Avahi: `systemctl status avahi-daemon`
+3. Check logs: `docker logs snapserver | grep -i "avahi"`
+4. Test direct connection: `snapclient --host <server_ip>`
+5. Allow firewall ports (see [HARDWARE.md — Firewall Rules](HARDWARE.md#firewall-rules))
+
+**AirPlay not visible:**
+1. Check logs: `docker logs shairport-sync | grep -i "avahi\|dbus\|fatal"`
+2. Verify D-Bus socket mount: `docker exec shairport-sync ls -la /run/dbus/system_bus_socket`
+
+**Spotify Connect not visible:**
+1. Check logs: `docker logs librespot | grep -i "discovery\|avahi\|error"`
+2. Verify D-Bus socket mount: `docker exec librespot ls -la /run/dbus/system_bus_socket`
+3. If `Address family not supported` error: librespot was built without Avahi backend — rebuild image
 
 **Common errors:**
-- `"Failed to create client: Access denied"` → Missing `security_opt: [apparmor:unconfined]`
+- `"Failed to create client: Access denied"` → Missing `security_opt: [apparmor:unconfined]` (snapserver)
+- `"couldn't create avahi client: Daemon not running!"` → Missing D-Bus socket mount or host avahi-daemon not running
+- `"Address family not supported by protocol"` → librespot using `libmdns` on host with IPv6 disabled — need Avahi backend
 - `"Avahi already running"` → Remove `avahi-daemon` from container command
 - No services found → Check `network_mode: host` is set
 
@@ -293,6 +310,7 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./audio:/audio
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
     depends_on:
@@ -306,6 +324,7 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./audio:/audio
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
     depends_on:
