@@ -19,28 +19,28 @@ Per i tipi di sorgente audio e l'API JSON-RPC, vedi [SOURCES.it.md](SOURCES.it.m
 ┌─────────────────┐     ┌──────────────┐
 │  Docker: MPD    │────▶│ /audio/fifo  │──┐
 │ (localhost:6600)│     └──────────────┘  │
-└─────────────────┘                       │
-                                          ▼
+└────────▲────────┘                       │
+         │                                ▼
 ┌─────────────────┐              ┌──────────────────┐
-│ Ingresso TCP    │─────────────▶│                  │
-│ (porta 4953)    │              │ Docker: Snapcast │
-└─────────────────┘              │ (porta 1704)     │
-                                 │                  │
-┌─────────────────┐              │ Sorgenti:        │
-│ AirPlay         │─────────────▶│  - MPD (FIFO)    │
-│ (shairport-sync)│              │  - TCP-Input     │
-└─────────────────┘              │  - AirPlay       │
-                                 │  - Spotify       │
-┌─────────────────┐              │                  │
-│ Spotify Connect │─────────────▶│                  │
-│ (librespot)     │              └────────┬─────────┘
-└─────────────────┘                       │
-                            ┌─────────────┼─────────────┐
-                            ▼             ▼             ▼
-                       ┌────────┐    ┌────────┐   ┌────────┐
-                       │Client 1│    │Client 2│   │Client 3│
-                       │(Snap)  │    │(Snap)  │   │(Snap)  │
-                       └────────┘    └────────┘   └────────┘
+│ Docker: myMPD   │              │                  │
+│ (localhost:8180)│  ┌──────────▶│ Docker: Snapcast │
+└─────────────────┘  │          │ (porta 1704)     │
+                     │          │                  │
+┌─────────────────┐  │          │ Sorgenti:        │
+│ Ingresso TCP    │──┘   ┌─────▶│  - MPD (FIFO)    │
+│ (porta 4953)    │      │      │  - TCP-Input     │
+└─────────────────┘      │      │  - AirPlay       │
+                         │      │  - Spotify       │
+┌─────────────────┐      │      │                  │
+│ AirPlay         │──────┘  ┌──▶│                  │
+│ (shairport-sync)│         │   └────────┬─────────┘
+└─────────────────┘         │            │
+                            │  ┌─────────┼─────────────┐
+┌─────────────────┐         │  ▼         ▼             ▼
+│ Spotify Connect │─────────┘ ┌────────┐ ┌────────┐ ┌────────┐
+│ (librespot)     │           │Client 1│ │Client 2│ │Client 3│
+└─────────────────┘           │(Snap)  │ │(Snap)  │ │(Snap)  │
+                              └────────┘ └────────┘ └────────┘
 ```
 
 ## Servizi e Porte
@@ -59,6 +59,17 @@ Per i tipi di sorgente audio e l'API JSON-RPC, vedi [SOURCES.it.md](SOURCES.it.m
 - Formato campionamento: 48000:16:2
 - Buffer: 2400ms (chunk_ms: 40)
 
+### myMPD
+
+| Porta | Protocollo | Scopo |
+|-------|------------|-------|
+| 8180 | HTTP | Interfaccia web (PWA, mobile-ready) |
+
+**Configurazione**: variabili d'ambiente in `docker-compose.yml`
+- Si connette a MPD su `localhost:6600`
+- SSL disabilitato (rete locale)
+- Dati: `mympd/workdir/`, cache: `mympd/cachedir/`
+
 ### MPD
 
 | Porta | Protocollo | Scopo |
@@ -72,6 +83,10 @@ Per i tipi di sorgente audio e l'API JSON-RPC, vedi [SOURCES.it.md](SOURCES.it.m
 - Database: `/data/mpd.db`
 
 ## Controllare MPD
+
+### Tramite myMPD (Interfaccia Web — Consigliato)
+
+Apri `http://<ip-del-server>:8180` in qualsiasi browser. myMPD è una PWA completa che funziona su desktop e mobile — sfoglia la libreria, gestisci playlist, controlla la riproduzione e visualizza le copertine degli album.
 
 ### Tramite mpc (Riga di Comando)
 
@@ -246,7 +261,7 @@ Vedi la scheda GitHub Actions per lo stato dei workflow e i log.
 
 ### docker-compose.yml
 
-Definisce entrambi i servizi con immagini pre-compilate da ghcr.io e rete host per mDNS:
+Definisce tutti i servizi con immagini pre-compilate e rete host per mDNS:
 
 ```yaml
 services:
@@ -268,6 +283,23 @@ services:
     environment:
       - TZ=${TZ:-Europe/Berlin}
     command: ["snapserver", "-c", "/etc/snapserver.conf"]
+
+  mympd:
+    image: ghcr.io/jcorporation/mympd/mympd:latest
+    container_name: mympd
+    restart: unless-stopped
+    network_mode: host
+    user: "${PUID:-1000}:${PGID:-1000}"
+    volumes:
+      - ./mympd/workdir:/var/lib/mympd
+      - ./mympd/cachedir:/var/cache/mympd
+      - ${MUSIC_LOSSLESS_PATH}:/music/Lossless:ro
+      - ${MUSIC_LOSSY_PATH}:/music/Lossy:ro
+      - ./mpd/playlists:/playlists:ro
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+      - MYMPD_HTTP_PORT=8180
+      - MYMPD_SSL=false
 
   mpd:
     image: ghcr.io/lollonet/snapmulti-mpd:latest

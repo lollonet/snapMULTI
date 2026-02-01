@@ -18,6 +18,23 @@ services:
       - TZ=${TZ:-Europe/Berlin}
     command: ["snapserver", "-c", "/etc/snapserver.conf"]
 
+  mympd:
+    image: ghcr.io/jcorporation/mympd/mympd:latest
+    container_name: mympd
+    restart: unless-stopped
+    network_mode: host
+    user: "${PUID:-1000}:${PGID:-1000}"
+    volumes:
+      - ./mympd/workdir:/var/lib/mympd
+      - ./mympd/cachedir:/var/cache/mympd
+      - ${MUSIC_LOSSLESS_PATH}:/music/Lossless:ro
+      - ${MUSIC_LOSSY_PATH}:/music/Lossy:ro
+      - ./mpd/playlists:/playlists:ro
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+      - MYMPD_HTTP_PORT=8180
+      - MYMPD_SSL=false
+
   mpd:
     image: ghcr.io/lollonet/snapmulti-mpd:latest
     container_name: mpd

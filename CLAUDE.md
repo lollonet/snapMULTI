@@ -45,9 +45,12 @@ snapMULTI/
     deploy.yml         # SSH deploy (workflow_call from build-push)
     build-test.yml     # PR-only build validation
     validate.yml       # Config syntax validation
+  mympd/
+    workdir/           # myMPD persistent data
+    cachedir/          # myMPD cache (album art, etc.)
   Dockerfile.snapMULTI # Snapserver + shairport-sync + librespot (Alpine)
   Dockerfile.mpd       # MPD + ffmpeg (Alpine)
-  docker-compose.yml   # App services (ghcr.io images, host networking)
+  docker-compose.yml   # App services (ghcr.io + myMPD images, host networking)
   .env.example         # Environment template
   .dockerignore        # Build context exclusions
   README.md            # Essential user guide (quickstart, connect, links to docs/)
@@ -59,5 +62,5 @@ snapMULTI/
 - **Docker images**: `ghcr.io/lollonet/snapmulti:latest` and `ghcr.io/lollonet/snapmulti-mpd:latest`
 - **Multi-arch**: linux/amd64 (raspy) + linux/arm64 (studio), native builds on self-hosted runners
 - **Config paths**: all config in `config/` directory
-- **Deployment**: push to main triggers build → manifest → deploy (never push directly to main without PR unless explicitly requested)
+- **Deployment**: tag push (`v*`) triggers build → manifest → deploy (never push directly to main without PR unless explicitly requested)
 - **Audio format**: 48000:16:2 (48kHz, 16-bit, stereo) across all sources

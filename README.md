@@ -16,7 +16,7 @@ snapMULTI runs on a home server and streams audio to speakers throughout your ne
 |--------|------------|
 | **Spotify** | Open Spotify app → Connect to a device → "snapMULTI" (Premium required) |
 | **AirPlay** | iPhone/iPad/Mac → AirPlay → "snapMULTI" |
-| **Music library** | Use an MPD app ([Cantata](https://github.com/CDrummond/cantata), [MPDroid](https://play.google.com/store/apps/details?id=com.namelessdev.mpdroid)) → connect to your server |
+| **Music library** | Use [myMPD](http://server-ip:8180) web UI, or an MPD app ([Cantata](https://github.com/CDrummond/cantata), [MPDroid](https://play.google.com/store/apps/details?id=com.namelessdev.mpdroid)) → connect to your server |
 | **Any app** | Stream audio via TCP to the server |
 | **Android / Tidal** | See [streaming guide](docs/SOURCES.md#streaming-from-android) |
 
@@ -70,7 +70,11 @@ docker compose up -d
 docker ps
 ```
 
-You should see two running containers: `snapserver` and `mpd`.
+You should see three running containers: `snapserver`, `mympd`, and `mpd`.
+
+### 5. Control your music
+
+Open `http://<server-ip>:8180` in a browser — myMPD lets you browse and play your library from any device.
 
 ## Listen on Your Speakers
 
