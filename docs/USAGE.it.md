@@ -221,7 +221,7 @@ Il push di un tag di versione (es. `git tag v1.1.0 && git push origin v1.1.0`) a
 
 1. **Build** — Immagini Docker multi-architettura compilate nativamente su due runner self-hosted (amd64 + arm64)
 2. **Manifest** — Le immagini per architettura vengono unite in tag multi-arch `:latest` su ghcr.io
-3. **Deploy** — Le immagini vengono scaricate e i container riavviati sul server domestico via SSH
+3. **Deploy** — Le immagini vengono scaricate e tutti e tre i container (`snapmulti`, `mpd`, `mympd`) riavviati sul server domestico via SSH
 
 ```
 tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :versione) → deploy.yml → server aggiornato
@@ -240,7 +240,7 @@ docker compose up -d
 | Workflow | Trigger | Scopo |
 |----------|---------|-------|
 | **Build & Push** | Push tag (`v*`) | Compila immagini multi-arch con versione, push su ghcr.io, avvia deploy |
-| **Deploy** | Chiamato da Build & Push | Scarica immagini e riavvia container sul server via SSH |
+| **Deploy** | Chiamato da Build & Push | Scarica immagini e riavvia tutti i container (snapmulti, mpd, mympd) sul server via SSH |
 | **Validate** | Push su qualsiasi branch, pull request | Verifica sintassi docker-compose e template environment |
 | **Build Test** | Pull request | Valida che le immagini Docker si compilino correttamente (senza push) |
 
