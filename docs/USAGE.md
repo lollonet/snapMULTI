@@ -201,14 +201,14 @@ ss -tlnp | grep -E "1704|1705|1780"
 
 ### Automated Deployment (Recommended)
 
-Push to `main` branch triggers the full CI/CD pipeline:
+Pushing a version tag (e.g. `git tag v1.1.0 && git push origin v1.1.0`) triggers the full CI/CD pipeline:
 
 1. **Build** — Multi-arch Docker images built natively on two self-hosted runners (amd64 + arm64)
 2. **Manifest** — Per-arch images merged into multi-arch `:latest` tags on ghcr.io
 3. **Deploy** — Images pulled and containers restarted on the home server via SSH
 
 ```
-push to main → build-push.yml → build (amd64 + arm64) → manifest → deploy.yml → server updated
+tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :version) → deploy.yml → server updated
 ```
 
 ### Manual Deployment
@@ -223,7 +223,7 @@ docker compose up -d
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| **Build & Push** | Push to `main` | Build multi-arch images, push to ghcr.io, trigger deploy |
+| **Build & Push** | Tag push (`v*`) | Build versioned multi-arch images, push to ghcr.io, trigger deploy |
 | **Deploy** | Called by Build & Push | Pull images and restart containers on server via SSH |
 | **Validate** | Push to any branch, pull requests | Check docker-compose syntax and environment template |
 | **Build Test** | Pull requests | Validate Docker images build correctly (no push) |

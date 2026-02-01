@@ -2,7 +2,7 @@ name: Build and Push Images
 
 on:
   push:
-    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 env:
@@ -26,6 +26,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -43,7 +52,9 @@ jobs:
           file: Dockerfile.snapMULTI
           platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ env.REGISTRY }}/lollonet/snapmulti:${{ matrix.suffix }}
+          tags: |
+            ${{ env.REGISTRY }}/lollonet/snapmulti:${{ matrix.suffix }}
+            ${{ steps.version.outputs.tag && format('{0}/lollonet/snapmulti:{1}-{2}', env.REGISTRY, steps.version.outputs.tag, matrix.suffix) || '' }}
           cache-from: type=gha,scope=snapmulti-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=snapmulti-${{ matrix.suffix }}
 
@@ -54,7 +65,9 @@ jobs:
           file: Dockerfile.mpd
           platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ env.REGISTRY }}/lollonet/snapmulti-mpd:${{ matrix.suffix }}
+          tags: |
+            ${{ env.REGISTRY }}/lollonet/snapmulti-mpd:${{ matrix.suffix }}
+            ${{ steps.version.outputs.tag && format('{0}/lollonet/snapmulti-mpd:{1}-{2}', env.REGISTRY, steps.version.outputs.tag, matrix.suffix) || '' }}
           cache-from: type=gha,scope=mpd-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=mpd-${{ matrix.suffix }}
 
@@ -65,6 +78,15 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -81,11 +103,27 @@ jobs:
             $REGISTRY/lollonet/snapmulti:amd64 \
             $REGISTRY/lollonet/snapmulti:arm64
 
+      - name: Create versioned manifest for snapmulti
+        if: steps.version.outputs.tag != ''
+        run: |
+          VERSION=${{ steps.version.outputs.tag }}
+          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti:$VERSION \
+            $REGISTRY/lollonet/snapmulti:$VERSION-amd64 \
+            $REGISTRY/lollonet/snapmulti:$VERSION-arm64
+
       - name: Create multi-arch manifest for mpd
         run: |
           docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-mpd:latest \
             $REGISTRY/lollonet/snapmulti-mpd:amd64 \
             $REGISTRY/lollonet/snapmulti-mpd:arm64
+
+      - name: Create versioned manifest for mpd
+        if: steps.version.outputs.tag != ''
+        run: |
+          VERSION=${{ steps.version.outputs.tag }}
+          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-mpd:$VERSION \
+            $REGISTRY/lollonet/snapmulti-mpd:$VERSION-amd64 \
+            $REGISTRY/lollonet/snapmulti-mpd:$VERSION-arm64
 
   deploy:
     needs: manifest

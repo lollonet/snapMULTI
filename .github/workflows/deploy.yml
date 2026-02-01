@@ -36,8 +36,9 @@ jobs:
             CURRENT_COMMIT=$(git rev-parse HEAD)
             echo "Current commit: $CURRENT_COMMIT"
 
-            echo "Pulling latest changes..."
-            git pull || { echo "ERROR: git pull failed"; exit 1; }
+            echo "Fetching latest changes..."
+            git fetch origin main || { echo "ERROR: git fetch failed"; exit 1; }
+            git reset --hard origin/main || { echo "ERROR: git reset failed"; exit 1; }
 
             NEW_COMMIT=$(git rev-parse HEAD)
             echo "New commit: $NEW_COMMIT"

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **CI trigger** — Build & Push workflow now triggers on version tag push (`v*`) instead of every push to `main`; Docker images are tagged with both `:latest` and the version number (e.g. `:1.0.1`)
+- **Deploy script** — Replaced `git pull` with `git fetch && git reset --hard` to prevent conflicts from local config overrides on the server
+
 ## [1.0.0] — 2026-01-30
 
 First stable release. Multiroom audio server with four audio sources, multi-arch Docker images, full bilingual documentation (EN + IT).
