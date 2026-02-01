@@ -1,6 +1,6 @@
 services:
-  snapmulti:
-    image: ghcr.io/lollonet/snapmulti:latest
+  snapserver:
+    image: ghcr.io/lollonet/snapmulti-server:latest
     container_name: snapserver
     hostname: snapmulti
     restart: unless-stopped
@@ -17,6 +17,32 @@ services:
     environment:
       - TZ=${TZ:-Europe/Berlin}
     command: ["snapserver", "-c", "/etc/snapserver.conf"]
+
+  shairport-sync:
+    image: ghcr.io/lollonet/snapmulti-airplay:latest
+    container_name: shairport-sync
+    restart: unless-stopped
+    network_mode: host
+    user: "${PUID:-1000}:${PGID:-1000}"
+    volumes:
+      - ./audio:/audio
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+    depends_on:
+      - snapserver
+
+  librespot:
+    image: ghcr.io/lollonet/snapmulti-spotify:latest
+    container_name: librespot
+    restart: unless-stopped
+    network_mode: host
+    user: "${PUID:-1000}:${PGID:-1000}"
+    volumes:
+      - ./audio:/audio
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+    depends_on:
+      - snapserver
 
   mympd:
     image: ghcr.io/jcorporation/mympd/mympd:latest

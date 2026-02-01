@@ -34,32 +34,34 @@ Each topic has ONE authoritative document. Other files link to it — never dupl
 ```
 snapMULTI/
   config/
-    snapserver.conf    # Snapcast server config (4 active + 4 commented sources)
-    mpd.conf           # MPD config (FIFO + HTTP outputs)
+    snapserver.conf      # Snapcast server config (4 active + 4 commented sources)
+    mpd.conf             # MPD config (FIFO + HTTP outputs)
   docs/
-    HARDWARE.md        # Hardware & network guide (server/client specs, Pi, bandwidth, setups)
-    USAGE.md           # Technical operations guide (architecture, services, MPD, mDNS, CI/CD)
-    SOURCES.md         # Audio sources technical reference (SSOT for sources)
+    HARDWARE.md          # Hardware & network guide (server/client specs, Pi, bandwidth, setups)
+    USAGE.md             # Technical operations guide (architecture, services, MPD, mDNS, CI/CD)
+    SOURCES.md           # Audio sources technical reference (SSOT for sources)
   .github/workflows/
-    build-push.yml     # Native dual-arch build + push to ghcr.io
-    deploy.yml         # SSH deploy (workflow_call from build-push)
-    build-test.yml     # PR-only build validation
-    validate.yml       # Config syntax validation
+    build-push.yml       # Native dual-arch build + push to ghcr.io (4 images)
+    deploy.yml           # SSH deploy (workflow_call from build-push, 5 containers)
+    build-test.yml       # PR-only build validation (4 Dockerfiles)
+    validate.yml         # Config syntax validation
   mympd/
-    workdir/           # myMPD persistent data
-    cachedir/          # myMPD cache (album art, etc.)
-  Dockerfile.snapMULTI # Snapserver + shairport-sync + librespot (Alpine)
-  Dockerfile.mpd       # MPD + ffmpeg (Alpine)
-  docker-compose.yml   # App services (ghcr.io + myMPD images, host networking)
-  .env.example         # Environment template
-  .dockerignore        # Build context exclusions
-  README.md            # Essential user guide (quickstart, connect, links to docs/)
-  CHANGELOG.md         # Project history
+    workdir/             # myMPD persistent data
+    cachedir/            # myMPD cache (album art, etc.)
+  Dockerfile.snapserver  # Snapserver only (from lollonet/santcasp, multi-stage)
+  Dockerfile.shairport-sync  # AirPlay receiver (pipe output)
+  Dockerfile.librespot   # Spotify Connect (pipe output)
+  Dockerfile.mpd         # MPD + ffmpeg (Alpine)
+  docker-compose.yml     # 5 services (ghcr.io + myMPD images, host networking)
+  .env.example           # Environment template
+  .dockerignore          # Build context exclusions
+  README.md              # Essential user guide (quickstart, connect, links to docs/)
+  CHANGELOG.md           # Project history
 ```
 
 ## Conventions
 
-- **Docker images**: `ghcr.io/lollonet/snapmulti:latest` and `ghcr.io/lollonet/snapmulti-mpd:latest`
+- **Docker images**: `ghcr.io/lollonet/snapmulti-server:latest`, `ghcr.io/lollonet/snapmulti-airplay:latest`, `ghcr.io/lollonet/snapmulti-spotify:latest`, `ghcr.io/lollonet/snapmulti-mpd:latest`
 - **Multi-arch**: linux/amd64 (raspy) + linux/arm64 (studio), native builds on self-hosted runners
 - **Config paths**: all config in `config/` directory
 - **Deployment**: tag push (`v*`) triggers build → manifest → deploy (never push directly to main without PR unless explicitly requested)

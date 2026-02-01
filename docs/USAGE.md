@@ -220,7 +220,7 @@ Pushing a version tag (e.g. `git tag v1.1.0 && git push origin v1.1.0`) triggers
 
 1. **Build** — Multi-arch Docker images built natively on two self-hosted runners (amd64 + arm64)
 2. **Manifest** — Per-arch images merged into multi-arch `:latest` tags on ghcr.io
-3. **Deploy** — Images pulled and all three containers (`snapmulti`, `mpd`, `mympd`) restarted on the home server via SSH
+3. **Deploy** — Images pulled and all five containers (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`) restarted on the home server via SSH
 
 ```
 tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :version) → deploy.yml → server updated
@@ -238,8 +238,8 @@ docker compose up -d
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| **Build & Push** | Tag push (`v*`) | Build versioned multi-arch images, push to ghcr.io, trigger deploy |
-| **Deploy** | Called by Build & Push | Pull images and restart all containers (snapmulti, mpd, mympd) on server via SSH |
+| **Build & Push** | Tag push (`v*`) | Build versioned multi-arch images (4 images), push to ghcr.io, trigger deploy |
+| **Deploy** | Called by Build & Push | Pull images and restart all containers (snapserver, shairport-sync, librespot, mpd, mympd) on server via SSH |
 | **Validate** | Push to any branch, pull requests | Check docker-compose syntax and environment template |
 | **Build Test** | Pull requests | Validate Docker images build correctly (no push) |
 
@@ -249,10 +249,12 @@ Docker images are hosted on GitHub Container Registry:
 
 | Image | Description |
 |-------|-------------|
-| `ghcr.io/lollonet/snapmulti:latest` | Snapserver + shairport-sync + librespot |
+| `ghcr.io/lollonet/snapmulti-server:latest` | Snapcast server (built from [santcasp](https://github.com/lollonet/santcasp)) |
+| `ghcr.io/lollonet/snapmulti-airplay:latest` | AirPlay receiver (shairport-sync) |
+| `ghcr.io/lollonet/snapmulti-spotify:latest` | Spotify Connect (librespot) |
 | `ghcr.io/lollonet/snapmulti-mpd:latest` | Music Player Daemon |
 
-Both images support `linux/amd64` and `linux/arm64` architectures.
+All images support `linux/amd64` and `linux/arm64` architectures.
 
 See GitHub Actions tab for workflow status and logs.
 
@@ -260,12 +262,12 @@ See GitHub Actions tab for workflow status and logs.
 
 ### docker-compose.yml
 
-Defines all services with pre-built images and host networking for mDNS:
+Defines all services with pre-built images and host networking for mDNS. Each audio source runs in its own container, communicating via named pipes in the shared `/audio` volume:
 
 ```yaml
 services:
-  snapmulti:
-    image: ghcr.io/lollonet/snapmulti:latest
+  snapserver:
+    image: ghcr.io/lollonet/snapmulti-server:latest
     container_name: snapserver
     hostname: snapmulti
     restart: unless-stopped
@@ -282,6 +284,32 @@ services:
     environment:
       - TZ=${TZ:-Europe/Berlin}
     command: ["snapserver", "-c", "/etc/snapserver.conf"]
+
+  shairport-sync:
+    image: ghcr.io/lollonet/snapmulti-airplay:latest
+    container_name: shairport-sync
+    restart: unless-stopped
+    network_mode: host
+    user: "${PUID:-1000}:${PGID:-1000}"
+    volumes:
+      - ./audio:/audio
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+    depends_on:
+      - snapserver
+
+  librespot:
+    image: ghcr.io/lollonet/snapmulti-spotify:latest
+    container_name: librespot
+    restart: unless-stopped
+    network_mode: host
+    user: "${PUID:-1000}:${PGID:-1000}"
+    volumes:
+      - ./audio:/audio
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+    depends_on:
+      - snapserver
 
   mympd:
     image: ghcr.io/jcorporation/mympd/mympd:latest

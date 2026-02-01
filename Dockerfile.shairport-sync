@@ -1,0 +1,8 @@
+FROM alpine:latest
+
+RUN apk add --no-cache shairport-sync
+
+RUN mkdir -p /audio
+
+ENTRYPOINT ["shairport-sync"]
+CMD ["-o", "pipe", "--", "/audio/airplay_fifo"]
