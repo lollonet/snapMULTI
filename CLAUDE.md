@@ -36,6 +36,7 @@ snapMULTI/
   config/
     snapserver.conf      # Snapcast server config (4 active + 4 commented sources)
     mpd.conf             # MPD config (FIFO + HTTP outputs)
+    shairport-sync.conf  # shairport-sync pipe backend config
   docs/
     HARDWARE.md          # Hardware & network guide (server/client specs, Pi, bandwidth, setups)
     USAGE.md             # Technical operations guide (architecture, services, MPD, mDNS, CI/CD)

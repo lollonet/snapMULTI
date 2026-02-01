@@ -11,8 +11,8 @@ Designed for remote management applications and advanced configuration.
 |---|--------|------|-----------|--------|-------------------|
 | 1 | MPD | `pipe` | `MPD` | Active | — (FIFO) |
 | 2 | TCP Input | `tcp` (server) | `TCP-Input` | Active | — (built-in) |
-| 3 | AirPlay | `airplay` | `AirPlay` | Active | `shairport-sync` |
-| 4 | Spotify Connect | `librespot` | `Spotify` | Active | `librespot` |
+| 3 | AirPlay | `pipe` | `AirPlay` | Active | `shairport-sync` (separate container) |
+| 4 | Spotify Connect | `pipe` | `Spotify` | Active | `librespot` (separate container) |
 | 5 | ALSA Capture | `alsa` | `LineIn` | Available | ALSA device |
 | 6 | Meta Stream | `meta` | `AutoSwitch` | Available | — (built-in) |
 | 7 | File Playback | `file` | `Alert` | Available | — (built-in) |
@@ -109,13 +109,13 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=5" \
 
 ---
 
-### 3. AirPlay (airplay)
+### 3. AirPlay (pipe from shairport-sync)
 
-Launches shairport-sync to receive AirPlay audio from Apple devices. The server appears as an AirPlay receiver on the local network.
+The shairport-sync container receives AirPlay audio from Apple devices and writes raw PCM to a named pipe. Snapserver reads from the pipe.
 
 **Config:**
 ```ini
-source = airplay:///usr/bin/shairport-sync?name=AirPlay&devicename=snapMULTI
+source = pipe:////audio/airplay_fifo?name=AirPlay
 ```
 
 **Parameters:**
@@ -123,9 +123,13 @@ source = airplay:///usr/bin/shairport-sync?name=AirPlay&devicename=snapMULTI
 | Parameter | Value | Description |
 |-----------|-------|-------------|
 | `name` | `AirPlay` | Stream ID |
-| `devicename` | `snapMULTI` | Name shown on Apple devices |
-| `port` | `5000` (default) | RTSP port (5000=AirPlay 1, 7000=AirPlay 2) |
-| `password` | — | Optional access password |
+
+**shairport-sync configuration** (`config/shairport-sync.conf`):
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| `general.name` | `snapMULTI` | Name shown on Apple devices |
+| `pipe.name` | `/audio/airplay_fifo` | Named pipe path for audio output |
 
 **Sample format:** 44100:16:2 (fixed by shairport-sync)
 
@@ -139,17 +143,17 @@ source = airplay:///usr/bin/shairport-sync?name=AirPlay&devicename=snapMULTI
 avahi-browse -r _raop._tcp --terminate
 ```
 
-**Docker requirements:** Host network mode + D-Bus socket for Avahi/mDNS.
+**Docker requirements:** Host network mode for mDNS. Shared `/audio` volume with snapserver.
 
 ---
 
-### 4. Spotify Connect (librespot)
+### 4. Spotify Connect (pipe from librespot)
 
-Launches librespot to act as a Spotify Connect receiver. The server appears as a Spotify device in the Spotify app.
+The librespot container acts as a Spotify Connect receiver and writes raw PCM to a named pipe. Snapserver reads from the pipe.
 
 **Config:**
 ```ini
-source = librespot:///usr/bin/librespot?name=Spotify&devicename=snapMULTI&bitrate=320
+source = pipe:////audio/spotify_fifo?name=Spotify
 ```
 
 **Parameters:**
@@ -157,14 +161,15 @@ source = librespot:///usr/bin/librespot?name=Spotify&devicename=snapMULTI&bitrat
 | Parameter | Value | Description |
 |-----------|-------|-------------|
 | `name` | `Spotify` | Stream ID |
-| `devicename` | `snapMULTI` | Name shown in Spotify app |
-| `bitrate` | `320` | Audio quality: 96, 160, or 320 kbps |
-| `volume` | `100` (default) | Initial volume (0-100) |
-| `normalize` | `false` (default) | Volume normalization |
-| `username` | — | Optional Spotify credentials |
-| `password` | — | Optional Spotify credentials |
-| `cache` | — | Optional cache directory |
-| `killall` | `false` (default) | Kill other librespot instances |
+
+**librespot container settings** (Dockerfile.librespot CMD):
+
+| Flag | Value | Description |
+|------|-------|-------------|
+| `--name` | `snapMULTI` | Name shown in Spotify app |
+| `--bitrate` | `320` | Audio quality: 96, 160, or 320 kbps |
+| `--backend` | `pipe` | Output to named pipe |
+| `--device` | `/audio/spotify_fifo` | Named pipe path for audio output |
 
 **Sample format:** 44100:16:2 (fixed by librespot)
 
@@ -208,7 +213,7 @@ source = alsa:///?name=LineIn&device=hw:0,0
 
 **Docker requirements:**
 ```yaml
-# Add to docker-compose.yml snapmulti service:
+# Add to docker-compose.yml snapserver service:
 devices:
   - /dev/snd:/dev/snd
 ```
@@ -490,22 +495,26 @@ Machine-readable reference for each source type. Use this to build configuration
 | **Sample format** | Configurable (default: global) |
 | **Parameters** | `name` (required), `mode` (server\|client), `port` |
 
-### airplay
+### airplay (not used — snapMULTI uses pipe instead)
+
+Snapcast's built-in `airplay://` source type launches shairport-sync as a child process. snapMULTI runs shairport-sync in a separate container and uses `pipe://` to read its output.
 
 | Property | Value |
 |----------|-------|
 | **Format** | `airplay:///<binary>?name=<id>&devicename=<name>[&port=5000]` |
-| **Required binaries** | `shairport-sync` |
+| **Required binaries** | `shairport-sync` (in same container) |
 | **Docker requirements** | Host network + D-Bus socket + Avahi |
 | **Sample format** | 44100:16:2 (fixed) |
 | **Parameters** | `name`, `devicename`, `port` (5000\|7000), `password` |
 
-### librespot
+### librespot (not used — snapMULTI uses pipe instead)
+
+Snapcast's built-in `librespot://` source type launches librespot as a child process. snapMULTI runs librespot in a separate container and uses `pipe://` to read its output.
 
 | Property | Value |
 |----------|-------|
 | **Format** | `librespot:///<binary>?name=<id>&devicename=<name>[&bitrate=320]` |
-| **Required binaries** | `librespot` |
+| **Required binaries** | `librespot` (in same container) |
 | **Docker requirements** | Network access for Spotify API |
 | **Sample format** | 44100:16:2 (fixed) |
 | **Parameters** | `name`, `devicename`, `bitrate` (96\|160\|320), `volume`, `normalize`, `username`, `password`, `cache`, `killall` |
