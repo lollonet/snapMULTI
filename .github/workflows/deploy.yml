@@ -15,7 +15,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: snapcast-runner
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 

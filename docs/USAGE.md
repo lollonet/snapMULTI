@@ -237,7 +237,7 @@ ss -tlnp | grep -E "1704|1705|1780"
 
 Pushing a version tag (e.g. `git tag v1.1.0 && git push origin v1.1.0`) triggers the full CI/CD pipeline:
 
-1. **Build** — Docker images built natively on self-hosted runners (currently amd64 only; arm64 temporarily disabled)
+1. **Build** — Docker images built on GitHub-hosted runners (currently amd64 only; arm64 via QEMU available but disabled)
 2. **Manifest** — Images tagged as `:latest` on ghcr.io (currently amd64 only; multi-arch resumes when arm64 runner is restored)
 3. **Deploy** — Images pulled and all five containers (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`) restarted on the home server via SSH
 

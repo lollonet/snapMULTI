@@ -13,14 +13,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - runner: snapcast-runner
-            platform: linux/amd64
+          - platform: linux/amd64
             suffix: amd64
-          # TODO: re-enable arm64 when studio-runner is available
-          # - runner: studio-runner
-          #   platform: linux/arm64
+          # TODO: re-enable arm64 when QEMU build time is acceptable
+          # - platform: linux/arm64
           #   suffix: arm64
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -35,6 +33,9 @@ jobs:
           else
             echo "tag=" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -109,7 +110,7 @@ jobs:
 
   manifest:
     needs: build
-    runs-on: snapcast-runner
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
