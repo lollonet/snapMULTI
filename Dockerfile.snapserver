@@ -19,6 +19,7 @@ WORKDIR /build
 # SANTCASP_SHA busts the Docker cache when santcasp has new commits
 ARG SANTCASP_SHA=latest
 RUN git clone --branch develop https://github.com/lollonet/santcasp.git . && \
+    sed -i 's/VERSION [0-9.]*-santcasp/VERSION 0.34.1/' CMakeLists.txt && \
     mkdir build && cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
           -DBUILD_CLIENT=OFF .. && \

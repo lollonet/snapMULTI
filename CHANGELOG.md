@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] — 2026-02-02
+
+### Fixed
+- **D-Bus access denied** — Add `apparmor:unconfined` security option to shairport-sync and librespot containers; AppArmor blocks D-Bus socket access by default
+- **librespot IPv6 bind failure** — Patch librespot discovery server (`server.rs`) to fall back to IPv4 when IPv6 is unavailable (`ipv6.disable=1` hosts)
+- **snapserver CI build** — Strip `-santcasp` suffix from CMake project version; `project(VERSION 0.34.1-santcasp)` is invalid CMake syntax (only numeric components allowed)
+
 ## [1.2.1] — 2026-02-02
 
 ### Fixed
