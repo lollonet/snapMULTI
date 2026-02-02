@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Deploy script** — `deploy.sh` bootstraps a fresh Linux machine (Raspberry Pi or x86_64) as a snapMULTI server: installs Docker, creates directories, auto-detects timezone/user, pulls images, starts services
 - **MPD metadata support** ([#17](https://github.com/lollonet/snapMULTI/pull/17)) — Now-playing info (title, artist, album, cover art) pushed to clients via `meta_mpd.py` controlscript; adds Python runtime and plugins to snapserver image
 
 ### Changed

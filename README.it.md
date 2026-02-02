@@ -30,14 +30,26 @@ Altre sorgenti disponibili — vedi il [Riferimento Sorgenti Audio](docs/SOURCES
 - Docker e Docker Compose installati
 - Una cartella con i tuoi file musicali
 
-### 1. Scarica il progetto
+### Opzione A: Deploy automatico (consigliato per Raspberry Pi)
+
+```bash
+git clone https://github.com/lollonet/snapMULTI.git
+cd snapMULTI
+sudo ./deploy.sh
+```
+
+Installa Docker se necessario, crea tutte le directory, rileva automaticamente fuso orario e utente, e avvia tutti i servizi. Modifica `.env` successivamente per impostare i percorsi della musica.
+
+### Opzione B: Configurazione manuale
+
+#### 1. Scarica il progetto
 
 ```bash
 git clone https://github.com/lollonet/snapMULTI.git
 cd snapMULTI
 ```
 
-### 2. Configura
+#### 2. Configura
 
 ```bash
 cp .env.example .env
@@ -58,13 +70,13 @@ PUID=1000
 PGID=1000
 ```
 
-### 3. Avvia
+#### 3. Avvia
 
 ```bash
 docker compose up -d
 ```
 
-### 4. Verifica
+#### 4. Verifica
 
 ```bash
 docker ps
