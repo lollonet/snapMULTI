@@ -78,7 +78,7 @@ For audio source types and JSON-RPC API, see [SOURCES.md](SOURCES.md).
 
 **Configuration**: `config/mpd.conf`
 - Output: FIFO to `/audio/snapcast_fifo`
-- Music directories: `/music/Lossless`, `/music/Lossy`
+- Music directory: `/music` (with `Lossless` and `Lossy` subdirectories via volume mounts)
 - Database: `/data/mpd.db`
 
 ## Control MPD
@@ -248,7 +248,7 @@ tag v* → build-push.yml → build (amd64) → manifest (:latest + :version) �
 ### Manual Deployment
 
 ```bash
-cd /home/claudio/Code/snapMULTI
+cd /path/to/snapMULTI
 docker compose pull
 docker compose up -d
 ```
@@ -395,8 +395,9 @@ snapclient --host <server-ip> --daemon
 **Using Docker**:
 ```bash
 docker run -d --name snapclient \
+  --network host \
   --device /dev/snd \
-  sweisgerber/snapcast:latest
+  ghcr.io/badaix/snapcast:latest snapclient
 ```
 
 **Browser as client** (MPD HTTP stream only):

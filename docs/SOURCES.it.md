@@ -32,7 +32,7 @@ Legge audio PCM da una pipe FIFO con nome. MPD scrive il suo output su `/audio/s
 
 **Configurazione:**
 ```ini
-source = pipe:////audio/snapcast_fifo?name=MPD
+source = pipe:////audio/snapcast_fifo?name=MPD&controlscript=meta_mpd.py
 ```
 
 **Parametri:**
@@ -41,6 +41,7 @@ source = pipe:////audio/snapcast_fifo?name=MPD
 |-----------|--------|-------------|
 | `name` | `MPD` | ID dello stream per uso client/API |
 | `mode` | `create` (predefinito) | Snapserver crea la FIFO se mancante |
+| `controlscript` | `meta_mpd.py` | Recupera metadati in riproduzione (titolo, artista, album, copertina) da MPD |
 
 **Formato campionamento:** Ereditato dal globale `sampleformat = 48000:16:2`
 
@@ -482,7 +483,7 @@ Riferimento leggibile da macchina per ogni tipo di sorgente. Usare per costruire
 | **Binari richiesti** | Nessuno |
 | **Requisiti Docker** | Mount del volume per il percorso FIFO |
 | **Formato campionamento** | Configurabile (predefinito: globale) |
-| **Parametri** | `name` (obbligatorio), `mode` (create\|read) |
+| **Parametri** | `name` (obbligatorio), `mode` (create\|read), `controlscript` (opzionale) |
 
 ### tcp
 

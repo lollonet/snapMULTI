@@ -87,7 +87,7 @@ Per i dispositivi **client**, l'installazione nativa è consigliata rispetto a D
 sudo apt install snapclient
 
 # Docker (solo se preferisci la containerizzazione)
-docker run -d --name snapclient --device /dev/snd sweisgerber/snapcast:latest
+docker run -d --name snapclient --network host --device /dev/snd ghcr.io/badaix/snapcast:latest snapclient
 ```
 
 Docker è consigliato per il **server** dove si beneficia della gestione container e della riproducibilità.
@@ -146,6 +146,8 @@ Formato audio: 48000 Hz, 16-bit, stereo (codec FLAC predefinito).
 | 1704 | TCP | Server → Client | Streaming audio |
 | 1705 | TCP | Bidirezionale | Controllo JSON-RPC |
 | 1780 | HTTP | Bidirezionale | API HTTP |
+| 6600 | TCP | Bidirezionale | Protocollo MPD (controllo client) |
+| 8000 | HTTP | Bidirezionale | Stream audio HTTP MPD |
 | 8180 | HTTP | Bidirezionale | Interfaccia web myMPD |
 | 5353 | UDP | Multicast | Autodiscovery mDNS |
 
@@ -161,6 +163,8 @@ Formato audio: 48000 Hz, 16-bit, stereo (codec FLAC predefinito).
 sudo ufw allow 1704/tcp   # Streaming audio
 sudo ufw allow 1705/tcp   # Controllo JSON-RPC
 sudo ufw allow 1780/tcp   # API HTTP
+sudo ufw allow 6600/tcp   # Protocollo MPD
+sudo ufw allow 8000/tcp   # Stream HTTP MPD
 sudo ufw allow 8180/tcp   # Interfaccia web myMPD
 sudo ufw allow 5353/udp   # Discovery mDNS
 ```
@@ -171,7 +175,9 @@ sudo ufw allow 5353/udp   # Discovery mDNS
 
 | Immagine | Dimensione |
 |----------|------------|
-| `ghcr.io/lollonet/snapmulti:latest` | ~80–120 MB |
+| `ghcr.io/lollonet/snapmulti-server:latest` | ~80–120 MB |
+| `ghcr.io/lollonet/snapmulti-airplay:latest` | ~30–50 MB |
+| `ghcr.io/lollonet/snapmulti-spotify:latest` | ~30–50 MB |
 | `ghcr.io/lollonet/snapmulti-mpd:latest` | ~50–80 MB |
 
 ### Libreria Musicale

@@ -483,7 +483,7 @@ Machine-readable reference for each source type. Use this to build configuration
 | **Required binaries** | None |
 | **Docker requirements** | Volume mount for FIFO path |
 | **Sample format** | Configurable (default: global) |
-| **Parameters** | `name` (required), `mode` (create\|read) |
+| **Parameters** | `name` (required), `mode` (create\|read), `controlscript` (optional) |
 
 ### tcp
 
