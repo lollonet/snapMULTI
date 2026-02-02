@@ -1,0 +1,17 @@
+diff --git a/discovery/src/server.rs b/discovery/src/server.rs
+--- a/discovery/src/server.rs
++++ b/discovery/src/server.rs
+@@ -290,7 +290,12 @@
+
+         let (close_tx, close_rx) = oneshot::channel();
+
+-        let listener = match TcpListener::bind(address) {
++        // Try binding to the preferred address (IPv6 dual-stack on Linux),
++        // fall back to IPv4-only if IPv6 is unavailable (e.g. ipv6.disable=1).
++        let listener = match TcpListener::bind(address).or_else(|_| {
++            debug!("IPv6 bind failed, falling back to IPv4");
++            TcpListener::bind(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), *port))
++        }) {
+             Ok(listener) => listener,
+             Err(e) => {
+                 warn!("Discovery server failed to start: {e}");

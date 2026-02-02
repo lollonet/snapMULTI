@@ -10,8 +10,13 @@ RUN apk add --no-cache \
 
 WORKDIR /build
 RUN git clone --depth=1 --branch=v0.8.0 \
-    https://github.com/librespot-org/librespot.git . && \
-    cargo build --release --no-default-features \
+    https://github.com/librespot-org/librespot.git .
+
+# Patch: fall back to IPv4 when IPv6 is unavailable (ipv6.disable=1)
+COPY patches/librespot-ipv4-fallback.patch /tmp/
+RUN git apply /tmp/librespot-ipv4-fallback.patch
+
+RUN cargo build --release --no-default-features \
       --features "with-avahi,rustls-tls-webpki-roots"
 
 FROM alpine:latest
