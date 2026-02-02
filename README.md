@@ -30,14 +30,26 @@ More source types available — see [Audio Sources Reference](docs/SOURCES.md).
 - Docker and Docker Compose installed
 - A folder with your music files
 
-### 1. Get the project
+### Option A: Automated deploy (recommended for Raspberry Pi)
+
+```bash
+git clone https://github.com/lollonet/snapMULTI.git
+cd snapMULTI
+sudo ./deploy.sh
+```
+
+This installs Docker if needed, creates all directories, auto-detects timezone and user, and starts all services. Edit `.env` afterwards to set your music paths.
+
+### Option B: Manual setup
+
+#### 1. Get the project
 
 ```bash
 git clone https://github.com/lollonet/snapMULTI.git
 cd snapMULTI
 ```
 
-### 2. Configure
+#### 2. Configure
 
 ```bash
 cp .env.example .env
@@ -58,13 +70,13 @@ PUID=1000
 PGID=1000
 ```
 
-### 3. Start
+#### 3. Start
 
 ```bash
 docker compose up -d
 ```
 
-### 4. Verify
+#### 4. Verify
 
 ```bash
 docker ps
