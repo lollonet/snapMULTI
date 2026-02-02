@@ -245,6 +245,16 @@ Pushing a version tag (e.g. `git tag v1.1.0 && git push origin v1.1.0`) triggers
 tag v* → build-push.yml → build (amd64) → manifest (:latest + :version) → deploy.yml → server updated
 ```
 
+### Automated Deployment (Fresh Install)
+
+```bash
+git clone https://github.com/lollonet/snapMULTI.git
+cd snapMULTI
+sudo ./deploy.sh
+```
+
+`deploy.sh` handles everything: installs Docker if needed, creates directories, auto-generates `.env` (timezone, UID/GID), pulls images, and starts services. Non-interactive — edit `.env` afterwards for music paths.
+
 ### Manual Deployment
 
 ```bash

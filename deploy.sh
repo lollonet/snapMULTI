@@ -64,8 +64,11 @@ step "Docker"
 if command -v docker >/dev/null 2>&1; then
     info "Docker already installed: $(docker --version)"
 else
-    info "Installing Docker via get.docker.com..."
-    curl -fsSL https://get.docker.com | sh
+    info "Installing Docker via official convenience script (https://get.docker.com)..."
+    info "Review the script before running: curl -fsSL https://get.docker.com"
+    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+    sh /tmp/get-docker.sh
+    rm -f /tmp/get-docker.sh
     info "Docker installed: $(docker --version)"
 fi
 
