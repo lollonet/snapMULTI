@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **MPD metadata support** ([#17](https://github.com/lollonet/snapMULTI/pull/17)) — Now-playing info (title, artist, album, cover art) pushed to clients via `meta_mpd.py` controlscript; adds Python runtime and plugins to snapserver image
+
+### Changed
+- **CI/CD temporarily amd64-only** ([#16](https://github.com/lollonet/snapMULTI/pull/16)) — Disable arm64 build while studio-runner is unavailable; `docs/USAGE.md` updated to reflect temporary state
+
 ## [1.2.2] — 2026-02-02
 
 ### Fixed
