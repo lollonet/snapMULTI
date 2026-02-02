@@ -32,7 +32,7 @@ Reads PCM audio from a named FIFO pipe. MPD writes its output to `/audio/snapcas
 
 **Config:**
 ```ini
-source = pipe:////audio/snapcast_fifo?name=MPD
+source = pipe:////audio/snapcast_fifo?name=MPD&controlscript=meta_mpd.py
 ```
 
 **Parameters:**
@@ -41,6 +41,7 @@ source = pipe:////audio/snapcast_fifo?name=MPD
 |-----------|-------|-------------|
 | `name` | `MPD` | Stream ID for client/API use |
 | `mode` | `create` (default) | Snapserver creates the FIFO if missing |
+| `controlscript` | `meta_mpd.py` | Fetches now-playing metadata (title, artist, album, cover art) from MPD |
 
 **Sample format:** Inherited from global `sampleformat = 48000:16:2`
 

@@ -45,8 +45,8 @@ RUN apk add --no-cache \
     py3-pip
 
 RUN pip3 install --no-cache-dir --break-system-packages \
-    python-mpd2 \
-    musicbrainzngs
+    python-mpd2==3.1.1 \
+    musicbrainzngs==0.7.1
 
 COPY --from=builder /usr/bin/snapserver /usr/bin/snapserver
 COPY --from=builder /usr/share/snapserver /usr/share/snapserver
