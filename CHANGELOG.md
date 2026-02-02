@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **CI/CD temporarily amd64-only** ([#16](https://github.com/lollonet/snapMULTI/pull/16)) — Disable arm64 build while studio-runner is unavailable; `docs/USAGE.md` updated to reflect temporary state
 
+### Fixed
+- **Documentation accuracy** ([#18](https://github.com/lollonet/snapMULTI/pull/18)) — Corrected Docker image names in storage tables, added missing MPD ports (6600, 8000) to network tables and firewall rules, fixed MPD music directory description, updated snapclient examples to use official image with host networking, added controlscript parameter to pipe source schema
+
 ## [1.2.2] — 2026-02-02
 
 ### Fixed
