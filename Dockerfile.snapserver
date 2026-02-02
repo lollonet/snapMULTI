@@ -38,9 +38,18 @@ RUN apk add --no-cache \
     libvorbis \
     nlohmann-json \
     opus \
-    soxr
+    soxr \
+    python3 \
+    py3-gobject3 \
+    py3-dbus \
+    py3-pip
+
+RUN pip3 install --no-cache-dir --break-system-packages \
+    python-mpd2 \
+    musicbrainzngs
 
 COPY --from=builder /usr/bin/snapserver /usr/bin/snapserver
+COPY --from=builder /usr/share/snapserver /usr/share/snapserver
 
 RUN mkdir -p /var/lib/snapserver /config /data /audio
 
