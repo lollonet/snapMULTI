@@ -16,9 +16,10 @@ jobs:
           - runner: snapcast-runner
             platform: linux/amd64
             suffix: amd64
-          - runner: studio-runner
-            platform: linux/arm64
-            suffix: arm64
+          # TODO: re-enable arm64 when studio-runner is available
+          # - runner: studio-runner
+          #   platform: linux/arm64
+          #   suffix: arm64
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -132,61 +133,54 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create multi-arch manifest for snapserver
+      # TODO: restore multi-arch manifests when arm64 is re-enabled
+      - name: Tag amd64 as latest for snapserver
         run: |
           docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-server:latest \
-            $REGISTRY/lollonet/snapmulti-server:amd64 \
-            $REGISTRY/lollonet/snapmulti-server:arm64
+            $REGISTRY/lollonet/snapmulti-server:amd64
 
-      - name: Create versioned manifest for snapserver
+      - name: Create versioned tag for snapserver
         if: steps.version.outputs.tag != ''
         run: |
           VERSION=${{ steps.version.outputs.tag }}
           docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-server:$VERSION \
-            $REGISTRY/lollonet/snapmulti-server:$VERSION-amd64 \
-            $REGISTRY/lollonet/snapmulti-server:$VERSION-arm64
+            $REGISTRY/lollonet/snapmulti-server:$VERSION-amd64
 
-      - name: Create multi-arch manifest for airplay
+      - name: Tag amd64 as latest for airplay
         run: |
           docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-airplay:latest \
-            $REGISTRY/lollonet/snapmulti-airplay:amd64 \
-            $REGISTRY/lollonet/snapmulti-airplay:arm64
+            $REGISTRY/lollonet/snapmulti-airplay:amd64
 
-      - name: Create versioned manifest for airplay
+      - name: Create versioned tag for airplay
         if: steps.version.outputs.tag != ''
         run: |
           VERSION=${{ steps.version.outputs.tag }}
           docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-airplay:$VERSION \
-            $REGISTRY/lollonet/snapmulti-airplay:$VERSION-amd64 \
-            $REGISTRY/lollonet/snapmulti-airplay:$VERSION-arm64
+            $REGISTRY/lollonet/snapmulti-airplay:$VERSION-amd64
 
-      - name: Create multi-arch manifest for spotify
+      - name: Tag amd64 as latest for spotify
         run: |
           docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-spotify:latest \
-            $REGISTRY/lollonet/snapmulti-spotify:amd64 \
-            $REGISTRY/lollonet/snapmulti-spotify:arm64
+            $REGISTRY/lollonet/snapmulti-spotify:amd64
 
-      - name: Create versioned manifest for spotify
+      - name: Create versioned tag for spotify
         if: steps.version.outputs.tag != ''
         run: |
           VERSION=${{ steps.version.outputs.tag }}
           docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-spotify:$VERSION \
-            $REGISTRY/lollonet/snapmulti-spotify:$VERSION-amd64 \
-            $REGISTRY/lollonet/snapmulti-spotify:$VERSION-arm64
+            $REGISTRY/lollonet/snapmulti-spotify:$VERSION-amd64
 
-      - name: Create multi-arch manifest for mpd
+      - name: Tag amd64 as latest for mpd
         run: |
           docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-mpd:latest \
-            $REGISTRY/lollonet/snapmulti-mpd:amd64 \
-            $REGISTRY/lollonet/snapmulti-mpd:arm64
+            $REGISTRY/lollonet/snapmulti-mpd:amd64
 
-      - name: Create versioned manifest for mpd
+      - name: Create versioned tag for mpd
         if: steps.version.outputs.tag != ''
         run: |
           VERSION=${{ steps.version.outputs.tag }}
           docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-mpd:$VERSION \
-            $REGISTRY/lollonet/snapmulti-mpd:$VERSION-amd64 \
-            $REGISTRY/lollonet/snapmulti-mpd:$VERSION-arm64
+            $REGISTRY/lollonet/snapmulti-mpd:$VERSION-amd64
 
   deploy:
     needs: manifest
