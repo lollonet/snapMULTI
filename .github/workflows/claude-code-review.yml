@@ -36,9 +36,50 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this pull request for the snapMULTI project — a Docker-based multiroom
+            audio system (Snapcast + MPD + AirPlay + Spotify Connect on Alpine Linux).
+
+            The PR branch is already checked out in the current working directory.
+            Read CLAUDE.md first for project conventions and documentation rules.
+
+            ## Review Checklist
+
+            ### CLAUDE.md Compliance
+            - [ ] Documentation SSOT rules followed (see CLAUDE.md table)
+            - [ ] Source parameter changes update docs/SOURCES.md
+            - [ ] Service/port/deployment changes update docs/USAGE.md
+            - [ ] Hardware/network changes update docs/HARDWARE.md
+            - [ ] New source types update config/snapserver.conf + README.md source table
+            - [ ] CHANGELOG.md updated under [Unreleased]
+
+            ### Docker & Infrastructure
+            - [ ] Dockerfiles use pinned versions for pip/apk dependencies
+            - [ ] No secrets or credentials in Dockerfiles or config files
+            - [ ] Audio format consistency (48000:16:2 across all sources)
+            - [ ] Named pipe paths match between containers
+            - [ ] Host networking preserved for mDNS/Avahi discovery
+
+            ### CI/CD
+            - [ ] Workflow changes don't break the build-push-deploy pipeline
+            - [ ] No direct pushes to main (PR workflow respected)
+
+            ### Code Quality
+            - [ ] Minimal changes — no unnecessary refactoring or feature creep
+            - [ ] No dead code or commented-out blocks left behind
+            - [ ] Config file comments are accurate and helpful
+
+            ### Security
+            - [ ] No hardcoded credentials or API keys
+            - [ ] No --break-system-packages without pinned versions
+            - [ ] Workflow files don't use untrusted input in run: commands
+
+            Post a single summary comment on the PR with findings.
+            Only flag issues that actually need attention — skip items that don't apply.
+            Rate each finding as: CRITICAL, HIGH, MEDIUM, or LOW.
+          claude_args: |
+            --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep"
 
