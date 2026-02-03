@@ -18,7 +18,7 @@ services:
       - TZ=${TZ:-Europe/Berlin}
     command: ["snapserver", "-c", "/etc/snapserver.conf"]
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:1780/ || exit 1"]
+      test: ["CMD-SHELL", "pgrep -x snapserver || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
