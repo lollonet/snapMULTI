@@ -462,7 +462,7 @@ main() {
     echo "Next steps:"
     echo "  1. Safely eject the SD card"
     echo "  2. Insert into Raspberry Pi"
-    echo "  3. Power on and wait (~5-10 minutes)"
+    echo "  3. Power on and wait for installation to complete"
     echo "  4. Connect to http://snapmulti.local:8180"
     echo ""
     warn "Note: First boot takes longer due to Docker image pulls"
