@@ -42,9 +42,12 @@ detect_music_library() {
         for dir in $pattern; do
             [[ -d "$dir" ]] || continue
 
-            # Count audio files (limit depth to avoid long scans)
+            # Show progress for potentially slow mounts
+            echo -ne "  Scanning ${dir}...\r" >&2
+
+            # Count audio files (depth 3, limit 1000 to keep fast)
             local count
-            count=$(find "$dir" -maxdepth 4 -type f \( \
+            count=$(find "$dir" -maxdepth 3 -type f \( \
                 -iname '*.flac' -o -iname '*.mp3' -o -iname '*.m4a' \
                 -o -iname '*.ogg' -o -iname '*.wav' -o -iname '*.aac' \
                 -o -iname '*.opus' -o -iname '*.wma' \
