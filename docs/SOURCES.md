@@ -390,7 +390,7 @@ Android doesn't have a built-in equivalent of Apple's AirPlay for audio casting 
 
 > **Note:** For Tidal specifically, consider using the [native Tidal integration](#5-tidal-via-tidal-bridge) instead of these workarounds. It provides better audio quality and doesn't require an Android device as intermediary.
 
-### Method 1: TCP Input via BubbleUPnP (Recommended for Tidal)
+### Method 1: TCP Input via BubbleUPnP
 
 [BubbleUPnP](https://play.google.com/store/apps/details?id=com.bubblesoft.android.bubbleupnp) has an **Audio Cast** feature that captures audio output from any Android app and streams it over the network.
 
@@ -408,11 +408,13 @@ ffmpeg -i <upnp-audio-stream> \
   tcp://<snapmulti-server-ip>:4953
 ```
 
-**Stream Tidal:**
-1. Open **Tidal** on Android, start playing music
-2. Open **BubbleUPnP**, use Audio Cast to capture Tidal's output
+**Stream any app (including Tidal):**
+1. Open any audio app on Android, start playing music
+2. Open **BubbleUPnP**, use Audio Cast to capture the app's output
 3. Audio is relayed to snapMULTI via TCP Input
-4. All Snapcast clients receive the Tidal stream
+4. All Snapcast clients receive the stream
+
+> **For Tidal specifically:** Use the [native Tidal integration](#5-tidal-via-tidal-bridge) instead — better quality, no Android device required.
 
 ### Method 2: AirPlay from Android
 
