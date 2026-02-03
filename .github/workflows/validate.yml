@@ -33,6 +33,5 @@ jobs:
       - name: Check environment template
         run: |
           source .env.example
-          : ${MUSIC_LOSSLESS_PATH:?Missing MUSIC_LOSSLESS_PATH}
-          : ${MUSIC_LOSSY_PATH:?Missing MUSIC_LOSSY_PATH}
+          : ${MUSIC_PATH:?Missing MUSIC_PATH}
           echo "✓ Required environment variables defined"
