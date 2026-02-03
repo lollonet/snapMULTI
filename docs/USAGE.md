@@ -237,12 +237,12 @@ ss -tlnp | grep -E "1704|1705|1780"
 
 Pushing a version tag (e.g. `git tag v1.1.0 && git push origin v1.1.0`) triggers the full CI/CD pipeline:
 
-1. **Build** — Docker images built natively on self-hosted runners (currently amd64 only; arm64 temporarily disabled)
-2. **Manifest** — Images tagged as `:latest` on ghcr.io (currently amd64 only; multi-arch resumes when arm64 runner is restored)
+1. **Build** — Docker images built on self-hosted runner (amd64 native + arm64 via QEMU cross-compilation)
+2. **Manifest** — Per-arch images combined into multi-arch `:latest` tags on ghcr.io
 3. **Deploy** — Images pulled and all five containers (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`) restarted on the home server via SSH
 
 ```
-tag v* → build-push.yml → build (amd64) → manifest (:latest + :version) → deploy.yml → server updated
+tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :version) → deploy.yml → server updated
 ```
 
 ### Automated Deployment (Fresh Install)
@@ -267,7 +267,7 @@ docker compose up -d
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| **Build & Push** | Tag push (`v*`) | Build versioned images (4 images, currently amd64 only), push to ghcr.io, trigger deploy |
+| **Build & Push** | Tag push (`v*`) | Build 4 multi-arch images (amd64 + arm64), push to ghcr.io, trigger deploy |
 | **Deploy** | Called by Build & Push | Pull images and restart all containers (snapserver, shairport-sync, librespot, mpd, mympd) on server via SSH |
 | **Validate** | Push to any branch, pull requests | Check docker-compose syntax and environment template |
 | **Build Test** | Pull requests | Validate Docker images build correctly (no push) |
@@ -283,7 +283,7 @@ Docker images are hosted on GitHub Container Registry:
 | `ghcr.io/lollonet/snapmulti-spotify:latest` | Spotify Connect (librespot) |
 | `ghcr.io/lollonet/snapmulti-mpd:latest` | Music Player Daemon |
 
-Images currently support `linux/amd64` only. `linux/arm64` support is temporarily disabled until the arm64 runner is restored.
+All images support `linux/amd64` and `linux/arm64` architectures.
 
 See GitHub Actions tab for workflow status and logs.
 

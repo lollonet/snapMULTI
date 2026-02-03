@@ -238,7 +238,7 @@ ss -tlnp | grep -E "1704|1705|1780"
 
 Il push di un tag di versione (es. `git tag v1.1.0 && git push origin v1.1.0`) avvia l'intera pipeline CI/CD:
 
-1. **Build** — Immagini Docker compilate nativamente su runner self-hosted (attualmente solo amd64; arm64 temporaneamente disabilitato)
+1. **Build** — Immagini Docker compilate su runner self-hosted (amd64 nativo + arm64 via cross-compilazione QEMU)
 2. **Manifest** — Le immagini per architettura vengono unite in tag multi-arch `:latest` su ghcr.io
 3. **Deploy** — Le immagini vengono scaricate e tutti e cinque i container (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`) riavviati sul server domestico via SSH
 
