@@ -24,6 +24,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -69,30 +70,66 @@ def create_session() -> tidalapi.Session:
     return session
 
 
+def save_session(session: tidalapi.Session) -> None:
+    """Save session credentials to file."""
+    SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "token_type": session.token_type,
+        "access_token": session.access_token,
+        "refresh_token": session.refresh_token,
+        "expiry_time": session.expiry_time.isoformat() if session.expiry_time else None,
+    }
+    SESSION_FILE.write_text(json.dumps(data, indent=2))
+
+
+def load_session(session: tidalapi.Session) -> bool:
+    """Load session credentials from file."""
+    if not SESSION_FILE.exists():
+        return False
+    try:
+        data = json.loads(SESSION_FILE.read_text())
+        session.token_type = data.get("token_type")
+        session.access_token = data.get("access_token")
+        session.refresh_token = data.get("refresh_token")
+        if data.get("expiry_time"):
+            session.expiry_time = datetime.fromisoformat(data["expiry_time"])
+        return session.check_login()
+    except Exception:
+        return False
+
+
 def login(session: tidalapi.Session) -> bool:
     """
-    Perform PKCE login flow.
-    Opens browser for OAuth, saves session to file.
+    Perform device code login flow (headless-friendly).
+    Displays a URL and code to enter on any device.
     """
     SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
 
+    # Try loading existing session
     if SESSION_FILE.exists():
         print(f"Loading existing session from {SESSION_FILE}")
-        try:
-            session.login_session_file(SESSION_FILE, do_pkce=True)
-            if session.check_login():
-                print(f"Logged in as: {session.user.first_name} {session.user.last_name}")
-                return True
-        except Exception as e:
-            print(f"Session expired or invalid: {e}")
+        if load_session(session):
+            print(f"Logged in as: {session.user.first_name} {session.user.last_name}")
+            return True
+        print("Session expired or invalid, starting new login...")
 
-    print("Starting PKCE login flow...")
-    print("A browser window will open. Please log in to Tidal.")
+    # Device code flow - works in containers/headless environments
+    print("\n" + "=" * 50)
+    print("TIDAL LOGIN")
+    print("=" * 50)
 
     try:
-        session.login_session_file(SESSION_FILE, do_pkce=True)
+        login_url, future = session.login_oauth()
+        print(f"\n1. Open this URL in any browser:\n   {login_url.verification_uri_complete}")
+        print(f"\n2. Or go to: {login_url.verification_uri}")
+        print(f"   and enter code: {login_url.user_code}")
+        print(f"\nWaiting for authorization (expires in {login_url.expires_in} seconds)...")
+
+        future.result()  # Blocks until user completes login
+
         if session.check_login():
-            print(f"Login successful! Session saved to {SESSION_FILE}")
+            save_session(session)
+            print(f"\nLogin successful! Session saved to {SESSION_FILE}")
             print(f"Logged in as: {session.user.first_name} {session.user.last_name}")
             return True
     except Exception as e:
