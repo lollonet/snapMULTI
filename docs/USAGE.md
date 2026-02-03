@@ -274,7 +274,7 @@ docker compose up -d
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | **Build & Push** | Tag push (`v*`) | Build 5 multi-arch images (amd64 + arm64), push to ghcr.io, trigger deploy |
-| **Deploy** | Called by Build & Push | Pull images and restart all containers (snapserver, shairport-sync, librespot, mpd, mympd) on server via SSH |
+| **Deploy** | Called by Build & Push | Pull images and restart 5 core containers on server via SSH (tidal is optional, requires manual pull) |
 | **Validate** | Push to any branch, pull requests | Check docker-compose syntax and environment template |
 | **Build Test** | Pull requests | Validate Docker images build correctly (no push) |
 
