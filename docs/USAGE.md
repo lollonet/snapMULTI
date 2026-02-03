@@ -355,8 +355,7 @@ services:
     volumes:
       - ./mympd/workdir:/var/lib/mympd
       - ./mympd/cachedir:/var/cache/mympd
-      - ${MUSIC_LOSSLESS_PATH}:/music/Lossless:ro
-      - ${MUSIC_LOSSY_PATH}:/music/Lossy:ro
+      - ${MUSIC_PATH:-/media/music}:/music:ro
       - ./mpd/playlists:/playlists:ro
     environment:
       - TZ=${TZ:-Europe/Berlin}
@@ -370,8 +369,7 @@ services:
     network_mode: host
     volumes:
       - ./audio:/audio
-      - ${MUSIC_LOSSLESS_PATH}:/music/Lossless:ro
-      - ${MUSIC_LOSSY_PATH}:/music/Lossy:ro
+      - ${MUSIC_PATH:-/media/music}:/music:ro
       - ./config/mpd.conf:/etc/mpd.conf:ro
       - ./mpd/playlists:/playlists
       - ./mpd/data:/data

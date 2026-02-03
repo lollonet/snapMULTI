@@ -38,7 +38,12 @@ cd snapMULTI
 sudo ./deploy.sh
 ```
 
-Installa Docker se necessario, crea tutte le directory, rileva automaticamente fuso orario e utente, e avvia tutti i servizi. Modifica `.env` successivamente per impostare i percorsi della musica.
+Installa Docker se necessario, crea le directory, rileva le impostazioni automaticamente e avvia i servizi.
+
+**Prima di avviare:** Monta la tua libreria musicale in `/media/music`:
+```bash
+sudo mount /dev/sdX1 /media/music   # Chiavetta USB, NAS, ecc.
+```
 
 ### Opzione B: Configurazione manuale
 
@@ -58,9 +63,8 @@ cp .env.example .env
 Modifica `.env` con le tue impostazioni:
 
 ```bash
-# Percorsi della libreria musicale (host)
-MUSIC_LOSSLESS_PATH=/percorso/della/tua/musica/Lossless
-MUSIC_LOSSY_PATH=/percorso/della/tua/musica/Lossy
+# Percorso libreria musicale — monta prima la tua musica qui
+MUSIC_PATH=/media/music
 
 # Fuso orario
 TZ=Europe/Rome
@@ -68,6 +72,11 @@ TZ=Europe/Rome
 # Utente/Gruppo per i processi nel container (corrispondente al tuo utente host)
 PUID=1000
 PGID=1000
+```
+
+Monta la tua musica prima di avviare:
+```bash
+sudo mount /dev/sdX1 /media/music   # Chiavetta USB, NAS, ecc.
 ```
 
 #### 3. Avvia

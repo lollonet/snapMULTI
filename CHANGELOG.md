@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **CI/CD multi-arch restored** — Re-enabled arm64 builds via QEMU cross-compilation on amd64 self-hosted runner; eliminates need for separate arm64 runner
 - **Self-hosted runner re-registered** — Runner re-deployed as Docker container on raspy (myoung34/github-runner)
+- **Simplified music path** — Single `MUSIC_PATH=/media/music` replaces separate Lossless/Lossy paths; user mounts music there before starting (future: auto-mount detection)
 
 ### Fixed
 - **Documentation accuracy** ([#18](https://github.com/lollonet/snapMULTI/pull/18)) — Corrected Docker image names in storage tables, added missing MPD ports (6600, 8000) to network tables and firewall rules, fixed MPD music directory description, updated snapclient examples to use official image with host networking, added controlscript parameter to pipe source schema

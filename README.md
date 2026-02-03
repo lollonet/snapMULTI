@@ -38,7 +38,12 @@ cd snapMULTI
 sudo ./deploy.sh
 ```
 
-This installs Docker if needed, creates all directories, auto-detects timezone and user, and starts all services. Edit `.env` afterwards to set your music paths.
+This installs Docker if needed, creates directories, auto-detects settings, and starts services.
+
+**Before starting:** Mount your music library to `/media/music`:
+```bash
+sudo mount /dev/sdX1 /media/music   # USB drive, NAS, etc.
+```
 
 ### Option B: Manual setup
 
@@ -58,9 +63,8 @@ cp .env.example .env
 Edit `.env` with your settings:
 
 ```bash
-# Music library paths (host)
-MUSIC_LOSSLESS_PATH=/path/to/your/music/Lossless
-MUSIC_LOSSY_PATH=/path/to/your/music/Lossy
+# Music library path — mount your music here first
+MUSIC_PATH=/media/music
 
 # Timezone
 TZ=Your/Timezone
@@ -68,6 +72,11 @@ TZ=Your/Timezone
 # User/Group for container processes (match your host user)
 PUID=1000
 PGID=1000
+```
+
+Mount your music before starting:
+```bash
+sudo mount /dev/sdX1 /media/music   # USB drive, NAS, etc.
 ```
 
 #### 3. Start
