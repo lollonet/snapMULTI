@@ -15,10 +15,10 @@ jobs:
         include:
           - platform: linux/amd64
             suffix: amd64
-          # TODO: re-enable arm64 when QEMU build time is acceptable
+          # TODO: re-enable arm64 when studio-runner is available
           # - platform: linux/arm64
           #   suffix: arm64
-    runs-on: ubuntu-latest
+    runs-on: snapcast-runner
     permissions:
       contents: read
       packages: write
@@ -33,9 +33,6 @@ jobs:
           else
             echo "tag=" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -110,7 +107,7 @@ jobs:
 
   manifest:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: snapcast-runner
     permissions:
       contents: read
       packages: write
