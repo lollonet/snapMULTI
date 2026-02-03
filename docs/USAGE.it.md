@@ -79,7 +79,7 @@ Per i tipi di sorgente audio e l'API JSON-RPC, vedi [SOURCES.it.md](SOURCES.it.m
 
 **Configurazione**: `config/mpd.conf`
 - Output: FIFO verso `/audio/snapcast_fifo`
-- Directory musicale: `/music` (con sottodirectory `Lossless` e `Lossy` tramite mount dei volumi)
+- Directory musicale: `/music` (mappata a `MUSIC_PATH` sull'host)
 - Database: `/data/mpd.db`
 
 ## Controllare MPD
