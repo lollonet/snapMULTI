@@ -1,0 +1,29 @@
+# Dockerfile.tidal — Tidal streaming bridge for snapMULTI
+# Streams Tidal audio to snapserver via tidalapi + ffmpeg
+
+FROM python:3.12-alpine
+
+# Install ffmpeg and build dependencies
+RUN apk add --no-cache \
+    ffmpeg \
+    && rm -rf /var/cache/apk/*
+
+# Install tidalapi
+RUN pip install --no-cache-dir tidalapi
+
+# Create non-root user
+RUN adduser -D -u 1000 tidal
+
+# Create config directory
+RUN mkdir -p /config && chown tidal:tidal /config
+
+# Copy script
+COPY scripts/tidal-bridge.py /usr/local/bin/tidal-bridge
+RUN chmod +x /usr/local/bin/tidal-bridge
+
+USER tidal
+WORKDIR /config
+
+# Default command shows help
+ENTRYPOINT ["tidal-bridge"]
+CMD ["--help"]

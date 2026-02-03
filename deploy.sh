@@ -174,11 +174,11 @@ cd "$INSTALL_DIR"
 # --- Step 4: Create directories ---
 step "Creating directories"
 
-dirs=(audio data mpd/data mpd/playlists mympd/workdir mympd/cachedir)
+dirs=(audio data mpd/data mpd/playlists mympd/workdir mympd/cachedir tidal)
 for d in "${dirs[@]}"; do
     mkdir -p "$d"
 done
-chown -R "$REAL_UID:$REAL_GID" audio data mpd mympd
+chown -R "$REAL_UID:$REAL_GID" audio data mpd mympd tidal
 info "Created: ${dirs[*]}"
 
 # --- Step 5: Generate .env ---
