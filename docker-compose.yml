@@ -17,6 +17,12 @@ services:
     environment:
       - TZ=${TZ:-Europe/Berlin}
     command: ["snapserver", "-c", "/etc/snapserver.conf"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:1780/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   shairport-sync:
     image: ghcr.io/lollonet/snapmulti-airplay:latest
@@ -32,7 +38,14 @@ services:
     environment:
       - TZ=${TZ:-Europe/Berlin}
     depends_on:
-      - snapserver
+      snapserver:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -x shairport-sync || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   librespot:
     image: ghcr.io/lollonet/snapmulti-spotify:latest
@@ -48,7 +61,14 @@ services:
     environment:
       - TZ=${TZ:-Europe/Berlin}
     depends_on:
-      - snapserver
+      snapserver:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -x librespot || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   mympd:
     image: ghcr.io/jcorporation/mympd/mympd:latest
@@ -65,6 +85,15 @@ services:
       - TZ=${TZ:-Europe/Berlin}
       - MYMPD_HTTP_PORT=8180
       - MYMPD_SSL=false
+    depends_on:
+      mpd:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8180/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   mpd:
     image: ghcr.io/lollonet/snapmulti-mpd:latest
@@ -79,3 +108,9 @@ services:
       - ./mpd/data:/data
     environment:
       - TZ=${TZ:-Europe/Berlin}
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'ping' | nc -w 2 127.0.0.1 6600 | grep -q OK || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
