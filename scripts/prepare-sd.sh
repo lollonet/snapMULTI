@@ -352,6 +352,34 @@ FIRSTRUN_EOF
     success "Created firstrun.sh"
 }
 
+# --- Detect Pi OS version ---
+detect_pi_os_version() {
+    local boot_dir="$1"
+
+    # Bookworm has kernel_2712.img (Pi 5 support) or specific markers
+    # Also check for /boot/firmware references in existing cmdline.txt
+    if [[ -f "$boot_dir/kernel_2712.img" ]]; then
+        echo "bookworm"
+        return
+    fi
+
+    # Check cmdline.txt for /boot/firmware references (Bookworm default)
+    if grep -q "root=PARTUUID=" "$boot_dir/cmdline.txt" 2>/dev/null; then
+        # Modern Pi OS (Bookworm uses PARTUUID by default)
+        # Check if it's a recent image by looking for overlays directory structure
+        if [[ -d "$boot_dir/overlays" ]] && [[ -f "$boot_dir/config.txt" ]]; then
+            # Check config.txt for Bookworm-specific entries
+            if grep -q "camera_auto_detect" "$boot_dir/config.txt" 2>/dev/null; then
+                echo "bookworm"
+                return
+            fi
+        fi
+    fi
+
+    # Default to Bullseye for older images
+    echo "bullseye"
+}
+
 # --- Patch cmdline.txt ---
 patch_cmdline() {
     local boot_dir="$1"
@@ -366,10 +394,18 @@ patch_cmdline() {
     sed -i.tmp 's| systemd.unit=[^ ]*||g' "$cmdline"
     rm -f "$cmdline.tmp"
 
-    # Detect boot path for cmdline (Bookworm vs Bullseye)
-    # Bookworm mounts boot at /boot/firmware, Bullseye at /boot
-    # We'll use /boot/firmware for Bookworm (default for new installs)
-    local firstrun_path="/boot/firmware/firstrun.sh"
+    # Detect Pi OS version and set correct boot path
+    local pi_os
+    pi_os=$(detect_pi_os_version "$boot_dir")
+
+    local firstrun_path
+    if [[ "$pi_os" == "bookworm" ]]; then
+        firstrun_path="/boot/firmware/firstrun.sh"
+        info "Detected Bookworm - using $firstrun_path"
+    else
+        firstrun_path="/boot/firstrun.sh"
+        info "Detected Bullseye - using $firstrun_path"
+    fi
 
     # Append systemd.run directive
     # Must be on same line (cmdline.txt is single line)
