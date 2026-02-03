@@ -246,6 +246,7 @@ TIDAL_QUALITY=high_lossless
 - Uses existing TCP-Input source (port 4953) — no snapserver config changes needed
 - No "cast" UX like Spotify Connect — playback is CLI-driven
 - Session tokens refresh automatically; re-login if expired
+- Optional service — pull image manually: `docker compose --profile tidal pull tidal`
 
 ---
 

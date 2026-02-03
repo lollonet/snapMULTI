@@ -8,8 +8,8 @@ RUN apk add --no-cache \
     ffmpeg \
     && rm -rf /var/cache/apk/*
 
-# Install tidalapi
-RUN pip install --no-cache-dir tidalapi
+# Install tidalapi (pinned version for reproducible builds)
+RUN pip install --no-cache-dir tidalapi==0.8.11
 
 # Create non-root user
 RUN adduser -D -u 1000 tidal

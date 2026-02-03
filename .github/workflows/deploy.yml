@@ -47,6 +47,8 @@ jobs:
             echo "$GHCR_TOKEN" | docker login ghcr.io -u lollonet --password-stdin || { echo "ERROR: ghcr.io login failed"; exit 1; }
 
             echo "Pulling latest images..."
+            # Note: tidal uses 'tidal' profile (optional); pull separately with:
+            # docker compose --profile tidal pull tidal
             docker compose pull snapserver shairport-sync librespot mpd mympd || { echo "ERROR: docker compose pull failed"; exit 1; }
 
             echo "Creating required directories..."
