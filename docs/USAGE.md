@@ -255,6 +255,8 @@ sudo ./deploy.sh
 
 `deploy.sh` handles everything: installs Docker if needed, creates directories, **auto-detects your music library** (scans `/media/*`, `/mnt/*`, `~/Music`), generates `.env`, pulls images, and starts services. Fully non-interactive.
 
+If no music library is detected, the script falls back to `MUSIC_PATH=/media/music` and warns the user. You must mount your music there or edit `.env` manually before MPD can access it.
+
 ### Manual Deployment
 
 ```bash

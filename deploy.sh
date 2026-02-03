@@ -22,10 +22,16 @@ step()  { echo -e "\n${CYAN}${BOLD}==> $*${NC}"; }
 # --- Auto-detect music library ---
 # Scans common mount points for directories containing audio files
 # Returns: path to music library, or empty if none found
+# Note: follows symlinks (-L) which may slow down on circular links
 detect_music_library() {
     local candidates=()
     local best_path=""
     local best_count=0
+
+    # Ensure globs that don't match expand to nothing (not literal)
+    local old_nullglob
+    old_nullglob=$(shopt -p nullglob || true)
+    shopt -s nullglob
 
     # Common mount points and music directories
     local search_paths=(
@@ -45,9 +51,9 @@ detect_music_library() {
             # Show progress for potentially slow mounts
             echo -ne "  Scanning ${dir}...\r" >&2
 
-            # Count audio files (depth 3, limit 1000 to keep fast)
+            # Count audio files (depth 3, follow symlinks, limit 1000)
             local count
-            count=$(find "$dir" -maxdepth 3 -type f \( \
+            count=$(find -L "$dir" -maxdepth 3 -type f \( \
                 -iname '*.flac' -o -iname '*.mp3' -o -iname '*.m4a' \
                 -o -iname '*.ogg' -o -iname '*.wav' -o -iname '*.aac' \
                 -o -iname '*.opus' -o -iname '*.wma' \
@@ -64,6 +70,9 @@ detect_music_library() {
             fi
         done
     done
+
+    # Restore nullglob to previous state
+    $old_nullglob
 
     if [[ -n "$best_path" ]]; then
         echo "$best_path"
