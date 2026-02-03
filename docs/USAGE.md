@@ -28,8 +28,8 @@ For audio source types and JSON-RPC API, see [SOURCES.md](SOURCES.md).
 ┌─────────────────┐  │          │ Sources:         │
 │ TCP Input       │──┘   ┌─────▶│  - MPD (FIFO)    │
 │ (port 4953)     │      │      │  - TCP-Input     │
-└─────────────────┘      │      │  - AirPlay       │
-                         │      │  - Spotify       │
+└────────▲────────┘      │      │  - AirPlay       │
+         │               │      │  - Spotify       │
 ┌─────────────────┐      │      │                  │
 │ AirPlay         │──────┘  ┌──▶│                  │
 │ (shairport-sync)│         │   └────────┬─────────┘
@@ -40,6 +40,10 @@ For audio source types and JSON-RPC API, see [SOURCES.md](SOURCES.md).
 │ (librespot)     │           │Client 1│ │Client 2│ │Client 3│
 └─────────────────┘           │(Snap)  │ │(Snap)  │ │(Snap)  │
                               └────────┘ └────────┘ └────────┘
+┌─────────────────┐
+│ Tidal           │───────────────┘ (via TCP Input)
+│ (tidal-bridge)  │
+└─────────────────┘
 ```
 
 ## Services & Ports
@@ -78,7 +82,7 @@ For audio source types and JSON-RPC API, see [SOURCES.md](SOURCES.md).
 
 **Configuration**: `config/mpd.conf`
 - Output: FIFO to `/audio/snapcast_fifo`
-- Music directory: `/music` (with `Lossless` and `Lossy` subdirectories via volume mounts)
+- Music directory: `/music` (mapped to `MUSIC_PATH` on host)
 - Database: `/data/mpd.db`
 
 ## Control MPD
@@ -269,7 +273,7 @@ docker compose up -d
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| **Build & Push** | Tag push (`v*`) | Build 4 multi-arch images (amd64 + arm64), push to ghcr.io, trigger deploy |
+| **Build & Push** | Tag push (`v*`) | Build 5 multi-arch images (amd64 + arm64), push to ghcr.io, trigger deploy |
 | **Deploy** | Called by Build & Push | Pull images and restart all containers (snapserver, shairport-sync, librespot, mpd, mympd) on server via SSH |
 | **Validate** | Push to any branch, pull requests | Check docker-compose syntax and environment template |
 | **Build Test** | Pull requests | Validate Docker images build correctly (no push) |

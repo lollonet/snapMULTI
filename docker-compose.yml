@@ -117,9 +117,9 @@ services:
 
   # Tidal streaming bridge (optional, run on-demand)
   # Usage:
-  #   docker compose run tidal login        # One-time OAuth setup
-  #   docker compose run tidal play <url>   # Play track/album/playlist
-  #   docker compose run tidal search <q>   # Search Tidal
+  #   docker compose --profile tidal run --rm tidal login      # One-time OAuth setup
+  #   docker compose --profile tidal run --rm tidal play <url> # Play track/album/playlist
+  #   docker compose --profile tidal run --rm tidal search <q> # Search Tidal
   tidal:
     image: ghcr.io/lollonet/snapmulti-tidal:latest
     container_name: tidal

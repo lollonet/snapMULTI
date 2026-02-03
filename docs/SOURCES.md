@@ -47,7 +47,7 @@ source = pipe:////audio/snapcast_fifo?name=MPD&controlscript=meta_mpd.py
 **Sample format:** Inherited from global `sampleformat = 48000:16:2`
 
 **How it works:**
-1. MPD plays local music files from `/music/Lossless` and `/music/Lossy`
+1. MPD plays local music files from `/music` (mapped to `MUSIC_PATH` on host)
 2. MPD writes PCM audio to `/audio/snapcast_fifo` (FIFO output in `mpd.conf`)
 3. Snapserver reads from the FIFO and distributes to clients
 
@@ -254,7 +254,7 @@ TIDAL_QUALITY=high_lossless
 
 These sources are included as commented-out examples in `config/snapserver.conf`. Uncomment to enable.
 
-### 5. ALSA Capture (alsa)
+### 6. ALSA Capture (alsa)
 
 Captures audio from an ALSA hardware device. Use for line-in inputs, microphones, or ALSA loopback devices.
 
@@ -292,7 +292,7 @@ docker exec snapserver cat /proc/asound/cards
 
 ---
 
-### 6. Meta Stream (meta)
+### 7. Meta Stream (meta)
 
 Reads and mixes audio from other stream sources with priority-based switching. Plays audio from the highest-priority active source.
 
@@ -323,7 +323,7 @@ source = meta:///MPD/Spotify/AirPlay?name=AutoSwitch
 
 ---
 
-### 7. File Playback (file)
+### 8. File Playback (file)
 
 Reads raw PCM audio from a file. Useful for alerts, doorbell sounds, or TTS announcements.
 
@@ -357,7 +357,7 @@ ffmpeg -i doorbell.mp3 \
 
 ---
 
-### 8. TCP Client (tcp client)
+### 9. TCP Client (tcp client)
 
 Connects to a remote TCP server to receive audio. The inverse of TCP server mode — Snapserver pulls audio from a remote source.
 
