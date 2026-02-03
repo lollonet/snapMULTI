@@ -249,7 +249,37 @@ Pushing a version tag (e.g. `git tag v1.1.0 && git push origin v1.1.0`) triggers
 tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :version) → deploy.yml → server updated
 ```
 
-### Automated Deployment (Fresh Install)
+### Zero-Touch SD Card (Raspberry Pi)
+
+Prepare an SD card that automatically installs snapMULTI on first boot. No SSH required.
+
+**On your computer:**
+
+1. Flash SD card with **Raspberry Pi Imager**:
+   - Choose: Raspberry Pi OS Lite (64-bit)
+   - Configure (gear icon): hostname, username/password, WiFi, enable SSH
+
+2. Keep SD card mounted and run:
+   ```bash
+   git clone https://github.com/lollonet/snapMULTI.git
+   ./snapMULTI/scripts/prepare-sd.sh
+   ```
+
+3. Eject SD card, insert into Pi, power on
+
+**What happens on first boot:**
+- Waits for network connectivity
+- Installs Docker via official convenience script
+- Clones snapMULTI to `/opt/snapmulti`
+- Auto-detects music library and timezone
+- Starts all services
+- Shows progress on HDMI output
+
+Installation log saved to `/var/log/snapmulti-install.log`.
+
+**Supported OS versions:** Raspberry Pi OS Bookworm (recommended) and Bullseye. The script auto-detects the version and uses the correct boot paths.
+
+### Automated Deployment (SSH)
 
 ```bash
 git clone https://github.com/lollonet/snapMULTI.git

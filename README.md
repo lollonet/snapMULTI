@@ -48,7 +48,7 @@ git clone https://github.com/lollonet/snapMULTI.git
 # 3. Eject SD, insert in Pi, power on
 ```
 
-First boot installs Docker and snapMULTI automatically (~5-10 min). Access at `http://snapmulti.local:8180`.
+First boot installs Docker and snapMULTI automatically (time depends on network speed). Access at `http://snapmulti.local:8180`.
 
 ### Option B: Automated deploy (SSH into existing Pi)
 
