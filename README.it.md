@@ -38,9 +38,9 @@ cd snapMULTI
 sudo ./deploy.sh
 ```
 
-Installa Docker se necessario, crea le directory, rileva le impostazioni automaticamente e avvia i servizi.
+Installa Docker se necessario, crea le directory, **rileva automaticamente la tua libreria musicale** e avvia i servizi.
 
-**Prima di avviare:** Monta la tua libreria musicale in `/media/music`:
+Lo script cerca file audio in `/media/*`, `/mnt/*` e `~/Music`. Se trovati, configura automaticamente. Altrimenti, monta prima la tua musica:
 ```bash
 sudo mount /dev/sdX1 /media/music   # Chiavetta USB, NAS, ecc.
 ```

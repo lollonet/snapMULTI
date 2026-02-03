@@ -254,7 +254,7 @@ cd snapMULTI
 sudo ./deploy.sh
 ```
 
-`deploy.sh` gestisce tutto: installa Docker se necessario, crea le directory, genera automaticamente `.env` (fuso orario, UID/GID), scarica le immagini e avvia i servizi. Non interattivo — modifica `.env` successivamente per i percorsi della musica.
+`deploy.sh` gestisce tutto: installa Docker se necessario, crea le directory, **rileva automaticamente la libreria musicale** (scansiona `/media/*`, `/mnt/*`, `~/Music`), genera `.env`, scarica le immagini e avvia i servizi. Completamente non interattivo.
 
 ### Deployment Manuale
 
