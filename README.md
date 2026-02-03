@@ -31,7 +31,26 @@ More source types available — see [Audio Sources Reference](docs/SOURCES.md).
 - Docker and Docker Compose installed
 - A folder with your music files
 
-### Option A: Automated deploy (recommended for Raspberry Pi)
+### Option A: Zero-touch SD card (Raspberry Pi)
+
+Flash SD → insert → power on → done. No SSH required.
+
+**On your computer:**
+```bash
+# 1. Flash SD card with Raspberry Pi Imager
+#    - Choose: Raspberry Pi OS Lite (64-bit)
+#    - Configure: hostname, user/password, WiFi, SSH
+
+# 2. Keep SD mounted, run:
+git clone https://github.com/lollonet/snapMULTI.git
+./snapMULTI/scripts/prepare-sd.sh
+
+# 3. Eject SD, insert in Pi, power on
+```
+
+First boot installs Docker and snapMULTI automatically (~5-10 min). Access at `http://snapmulti.local:8180`.
+
+### Option B: Automated deploy (SSH into existing Pi)
 
 ```bash
 git clone https://github.com/lollonet/snapMULTI.git
@@ -46,7 +65,7 @@ The script scans `/media/*`, `/mnt/*`, and `~/Music` for audio files. If found, 
 sudo mount /dev/sdX1 /media/music   # USB drive, NAS, etc.
 ```
 
-### Option B: Manual setup
+### Option C: Manual setup
 
 #### 1. Get the project
 
