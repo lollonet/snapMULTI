@@ -28,8 +28,8 @@ For audio source types and JSON-RPC API, see [SOURCES.md](SOURCES.md).
 ┌─────────────────┐  │          │ Sources:         │
 │ TCP Input       │──┘   ┌─────▶│  - MPD (FIFO)    │
 │ (port 4953)     │      │      │  - TCP-Input     │
-└─────────────────┘      │      │  - AirPlay       │
-                         │      │  - Spotify       │
+└────────▲────────┘      │      │  - AirPlay       │
+         │               │      │  - Spotify       │
 ┌─────────────────┐      │      │                  │
 │ AirPlay         │──────┘  ┌──▶│                  │
 │ (shairport-sync)│         │   └────────┬─────────┘
@@ -40,6 +40,10 @@ For audio source types and JSON-RPC API, see [SOURCES.md](SOURCES.md).
 │ (librespot)     │           │Client 1│ │Client 2│ │Client 3│
 └─────────────────┘           │(Snap)  │ │(Snap)  │ │(Snap)  │
                               └────────┘ └────────┘ └────────┘
+┌─────────────────┐
+│ Tidal           │───────────────┘ (via TCP Input)
+│ (tidal-bridge)  │
+└─────────────────┘
 ```
 
 ## Services & Ports
@@ -78,7 +82,7 @@ For audio source types and JSON-RPC API, see [SOURCES.md](SOURCES.md).
 
 **Configuration**: `config/mpd.conf`
 - Output: FIFO to `/audio/snapcast_fifo`
-- Music directory: `/music` (with `Lossless` and `Lossy` subdirectories via volume mounts)
+- Music directory: `/music` (mapped to `MUSIC_PATH` on host)
 - Database: `/data/mpd.db`
 
 ## Control MPD
@@ -269,8 +273,8 @@ docker compose up -d
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| **Build & Push** | Tag push (`v*`) | Build 4 multi-arch images (amd64 + arm64), push to ghcr.io, trigger deploy |
-| **Deploy** | Called by Build & Push | Pull images and restart all containers (snapserver, shairport-sync, librespot, mpd, mympd) on server via SSH |
+| **Build & Push** | Tag push (`v*`) | Build 5 multi-arch images (amd64 + arm64), push to ghcr.io, trigger deploy |
+| **Deploy** | Called by Build & Push | Pull images and restart 5 core containers on server via SSH (tidal is optional, requires manual pull) |
 | **Validate** | Push to any branch, pull requests | Check docker-compose syntax and environment template |
 | **Build Test** | Pull requests | Validate Docker images build correctly (no push) |
 
@@ -284,6 +288,7 @@ Docker images are hosted on GitHub Container Registry:
 | `ghcr.io/lollonet/snapmulti-airplay:latest` | AirPlay receiver (shairport-sync) |
 | `ghcr.io/lollonet/snapmulti-spotify:latest` | Spotify Connect (librespot) |
 | `ghcr.io/lollonet/snapmulti-mpd:latest` | Music Player Daemon |
+| `ghcr.io/lollonet/snapmulti-tidal:latest` | Tidal streaming bridge (tidalapi + ffmpeg) |
 
 All images support `linux/amd64` and `linux/arm64` architectures.
 

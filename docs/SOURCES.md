@@ -13,10 +13,11 @@ Designed for remote management applications and advanced configuration.
 | 2 | TCP Input | `tcp` (server) | `TCP-Input` | Active | — (built-in) |
 | 3 | AirPlay | `pipe` | `AirPlay` | Active | `shairport-sync` (separate container) |
 | 4 | Spotify Connect | `pipe` | `Spotify` | Active | `librespot` (separate container) |
-| 5 | ALSA Capture | `alsa` | `LineIn` | Available | ALSA device |
-| 6 | Meta Stream | `meta` | `AutoSwitch` | Available | — (built-in) |
-| 7 | File Playback | `file` | `Alert` | Available | — (built-in) |
-| 8 | TCP Client | `tcp` (client) | `Remote` | Available | — (built-in) |
+| 5 | Tidal | `tcp` | `TCP-Input` | Optional | `tidal-bridge` (separate container) |
+| 6 | ALSA Capture | `alsa` | `LineIn` | Available | ALSA device |
+| 7 | Meta Stream | `meta` | `AutoSwitch` | Available | — (built-in) |
+| 8 | File Playback | `file` | `Alert` | Available | — (built-in) |
+| 9 | TCP Client | `tcp` (client) | `Remote` | Available | — (built-in) |
 
 **Status legend:**
 - **Active** — Enabled in `config/snapserver.conf`, running in production
@@ -46,7 +47,7 @@ source = pipe:////audio/snapcast_fifo?name=MPD&controlscript=meta_mpd.py
 **Sample format:** Inherited from global `sampleformat = 48000:16:2`
 
 **How it works:**
-1. MPD plays local music files from `/music/Lossless` and `/music/Lossy`
+1. MPD plays local music files from `/music` (mapped to `MUSIC_PATH` on host)
 2. MPD writes PCM audio to `/audio/snapcast_fifo` (FIFO output in `mpd.conf`)
 3. Snapserver reads from the FIFO and distributes to clients
 
@@ -184,11 +185,76 @@ source = pipe:////audio/spotify_fifo?name=Spotify
 
 ---
 
+### 5. Tidal (via tidal-bridge)
+
+Native Tidal streaming using [tidalapi](https://github.com/EbbLabs/python-tidal). Fetches stream URLs from Tidal's API and pipes decoded audio to snapserver's TCP input.
+
+**Requirements:** Tidal subscription (HiFi or HiFi+)
+
+**Architecture:**
+```
+Tidal API → tidalapi → stream URL → ffmpeg → PCM (s16le 48kHz) → snapserver TCP :4953
+```
+
+**First-time setup (OAuth authentication):**
+```bash
+# One-time login (opens browser for Tidal OAuth)
+docker compose --profile tidal run --rm tidal login
+
+# Session saved to ./tidal/tidal-session.json
+```
+
+**Play music:**
+```bash
+# Play a track by URL
+docker compose --profile tidal run --rm tidal play https://tidal.com/browse/track/12345678
+
+# Play an album
+docker compose --profile tidal run --rm tidal play album:77646169
+
+# Play a playlist
+docker compose --profile tidal run --rm tidal play playlist:uuid-here
+
+# Search for content
+docker compose --profile tidal run --rm tidal search "pink floyd"
+```
+
+**Quality settings:**
+
+| Quality | Format | Subscription |
+|---------|--------|--------------|
+| `low_96k` | M4A 96 kbps | Any |
+| `low_320k` | M4A 320 kbps | Any |
+| `high_lossless` | FLAC lossless | HiFi |
+| `hi_res_lossless` | FLAC 24-bit/192kHz | HiFi+ |
+
+Set quality in `.env`:
+```bash
+TIDAL_QUALITY=high_lossless
+```
+
+**Environment variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TIDAL_SESSION_FILE` | `/config/tidal-session.json` | Session file path |
+| `TIDAL_QUALITY` | `high_lossless` | Audio quality |
+| `SNAPSERVER_HOST` | `127.0.0.1` | Snapserver hostname |
+| `SNAPSERVER_PORT` | `4953` | TCP input port |
+
+**Notes:**
+- Uses existing TCP-Input source (port 4953) — no snapserver config changes needed
+- No "cast" UX like Spotify Connect — playback is CLI-driven
+- Session tokens refresh automatically; re-login if expired
+- Optional service — pull image manually: `docker compose --profile tidal pull tidal`
+
+---
+
 ## Available Sources
 
 These sources are included as commented-out examples in `config/snapserver.conf`. Uncomment to enable.
 
-### 5. ALSA Capture (alsa)
+### 6. ALSA Capture (alsa)
 
 Captures audio from an ALSA hardware device. Use for line-in inputs, microphones, or ALSA loopback devices.
 
@@ -226,7 +292,7 @@ docker exec snapserver cat /proc/asound/cards
 
 ---
 
-### 6. Meta Stream (meta)
+### 7. Meta Stream (meta)
 
 Reads and mixes audio from other stream sources with priority-based switching. Plays audio from the highest-priority active source.
 
@@ -257,7 +323,7 @@ source = meta:///MPD/Spotify/AirPlay?name=AutoSwitch
 
 ---
 
-### 7. File Playback (file)
+### 8. File Playback (file)
 
 Reads raw PCM audio from a file. Useful for alerts, doorbell sounds, or TTS announcements.
 
@@ -291,7 +357,7 @@ ffmpeg -i doorbell.mp3 \
 
 ---
 
-### 8. TCP Client (tcp client)
+### 9. TCP Client (tcp client)
 
 Connects to a remote TCP server to receive audio. The inverse of TCP server mode — Snapserver pulls audio from a remote source.
 
@@ -320,9 +386,11 @@ source = tcp://192.168.1.100:4953?name=Remote&mode=client
 
 ## Streaming from Android
 
-Android doesn't have a built-in equivalent of Apple's AirPlay for audio casting to arbitrary receivers. Here are the methods to stream audio from Android apps (including Tidal) to snapMULTI.
+Android doesn't have a built-in equivalent of Apple's AirPlay for audio casting to arbitrary receivers. Here are the methods to stream audio from Android apps to snapMULTI.
 
-### Method 1: TCP Input via BubbleUPnP (Recommended for Tidal)
+> **Note:** For Tidal specifically, consider using the [native Tidal integration](#5-tidal-via-tidal-bridge) instead of these workarounds. It provides better audio quality and doesn't require an Android device as intermediary.
+
+### Method 1: TCP Input via BubbleUPnP
 
 [BubbleUPnP](https://play.google.com/store/apps/details?id=com.bubblesoft.android.bubbleupnp) has an **Audio Cast** feature that captures audio output from any Android app and streams it over the network.
 
@@ -340,11 +408,13 @@ ffmpeg -i <upnp-audio-stream> \
   tcp://<snapmulti-server-ip>:4953
 ```
 
-**Stream Tidal:**
-1. Open **Tidal** on Android, start playing music
-2. Open **BubbleUPnP**, use Audio Cast to capture Tidal's output
+**Stream any app (including Tidal):**
+1. Open any audio app on Android, start playing music
+2. Open **BubbleUPnP**, use Audio Cast to capture the app's output
 3. Audio is relayed to snapMULTI via TCP Input
-4. All Snapcast clients receive the Tidal stream
+4. All Snapcast clients receive the stream
+
+> **For Tidal specifically:** Use the [native Tidal integration](#5-tidal-via-tidal-bridge) instead — better quality, no Android device required.
 
 ### Method 2: AirPlay from Android
 

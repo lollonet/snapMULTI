@@ -114,3 +114,26 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  # Tidal streaming bridge (optional, run on-demand)
+  # Usage:
+  #   docker compose --profile tidal run --rm tidal login      # One-time OAuth setup
+  #   docker compose --profile tidal run --rm tidal play <url> # Play track/album/playlist
+  #   docker compose --profile tidal run --rm tidal search <q> # Search Tidal
+  tidal:
+    image: ghcr.io/lollonet/snapmulti-tidal:latest
+    container_name: tidal
+    network_mode: host
+    user: "${PUID:-1000}:${PGID:-1000}"
+    profiles: ["tidal"]  # Only starts with: docker compose --profile tidal ...
+    volumes:
+      - ./tidal:/config
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+      - TIDAL_SESSION_FILE=/config/tidal-session.json
+      - TIDAL_QUALITY=${TIDAL_QUALITY:-high_lossless}
+      - SNAPSERVER_HOST=127.0.0.1
+      - SNAPSERVER_PORT=4953
+    depends_on:
+      snapserver:
+        condition: service_healthy

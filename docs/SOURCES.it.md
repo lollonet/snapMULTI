@@ -46,7 +46,7 @@ source = pipe:////audio/snapcast_fifo?name=MPD&controlscript=meta_mpd.py
 **Formato campionamento:** Ereditato dal globale `sampleformat = 48000:16:2`
 
 **Come funziona:**
-1. MPD riproduce file musicali locali da `/music/Lossless` e `/music/Lossy`
+1. MPD riproduce file musicali locali da `/music` (mappato a `MUSIC_PATH` sull'host)
 2. MPD scrive audio PCM su `/audio/snapcast_fifo` (output FIFO in `mpd.conf`)
 3. Snapserver legge dalla FIFO e distribuisce ai client
 
