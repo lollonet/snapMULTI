@@ -59,7 +59,7 @@ jobs:
             ### Docker & Infrastructure
             - [ ] Dockerfiles use pinned versions for pip/apk dependencies
             - [ ] No secrets or credentials in Dockerfiles or config files
-            - [ ] Audio format consistency (48000:16:2 across all sources)
+            - [ ] Audio format consistency (44100:16:2 across all sources)
             - [ ] Named pipe paths match between containers
             - [ ] Host networking preserved for mDNS/Avahi discovery
 

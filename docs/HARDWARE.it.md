@@ -96,7 +96,7 @@ Docker è consigliato per il **server** dove si beneficia della gestione contain
 
 ### Banda
 
-Formato audio: 48000 Hz, 16-bit, stereo (codec FLAC predefinito).
+Formato audio: 44100 Hz, 16-bit, stereo (codec FLAC predefinito).
 
 | Metrica | Valore |
 |---------|--------|
