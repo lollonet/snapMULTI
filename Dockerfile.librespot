@@ -29,6 +29,6 @@ COPY --from=builder /build/target/release/librespot /usr/bin/librespot
 
 RUN mkdir -p /audio
 
-ENTRYPOINT ["librespot"]
-CMD ["--name", "snapMULTI", "--bitrate", "320", "--backend", "pipe", \
-     "--device", "/audio/spotify_fifo", "--zeroconf-backend", "avahi"]
+ENV DEVICE_NAME=""
+
+ENTRYPOINT ["/bin/sh", "-c", "exec librespot --name \"${DEVICE_NAME:-$(hostname) Spotify}\" --bitrate 320 --backend pipe --device /audio/spotify_fifo --zeroconf-backend avahi"]

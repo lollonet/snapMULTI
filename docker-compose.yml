@@ -134,6 +134,7 @@ services:
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
+      - DEVICE_NAME=${SPOTIFY_NAME:-}
     depends_on:
       snapserver:
         condition: service_healthy
