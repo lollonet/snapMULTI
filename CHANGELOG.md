@@ -7,102 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.4.0] — 2026-02-04
+## [0.1.0] — 2026-02-04
 
-### Added
-- **Security hardening** — Containers now run with `read_only: true`, `no-new-privileges`, `cap_drop: ALL`, and minimal `cap_add`; tmpfs mounts for `/tmp` and `/run`
-- **Hardware auto-detection** — `scripts/deploy.sh` detects RAM, CPU cores, and Raspberry Pi model to auto-select resource profiles (minimal/standard/performance)
-- **Resource profiles** — Three hardware profiles with appropriate memory/CPU limits: minimal (Pi Zero 2/Pi 3), standard (Pi 4 2GB), performance (Pi 4 4GB+/Pi 5)
+Initial release. Multiroom audio server with five audio sources, security hardening, hardware auto-detection, and zero-touch deployment.
 
-### Changed
-- **Audio format standardized to 44.1kHz** — Changed from 48000:16:2 to 44100:16:2 across entire audio chain (AirPlay/Spotify output 44.1kHz natively); fixes silent playback issues
-- **prepare-sd.sh now uses deploy.sh** — Zero-touch install gains hardware profile detection automatically; reduced code duplication
+### Features
 
-### Fixed
-- **AirPlay/Spotify silent playback** — Sample rate mismatch (sources output 44100, snapserver expected 48000) caused no audio; now aligned at 44100:16:2
-- **Year check in prepare-sd.sh** — Updated time sync check from 2024 to 2025
-- **Documentation sync** — Updated 9 files with correct 44100 Hz sample rate references
+- **Multiroom audio** — Snapcast server with synchronized playback across all clients
+- **Five audio sources**:
+  - MPD (local music library)
+  - AirPlay (via shairport-sync)
+  - Spotify Connect (via librespot)
+  - TCP input (port 4953 for external streams)
+  - Tidal streaming (via tidalapi, HiFi subscription required)
+- **myMPD web GUI** — Mobile-ready interface on port 8180
+- **mDNS autodiscovery** — Automatic client discovery via Avahi/Bonjour
+- **Security hardening** — read_only containers, no-new-privileges, cap_drop ALL, tmpfs mounts
+- **Hardware auto-detection** — Auto-selects resource profile (minimal/standard/performance) based on RAM and Pi model
+- **Zero-touch SD preparation** — `scripts/prepare-sd.sh` for automatic first-boot installation
+- **Deploy script** — `scripts/deploy.sh` bootstraps fresh Linux machines
+- **Multi-arch images** — amd64 + arm64 on ghcr.io
+- **Bilingual docs** — English + Italian
 
-## [1.3.2] — 2026-02-04
+### Technical
 
-### Fixed
-- **Zero-touch SD boot path detection** ([#26](https://github.com/lollonet/snapMULTI/pull/26)) — Auto-detect Bookworm vs Bullseye and use correct boot path (`/boot/firmware` vs `/boot`) in cmdline.txt
-
-## [1.3.1] — 2026-02-04
-
-### Fixed
-- **Tidal headless login** ([#24](https://github.com/lollonet/snapMULTI/pull/24)) — Replace PKCE OAuth flow with device code flow; PKCE browser redirect fails in containers, device code works headless
-
-## [1.3.0] — 2026-02-03
-
-### Added
-- **Zero-touch SD preparation** ([#25](https://github.com/lollonet/snapMULTI/pull/25)) — `scripts/prepare-sd.sh` prepares a freshly-flashed Raspberry Pi OS SD card for automatic snapMULTI installation on first boot; no SSH required - just flash, run script, insert SD, power on
-- **Native Tidal streaming** ([#23](https://github.com/lollonet/snapMULTI/pull/23), [#10](https://github.com/lollonet/snapMULTI/issues/10)) — Fifth audio source via [tidalapi](https://github.com/EbbLabs/python-tidal); fetches stream URLs from Tidal API and pipes decoded audio to snapserver TCP input. Requires Tidal HiFi/HiFi+ subscription. CLI-driven playback: `docker compose --profile tidal run --rm tidal play <url>`
-- **Deploy script** — `deploy.sh` bootstraps a fresh Linux machine (Raspberry Pi or x86_64) as a snapMULTI server: installs Docker, creates directories, auto-detects timezone/user, pulls images, starts services
-- **Music library auto-detection** ([#20](https://github.com/lollonet/snapMULTI/issues/20)) — `deploy.sh` scans `/media/*`, `/mnt/*`, and `~/Music` for audio files and configures `MUSIC_PATH` automatically; no manual mount required if music is already accessible
-- **MPD metadata support** ([#17](https://github.com/lollonet/snapMULTI/pull/17)) — Now-playing info (title, artist, album, cover art) pushed to clients via `meta_mpd.py` controlscript; adds Python runtime and plugins to snapserver image
-
-### Changed
-- **CI/CD multi-arch restored** — Re-enabled arm64 builds via QEMU cross-compilation on amd64 self-hosted runner; eliminates need for separate arm64 runner
-- **Self-hosted runner re-registered** — Runner re-deployed as Docker container on raspy (myoung34/github-runner)
-- **Simplified music path** — Single `MUSIC_PATH=/media/music` replaces separate Lossless/Lossy paths; user mounts music there before starting (future: auto-mount detection)
-
-### Fixed
-- **Documentation accuracy** ([#18](https://github.com/lollonet/snapMULTI/pull/18)) — Corrected Docker image names in storage tables, added missing MPD ports (6600, 8000) to network tables and firewall rules, fixed MPD music directory description, updated snapclient examples to use official image with host networking, added controlscript parameter to pipe source schema
-
-## [1.2.2] — 2026-02-02
-
-### Fixed
-- **D-Bus access denied** — Add `apparmor:unconfined` security option to shairport-sync and librespot containers; AppArmor blocks D-Bus socket access by default
-- **librespot IPv6 bind failure** — Patch librespot discovery server (`server.rs`) to fall back to IPv4 when IPv6 is unavailable (`ipv6.disable=1` hosts)
-- **snapserver CI build** — Strip `-santcasp` suffix from CMake project version; `project(VERSION 0.34.1-santcasp)` is invalid CMake syntax (only numeric components allowed)
-
-## [1.2.1] — 2026-02-02
-
-### Fixed
-- **AirPlay mDNS discovery** ([#15](https://github.com/lollonet/snapMULTI/pull/15)) — Mount host D-Bus socket for shairport-sync so it can reach the host's Avahi daemon for AirPlay advertisement
-- **Spotify Connect discovery** ([#15](https://github.com/lollonet/snapMULTI/pull/15)) — Rebuild librespot from source with Avahi Zeroconf backend (`with-avahi`) instead of Alpine package; the default `libmdns` backend requires IPv6 sockets, which fails on hosts with `ipv6.disable=1`
-
-## [1.2.0] — 2026-02-01
-
-### Added
-- **myMPD web GUI** ([#11](https://github.com/lollonet/snapMULTI/pull/11)) — Mobile-ready web interface for MPD control via [myMPD](https://github.com/jcorporation/myMPD) on port 8180 (PWA, album art, playlists)
-
-### Changed
-- **Container architecture** ([#13](https://github.com/lollonet/snapMULTI/pull/13)) — Split monolith image into separate containers: snapserver (from [santcasp](https://github.com/lollonet/santcasp)), shairport-sync (AirPlay), and librespot (Spotify Connect), communicating via named pipes in shared `/audio` volume
-- **Snapserver source** — Built from `lollonet/santcasp` fork instead of `badaix/snapcast`
-- **Audio sources** — AirPlay and Spotify sources changed from process-managed (`airplay://`, `librespot://`) to pipe-based (`pipe://`) for inter-container communication
-- **CI/CD pipeline** — Now builds 4 images (snapmulti-server, snapmulti-airplay, snapmulti-spotify, snapmulti-mpd) and deploys 5 containers
-
-### Fixed
-- **myMPD deploy** ([#12](https://github.com/lollonet/snapMULTI/pull/12)) — Include myMPD in deploy workflow (pull + start + create directories)
-
-### Removed
-- **Monolith image** — `Dockerfile.snapMULTI` replaced by `Dockerfile.snapserver`, `Dockerfile.shairport-sync`, and `Dockerfile.librespot`
-
-## [1.0.0] — 2026-01-30
-
-First stable release. Multiroom audio server with four audio sources, multi-arch Docker images, full bilingual documentation (EN + IT).
-
-### Added
-- **Initial Docker setup** — Snapcast server and MPD running in Alpine Linux containers with CI/CD pipelines
-- **MPD configuration** — Music Player Daemon with FIFO output to Snapcast
-- **mDNS autodiscovery** ([#1](https://github.com/lollonet/snapMULTI/pull/1)) — Automatic client discovery via Avahi/Bonjour using host D-Bus socket
-- **Multi-source audio** — Four audio sources: MPD (local library), TCP input (port 4953), AirPlay (via shairport-sync), and Spotify Connect (via librespot)
-- **Spotify Connect** ([#2](https://github.com/lollonet/snapMULTI/issues/2)) — Fourth audio source via librespot (Spotify Premium required, 320 kbps)
-- **Container registry** ([#3](https://github.com/lollonet/snapMULTI/issues/3)) — Multi-arch images (amd64 + arm64) built natively on self-hosted runners and pushed to ghcr.io
-- **Audio sources reference** — `docs/SOURCES.md` with full technical reference for all 8 source types (pipe, tcp, airplay, librespot, alsa, meta, file, tcp client), JSON-RPC API, source type schema, and Android/Tidal streaming guide
-- **Operations guide** — `docs/USAGE.md` with architecture, services, MPD control, mDNS setup, deployment, CI/CD, and configuration reference
-- **Hardware & network guide** — `docs/HARDWARE.md` with server/client requirements, Raspberry Pi models, audio output options, network bandwidth calculations, WiFi vs Ethernet, recommended setups (budget/mid/enthusiast), and known limitations
-- **Italian translations** — Bilingual repo: `README.it.md`, `docs/USAGE.it.md`, `docs/SOURCES.it.md`, `docs/HARDWARE.it.md` with language switchers on all docs
-- **Essential README** — Simple appliance manual for non-technical users (~100 lines); technical content in `docs/`
-- **CI/CD pipelines** — Build, validate, and deploy workflows on self-hosted runners
-- **Issue templates** — Bug report and feature request templates for GitHub
-
-### Fixed
-- **Server buffer configuration** — Increased buffer from 1000ms to 2400ms and chunk_ms from 20ms to 40ms to compensate for clock drift and network jitter on WiFi connections; see [rpi-snapclient-usb#9](https://github.com/lollonet/rpi-snapclient-usb/issues/9)
-- **Deploy workflow** — Target only app services (`snapmulti`, `mpd`), pull pre-built images from ghcr.io, proper error handling with `set -euo pipefail`
-- **Docker image tags** — Lowercase image names to comply with Docker naming rules
-- **Dockerfile config paths** — Fixed `COPY` paths after config directory reorganization
-- **Validation workflow** — Proper error output instead of suppressing to `/dev/null`
-- **Documentation alignment** — README and config examples match actual implementation
+- Audio format: 44100:16:2 (CD quality)
+- Container architecture: 5 separate services communicating via named pipes
+- CI/CD: GitHub Actions with self-hosted runners
+- Resource profiles: minimal (Pi Zero 2/Pi 3), standard (Pi 4 2GB), performance (Pi 4 4GB+/Pi 5)
