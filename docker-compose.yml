@@ -34,6 +34,7 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./audio:/audio
+      - ./config/shairport-sync.conf:/etc/shairport-sync.conf:ro
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
