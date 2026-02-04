@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial release. Multiroom audio server with five audio sources, security hardening, hardware auto-detection, and zero-touch deployment.
 
+### Fixed
+
+- **Zero-touch boot freeze** — Fixed prepare-sd.sh overwriting Pi Imager's firstrun.sh, which broke WiFi configuration and caused boot to hang at "Waiting for network..."
+
 ### Features
 
 - **Multiroom audio** — Snapcast server with synchronized playback across all clients
