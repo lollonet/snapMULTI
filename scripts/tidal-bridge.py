@@ -42,7 +42,7 @@ SNAPSERVER_PORT = int(os.environ.get("SNAPSERVER_PORT", "4953"))
 AUDIO_QUALITY = os.environ.get("TIDAL_QUALITY", "high_lossless")  # low_96k, low_320k, high_lossless, hi_res_lossless
 
 # PCM format for snapserver (must match snapserver.conf sampleformat)
-SAMPLE_RATE = 48000
+SAMPLE_RATE = 44100
 SAMPLE_BITS = 16
 CHANNELS = 2
 

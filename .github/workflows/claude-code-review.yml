@@ -35,7 +35,10 @@ jobs:
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
+          # Use OAuth token (not API key) for authentication
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # GitHub token for repo operations
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
@@ -59,7 +62,7 @@ jobs:
             ### Docker & Infrastructure
             - [ ] Dockerfiles use pinned versions for pip/apk dependencies
             - [ ] No secrets or credentials in Dockerfiles or config files
-            - [ ] Audio format consistency (48000:16:2 across all sources)
+            - [ ] Audio format consistency (44100:16:2 across all sources)
             - [ ] Named pipe paths match between containers
             - [ ] Host networking preserved for mDNS/Avahi discovery
 

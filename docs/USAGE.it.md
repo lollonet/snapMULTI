@@ -56,7 +56,7 @@ Per i tipi di sorgente audio e l'API JSON-RPC, vedi [SOURCES.it.md](SOURCES.it.m
 **Configurazione**: `config/snapserver.conf`
 - Client massimi: 0 (illimitati, modificabile nel file di configurazione)
 - Codec: FLAC
-- Formato campionamento: 48000:16:2
+- Formato campionamento: 44100:16:2
 - Buffer: 2400ms (chunk_ms: 40)
 
 ### myMPD

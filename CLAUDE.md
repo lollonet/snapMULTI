@@ -66,4 +66,4 @@ snapMULTI/
 - **Multi-arch**: linux/amd64 (raspy) + linux/arm64 (studio), native builds on self-hosted runners
 - **Config paths**: all config in `config/` directory
 - **Deployment**: tag push (`v*`) triggers build → manifest → deploy (never push directly to main without PR unless explicitly requested)
-- **Audio format**: 48000:16:2 (48kHz, 16-bit, stereo) across all sources
+- **Audio format**: 44100:16:2 (44.1kHz, 16-bit, stereo) across all sources

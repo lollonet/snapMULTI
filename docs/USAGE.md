@@ -59,7 +59,7 @@ For audio source types and JSON-RPC API, see [SOURCES.md](SOURCES.md).
 **Configuration**: `config/snapserver.conf`
 - Max clients: 0 (unlimited, adjust in config as needed)
 - Codec: FLAC
-- Sample format: 48000:16:2
+- Sample format: 44100:16:2
 - Buffer: 2400ms (chunk_ms: 40)
 
 ### myMPD

@@ -96,7 +96,7 @@ Docker is recommended for the **server** where you benefit from container manage
 
 ### Bandwidth
 
-Audio format: 48000 Hz, 16-bit, stereo (default FLAC codec).
+Audio format: 44100 Hz, 16-bit, stereo (default FLAC codec).
 
 | Metric | Value |
 |--------|-------|

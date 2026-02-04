@@ -44,7 +44,7 @@ source = pipe:////audio/snapcast_fifo?name=MPD&controlscript=meta_mpd.py
 | `mode` | `create` (default) | Snapserver creates the FIFO if missing |
 | `controlscript` | `meta_mpd.py` | Fetches now-playing metadata (title, artist, album, cover art) from MPD |
 
-**Sample format:** Inherited from global `sampleformat = 48000:16:2`
+**Sample format:** Inherited from global `sampleformat = 44100:16:2`
 
 **How it works:**
 1. MPD plays local music files from `/music` (mapped to `MUSIC_PATH` on host)
@@ -80,23 +80,23 @@ source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
 | `bind` | `0.0.0.0` | Accept from any interface |
 | `port` | `4953` | Listening port |
 
-**Sample format:** 48000:16:2 (PCM s16le, stereo)
+**Sample format:** 44100:16:2 (PCM s16le, stereo)
 
 **Send audio:**
 ```bash
 # Stream a file
 ffmpeg -i music.mp3 \
-  -f s16le -ar 48000 -ac 2 \
+  -f s16le -ar 44100 -ac 2 \
   tcp://<server-ip>:4953
 
 # Stream internet radio
 ffmpeg -i http://stream.example.com/radio \
-  -f s16le -ar 48000 -ac 2 \
+  -f s16le -ar 44100 -ac 2 \
   tcp://<server-ip>:4953
 
 # Generate test tone
 ffmpeg -f lavfi -i "sine=frequency=440:duration=5" \
-  -f s16le -ar 48000 -ac 2 \
+  -f s16le -ar 44100 -ac 2 \
   tcp://<server-ip>:4953
 ```
 
@@ -104,7 +104,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=5" \
 
 | Property | Value |
 |----------|-------|
-| Sample rate | 48000 Hz |
+| Sample rate | 44100 Hz |
 | Bit depth | 16 bit |
 | Channels | 2 (stereo) |
 | Encoding | Raw PCM (s16le) |
@@ -339,12 +339,12 @@ source = file:///audio/alert.pcm?name=Alert
 | `name` | `Alert` | Stream ID |
 | Path | `/audio/alert.pcm` | Absolute path to PCM file |
 
-**Sample format:** Must match global `sampleformat` (48000:16:2 by default).
+**Sample format:** Must match global `sampleformat` (44100:16:2 by default).
 
 **Create a PCM file from any audio:**
 ```bash
 ffmpeg -i doorbell.mp3 \
-  -f s16le -ar 48000 -ac 2 \
+  -f s16le -ar 44100 -ac 2 \
   /path/to/audio/alert.pcm
 ```
 
@@ -375,7 +375,7 @@ source = tcp://192.168.1.100:4953?name=Remote&mode=client
 | Host | `192.168.1.100` | IP of the remote audio source |
 | Port | `4953` | Port to connect to |
 
-**Sample format:** 48000:16:2 (must match remote source).
+**Sample format:** 44100:16:2 (must match remote source).
 
 **Use cases:**
 - Pull audio from another Snapserver or audio source on the network
@@ -404,7 +404,7 @@ Android doesn't have a built-in equivalent of Apple's AirPlay for audio casting 
 # Relay audio from BubbleUPnP (UPnP renderer) to Snapcast TCP input
 # Run on a machine that acts as a UPnP/DLNA renderer
 ffmpeg -i <upnp-audio-stream> \
-  -f s16le -ar 48000 -ac 2 \
+  -f s16le -ar 44100 -ac 2 \
   tcp://<snapmulti-server-ip>:4953
 ```
 
@@ -436,7 +436,7 @@ For apps that can output raw audio (or with a local `ffmpeg` relay):
 ```bash
 # On Android (via Termux) or a relay machine:
 ffmpeg -f pulse -i default \
-  -f s16le -ar 48000 -ac 2 \
+  -f s16le -ar 44100 -ac 2 \
   tcp://<snapmulti-server-ip>:4953
 ```
 
@@ -448,7 +448,7 @@ This captures all system audio and sends it to the TCP Input source.
 |--------|-----------|---------------|---------------|------------|
 | BubbleUPnP | BubbleUPnP | Yes | Good (depends on relay) | Medium |
 | AirPlay app | AirMusic / AllStream | Yes (any app) | Good (44100:16:2) | Low |
-| Direct TCP | Termux + ffmpeg | Yes (system audio) | Lossless (48000:16:2) | High |
+| Direct TCP | Termux + ffmpeg | Yes (system audio) | Lossless (44100:16:2) | High |
 
 ---
 
