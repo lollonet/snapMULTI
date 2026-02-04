@@ -50,9 +50,14 @@ done
 
 # Copy project files from boot partition
 log_and_tty "Copying files to $INSTALL_DIR ..."
-mkdir -p "$INSTALL_DIR"
-cp -r "$SNAP_BOOT/"* "$INSTALL_DIR/" 2>/dev/null || true
-cp -r "$SNAP_BOOT/".??* "$INSTALL_DIR/" 2>/dev/null || true
+mkdir -p "$INSTALL_DIR/scripts"
+# Copy main files to root
+cp "$SNAP_BOOT/docker-compose.yml" "$INSTALL_DIR/"
+cp "$SNAP_BOOT/.env.example" "$INSTALL_DIR/" 2>/dev/null || true
+cp -r "$SNAP_BOOT/config" "$INSTALL_DIR/"
+# Copy scripts to scripts/ (deploy.sh expects this structure)
+cp "$SNAP_BOOT/deploy.sh" "$INSTALL_DIR/scripts/"
+cp "$SNAP_BOOT/firstboot.sh" "$INSTALL_DIR/scripts/"
 
 # Install Docker if needed
 if ! command -v docker &>/dev/null; then
@@ -70,7 +75,7 @@ fi
 # Run deploy script
 log_and_tty "Running deploy.sh ..."
 cd "$INSTALL_DIR"
-bash deploy.sh >> "$LOG" 2>&1
+bash scripts/deploy.sh >> "$LOG" 2>&1
 
 # Mark as installed
 touch "$MARKER"
