@@ -1,3 +1,51 @@
+# snapMULTI Docker Compose
+# Hardware profile auto-detected by deploy.sh: minimal | standard | performance
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-security: &default-security
+  security_opt:
+    - apparmor:unconfined  # Required for D-Bus access
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  cap_add:
+    - DAC_OVERRIDE      # File access as non-root
+    - SETUID
+    - SETGID
+
+# Resource profiles (set HARDWARE_PROFILE in .env)
+x-resources-minimal: &resources-minimal
+  deploy:
+    resources:
+      limits:
+        memory: 128M
+        cpus: '0.5'
+      reservations:
+        memory: 64M
+
+x-resources-standard: &resources-standard
+  deploy:
+    resources:
+      limits:
+        memory: 256M
+        cpus: '1.0'
+      reservations:
+        memory: 128M
+
+x-resources-performance: &resources-performance
+  deploy:
+    resources:
+      limits:
+        memory: 512M
+        cpus: '2.0'
+      reservations:
+        memory: 256M
+
 services:
   snapserver:
     image: ghcr.io/lollonet/snapmulti-server:latest
@@ -5,32 +53,46 @@ services:
     hostname: snapmulti
     restart: unless-stopped
     network_mode: host
-    security_opt:
-      - apparmor:unconfined
+    <<: *default-security
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+      - /run:size=64M
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./config/snapserver.conf:/etc/snapserver.conf:ro
-      - ./config:/config
+      - ./config:/config:ro
       - ./data:/data
       - ./audio:/audio
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
     command: ["snapserver", "-c", "/etc/snapserver.conf"]
+    logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x snapserver || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:1780/jsonrpc --post-data='{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"Server.GetStatus\"}' | grep -q result || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: ${SNAPSERVER_MEM_LIMIT:-256M}
+          cpus: '${SNAPSERVER_CPU_LIMIT:-1.0}'
+        reservations:
+          memory: ${SNAPSERVER_MEM_RESERVE:-128M}
 
   shairport-sync:
     image: ghcr.io/lollonet/snapmulti-airplay:latest
     container_name: shairport-sync
     restart: unless-stopped
     network_mode: host
-    security_opt:
-      - apparmor:unconfined
+    <<: *default-security
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+      - /run:size=32M
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./audio:/audio
@@ -41,20 +103,31 @@ services:
     depends_on:
       snapserver:
         condition: service_healthy
+    logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x shairport-sync || exit 1"]
+      test: ["CMD-SHELL", "pgrep -x shairport-sync && test -p /audio/airplay_fifo || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: ${AIRPLAY_MEM_LIMIT:-128M}
+          cpus: '${AIRPLAY_CPU_LIMIT:-0.5}'
+        reservations:
+          memory: ${AIRPLAY_MEM_RESERVE:-64M}
 
   librespot:
     image: ghcr.io/lollonet/snapmulti-spotify:latest
     container_name: librespot
     restart: unless-stopped
     network_mode: host
-    security_opt:
-      - apparmor:unconfined
+    <<: *default-security
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+      - /run:size=32M
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./audio:/audio
@@ -64,18 +137,33 @@ services:
     depends_on:
       snapserver:
         condition: service_healthy
+    logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x librespot || exit 1"]
+      test: ["CMD-SHELL", "pgrep -x librespot && test -p /audio/spotify_fifo || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: ${SPOTIFY_MEM_LIMIT:-128M}
+          cpus: '${SPOTIFY_CPU_LIMIT:-0.5}'
+        reservations:
+          memory: ${SPOTIFY_MEM_RESERVE:-64M}
 
   mympd:
     image: ghcr.io/jcorporation/mympd/mympd:latest
     container_name: mympd
     restart: unless-stopped
     network_mode: host
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./mympd/workdir:/var/lib/mympd
@@ -89,18 +177,35 @@ services:
     depends_on:
       mpd:
         condition: service_healthy
+    logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8180/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: ${MYMPD_MEM_LIMIT:-128M}
+          cpus: '${MYMPD_CPU_LIMIT:-0.5}'
+        reservations:
+          memory: ${MYMPD_MEM_RESERVE:-64M}
 
   mpd:
     image: ghcr.io/lollonet/snapmulti-mpd:latest
     container_name: mpd
     restart: unless-stopped
     network_mode: host
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+      - /run:size=32M
+    user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./audio:/audio
       - ${MUSIC_PATH:-/media/music}:/music:ro
@@ -109,12 +214,20 @@ services:
       - ./mpd/data:/data
     environment:
       - TZ=${TZ:-Europe/Berlin}
+    logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "echo 'ping' | nc -w 2 127.0.0.1 6600 | grep -q OK || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: ${MPD_MEM_LIMIT:-256M}
+          cpus: '${MPD_CPU_LIMIT:-1.0}'
+        reservations:
+          memory: ${MPD_MEM_RESERVE:-128M}
 
   # Tidal streaming bridge (optional, run on-demand)
   # Usage:
@@ -126,7 +239,14 @@ services:
     container_name: tidal
     network_mode: host
     user: "${PUID:-1000}:${PGID:-1000}"
-    profiles: ["tidal"]  # Only starts with: docker compose --profile tidal ...
+    profiles: ["tidal"]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
     volumes:
       - ./tidal:/config
     environment:
@@ -138,3 +258,4 @@ services:
     depends_on:
       snapserver:
         condition: service_healthy
+    logging: *default-logging
