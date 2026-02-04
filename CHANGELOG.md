@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] — 2026-02-04
+
+### Fixed
+- **Zero-touch SD boot path detection** ([#26](https://github.com/lollonet/snapMULTI/pull/26)) — Auto-detect Bookworm vs Bullseye and use correct boot path (`/boot/firmware` vs `/boot`) in cmdline.txt
+
+## [1.3.1] — 2026-02-04
+
+### Fixed
+- **Tidal headless login** ([#24](https://github.com/lollonet/snapMULTI/pull/24)) — Replace PKCE OAuth flow with device code flow; PKCE browser redirect fails in containers, device code works headless
+
+## [1.3.0] — 2026-02-03
+
 ### Added
 - **Zero-touch SD preparation** ([#25](https://github.com/lollonet/snapMULTI/pull/25)) — `scripts/prepare-sd.sh` prepares a freshly-flashed Raspberry Pi OS SD card for automatic snapMULTI installation on first boot; no SSH required - just flash, run script, insert SD, power on
-- **Native Tidal streaming** ([#10](https://github.com/lollonet/snapMULTI/issues/10)) — Fifth audio source via [tidalapi](https://github.com/EbbLabs/python-tidal); fetches stream URLs from Tidal API and pipes decoded audio to snapserver TCP input. Requires Tidal HiFi/HiFi+ subscription. CLI-driven playback: `docker compose --profile tidal run --rm tidal play <url>`
+- **Native Tidal streaming** ([#23](https://github.com/lollonet/snapMULTI/pull/23), [#10](https://github.com/lollonet/snapMULTI/issues/10)) — Fifth audio source via [tidalapi](https://github.com/EbbLabs/python-tidal); fetches stream URLs from Tidal API and pipes decoded audio to snapserver TCP input. Requires Tidal HiFi/HiFi+ subscription. CLI-driven playback: `docker compose --profile tidal run --rm tidal play <url>`
 - **Deploy script** — `deploy.sh` bootstraps a fresh Linux machine (Raspberry Pi or x86_64) as a snapMULTI server: installs Docker, creates directories, auto-detects timezone/user, pulls images, starts services
 - **Music library auto-detection** ([#20](https://github.com/lollonet/snapMULTI/issues/20)) — `deploy.sh` scans `/media/*`, `/mnt/*`, and `~/Music` for audio files and configures `MUSIC_PATH` automatically; no manual mount required if music is already accessible
 - **MPD metadata support** ([#17](https://github.com/lollonet/snapMULTI/pull/17)) — Now-playing info (title, artist, album, cover art) pushed to clients via `meta_mpd.py` controlscript; adds Python runtime and plugins to snapserver image
