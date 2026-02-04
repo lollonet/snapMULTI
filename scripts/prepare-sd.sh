@@ -409,7 +409,7 @@ patch_cmdline() {
     # Must be on same line (cmdline.txt is single line)
     local current
     current=$(cat "$cmdline" | tr -d '\n')
-    echo "$current systemd.run=$firstrun_path systemd.run_success_action=reboot systemd.unit=kernel-command-line.target" > "$cmdline"
+    echo "$current systemd.run=$firstrun_path systemd.run_success_action=reboot" > "$cmdline"
 
     success "Patched cmdline.txt"
     info "Backup saved to cmdline.txt.bak"
