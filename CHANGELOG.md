@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-02-04
+
+### Added
+- **Security hardening** — Containers now run with `read_only: true`, `no-new-privileges`, `cap_drop: ALL`, and minimal `cap_add`; tmpfs mounts for `/tmp` and `/run`
+- **Hardware auto-detection** — `scripts/deploy.sh` detects RAM, CPU cores, and Raspberry Pi model to auto-select resource profiles (minimal/standard/performance)
+- **Resource profiles** — Three hardware profiles with appropriate memory/CPU limits: minimal (Pi Zero 2/Pi 3), standard (Pi 4 2GB), performance (Pi 4 4GB+/Pi 5)
+
+### Changed
+- **Audio format standardized to 44.1kHz** — Changed from 48000:16:2 to 44100:16:2 across entire audio chain (AirPlay/Spotify output 44.1kHz natively); fixes silent playback issues
+- **prepare-sd.sh now uses deploy.sh** — Zero-touch install gains hardware profile detection automatically; reduced code duplication
+
+### Fixed
+- **AirPlay/Spotify silent playback** — Sample rate mismatch (sources output 44100, snapserver expected 48000) caused no audio; now aligned at 44100:16:2
+- **Year check in prepare-sd.sh** — Updated time sync check from 2024 to 2025
+- **Documentation sync** — Updated 9 files with correct 44100 Hz sample rate references
+
 ## [1.3.2] — 2026-02-04
 
 ### Fixed
