@@ -73,11 +73,13 @@ cp "$PROJECT_DIR/.env.example" "$DEST/" 2>/dev/null || true
 
 echo "  Copied $(du -sh "$DEST" | cut -f1) to boot partition."
 
-# ── Patch firstrun.sh ───────────────────────────────────────────────
+# ── Patch boot scripts ──────────────────────────────────────────────
 FIRSTRUN="$BOOT/firstrun.sh"
+USERDATA="$BOOT/user-data"
 HOOK='bash /boot/firmware/snapmulti/firstboot.sh'
 
 if [ -f "$FIRSTRUN" ]; then
+    # Legacy Pi Imager (Bullseye): patch firstrun.sh
     if grep -qF "snapmulti/firstboot.sh" "$FIRSTRUN"; then
         echo "firstrun.sh already patched, skipping."
     else
@@ -97,9 +99,25 @@ if [ -f "$FIRSTRUN" ]; then
         fi
         echo "  firstrun.sh patched."
     fi
+elif [ -f "$USERDATA" ]; then
+    # Modern Pi Imager (Bookworm+): patch cloud-init user-data
+    if grep -qF "snapmulti/firstboot.sh" "$USERDATA"; then
+        echo "user-data already patched, skipping."
+    else
+        echo "Patching user-data to run snapmulti installer on first boot ..."
+        if grep -q '^runcmd:' "$USERDATA"; then
+            # Append to existing runcmd section
+            sed -i.bak '/^runcmd:/a\  - [bash, /boot/firmware/snapmulti/firstboot.sh]' "$USERDATA"
+            rm -f "${USERDATA}.bak"
+        else
+            # Add runcmd section
+            printf '\nruncmd:\n  - [bash, /boot/firmware/snapmulti/firstboot.sh]\n' >> "$USERDATA"
+        fi
+        echo "  user-data patched."
+    fi
 else
     echo ""
-    echo "NOTE: No firstrun.sh found on boot partition."
+    echo "NOTE: No firstrun.sh or user-data found on boot partition."
     echo "  After booting, SSH into the Pi and run:"
     echo "    sudo bash /boot/firmware/snapmulti/firstboot.sh"
     echo ""
