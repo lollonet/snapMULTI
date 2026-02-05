@@ -20,11 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **deploy.sh validation** — Added config file validation before start and PROJECT_ROOT existence check
 - **deploy.sh service verification** — Retry loop (6 attempts × 10s) instead of fixed 10s sleep for slow-starting services
 
-### Fixed
-- **Zero-touch SD card** — Rewrote prepare-sd.sh using rpi-snapclient-usb pattern; now patches firstrun.sh instead of overwriting it
-- **Bookworm support** — prepare-sd.sh now supports both Bullseye (firstrun.sh) and Bookworm (cloud-init user-data)
-- **Directory structure** — firstboot.sh creates correct `scripts/` subdirectory that deploy.sh expects
-
 ## [0.1.0] — 2026-02-04
 
 Initial release. Multiroom audio server with five audio sources, security hardening, hardware auto-detection, and zero-touch deployment.

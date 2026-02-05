@@ -336,7 +336,7 @@ validate_config() {
 
 check_docker() {
     if ! command -v docker &>/dev/null; then
-        error "Docker not found. Install with: curl -fsSL https://get.docker.com | sh"
+        error "Docker not found. Please install Docker and try again."
         exit 1
     fi
 
