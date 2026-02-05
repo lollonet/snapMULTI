@@ -10,15 +10,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Documentation: Audio format & network mode** — Explains 44100:16:2 sample rate, FLAC codec, and why host networking is required for mDNS
 - **Documentation: Troubleshooting guide** — Common issues table in README with solutions for Spotify/AirPlay visibility, audio sync, and connection problems
-- **Documentation: Logs & diagnostics** — How to view container logs, common error messages, health checks, and installation log location
+- **Documentation: Logs & diagnostics** — Container logs, common error messages, health checks, and installation log location
 - **Documentation: Upgrade instructions** — Standard update, backup, and rollback procedures
 
 ### Changed
-- **Service naming** — AirPlay and Spotify now use hostname-based names (`hostname AirPlay`, `hostname Spotify`) with optional `AIRPLAY_NAME`/`SPOTIFY_NAME` env vars for customization
-- **firstboot.sh security** — Added PATH hardening to prevent PATH hijacking attacks
-- **firstboot.sh error handling** — Added failed marker, network timeout check, secure Docker install via APT repo (not curl|sh), and container verification
-- **deploy.sh validation** — Added config file validation before start and PROJECT_ROOT existence check
-- **deploy.sh service verification** — Retry loop (6 attempts × 10s) instead of fixed 10s sleep for slow-starting services
+- **Service naming** — AirPlay and Spotify use hostname-based names with optional `AIRPLAY_NAME`/`SPOTIFY_NAME` env vars for customization
+- **deploy.sh validation** — Config file validation, PROJECT_ROOT check, and `--profile` argument validation with safe `shift` handling
+- **deploy.sh service verification** — Retry loop (6 attempts x 10s) instead of fixed sleep for slow-starting services
+- **firstboot.sh container verification** — Healthcheck-based loop (12 attempts x 10s) replaces naive `sleep 5` + container count
+- **firstboot.sh network check** — Detects default gateway each iteration, falls back to 1.1.1.1 and 8.8.8.8 (works behind restrictive firewalls)
+
+### Fixed
+- **prepare-sd.sh** — Support Bookworm cloud-init user-data and rpi-snapclient-usb boot pattern
+- **firstboot.sh directory structure** — Create `scripts/` subdirectory expected by deploy.sh
+- **firstboot.sh healthcheck grep** — Fix `(unhealthy)` containers being counted as healthy due to substring match
+
+### Security
+- **DEVICE_NAME sanitization** — Entrypoint script strips shell metacharacters to prevent command injection ([#40](https://github.com/lollonet/snapMULTI/pull/40))
+- **FIFO permissions** — Changed from 666 (world-writable) to 660 (owner+group only)
+- **PATH hardening** — Secure PATH export in firstboot.sh prevents hijacking
+- **Docker install** — Uses official APT repository with GPG verification instead of `curl | sh`
 
 ## [0.1.0] — 2026-02-04
 
