@@ -30,6 +30,35 @@ jobs:
           fi
           echo "✓ docker-compose configuration valid"
 
+      - name: Install shellcheck
+        run: |
+          if ! command -v shellcheck &>/dev/null; then
+            apk add --no-cache shellcheck 2>/dev/null || apt-get install -y shellcheck || {
+              echo "ERROR: Failed to install shellcheck"
+              exit 1
+            }
+          fi
+
+      - name: Shellcheck scripts
+        run: |
+          if ! ls scripts/*.sh 1>/dev/null 2>&1; then
+            echo "No shell scripts found in scripts/"
+            exit 0
+          fi
+          echo "Running shellcheck on shell scripts..."
+          FAILED=0
+          for f in scripts/*.sh; do
+            echo "  Checking $f"
+            if ! shellcheck -x -S warning "$f"; then
+              FAILED=1
+            fi
+          done
+          if [ "$FAILED" -eq 1 ]; then
+            echo "ERROR: shellcheck found issues"
+            exit 1
+          fi
+          echo "✓ All scripts pass shellcheck"
+
       - name: Check environment template
         run: |
           source .env.example
