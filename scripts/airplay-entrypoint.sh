@@ -2,7 +2,7 @@
 # Entrypoint for shairport-sync container
 # Sanitizes DEVICE_NAME to prevent command injection
 
-set -e
+set -eu
 
 # Sanitize DEVICE_NAME: remove shell metacharacters, allow only safe chars
 # Safe chars: alphanumeric, space, hyphen, underscore, apostrophe

@@ -63,10 +63,16 @@ log_and_tty "snapMULTI Auto-Install"
 log_and_tty "========================================="
 
 # Wait for network (needed for Docker install)
+# Try default gateway first, then public DNS as fallback
 log_and_tty "Waiting for network..."
 NETWORK_READY=false
 for i in $(seq 1 60); do
-    if ping -c1 -W2 8.8.8.8 &>/dev/null; then
+    # Re-detect gateway each iteration (interface may not be up yet)
+    GATEWAY=$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')
+    # Try gateway first (works behind restrictive firewalls), then public DNS
+    if { [ -n "$GATEWAY" ] && ping -c1 -W2 "$GATEWAY" &>/dev/null; } || \
+       ping -c1 -W2 1.1.1.1 &>/dev/null || \
+       ping -c1 -W2 8.8.8.8 &>/dev/null; then
         log_and_tty "Network ready."
         NETWORK_READY=true
         break
@@ -135,13 +141,28 @@ if ! bash scripts/deploy.sh >> "$LOG" 2>&1; then
     exit 1
 fi
 
-# Verify containers are running
-log_and_tty "Verifying containers..."
-sleep 5
-RUNNING=$(docker ps --format '{{.Names}}' | wc -l)
-if [ "$RUNNING" -lt 3 ]; then
-    log_and_tty "WARNING: Only $RUNNING containers running (expected 5)."
-    log_and_tty "Check: docker ps -a"
+# Verify containers are healthy (docker-compose healthchecks)
+log_and_tty "Waiting for containers to become healthy..."
+HEALTHY=false
+for attempt in $(seq 1 12); do
+    # Count healthy containers (exact match to avoid "unhealthy" false positive)
+    TOTAL=$(docker ps --format '{{.Names}}' | wc -l)
+    HEALTHY_COUNT=$(docker ps --format '{{.Status}}' | grep -c "(healthy)" || true)
+    if [ "$TOTAL" -ge 5 ] && [ "$HEALTHY_COUNT" -eq "$TOTAL" ]; then
+        log_and_tty "All $TOTAL containers healthy."
+        HEALTHY=true
+        break
+    fi
+    log_and_tty "  Attempt $attempt/12: $HEALTHY_COUNT/$TOTAL healthy..."
+    sleep 10
+done
+
+if [ "$HEALTHY" = false ]; then
+    log_and_tty "WARNING: Not all containers healthy after 2 minutes."
+    docker ps --format '{{.Names}}\t{{.Status}}' | while read -r line; do
+        log_and_tty "  $line"
+    done
+    log_and_tty "Check: docker compose logs"
 fi
 
 # Mark as installed (only on success - trap won't fire since we exit 0)
