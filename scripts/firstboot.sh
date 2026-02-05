@@ -135,13 +135,27 @@ if ! bash scripts/deploy.sh >> "$LOG" 2>&1; then
     exit 1
 fi
 
-# Verify containers are running
-log_and_tty "Verifying containers..."
-sleep 5
-RUNNING=$(docker ps --format '{{.Names}}' | wc -l)
-if [ "$RUNNING" -lt 3 ]; then
-    log_and_tty "WARNING: Only $RUNNING containers running (expected 5)."
-    log_and_tty "Check: docker ps -a"
+# Verify containers are healthy (docker-compose healthchecks)
+log_and_tty "Waiting for containers to become healthy..."
+HEALTHY=false
+for attempt in $(seq 1 12); do
+    UNHEALTHY=$(docker ps --format '{{.Names}}\t{{.Status}}' | grep -cv "healthy" || true)
+    TOTAL=$(docker ps --format '{{.Names}}' | wc -l)
+    if [ "$TOTAL" -ge 5 ] && [ "$UNHEALTHY" -eq 0 ]; then
+        log_and_tty "All $TOTAL containers healthy."
+        HEALTHY=true
+        break
+    fi
+    log_and_tty "  Attempt $attempt/12: $((TOTAL - UNHEALTHY))/$TOTAL healthy..."
+    sleep 10
+done
+
+if [ "$HEALTHY" = false ]; then
+    log_and_tty "WARNING: Not all containers healthy after 2 minutes."
+    docker ps --format '{{.Names}}\t{{.Status}}' | while read -r line; do
+        log_and_tty "  $line"
+    done
+    log_and_tty "Check: docker compose logs"
 fi
 
 # Mark as installed (only on success - trap won't fire since we exit 0)
