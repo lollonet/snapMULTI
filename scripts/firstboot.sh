@@ -139,14 +139,15 @@ fi
 log_and_tty "Waiting for containers to become healthy..."
 HEALTHY=false
 for attempt in $(seq 1 12); do
-    UNHEALTHY=$(docker ps --format '{{.Names}}\t{{.Status}}' | grep -cv "healthy" || true)
+    # Count healthy containers (exact match to avoid "unhealthy" false positive)
     TOTAL=$(docker ps --format '{{.Names}}' | wc -l)
-    if [ "$TOTAL" -ge 5 ] && [ "$UNHEALTHY" -eq 0 ]; then
+    HEALTHY_COUNT=$(docker ps --format '{{.Status}}' | grep -c "(healthy)" || true)
+    if [ "$TOTAL" -ge 5 ] && [ "$HEALTHY_COUNT" -eq "$TOTAL" ]; then
         log_and_tty "All $TOTAL containers healthy."
         HEALTHY=true
         break
     fi
-    log_and_tty "  Attempt $attempt/12: $((TOTAL - UNHEALTHY))/$TOTAL healthy..."
+    log_and_tty "  Attempt $attempt/12: $HEALTHY_COUNT/$TOTAL healthy..."
     sleep 10
 done
 
