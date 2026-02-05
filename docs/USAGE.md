@@ -46,6 +46,81 @@ For audio source types and JSON-RPC API, see [SOURCES.md](SOURCES.md).
 └─────────────────┘
 ```
 
+## Audio Format (Sample Rate)
+
+All audio sources use a unified sample format to ensure bit-perfect synchronization across clients:
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| Sample rate | 44100 Hz | CD-quality audio (44.1 kHz) |
+| Bit depth | 16-bit | Standard PCM resolution |
+| Channels | 2 | Stereo |
+
+**Format string**: `44100:16:2` (used in Snapcast configuration)
+
+### Why 44.1 kHz?
+
+- **CD standard**: Most music is mastered at 44.1 kHz
+- **Universal compatibility**: All audio sources (MPD, Spotify, AirPlay) output at this rate
+- **No resampling**: Avoids quality loss from sample rate conversion
+- **Low latency**: Smaller buffers than 48 kHz for same chunk duration
+
+### Audio Chain
+
+```
+Source → FIFO Pipe → Snapserver → Network → Snapclient → Sound Card
+         (raw PCM)   (FLAC codec)  (1704/tcp)  (decode)    (PCM out)
+```
+
+All sources must output raw S16LE PCM at 44100:16:2 to the FIFO pipes. Snapserver encodes to FLAC for network transmission (lossless), and clients decode back to PCM.
+
+### Codec Options
+
+Snapserver supports multiple codecs (configured in `config/snapserver.conf`):
+
+| Codec | Compression | Latency | Use Case |
+|-------|-------------|---------|----------|
+| **flac** (default) | Lossless | Low | Best quality, recommended |
+| opus | Lossy | Very low | Limited bandwidth |
+| ogg | Lossy | Low | Legacy clients |
+| pcm | None | Lowest | LAN only, high bandwidth |
+
+## Network Mode
+
+All snapMULTI containers use **host network mode** (`network_mode: host`). This is required for:
+
+### mDNS / Autodiscovery
+
+Avahi publishes services (AirPlay, Spotify Connect, Snapcast) via multicast DNS on port 5353. Bridge networking isolates containers from the host network, breaking mDNS broadcasts. Host mode allows containers to:
+
+- Share the host's network namespace
+- Use the host's Avahi daemon via D-Bus
+- Broadcast mDNS services on all interfaces
+
+### Low-Latency Audio
+
+Audio streaming requires consistent, low-latency networking. Host mode eliminates:
+
+- Docker's NAT translation overhead
+- Port mapping delays
+- Potential buffer bloat from virtual bridges
+
+### Implications
+
+1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 6600, 8180)
+2. **Firewall rules**: Must allow traffic on service ports (see [HARDWARE.md](HARDWARE.md))
+3. **Single instance**: Cannot run multiple snapMULTI stacks on the same host
+
+### Alternative: macvlan (Advanced)
+
+For multi-instance deployments, macvlan networking assigns each container a unique IP address on the physical network. This requires:
+
+- Router DHCP reservations
+- Manual mDNS configuration
+- More complex setup
+
+Host mode is recommended for single-server deployments.
+
 ## Services & Ports
 
 ### Snapserver
@@ -448,4 +523,90 @@ docker run -d --name snapclient \
 **Browser as client** (MPD HTTP stream only):
 ```
 http://<server-ip>:8000
+```
+
+## Logs & Diagnostics
+
+### Viewing Logs
+
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f snapserver
+docker compose logs -f shairport-sync
+docker compose logs -f librespot
+docker compose logs -f mpd
+
+# Last 100 lines
+docker compose logs --tail 100 snapserver
+```
+
+### Common Log Messages
+
+| Service | Message | Meaning |
+|---------|---------|---------|
+| snapserver | `Avahi daemon not running` | Host's avahi-daemon not started |
+| shairport-sync | `Connection refused on dbus` | Missing D-Bus socket mount |
+| librespot | `Address family not supported` | Built without Avahi backend |
+| mpd | `Failed to open FIFO` | FIFO pipe not created |
+
+### Health Checks
+
+```bash
+# Service status
+docker compose ps
+
+# Detailed health
+docker inspect --format='{{.State.Health.Status}}' snapserver
+
+# Resource usage
+docker stats --no-stream
+```
+
+### Installation Log (Zero-Touch)
+
+For SD card installations, check:
+```bash
+cat /var/log/snapmulti-install.log
+```
+
+Failed installations create a marker at `/opt/snapmulti/.install-failed`. Remove it to retry:
+```bash
+rm /opt/snapmulti/.install-failed
+sudo /opt/snapmulti/scripts/firstboot.sh
+```
+
+## Updating
+
+### Standard Update
+
+```bash
+cd /opt/snapmulti  # or wherever installed
+git pull
+docker compose pull
+docker compose up -d
+```
+
+### Update with Backup
+
+```bash
+cd /opt/snapmulti
+cp -r config config.backup
+git pull
+docker compose pull
+docker compose up -d
+```
+
+### Rollback
+
+If an update breaks things:
+```bash
+# Restore config
+cp -r config.backup/* config/
+
+# Or use a specific image version
+docker compose pull ghcr.io/lollonet/snapmulti-server:v1.0.0
+docker compose up -d
 ```
