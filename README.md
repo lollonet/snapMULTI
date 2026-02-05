@@ -143,6 +143,30 @@ It auto-discovers the server on your local network. To connect manually:
 snapclient --host <server-ip>
 ```
 
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| **Spotify/AirPlay not visible** | Check mDNS: `avahi-browse -r _spotify-connect._tcp` — ensure host has `avahi-daemon` running |
+| **No audio output** | Verify FIFO exists: `ls -la audio/*_fifo` — deploy.sh creates these automatically |
+| **Containers keep restarting** | Check logs: `docker compose logs -f` — common cause is missing config files |
+| **Clients can't connect** | Verify ports: `ss -tlnp \| grep 1704` — ensure firewall allows ports 1704, 1705, 1780 |
+| **myMPD shows empty library** | Update database: `echo 'update' \| nc localhost 6600` — wait for scan to complete |
+| **Audio out of sync** | Increase buffer in `config/snapserver.conf`: `buffer = 3000` (default: 2400) |
+
+For detailed troubleshooting, see [Usage Guide — Autodiscovery](docs/USAGE.md#autodiscovery-mdns).
+
+## Upgrading
+
+```bash
+cd /path/to/snapMULTI
+git pull
+docker compose pull
+docker compose up -d
+```
+
+For major version upgrades, check [CHANGELOG.md](CHANGELOG.md) for breaking changes.
+
 ## Documentation
 
 | Guide | What's inside |

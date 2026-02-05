@@ -6,5 +6,7 @@ RUN mkdir -p /audio
 
 COPY config/shairport-sync.conf /etc/shairport-sync.conf
 
-ENTRYPOINT ["shairport-sync"]
-CMD ["-c", "/etc/shairport-sync.conf"]
+ENV DEVICE_NAME=""
+
+# Use DEVICE_NAME if set, otherwise fall back to hostname + " AirPlay"
+ENTRYPOINT ["/bin/sh", "-c", "exec shairport-sync -c /etc/shairport-sync.conf -a \"${DEVICE_NAME:-$(hostname) AirPlay}\""]

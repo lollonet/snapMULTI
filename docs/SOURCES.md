@@ -130,8 +130,13 @@ source = pipe:////audio/airplay_fifo?name=AirPlay
 
 | Setting | Value | Description |
 |---------|-------|-------------|
-| `general.name` | `snapMULTI` | Name shown on Apple devices |
+| `general.name` | `%H AirPlay` | Name shown on Apple devices (%H = hostname) |
 | `pipe.name` | `/audio/airplay_fifo` | Named pipe path for audio output |
+
+**Custom service name:** Set `AIRPLAY_NAME` in `.env` to override the default hostname-based name:
+```bash
+AIRPLAY_NAME="Living Room AirPlay"
+```
 
 **Sample format:** 44100:16:2 (fixed by shairport-sync)
 
@@ -168,10 +173,15 @@ source = pipe:////audio/spotify_fifo?name=Spotify
 
 | Flag | Value | Description |
 |------|-------|-------------|
-| `--name` | `snapMULTI` | Name shown in Spotify app |
+| `--name` | `$(hostname) Spotify` | Name shown in Spotify app (hostname-based) |
 | `--bitrate` | `320` | Audio quality: 96, 160, or 320 kbps |
 | `--backend` | `pipe` | Output to named pipe |
 | `--device` | `/audio/spotify_fifo` | Named pipe path for audio output |
+
+**Custom service name:** Set `SPOTIFY_NAME` in `.env` to override the default hostname-based name:
+```bash
+SPOTIFY_NAME="Living Room Spotify"
+```
 
 **Sample format:** 44100:16:2 (fixed by librespot)
 

@@ -20,6 +20,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$PROJECT_ROOT/.env"
 
+# Validate PROJECT_ROOT is set and exists
+if [[ -z "$PROJECT_ROOT" ]] || [[ ! -d "$PROJECT_ROOT" ]]; then
+    echo "[ERROR] PROJECT_ROOT is not set or does not exist: $PROJECT_ROOT" >&2
+    exit 1
+fi
+
 #######################################
 # Hardware Detection
 #######################################
@@ -273,12 +279,64 @@ create_directories() {
 }
 
 #######################################
+# Configuration Validation
+#######################################
+
+validate_config() {
+    local errors=0
+
+    info "Validating configuration..."
+
+    # Check docker-compose.yml exists
+    if [[ ! -f "$PROJECT_ROOT/docker-compose.yml" ]]; then
+        error "docker-compose.yml not found in $PROJECT_ROOT"
+        errors=$((errors + 1))
+    fi
+
+    # Check required config files
+    local required_configs=(
+        "config/snapserver.conf"
+        "config/mpd.conf"
+        "config/shairport-sync.conf"
+    )
+
+    for config in "${required_configs[@]}"; do
+        if [[ ! -f "$PROJECT_ROOT/$config" ]]; then
+            error "Missing config file: $config"
+            errors=$((errors + 1))
+        fi
+    done
+
+    # Validate FIFO paths in configs match audio directory
+    if [[ -f "$PROJECT_ROOT/config/snapserver.conf" ]]; then
+        if ! grep -q "/audio/" "$PROJECT_ROOT/config/snapserver.conf"; then
+            warn "snapserver.conf may have incorrect FIFO paths (expected /audio/)"
+        fi
+    fi
+
+    # Validate docker-compose.yml syntax
+    if command -v docker &>/dev/null; then
+        if ! docker compose -f "$PROJECT_ROOT/docker-compose.yml" config --quiet 2>/dev/null; then
+            error "docker-compose.yml has syntax errors"
+            errors=$((errors + 1))
+        fi
+    fi
+
+    if [[ $errors -gt 0 ]]; then
+        error "Configuration validation failed with $errors error(s)"
+        exit 1
+    fi
+
+    ok "Configuration valid"
+}
+
+#######################################
 # Docker Operations
 #######################################
 
 check_docker() {
     if ! command -v docker &>/dev/null; then
-        error "Docker not found. Install with: curl -fsSL https://get.docker.com | sh"
+        error "Docker not found. Please install Docker and try again."
         exit 1
     fi
 
@@ -305,8 +363,60 @@ pull_images() {
 start_services() {
     info "Starting services..."
     cd "$PROJECT_ROOT"
-    docker compose up -d
+    if ! docker compose up -d; then
+        error "Failed to start services"
+        exit 1
+    fi
     ok "Services started"
+}
+
+verify_services() {
+    local expected_services=("snapserver" "shairport-sync" "librespot" "mpd" "mympd")
+    local max_attempts=6
+    local wait_seconds=10
+    local attempt=1
+
+    info "Verifying services (max ${max_attempts} attempts, ${wait_seconds}s interval)..."
+
+    while [[ $attempt -le $max_attempts ]]; do
+        local failed=0
+        local running_services=()
+
+        for service in "${expected_services[@]}"; do
+            if docker ps --format '{{.Names}}' | grep -q "^${service}$"; then
+                running_services+=("$service")
+            else
+                failed=$((failed + 1))
+            fi
+        done
+
+        if [[ $failed -eq 0 ]]; then
+            for service in "${expected_services[@]}"; do
+                ok "$service running"
+            done
+            ok "All services running"
+            return 0
+        fi
+
+        if [[ $attempt -lt $max_attempts ]]; then
+            info "Attempt $attempt/$max_attempts: ${#running_services[@]}/${#expected_services[@]} services running, waiting ${wait_seconds}s..."
+            sleep "$wait_seconds"
+        fi
+
+        attempt=$((attempt + 1))
+    done
+
+    # Final report after all attempts
+    warn "Service verification failed after $max_attempts attempts"
+    for service in "${expected_services[@]}"; do
+        if docker ps --format '{{.Names}}' | grep -q "^${service}$"; then
+            ok "$service running"
+        else
+            error "$service not running"
+        fi
+    done
+    warn "Check logs: docker compose logs"
+    return 1
 }
 
 show_status() {
@@ -380,6 +490,9 @@ main() {
     # Check prerequisites
     check_docker
 
+    # Validate configuration files
+    validate_config
+
     # Auto-detect hardware if profile not specified
     if [[ -z "$profile" ]]; then
         profile=$(detect_hardware_profile)
@@ -395,6 +508,9 @@ main() {
     # Pull and start
     pull_images
     start_services
+
+    # Verify all services started
+    verify_services
 
     # Show status
     show_status
