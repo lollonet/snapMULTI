@@ -3,30 +3,23 @@
 ## Documentation SSOT (Single Source of Truth)
 
 Each topic has ONE authoritative document. Other files link to it — never duplicate content.
+Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 
-| Topic | Owner | Notes |
-|-------|-------|-------|
-| Audio sources (config, params, schema, API) | `docs/SOURCES.md` | Technical reference for all source types |
-| Android / Tidal streaming | `docs/SOURCES.md` | Setup guides for non-native casting |
-| JSON-RPC API | `docs/SOURCES.md` | Stream management endpoints |
-| Architecture, services, ports | `docs/USAGE.md` | System diagram, port tables, config details |
-| MPD control (mpc, clients, apps) | `docs/USAGE.md` | Command-line and GUI client usage |
-| Autodiscovery / mDNS | `docs/USAGE.md` | Docker requirements, troubleshooting |
-| Deployment / CI/CD | `docs/USAGE.md` | Pipeline, workflows, container registry |
-| docker-compose.yml reference | `docs/USAGE.md` | Full example with annotations |
-| Snapclient advanced options | `docs/USAGE.md` | Daemon mode, Docker, sound cards, browser |
-| User quickstart | `README.md` | How to get running (essential steps only) |
-| Client basic setup | `README.md` | Install snapclient + connect (minimal) |
-| Changelog | `CHANGELOG.md` | Historical log, not duplicated |
-| Hardware requirements, network, setups | `docs/HARDWARE.md` | Server/client specs, Pi models, bandwidth, configs |
-| Source config (inline) | `config/snapserver.conf` | Comments per-source, links to docs/ |
+| Topic | Owner |
+|-------|-------|
+| Audio sources, params, schema, JSON-RPC API | `docs/SOURCES.md` |
+| Architecture, services, ports, mDNS, CI/CD | `docs/USAGE.md` |
+| Hardware, network, recommended setups | `docs/HARDWARE.md` |
+| User quickstart, client basic setup | `README.md` |
+| Changelog | `CHANGELOG.md` |
+| Source config (inline comments) | `config/snapserver.conf` |
 
 **Rules:**
 - README is an appliance manual — what it does, how to install, how to connect. No jargon.
-- When adding a new source type: update `docs/SOURCES.md` (full details) + `config/snapserver.conf` (commented example) + `README.md` source table (one-liner)
-- When changing source parameters: update `docs/SOURCES.md` only
-- When changing services, ports, deployment, mDNS: update `docs/USAGE.md` only
-- When changing hardware specs, network, or recommended setups: update `docs/HARDWARE.md` only
+- New source type → update `docs/SOURCES.md` + `config/snapserver.conf` + `README.md` source table
+- Source param changes → `docs/SOURCES.md` only
+- Services/ports/CI changes → `docs/USAGE.md` only
+- Hardware/network changes → `docs/HARDWARE.md` only
 - README links to docs/ for anything technical — never inline technical details
 
 ## Project Structure
@@ -34,36 +27,45 @@ Each topic has ONE authoritative document. Other files link to it — never dupl
 ```
 snapMULTI/
   config/
-    snapserver.conf      # Snapcast server config (4 active + 4 commented sources)
-    mpd.conf             # MPD config (FIFO + HTTP outputs)
-    shairport-sync.conf  # shairport-sync pipe backend config
+    snapserver.conf          # Snapcast server config (4 active + 4 commented sources)
+    mpd.conf                 # MPD config (FIFO + HTTP outputs)
+    shairport-sync.conf      # shairport-sync pipe backend config
+  scripts/
+    deploy.sh                # Server deployment (profiles, FIFO setup, validation)
+    firstboot.sh             # First-boot provisioning (network wait, healthcheck loop)
+    airplay-entrypoint.sh    # AirPlay container entrypoint (DEVICE_NAME sanitization)
+    prepare-sd.sh            # SD card preparation for new clients
+    tidal-bridge.py          # Tidal Connect → TCP bridge
   docs/
-    HARDWARE.md          # Hardware & network guide (server/client specs, Pi, bandwidth, setups)
-    USAGE.md             # Technical operations guide (architecture, services, MPD, mDNS, CI/CD)
-    SOURCES.md           # Audio sources technical reference (SSOT for sources)
+    HARDWARE.md              # Hardware & network guide
+    USAGE.md                 # Technical operations guide
+    SOURCES.md               # Audio sources technical reference
+    *.it.md                  # Italian translations
   .github/workflows/
-    build-push.yml       # Native dual-arch build + push to ghcr.io (4 images)
-    deploy.yml           # SSH deploy (workflow_call from build-push, 5 containers)
-    build-test.yml       # PR-only build validation (4 Dockerfiles)
-    validate.yml         # Config syntax validation
+    build-push.yml           # Dual-arch build + push to ghcr.io (5 images)
+    deploy.yml               # SSH deploy (workflow_call, 6 containers)
+    build-test.yml           # PR-only Docker build validation (5 Dockerfiles)
+    validate.yml             # docker-compose syntax, shellcheck, env template
+    claude-code-review.yml   # Automated PR review
+    claude.yml               # Claude CI helper
   mympd/
-    workdir/             # myMPD persistent data
-    cachedir/            # myMPD cache (album art, etc.)
-  Dockerfile.snapserver  # Snapserver only (from lollonet/santcasp, multi-stage)
+    workdir/                 # myMPD persistent data
+    cachedir/                # myMPD cache (album art, etc.)
+  Dockerfile.snapserver      # Snapserver (from lollonet/santcasp, multi-stage)
   Dockerfile.shairport-sync  # AirPlay receiver (pipe output)
-  Dockerfile.librespot   # Spotify Connect (pipe output)
-  Dockerfile.mpd         # MPD + ffmpeg (Alpine)
-  docker-compose.yml     # 5 services (ghcr.io + myMPD images, host networking)
-  .env.example           # Environment template
-  .dockerignore          # Build context exclusions
-  README.md              # Essential user guide (quickstart, connect, links to docs/)
-  CHANGELOG.md           # Project history
+  Dockerfile.librespot       # Spotify Connect (pipe output)
+  Dockerfile.mpd             # MPD + ffmpeg (Alpine)
+  Dockerfile.tidal           # Tidal Connect bridge
+  docker-compose.yml         # 5 default + 1 profile-gated service (host networking)
+  .env.example               # Environment template
 ```
 
 ## Conventions
 
-- **Docker images**: `ghcr.io/lollonet/snapmulti-server:latest`, `ghcr.io/lollonet/snapmulti-airplay:latest`, `ghcr.io/lollonet/snapmulti-spotify:latest`, `ghcr.io/lollonet/snapmulti-mpd:latest`
+- **Docker images**: `ghcr.io/lollonet/snapmulti-{server,airplay,spotify,mpd,tidal}:latest`
 - **Multi-arch**: linux/amd64 (raspy) + linux/arm64 (studio), native builds on self-hosted runners
-- **Config paths**: all config in `config/` directory
-- **Deployment**: tag push (`v*`) triggers build → manifest → deploy (never push directly to main without PR unless explicitly requested)
+- **Config paths**: all config in `config/`, all scripts in `scripts/`
+- **Deployment**: tag push (`v*`) triggers build → manifest → deploy
+- **Git workflow**: always use PRs, never push directly to main unless explicitly requested
 - **Audio format**: 44100:16:2 (44.1kHz, 16-bit, stereo) across all sources
+- **CI gates**: shellcheck on all `scripts/*.sh`, docker-compose syntax validation
