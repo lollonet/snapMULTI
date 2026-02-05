@@ -64,10 +64,11 @@ log_and_tty "========================================="
 
 # Wait for network (needed for Docker install)
 # Try default gateway first, then public DNS as fallback
-GATEWAY=$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')
 log_and_tty "Waiting for network..."
 NETWORK_READY=false
 for i in $(seq 1 60); do
+    # Re-detect gateway each iteration (interface may not be up yet)
+    GATEWAY=$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')
     # Try gateway first (works behind restrictive firewalls), then public DNS
     if { [ -n "$GATEWAY" ] && ping -c1 -W2 "$GATEWAY" &>/dev/null; } || \
        ping -c1 -W2 1.1.1.1 &>/dev/null || \
