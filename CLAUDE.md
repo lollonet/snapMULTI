@@ -47,6 +47,7 @@ snapMULTI/
     build-test.yml           # PR-only Docker build validation (5 Dockerfiles)
     validate.yml             # docker-compose syntax, shellcheck, env template
     claude-code-review.yml   # Automated PR review
+    claude.yml               # Claude CI helper
   mympd/
     workdir/                 # myMPD persistent data
     cachedir/                # myMPD cache (album art, etc.)
@@ -55,7 +56,7 @@ snapMULTI/
   Dockerfile.librespot       # Spotify Connect (pipe output)
   Dockerfile.mpd             # MPD + ffmpeg (Alpine)
   Dockerfile.tidal           # Tidal Connect bridge
-  docker-compose.yml         # 6 services (host networking)
+  docker-compose.yml         # 5 default + 1 profile-gated service (host networking)
   .env.example               # Environment template
 ```
 
