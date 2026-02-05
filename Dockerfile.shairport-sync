@@ -5,8 +5,10 @@ RUN apk add --no-cache shairport-sync
 RUN mkdir -p /audio
 
 COPY config/shairport-sync.conf /etc/shairport-sync.conf
+COPY scripts/airplay-entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENV DEVICE_NAME=""
 
-# Use DEVICE_NAME if set, otherwise fall back to hostname + " AirPlay"
-ENTRYPOINT ["/bin/sh", "-c", "exec shairport-sync -c /etc/shairport-sync.conf -a \"${DEVICE_NAME:-$(hostname) AirPlay}\""]
+# Use entrypoint script that sanitizes DEVICE_NAME to prevent command injection
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

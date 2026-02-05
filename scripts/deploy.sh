@@ -271,9 +271,9 @@ create_directories() {
         fi
     done
 
-    # Set permissions
+    # Set permissions (660 = owner+group read/write, more secure than 666)
     chmod 770 "$PROJECT_ROOT/audio"
-    chmod 666 "$PROJECT_ROOT/audio"/*_fifo 2>/dev/null || true
+    chmod 660 "$PROJECT_ROOT/audio"/*_fifo 2>/dev/null || true
 
     ok "Directories created"
 }
@@ -457,7 +457,19 @@ main() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --profile)
+                if [[ -z "${2:-}" ]]; then
+                    error "--profile requires a value (minimal|standard|performance)"
+                    exit 1
+                fi
                 profile="$2"
+                # Validate profile value
+                case "$profile" in
+                    minimal|standard|performance) ;;
+                    *)
+                        error "Invalid profile: $profile (must be minimal, standard, or performance)"
+                        exit 1
+                        ;;
+                esac
                 shift 2
                 ;;
             -h|--help)
