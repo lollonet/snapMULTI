@@ -63,10 +63,15 @@ log_and_tty "snapMULTI Auto-Install"
 log_and_tty "========================================="
 
 # Wait for network (needed for Docker install)
+# Try default gateway first, then public DNS as fallback
+GATEWAY=$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')
 log_and_tty "Waiting for network..."
 NETWORK_READY=false
 for i in $(seq 1 60); do
-    if ping -c1 -W2 8.8.8.8 &>/dev/null; then
+    # Try gateway first (works behind restrictive firewalls), then public DNS
+    if { [ -n "$GATEWAY" ] && ping -c1 -W2 "$GATEWAY" &>/dev/null; } || \
+       ping -c1 -W2 1.1.1.1 &>/dev/null || \
+       ping -c1 -W2 8.8.8.8 &>/dev/null; then
         log_and_tty "Network ready."
         NETWORK_READY=true
         break
