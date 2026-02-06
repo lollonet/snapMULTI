@@ -234,6 +234,15 @@ ss -tlnp | grep -E "1704|1705|1780"
 
 ## Deployment
 
+### Metodi di Deployment
+
+| Metodo | Destinatari | Hardware | Cosa fa |
+|--------|-------------|----------|---------|
+| **SD Zero-touch** | Principianti | Raspberry Pi | Scrivi SD, inserisci, accendi — completamente automatico |
+| **`deploy.sh`** | Avanzati | Pi o x86_64 | Rileva hardware, crea directory, avvia servizi |
+| **Manuale** | Avanzati | Pi o x86_64 | Clona, modifica `.env`, `docker compose up` |
+| **CI/CD (tag push)** | Manutentori | N/A | Compila immagini, deploya su server via SSH |
+
 ### Deployment Automatico (Consigliato)
 
 Il push di un tag di versione (es. `git tag v1.1.0 && git push origin v1.1.0`) avvia l'intera pipeline CI/CD:
