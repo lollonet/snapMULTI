@@ -38,6 +38,8 @@ The server runs all audio services: Snapcast, MPD, shairport-sync (AirPlay), and
 
 > **Note:** Raspberry Pi 2 and Pi Zero 2 W can run the server but are borderline. A Pi 3B+ or better is recommended for all four audio sources.
 
+> **Beginners:** If this is your first time, use a Raspberry Pi 4 (4GB) with the [zero-touch SD setup](../README.md#beginners-plug-and-play-raspberry-pi). It handles everything automatically — no terminal required.
+
 ## Client Requirements
 
 Snapcast clients are lightweight — they receive audio and play it through speakers.

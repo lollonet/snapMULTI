@@ -22,6 +22,17 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 - Hardware/network changes → `docs/HARDWARE.md` only
 - README links to docs/ for anything technical — never inline technical details
 
+## Deployment Targets
+
+| Audience | Hardware | Method | Scripts |
+|----------|----------|--------|---------|
+| **Beginners** | Raspberry Pi 4 | Zero-touch SD | `prepare-sd.sh` → `firstboot.sh` → `deploy.sh` |
+| **Advanced** | Pi4 or x86_64 | Automated or Manual | `deploy.sh` (optional) |
+
+**Beginners**: No terminal required. Flash SD card on another computer, insert in Pi, power on. The Pi becomes a dedicated audio appliance.
+
+**Advanced**: Clone repo on any Linux host (Pi, x86_64, VM, NAS). Use `deploy.sh` for automation (hardware detection, directory setup, resource profiles) or skip it and just run `docker compose up`.
+
 ## Project Structure
 
 ```

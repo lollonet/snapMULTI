@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Documentation: Upgrade instructions** — Standard update, backup, and rollback procedures
 
 ### Changed
-- **CLAUDE.md** — Updated project structure to reflect current state (scripts/, tidal, workflows, service counts)
+- **Documentation: Quick Start reorganization** — Split into Beginners (Pi zero-touch) and Advanced (any Linux) sections with clear audience targeting
+- **CLAUDE.md** — Added Deployment Targets section, updated project structure
 - **CI/CD: validate.yml** — Added shellcheck linting for all scripts/ with `-S warning` severity
 - **Service naming** — AirPlay and Spotify use hostname-based names with optional `AIRPLAY_NAME`/`SPOTIFY_NAME` env vars for customization
 - **deploy.sh validation** — Config file validation, PROJECT_ROOT check, and `--profile` argument validation with safe `shift` handling

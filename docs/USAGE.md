@@ -312,6 +312,15 @@ ss -tlnp | grep -E "1704|1705|1780"
 
 ## Deployment
 
+### Deployment Methods
+
+| Method | Audience | Hardware | What it does |
+|--------|----------|----------|--------------|
+| **Zero-touch SD** | Beginners | Raspberry Pi | Flash SD, insert, power on — fully automatic |
+| **`deploy.sh`** | Advanced | Pi or x86_64 | Detects hardware, creates dirs, starts services |
+| **Manual** | Advanced | Pi or x86_64 | Clone, edit `.env`, `docker compose up` |
+| **CI/CD (tag push)** | Maintainers | N/A | Builds images, deploys to server via SSH |
+
 ### Automated Deployment (Recommended)
 
 Pushing a version tag (e.g. `git tag v1.1.0 && git push origin v1.1.0`) triggers the full CI/CD pipeline:

@@ -25,15 +25,15 @@ More source types available — see [Audio Sources Reference](docs/SOURCES.md).
 
 ## Quick Start
 
-### You need
+### Beginners: Plug-and-Play (Raspberry Pi)
 
-- A Linux machine (x86_64 or ARM64)
-- Docker and Docker Compose installed
-- A folder with your music files
+No terminal skills required. Flash an SD card, insert it, power on — done.
 
-### Option A: Zero-touch SD card (Raspberry Pi)
-
-Flash SD → insert → power on → done. No SSH required.
+**You need:**
+- Raspberry Pi 4 (2GB+ RAM recommended)
+- microSD card (16GB+)
+- USB drive or NAS with your music
+- Another computer to flash the SD card
 
 **On your computer:**
 ```bash
@@ -48,64 +48,62 @@ git clone https://github.com/lollonet/snapMULTI.git
 # 3. Eject SD, insert in Pi, power on
 ```
 
-First boot installs Docker and snapMULTI automatically (time depends on network speed). Access at `http://snapmulti.local:8180`.
+First boot installs Docker and snapMULTI automatically. Access at `http://snapmulti.local:8180`.
 
-### Option B: Automated deploy (SSH into existing Pi)
+---
+
+### Advanced: Any Linux Server
+
+For users comfortable with terminal and Docker. Works on **Raspberry Pi, x86_64, VMs, NAS** — anything that runs Linux and Docker.
+
+**You need:**
+- Any Linux machine (Pi4, Intel NUC, old laptop, VM, NAS with Docker support)
+- Docker and Docker Compose installed
+- A folder with your music files
+
+Choose your method:
+
+#### Option A: Automated (`deploy.sh`)
+
+Auto-detects hardware, creates directories, sets permissions, starts services.
 
 ```bash
 git clone https://github.com/lollonet/snapMULTI.git
 cd snapMULTI
-sudo ./deploy.sh
+sudo ./scripts/deploy.sh
 ```
 
-This installs Docker if needed, creates directories, **auto-detects your music library**, and starts services.
-
-The script scans `/media/*`, `/mnt/*`, and `~/Music` for audio files. If found, it configures automatically. If not, mount your music first:
+The script scans `/media/*`, `/mnt/*`, and `~/Music` for audio files. If not found, mount your music first:
 ```bash
 sudo mount /dev/sdX1 /media/music   # USB drive, NAS, etc.
 ```
 
-### Option C: Manual setup
+#### Option B: Manual
 
-#### 1. Get the project
+Full control — just clone, configure, run.
 
 ```bash
 git clone https://github.com/lollonet/snapMULTI.git
 cd snapMULTI
-```
-
-#### 2. Configure
-
-```bash
 cp .env.example .env
 ```
 
 Edit `.env` with your settings:
 
 ```bash
-# Music library path — mount your music here first
-MUSIC_PATH=/media/music
-
-# Timezone
-TZ=Your/Timezone
-
-# User/Group for container processes (match your host user)
-PUID=1000
-PGID=1000
+MUSIC_PATH=/media/music      # Path to your music library
+TZ=Your/Timezone             # e.g., Europe/Rome
+PUID=1000                    # Your user ID (run: id -u)
+PGID=1000                    # Your group ID (run: id -g)
 ```
 
-Mount your music before starting:
-```bash
-sudo mount /dev/sdX1 /media/music   # USB drive, NAS, etc.
-```
-
-#### 3. Start
+Start:
 
 ```bash
 docker compose up -d
 ```
 
-#### 4. Verify
+Verify:
 
 ```bash
 docker ps
@@ -113,7 +111,9 @@ docker ps
 
 You should see five running containers: `snapserver`, `shairport-sync`, `librespot`, `mpd`, and `mympd`.
 
-### 5. Control your music
+---
+
+### Control your music
 
 Open `http://<server-ip>:8180` in a browser — myMPD lets you browse and play your library from any device.
 
