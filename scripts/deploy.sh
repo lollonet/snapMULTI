@@ -1,30 +1,99 @@
 #!/usr/bin/env bash
-# snapMULTI deployment script with auto hardware detection
-# Usage: ./scripts/deploy.sh [--profile minimal|standard|performance]
+# snapMULTI deployment script
+# Bootstraps a fresh Linux machine as a snapMULTI server.
+# Usage: sudo ./scripts/deploy.sh [--profile minimal|standard|performance]
 set -euo pipefail
 
-# Colors
+#######################################
+# Colors and Output
+#######################################
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
 
 info()  { echo -e "${BLUE}[INFO]${NC} $*" >&2; }
 ok()    { echo -e "${GREEN}[OK]${NC} $*" >&2; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*" >&2; }
 error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
+step()  { echo -e "\n${CYAN}${BOLD}==> $*${NC}" >&2; }
 
-# Detect script location and project root
+#######################################
+# Project Root Detection
+#######################################
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENV_FILE="$PROJECT_ROOT/.env"
 
-# Validate PROJECT_ROOT is set and exists
-if [[ -z "$PROJECT_ROOT" ]] || [[ ! -d "$PROJECT_ROOT" ]]; then
-    echo "[ERROR] PROJECT_ROOT is not set or does not exist: $PROJECT_ROOT" >&2
+# Handle both ./scripts/deploy.sh and ./deploy.sh (symlink) cases
+if [[ -f "$SCRIPT_DIR/../docker-compose.yml" ]]; then
+    PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [[ -f "$SCRIPT_DIR/docker-compose.yml" ]]; then
+    PROJECT_ROOT="$SCRIPT_DIR"
+else
+    error "Cannot find docker-compose.yml. Run from the snapMULTI directory."
     exit 1
 fi
+
+ENV_FILE="$PROJECT_ROOT/.env"
+
+#######################################
+# Music Library Detection
+#######################################
+
+detect_music_library() {
+    local best_path=""
+    local best_count=0
+    local real_user="${SUDO_USER:-$(whoami)}"
+
+    # Ensure globs that don't match expand to nothing
+    local old_nullglob
+    old_nullglob=$(shopt -p nullglob || true)
+    shopt -s nullglob
+
+    local search_paths=(
+        /media/*
+        /mnt/*
+        "/home/$real_user/Music"
+        "/home/$real_user/music"
+    )
+
+    echo -e "${BLUE}[INFO]${NC} Scanning for music libraries..." >&2
+
+    for pattern in "${search_paths[@]}"; do
+        # shellcheck disable=SC2086
+        for dir in $pattern; do
+            [[ -d "$dir" ]] || continue
+
+            echo -ne "  Scanning ${dir}...\r" >&2
+
+            local count
+            count=$(find -L "$dir" -maxdepth 3 -type f \( \
+                -iname '*.flac' -o -iname '*.mp3' -o -iname '*.m4a' \
+                -o -iname '*.ogg' -o -iname '*.wav' -o -iname '*.aac' \
+                -o -iname '*.opus' -o -iname '*.wma' \
+            \) 2>/dev/null | head -1000 | wc -l)
+
+            if [[ "$count" -gt 0 ]]; then
+                echo -e "${BLUE}[INFO]${NC}   Found: $dir ($count audio files)" >&2
+                if [[ "$count" -gt "$best_count" ]]; then
+                    best_count="$count"
+                    best_path="$dir"
+                fi
+            fi
+        done
+    done
+
+    # Restore nullglob
+    $old_nullglob
+
+    if [[ -n "$best_path" ]]; then
+        echo "$best_path"
+    fi
+}
 
 #######################################
 # Hardware Detection
@@ -61,19 +130,10 @@ detect_hardware_profile() {
     info "Hardware: ${total_ram_mb}MB RAM, ${cpu_cores} CPU cores"
 
     # Determine profile based on hardware
-    # Pi Zero 2 W: 512MB RAM, 4 cores (but weak)
-    # Pi 3: 1GB RAM, 4 cores
-    # Pi 4: 2-8GB RAM, 4 cores
-    # Pi 5: 4-8GB RAM, 4 cores (fast)
-
     if [[ -n "$pi_model" ]]; then
         case "$pi_model" in
-            *"Zero 2"*)
-                profile="minimal"
-                ;;
-            *"Pi 3"*)
-                profile="minimal"
-                ;;
+            *"Zero 2"*) profile="minimal" ;;
+            *"Pi 3"*)   profile="minimal" ;;
             *"Pi 4"*)
                 if [[ $total_ram_mb -ge 4000 ]]; then
                     profile="performance"
@@ -81,11 +141,8 @@ detect_hardware_profile() {
                     profile="standard"
                 fi
                 ;;
-            *"Pi 5"*)
-                profile="performance"
-                ;;
+            *"Pi 5"*)   profile="performance" ;;
             *)
-                # Unknown Pi, use RAM-based detection
                 if [[ $total_ram_mb -lt 1500 ]]; then
                     profile="minimal"
                 elif [[ $total_ram_mb -lt 4000 ]]; then
@@ -120,8 +177,6 @@ apply_resource_profile() {
 
     case "$profile" in
         minimal)
-            # Pi Zero 2 W, Pi 3, low-RAM systems (~1GB total)
-            # Total container memory: ~450MB
             cat >> "$ENV_FILE" <<'EOF'
 
 # Hardware Profile: BEGIN
@@ -146,8 +201,6 @@ MYMPD_CPU_LIMIT=0.25
 EOF
             ;;
         standard)
-            # Pi 4 2GB, typical x86 systems
-            # Total container memory: ~900MB
             cat >> "$ENV_FILE" <<'EOF'
 
 # Hardware Profile: BEGIN
@@ -172,8 +225,6 @@ MYMPD_CPU_LIMIT=0.5
 EOF
             ;;
         performance)
-            # Pi 4 4GB+, Pi 5, powerful x86
-            # Total container memory: ~1.8GB
             cat >> "$ENV_FILE" <<'EOF'
 
 # Hardware Profile: BEGIN
@@ -207,45 +258,82 @@ EOF
 }
 
 #######################################
-# Environment Setup
+# Preflight Checks
 #######################################
 
-setup_env() {
-    local profile="$1"
+preflight_checks() {
+    step "Preflight checks"
 
-    if [[ -f "$ENV_FILE" ]]; then
-        # Check if profile already set
-        if grep -q "# Hardware Profile: BEGIN" "$ENV_FILE"; then
-            local current_profile
-            current_profile=$(grep "# Profile:" "$ENV_FILE" | awk '{print $3}')
-            if [[ "$current_profile" == "$profile" ]]; then
-                info "Profile '$profile' already configured"
-                return 0
-            else
-                warn "Existing profile: $current_profile, updating to: $profile"
-                # Remove old profile settings (block between BEGIN/END markers)
-                sed -i.bak '/# Hardware Profile: BEGIN/,/# Hardware Profile: END/d' "$ENV_FILE"
-                rm -f "$ENV_FILE.bak"
-            fi
-        fi
+    # Must be Linux
+    if [[ "$(uname -s)" != "Linux" ]]; then
+        error "snapMULTI requires Linux (host networking for mDNS). Detected: $(uname -s)"
+        exit 1
+    fi
+    info "OS: Linux"
+
+    # Architecture check
+    local arch
+    arch="$(uname -m)"
+    case "$arch" in
+        x86_64)  info "Architecture: amd64" ;;
+        aarch64) info "Architecture: arm64" ;;
+        armv7l)  info "Architecture: armv7 (supported but arm64 recommended)" ;;
+        armv6l)  warn "Architecture: armv6 — too weak for server use (Pi Zero v1 / Pi 1)" ;;
+        *)       error "Unsupported architecture: $arch"; exit 1 ;;
+    esac
+
+    # Network check
+    if curl -sf --max-time 5 https://ghcr.io >/dev/null 2>&1; then
+        info "Network: OK (ghcr.io reachable)"
     else
-        # Create new .env from example or defaults
-        if [[ -f "$PROJECT_ROOT/.env.example" ]]; then
-            cp "$PROJECT_ROOT/.env.example" "$ENV_FILE"
-            info "Created .env from .env.example"
-        else
-            cat > "$ENV_FILE" <<EOF
-# snapMULTI Configuration
-TZ=$(timedatectl show -p Timezone --value 2>/dev/null || echo "Europe/Berlin")
-PUID=$(id -u)
-PGID=$(id -g)
-MUSIC_PATH=/media/music
-EOF
-            info "Created new .env file"
-        fi
+        error "Cannot reach ghcr.io — check network connectivity"
+        exit 1
+    fi
+}
+
+#######################################
+# Docker Installation
+#######################################
+
+install_docker() {
+    step "Docker"
+
+    if command -v docker >/dev/null 2>&1; then
+        info "Docker already installed: $(docker --version)"
+    else
+        info "Installing Docker via official script (https://get.docker.com)..."
+        curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+        sh /tmp/get-docker.sh
+        rm -f /tmp/get-docker.sh
+        ok "Docker installed: $(docker --version)"
     fi
 
-    apply_resource_profile "$profile"
+    # Check Docker Compose
+    if docker compose version >/dev/null 2>&1; then
+        info "Docker Compose: $(docker compose version --short)"
+    else
+        error "Docker Compose not found. Install Docker Compose v2."
+        exit 1
+    fi
+
+    # Add real user to docker group
+    local real_user="${SUDO_USER:-$(whoami)}"
+    if ! id -nG "$real_user" | grep -qw docker; then
+        usermod -aG docker "$real_user"
+        info "Added $real_user to docker group (re-login to take effect)"
+    fi
+
+    # Enable and start Docker
+    systemctl enable docker >/dev/null 2>&1 || true
+    systemctl start docker
+
+    # Verify Docker is running
+    if ! docker info &>/dev/null; then
+        error "Cannot connect to Docker daemon. Is it running?"
+        exit 1
+    fi
+
+    ok "Docker ready"
 }
 
 #######################################
@@ -253,7 +341,12 @@ EOF
 #######################################
 
 create_directories() {
-    info "Creating required directories..."
+    step "Creating directories"
+
+    local real_user="${SUDO_USER:-$(whoami)}"
+    local real_uid real_gid
+    real_uid="$(id -u "$real_user")"
+    real_gid="$(id -g "$real_user")"
 
     local dirs=(
         "audio"
@@ -277,11 +370,92 @@ create_directories() {
         fi
     done
 
-    # Set permissions (660 = owner+group read/write, more secure than 666)
+    # Set ownership and permissions
+    chown -R "$real_uid:$real_gid" "$PROJECT_ROOT/audio" "$PROJECT_ROOT/data" \
+        "$PROJECT_ROOT/mpd" "$PROJECT_ROOT/mympd" "$PROJECT_ROOT/tidal"
     chmod 770 "$PROJECT_ROOT/audio"
     chmod 660 "$PROJECT_ROOT/audio"/*_fifo 2>/dev/null || true
 
-    ok "Directories created"
+    ok "Directories created: ${dirs[*]}"
+}
+
+#######################################
+# Environment Configuration
+#######################################
+
+setup_env() {
+    local profile="$1"
+
+    step "Environment configuration"
+
+    local real_user="${SUDO_USER:-$(whoami)}"
+    local real_uid real_gid
+    real_uid="$(id -u "$real_user")"
+    real_gid="$(id -g "$real_user")"
+
+    if [[ -f "$ENV_FILE" ]]; then
+        # Check if profile already set
+        if grep -q "# Hardware Profile: BEGIN" "$ENV_FILE"; then
+            local current_profile
+            current_profile=$(grep "# Profile:" "$ENV_FILE" | awk '{print $3}')
+            if [[ "$current_profile" == "$profile" ]]; then
+                info "Profile '$profile' already configured"
+                return 0
+            else
+                warn "Existing profile: $current_profile, updating to: $profile"
+                sed -i.bak '/# Hardware Profile: BEGIN/,/# Hardware Profile: END/d' "$ENV_FILE"
+                rm -f "$ENV_FILE.bak"
+            fi
+        else
+            info "Existing .env found, adding hardware profile"
+        fi
+        apply_resource_profile "$profile"
+    else
+        # Auto-detect timezone
+        local tz_detected
+        if command -v timedatectl >/dev/null 2>&1; then
+            tz_detected="$(timedatectl show -p Timezone --value 2>/dev/null || echo "Europe/Berlin")"
+        elif [[ -f /etc/timezone ]]; then
+            tz_detected="$(cat /etc/timezone)"
+        else
+            tz_detected="Europe/Berlin"
+        fi
+
+        # Auto-detect music library
+        local music_path
+        music_path="$(detect_music_library)"
+        if [[ -n "$music_path" ]]; then
+            info "Auto-detected music library: $music_path"
+        else
+            music_path="/media/music"
+            warn "No music library found — using default: $music_path"
+            warn "Mount your music there or edit .env to set MUSIC_PATH"
+        fi
+
+        # Generate .env
+        cat > "$ENV_FILE" <<EOF
+# snapMULTI Environment Configuration
+# Generated by deploy.sh on $(date -Iseconds)
+
+# Music library path
+MUSIC_PATH=$music_path
+
+# Timezone
+TZ=$tz_detected
+
+# User/Group for container processes
+PUID=$real_uid
+PGID=$real_gid
+EOF
+
+        chown "$real_uid:$real_gid" "$ENV_FILE"
+        info "Generated .env:"
+        info "  MUSIC_PATH=$music_path"
+        info "  TZ=$tz_detected"
+        info "  PUID=$real_uid  PGID=$real_gid"
+
+        apply_resource_profile "$profile"
+    fi
 }
 
 #######################################
@@ -289,9 +463,9 @@ create_directories() {
 #######################################
 
 validate_config() {
-    local errors=0
+    step "Validating configuration"
 
-    info "Validating configuration..."
+    local errors=0
 
     # Check docker-compose.yml exists
     if [[ ! -f "$PROJECT_ROOT/docker-compose.yml" ]]; then
@@ -313,19 +487,10 @@ validate_config() {
         fi
     done
 
-    # Validate FIFO paths in configs match audio directory
-    if [[ -f "$PROJECT_ROOT/config/snapserver.conf" ]]; then
-        if ! grep -q "/audio/" "$PROJECT_ROOT/config/snapserver.conf"; then
-            warn "snapserver.conf may have incorrect FIFO paths (expected /audio/)"
-        fi
-    fi
-
     # Validate docker-compose.yml syntax
-    if command -v docker &>/dev/null; then
-        if ! docker compose -f "$PROJECT_ROOT/docker-compose.yml" config --quiet 2>/dev/null; then
-            error "docker-compose.yml has syntax errors"
-            errors=$((errors + 1))
-        fi
+    if ! docker compose -f "$PROJECT_ROOT/docker-compose.yml" config --quiet 2>/dev/null; then
+        error "docker-compose.yml has syntax errors"
+        errors=$((errors + 1))
     fi
 
     if [[ $errors -gt 0 ]]; then
@@ -340,34 +505,15 @@ validate_config() {
 # Docker Operations
 #######################################
 
-check_docker() {
-    if ! command -v docker &>/dev/null; then
-        error "Docker not found. Please install Docker and try again."
-        exit 1
-    fi
-
-    if ! docker compose version &>/dev/null; then
-        error "Docker Compose not found. Install Docker Compose plugin."
-        exit 1
-    fi
-
-    if ! docker info &>/dev/null; then
-        error "Cannot connect to Docker daemon. Is it running?"
-        exit 1
-    fi
-
-    ok "Docker ready"
-}
-
 pull_images() {
-    info "Pulling Docker images..."
+    step "Pulling Docker images"
     cd "$PROJECT_ROOT"
     docker compose pull
     ok "Images pulled"
 }
 
 start_services() {
-    info "Starting services..."
+    step "Starting services"
     cd "$PROJECT_ROOT"
     if ! docker compose up -d; then
         error "Failed to start services"
@@ -377,12 +523,14 @@ start_services() {
 }
 
 verify_services() {
+    step "Verifying services"
+
     local expected_services=("snapserver" "shairport-sync" "librespot" "mpd" "mympd")
     local max_attempts=6
     local wait_seconds=10
     local attempt=1
 
-    info "Verifying services (max ${max_attempts} attempts, ${wait_seconds}s interval)..."
+    info "Checking services (max ${max_attempts} attempts, ${wait_seconds}s interval)..."
 
     while [[ $attempt -le $max_attempts ]]; do
         local failed=0
@@ -405,15 +553,15 @@ verify_services() {
         fi
 
         if [[ $attempt -lt $max_attempts ]]; then
-            info "Attempt $attempt/$max_attempts: ${#running_services[@]}/${#expected_services[@]} services running, waiting ${wait_seconds}s..."
+            info "Attempt $attempt/$max_attempts: ${#running_services[@]}/${#expected_services[@]} running, waiting ${wait_seconds}s..."
             sleep "$wait_seconds"
         fi
 
         attempt=$((attempt + 1))
     done
 
-    # Final report after all attempts
-    warn "Service verification failed after $max_attempts attempts"
+    # Final report
+    warn "Service verification incomplete after $max_attempts attempts"
     for service in "${expected_services[@]}"; do
         if docker ps --format '{{.Names}}' | grep -q "^${service}$"; then
             ok "$service running"
@@ -426,30 +574,27 @@ verify_services() {
 }
 
 show_status() {
-    echo ""
-    echo "════════════════════════════════════════════════════════════"
-    echo "  snapMULTI is running!"
-    echo "════════════════════════════════════════════════════════════"
-    echo ""
-
-    # Get IP address
     local ip
     ip=$(hostname -I 2>/dev/null | awk '{print $1}') || ip="<server-ip>"
 
-    echo "  Services:"
-    echo "    myMPD Web UI:   http://$ip:8180"
-    echo "    Snapcast API:   http://$ip:1780"
-    echo "    MPD Control:    $ip:6600"
     echo ""
-    echo "  Connect clients:"
-    echo "    apt install snapclient"
-    echo "    snapclient --host $ip"
+    echo -e "${GREEN}${BOLD}"
+    echo "  ════════════════════════════════════════"
+    echo "    snapMULTI is running!"
+    echo "  ════════════════════════════════════════"
     echo ""
-    echo "  Check status:"
-    echo "    docker compose ps"
-    echo "    docker compose logs -f"
+    echo "    myMPD Web UI:  http://${ip}:8180"
+    echo "    Snapcast API:  http://${ip}:1780"
+    echo "    MPD Control:   ${ip}:6600"
     echo ""
-    echo "════════════════════════════════════════════════════════════"
+    echo "    Connect clients:"
+    echo "      sudo apt install snapclient"
+    echo "      snapclient --host ${ip}"
+    echo ""
+    echo "    Install dir:   ${PROJECT_ROOT}"
+    echo "    Config:        ${PROJECT_ROOT}/.env"
+    echo "  ════════════════════════════════════════"
+    echo -e "${NC}"
 }
 
 #######################################
@@ -468,7 +613,6 @@ main() {
                     exit 1
                 fi
                 profile="$2"
-                # Validate profile value
                 case "$profile" in
                     minimal|standard|performance) ;;
                     *)
@@ -480,6 +624,9 @@ main() {
                 ;;
             -h|--help)
                 echo "Usage: $0 [--profile minimal|standard|performance]"
+                echo ""
+                echo "Bootstraps a fresh Linux machine as a snapMULTI server."
+                echo "Installs Docker if needed, detects hardware, configures services."
                 echo ""
                 echo "Options:"
                 echo "  --profile  Force a specific resource profile"
@@ -498,39 +645,33 @@ main() {
         esac
     done
 
+    # Must run as root for Docker installation
+    if [[ $EUID -ne 0 ]]; then
+        error "This script must be run as root (sudo $0)"
+        exit 1
+    fi
+
     echo ""
     info "snapMULTI Deployment"
     echo ""
 
-    # Change to project root
-    cd "$PROJECT_ROOT"
-
-    # Check prerequisites
-    check_docker
-
-    # Validate configuration files
-    validate_config
+    # Run deployment steps
+    preflight_checks
+    install_docker
+    create_directories
 
     # Auto-detect hardware if profile not specified
+    step "Hardware detection"
     if [[ -z "$profile" ]]; then
         profile=$(detect_hardware_profile)
     fi
     info "Using profile: $profile"
 
-    # Setup environment
     setup_env "$profile"
-
-    # Create directories
-    create_directories
-
-    # Pull and start
+    validate_config
     pull_images
     start_services
-
-    # Verify all services started
     verify_services
-
-    # Show status
     show_status
 }
 

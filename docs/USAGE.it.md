@@ -260,7 +260,7 @@ tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :ver
 ```bash
 git clone https://github.com/lollonet/snapMULTI.git
 cd snapMULTI
-sudo ./deploy.sh
+sudo ./scripts/deploy.sh
 ```
 
 `deploy.sh` gestisce tutto: installa Docker se necessario, crea le directory, **rileva automaticamente la libreria musicale** (scansiona `/media/*`, `/mnt/*`, `~/Music`), genera `.env`, scarica le immagini e avvia i servizi. Completamente non interattivo.
