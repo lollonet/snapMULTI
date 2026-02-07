@@ -465,6 +465,7 @@ EOF
 validate_config() {
     step "Validating configuration"
 
+    cd "$PROJECT_ROOT"
     local errors=0
 
     # Check docker-compose.yml exists
@@ -488,8 +489,8 @@ validate_config() {
     done
 
     # Validate docker-compose.yml syntax
-    if ! docker compose -f "$PROJECT_ROOT/docker-compose.yml" config --quiet 2>/dev/null; then
-        error "docker-compose.yml has syntax errors"
+    if ! docker compose config --quiet; then
+        error "docker-compose.yml has syntax errors (run 'docker compose config' for details)"
         errors=$((errors + 1))
     fi
 
