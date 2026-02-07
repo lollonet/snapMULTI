@@ -368,7 +368,7 @@ Installation log saved to `/var/log/snapmulti-install.log`.
 ```bash
 git clone https://github.com/lollonet/snapMULTI.git
 cd snapMULTI
-sudo ./deploy.sh
+sudo ./scripts/deploy.sh
 ```
 
 `deploy.sh` handles everything: installs Docker if needed, creates directories, **auto-detects your music library** (scans `/media/*`, `/mnt/*`, `~/Music`), generates `.env`, pulls images, and starts services. Fully non-interactive.
