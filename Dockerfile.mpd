@@ -1,4 +1,4 @@
-FROM alpine:latest
+FROM alpine:3.23
 
 # Install MPD and ffmpeg for codec support
 RUN apk add --no-cache \

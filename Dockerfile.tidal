@@ -1,7 +1,7 @@
 # Dockerfile.tidal — Tidal streaming bridge for snapMULTI
 # Streams Tidal audio to snapserver via tidalapi + ffmpeg
 
-FROM python:3.12-alpine
+FROM python:3.12-alpine3.23
 
 # Install ffmpeg and build dependencies
 RUN apk add --no-cache \

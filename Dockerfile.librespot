@@ -19,7 +19,7 @@ RUN git apply /tmp/librespot-ipv4-fallback.patch
 RUN cargo build --release --no-default-features \
       --features "with-avahi,rustls-tls-webpki-roots"
 
-FROM alpine:latest
+FROM alpine:3.23
 
 RUN apk add --no-cache \
     avahi-libs \

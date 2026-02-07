@@ -124,7 +124,8 @@ apply_resource_profile() {
             # Total container memory: ~450MB
             cat >> "$ENV_FILE" <<'EOF'
 
-# Hardware Profile: minimal (auto-detected)
+# Hardware Profile: BEGIN
+# Profile: minimal (auto-detected)
 # For: Pi Zero 2 W, Pi 3, systems with <2GB RAM
 SNAPSERVER_MEM_LIMIT=128M
 SNAPSERVER_MEM_RESERVE=64M
@@ -141,6 +142,7 @@ MPD_CPU_LIMIT=0.5
 MYMPD_MEM_LIMIT=64M
 MYMPD_MEM_RESERVE=32M
 MYMPD_CPU_LIMIT=0.25
+# Hardware Profile: END
 EOF
             ;;
         standard)
@@ -148,7 +150,8 @@ EOF
             # Total container memory: ~900MB
             cat >> "$ENV_FILE" <<'EOF'
 
-# Hardware Profile: standard (auto-detected)
+# Hardware Profile: BEGIN
+# Profile: standard (auto-detected)
 # For: Pi 4 2GB, systems with 2-4GB RAM
 SNAPSERVER_MEM_LIMIT=256M
 SNAPSERVER_MEM_RESERVE=128M
@@ -165,6 +168,7 @@ MPD_CPU_LIMIT=1.0
 MYMPD_MEM_LIMIT=128M
 MYMPD_MEM_RESERVE=64M
 MYMPD_CPU_LIMIT=0.5
+# Hardware Profile: END
 EOF
             ;;
         performance)
@@ -172,7 +176,8 @@ EOF
             # Total container memory: ~1.8GB
             cat >> "$ENV_FILE" <<'EOF'
 
-# Hardware Profile: performance (auto-detected)
+# Hardware Profile: BEGIN
+# Profile: performance (auto-detected)
 # For: Pi 4 4GB+, Pi 5, systems with 8GB+ RAM
 SNAPSERVER_MEM_LIMIT=512M
 SNAPSERVER_MEM_RESERVE=256M
@@ -189,6 +194,7 @@ MPD_CPU_LIMIT=2.0
 MYMPD_MEM_LIMIT=256M
 MYMPD_MEM_RESERVE=128M
 MYMPD_CPU_LIMIT=1.0
+# Hardware Profile: END
 EOF
             ;;
         *)
@@ -209,16 +215,16 @@ setup_env() {
 
     if [[ -f "$ENV_FILE" ]]; then
         # Check if profile already set
-        if grep -q "Hardware Profile:" "$ENV_FILE"; then
+        if grep -q "# Hardware Profile: BEGIN" "$ENV_FILE"; then
             local current_profile
-            current_profile=$(grep "Hardware Profile:" "$ENV_FILE" | awk '{print $4}')
+            current_profile=$(grep "# Profile:" "$ENV_FILE" | awk '{print $3}')
             if [[ "$current_profile" == "$profile" ]]; then
                 info "Profile '$profile' already configured"
                 return 0
             else
                 warn "Existing profile: $current_profile, updating to: $profile"
-                # Remove old profile settings
-                sed -i.bak '/# Hardware Profile:/,$d' "$ENV_FILE"
+                # Remove old profile settings (block between BEGIN/END markers)
+                sed -i.bak '/# Hardware Profile: BEGIN/,/# Hardware Profile: END/d' "$ENV_FILE"
                 rm -f "$ENV_FILE.bak"
             fi
         fi
