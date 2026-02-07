@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Documentation: Upgrade instructions** — Standard update, backup, and rollback procedures
 
 ### Changed
+- **Dockerfiles** — Pin Alpine base image to `3.23` for reproducible builds
 - **Documentation: Quick Start reorganization** — Split into Beginners (Pi zero-touch) and Advanced (any Linux) sections with clear audience targeting
 - **CLAUDE.md** — Added Deployment Targets section, updated project structure
 - **CI/CD: validate.yml** — Added shellcheck linting for all scripts/ with `-S warning` severity
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **prepare-sd.sh** — Support Bookworm cloud-init user-data and rpi-snapclient-usb boot pattern
 - **firstboot.sh directory structure** — Create `scripts/` subdirectory expected by deploy.sh
 - **firstboot.sh healthcheck grep** — Fix `(unhealthy)` containers being counted as healthy due to substring match
+- **deploy.sh profile update** — Use BEGIN/END block markers instead of deleting to EOF (preserves user custom env vars)
 
 ### Security
 - **DEVICE_NAME sanitization** — Entrypoint script strips shell metacharacters to prevent command injection ([#40](https://github.com/lollonet/snapMULTI/pull/40))

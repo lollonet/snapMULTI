@@ -1,4 +1,4 @@
-FROM alpine:latest AS builder
+FROM alpine:3.23 AS builder
 
 RUN apk add --no-cache \
     alsa-lib-dev \
@@ -26,7 +26,7 @@ RUN git clone --branch develop https://github.com/lollonet/santcasp.git . && \
     make -j$(nproc) && \
     make install
 
-FROM alpine:latest
+FROM alpine:3.23
 
 RUN apk add --no-cache \
     alsa-lib \
