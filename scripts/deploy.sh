@@ -395,6 +395,9 @@ create_directories() {
         fi
     done
 
+    # Pre-create MPD database file to avoid startup error
+    touch "$PROJECT_ROOT/mpd/data/mpd.db"
+
     # Set ownership and permissions
     chown -R "$real_uid:$real_gid" "$PROJECT_ROOT/audio" "$PROJECT_ROOT/data" \
         "$PROJECT_ROOT/mpd" "$PROJECT_ROOT/mympd" "$PROJECT_ROOT/tidal"

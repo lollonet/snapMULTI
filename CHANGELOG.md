@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **firstboot.sh network check** — Detects default gateway each iteration, falls back to 1.1.1.1 and 8.8.8.8 (works behind restrictive firewalls)
 
 ### Fixed
+- **MPD first-run startup** — Pre-create empty `mpd.db` file and increase healthcheck `start_period` to 60s (fixes "Failed to open mpd.db" error with NFS music libraries)
 - **deploy.sh validate_config** — Change to PROJECT_ROOT before running `docker compose config` (fixes first-run failures when script invoked from a different directory)
 - **prepare-sd.sh** — Support Bookworm cloud-init user-data and rpi-snapclient-usb boot pattern
 - **firstboot.sh directory structure** — Create `scripts/` subdirectory expected by deploy.sh
