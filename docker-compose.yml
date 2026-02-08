@@ -178,7 +178,7 @@ services:
       - MYMPD_SSL=false
     depends_on:
       mpd:
-        condition: service_started
+        condition: service_healthy
     logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8180/ || exit 1"]
