@@ -53,6 +53,7 @@ COPY --from=builder /usr/share/snapserver /usr/share/snapserver
 
 # Patch meta_mpd.py to fix JSON serialization bug (upstream issue)
 COPY patches/meta_mpd.py /usr/share/snapserver/plug-ins/meta_mpd.py
+RUN chmod +x /usr/share/snapserver/plug-ins/meta_mpd.py
 
 RUN mkdir -p /var/lib/snapserver /config /data /audio
 
