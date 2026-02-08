@@ -44,6 +44,25 @@ ENV_FILE="$PROJECT_ROOT/.env"
 # Music Library Detection
 #######################################
 
+is_network_mount() {
+    local path="$1"
+    [[ -z "$path" ]] && return 1
+
+    # Get filesystem type for the path
+    local fstype
+    fstype=$(df -T "$path" 2>/dev/null | awk 'NR==2 {print $2}')
+
+    # Check if it's a network filesystem
+    case "$fstype" in
+        nfs|nfs4|cifs|smb|smbfs|fuse.sshfs|fuse.rclone)
+            return 0  # true - is network mount
+            ;;
+        *)
+            return 1  # false - local
+            ;;
+    esac
+}
+
 detect_music_library() {
     local best_path=""
     local best_count=0
@@ -460,6 +479,15 @@ setup_env() {
             warn "Mount your music there or edit .env to set MUSIC_PATH"
         fi
 
+        # Detect if music is on network mount
+        local mpd_start_period="30s"
+        if is_network_mount "$music_path"; then
+            mpd_start_period="300s"
+            info "Network mount detected — using extended MPD start period (5 min)"
+        else
+            info "Local storage detected — using standard MPD start period (30s)"
+        fi
+
         # Generate .env
         cat > "$ENV_FILE" <<EOF
 # snapMULTI Environment Configuration
@@ -474,6 +502,9 @@ TZ=$tz_detected
 # User/Group for container processes
 PUID=$real_uid
 PGID=$real_gid
+
+# MPD healthcheck start period (longer for NFS/network mounts)
+MPD_START_PERIOD=$mpd_start_period
 EOF
 
         chown "$real_uid:$real_gid" "$ENV_FILE"
@@ -481,6 +512,7 @@ EOF
         info "  MUSIC_PATH=$music_path"
         info "  TZ=$tz_detected"
         info "  PUID=$real_uid  PGID=$real_gid"
+        info "  MPD_START_PERIOD=$mpd_start_period"
 
         apply_resource_profile "$profile"
     fi

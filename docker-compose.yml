@@ -178,14 +178,14 @@ services:
       - MYMPD_SSL=false
     depends_on:
       mpd:
-        condition: service_healthy
+        condition: service_started
     logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8180/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: ${MPD_START_PERIOD:-60s}
     deploy:
       resources:
         limits:
@@ -222,7 +222,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: ${MPD_START_PERIOD:-60s}
     deploy:
       resources:
         limits:
