@@ -292,6 +292,31 @@ preflight_checks() {
 }
 
 #######################################
+# System Dependencies
+#######################################
+
+install_dependencies() {
+    step "System dependencies"
+
+    # Avahi is required for mDNS discovery (Spotify Connect, AirPlay)
+    if ! command -v avahi-daemon >/dev/null 2>&1; then
+        info "Installing Avahi for mDNS discovery..."
+        apt-get update -qq
+        apt-get install -y -qq avahi-daemon >/dev/null
+        systemctl enable --now avahi-daemon >/dev/null 2>&1
+        ok "Avahi installed"
+    else
+        info "Avahi already installed"
+        # Ensure it's running
+        if ! systemctl is-active --quiet avahi-daemon; then
+            systemctl start avahi-daemon
+        fi
+    fi
+
+    ok "System dependencies ready"
+}
+
+#######################################
 # Docker Installation
 #######################################
 
@@ -658,6 +683,7 @@ main() {
 
     # Run deployment steps
     preflight_checks
+    install_dependencies
     install_docker
     create_directories
 
