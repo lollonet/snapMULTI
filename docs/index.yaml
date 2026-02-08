@@ -1,0 +1,6 @@
+vision:       docs/standards/VISION.md
+requirements: docs/requirements/REQ-INDEX.md
+architecture: docs/architecture/ARC-INDEX.md
+technology:   docs/technology/TECH-INDEX.md
+adr:          docs/adr/
+standards:    CLAUDE.md
