@@ -164,7 +164,7 @@ tag_mapping = {
     'duration': ['duration', float, False],
     'name': ['name', str, False],
     'originaldate': ['originalDate', str, False],
-    'performer': ['performer', str, True],
+    'performer': ['performer', str, False],
     'conductor': ['conductor', str, True],
     'work': ['work', str, False],
     'grouping': ['grouping', str, False],
