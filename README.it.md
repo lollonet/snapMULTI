@@ -15,6 +15,7 @@ snapMULTI gira su un server domestico e trasmette l'audio agli altoparlanti in t
 | Sorgente | Come usarla |
 |----------|-------------|
 | **Spotify** | Apri l'app Spotify → Connetti a un dispositivo → "snapMULTI" (richiede Premium) |
+| **Tidal** | Apri l'app Tidal → Cast → "snapMULTI Tidal" (solo ARM/Pi) |
 | **AirPlay** | iPhone/iPad/Mac → AirPlay → "snapMULTI" |
 | **Libreria musicale** | Usa l'interfaccia web [myMPD](http://ip-del-server:8180), oppure un'app MPD ([Cantata](https://github.com/CDrummond/cantata), [MPDroid](https://play.google.com/store/apps/details?id=com.namelessdev.mpdroid)) → connettiti al server |
 | **Qualsiasi app** | Trasmetti audio via TCP al server |

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Tidal Connect replaces tidal-bridge** — Native casting from Tidal app instead of CLI-based streaming
+  - Uses `giof71/tidal-connect` image with ALSA→FIFO routing
+  - ARM only (Pi 3/4/5), x86_64 not supported
+  - No OAuth login required — just cast from app
+- **Removed TCP-Input source** — Replaced by Tidal source in snapserver config
+
+### Removed
+- **Dockerfile.tidal** — No longer building custom tidal image
+- **scripts/tidal-bridge.py** — Replaced by tidal-connect container
+- **tidal directory** — No longer needed for session storage
+
 ## [0.1.3] — 2026-02-11
 
 ### Changed

@@ -109,19 +109,6 @@ jobs:
           cache-from: type=gha,scope=mpd-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=mpd-${{ matrix.suffix }}
 
-      - name: Build and push tidal
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.tidal
-          platforms: ${{ matrix.platform }}
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/lollonet/snapmulti-tidal:${{ matrix.suffix }}
-            ${{ steps.version.outputs.tag && format('{0}/lollonet/snapmulti-tidal:{1}-{2}', env.REGISTRY, steps.version.outputs.tag, matrix.suffix) || '' }}
-          cache-from: type=gha,scope=tidal-${{ matrix.suffix }}
-          cache-to: type=gha,mode=max,scope=tidal-${{ matrix.suffix }}
-
   manifest:
     needs: build
     runs-on: snapcast-runner
@@ -203,20 +190,6 @@ jobs:
           docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-mpd:$VERSION \
             $REGISTRY/lollonet/snapmulti-mpd:$VERSION-amd64 \
             $REGISTRY/lollonet/snapmulti-mpd:$VERSION-arm64
-
-      - name: Create multi-arch manifest for tidal
-        run: |
-          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-tidal:latest \
-            $REGISTRY/lollonet/snapmulti-tidal:amd64 \
-            $REGISTRY/lollonet/snapmulti-tidal:arm64
-
-      - name: Create versioned tag for tidal
-        if: steps.version.outputs.tag != ''
-        run: |
-          VERSION=${{ steps.version.outputs.tag }}
-          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-tidal:$VERSION \
-            $REGISTRY/lollonet/snapmulti-tidal:$VERSION-amd64 \
-            $REGISTRY/lollonet/snapmulti-tidal:$VERSION-arm64
 
   deploy:
     needs: manifest

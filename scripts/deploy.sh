@@ -400,7 +400,6 @@ create_directories() {
         "mpd/playlists"
         "mympd/workdir"
         "mympd/cachedir"
-        "tidal"
     )
 
     for dir in "${dirs[@]}"; do
@@ -408,7 +407,7 @@ create_directories() {
     done
 
     # Create FIFOs if they don't exist
-    for fifo in snapcast_fifo airplay_fifo spotify_fifo; do
+    for fifo in snapcast_fifo airplay_fifo spotify_fifo tidal_fifo; do
         if [[ ! -p "$PROJECT_ROOT/audio/$fifo" ]]; then
             mkfifo "$PROJECT_ROOT/audio/$fifo"
         fi
@@ -425,7 +424,7 @@ create_directories() {
 
     # Set ownership and permissions
     chown -R "$real_uid:$real_gid" "$PROJECT_ROOT/audio" "$PROJECT_ROOT/data" \
-        "$PROJECT_ROOT/mpd" "$PROJECT_ROOT/mympd" "$PROJECT_ROOT/tidal"
+        "$PROJECT_ROOT/mpd" "$PROJECT_ROOT/mympd"
     chmod 770 "$PROJECT_ROOT/audio"
     chmod 660 "$PROJECT_ROOT/audio"/*_fifo 2>/dev/null || true
 

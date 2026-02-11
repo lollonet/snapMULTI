@@ -10,14 +10,13 @@ Designed for remote management applications and advanced configuration.
 | # | Source | Type | Stream ID | Status | Binary/Dependency |
 |---|--------|------|-----------|--------|-------------------|
 | 1 | MPD | `pipe` | `MPD` | Active | — (FIFO) |
-| 2 | TCP Input | `tcp` (server) | `TCP-Input` | Active | — (built-in) |
+| 2 | Tidal Connect | `pipe` | `Tidal` | Active | `tidal-connect` (separate container, ARM only) |
 | 3 | AirPlay | `pipe` | `AirPlay` | Active | `shairport-sync` (separate container) |
 | 4 | Spotify Connect | `pipe` | `Spotify` | Active | `librespot` (separate container) |
-| 5 | Tidal | `tcp` | `TCP-Input` | Optional | `tidal-bridge` (separate container) |
-| 6 | ALSA Capture | `alsa` | `LineIn` | Available | ALSA device |
-| 7 | Meta Stream | `meta` | `AutoSwitch` | Available | — (built-in) |
-| 8 | File Playback | `file` | `Alert` | Available | — (built-in) |
-| 9 | TCP Client | `tcp` (client) | `Remote` | Available | — (built-in) |
+| 5 | ALSA Capture | `alsa` | `LineIn` | Available | ALSA device |
+| 6 | Meta Stream | `meta` | `AutoSwitch` | Available | — (built-in) |
+| 7 | File Playback | `file` | `Alert` | Available | — (built-in) |
+| 8 | TCP Client | `tcp` (client) | `Remote` | Available | — (built-in) |
 
 **Status legend:**
 - **Active** — Enabled in `config/snapserver.conf`, running in production
@@ -62,52 +61,48 @@ mpc status                  # Check status
 
 ---
 
-### 2. TCP Input (tcp server)
+### 2. Tidal Connect (pipe from tidal-connect)
 
-Listens on a TCP port for incoming PCM audio. Any application that can send raw audio over TCP can use this source.
+Cast directly from the Tidal app to snapMULTI, like Spotify Connect. The tidal-connect container receives Tidal audio and routes it through ALSA to a named pipe.
+
+> **Note:** ARM only (Raspberry Pi 3/4/5). Does not work on x86_64.
 
 **Config:**
 ```ini
-source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
+source = pipe:////audio/tidal_fifo?name=Tidal
 ```
 
 **Parameters:**
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
-| `name` | `TCP-Input` | Stream ID |
-| `mode` | `server` | Snapserver listens for connections |
-| `bind` | `0.0.0.0` | Accept from any interface |
-| `port` | `4953` | Listening port |
+| `name` | `Tidal` | Stream ID |
 
-**Sample format:** 44100:16:2 (PCM s16le, stereo)
+**tidal-connect container settings** (docker-compose.yml):
 
-**Send audio:**
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FRIENDLY_NAME` | `snapMULTI Tidal` | Name shown in Tidal app |
+| `FORCE_PLAYBACK_DEVICE` | `default` | ALSA device (routes to FIFO) |
+
+**Custom service name:** Set `TIDAL_NAME` in `.env` to override the default name:
 ```bash
-# Stream a file
-ffmpeg -i music.mp3 \
-  -f s16le -ar 44100 -ac 2 \
-  tcp://<server-ip>:4953
-
-# Stream internet radio
-ffmpeg -i http://stream.example.com/radio \
-  -f s16le -ar 44100 -ac 2 \
-  tcp://<server-ip>:4953
-
-# Generate test tone
-ffmpeg -f lavfi -i "sine=frequency=440:duration=5" \
-  -f s16le -ar 44100 -ac 2 \
-  tcp://<server-ip>:4953
+TIDAL_NAME="Living Room Tidal"
 ```
 
-**Required audio format:**
+**Sample format:** 44100:16:2 (fixed by tidal-connect)
 
-| Property | Value |
-|----------|-------|
-| Sample rate | 44100 Hz |
-| Bit depth | 16 bit |
-| Channels | 2 (stereo) |
-| Encoding | Raw PCM (s16le) |
+**Connect from Tidal:**
+1. Open **Tidal** on your phone/tablet
+2. Start playing a song
+3. Tap the **speaker icon** (device selector)
+4. Select **"snapMULTI Tidal"**
+
+**Limitations:**
+- **ARM only** — The tidal-connect binary only runs on ARM (Pi 3/4/5)
+- **No metadata** — Track info not available (closed-source binary limitation)
+
+**Docker requirements:** Host network mode for mDNS. Shared `/audio` volume with snapserver.
 
 ---
 
@@ -195,76 +190,11 @@ SPOTIFY_NAME="Living Room Spotify"
 
 ---
 
-### 5. Tidal (via tidal-bridge)
-
-Native Tidal streaming using [tidalapi](https://github.com/EbbLabs/python-tidal). Fetches stream URLs from Tidal's API and pipes decoded audio to snapserver's TCP input.
-
-**Requirements:** Tidal subscription (HiFi or HiFi+)
-
-**Architecture:**
-```
-Tidal API → tidalapi → stream URL → ffmpeg → PCM (s16le 48kHz) → snapserver TCP :4953
-```
-
-**First-time setup (OAuth authentication):**
-```bash
-# One-time login (opens browser for Tidal OAuth)
-docker compose --profile tidal run --rm tidal login
-
-# Session saved to ./tidal/tidal-session.json
-```
-
-**Play music:**
-```bash
-# Play a track by URL
-docker compose --profile tidal run --rm tidal play https://tidal.com/browse/track/12345678
-
-# Play an album
-docker compose --profile tidal run --rm tidal play album:77646169
-
-# Play a playlist
-docker compose --profile tidal run --rm tidal play playlist:uuid-here
-
-# Search for content
-docker compose --profile tidal run --rm tidal search "pink floyd"
-```
-
-**Quality settings:**
-
-| Quality | Format | Subscription |
-|---------|--------|--------------|
-| `low_96k` | M4A 96 kbps | Any |
-| `low_320k` | M4A 320 kbps | Any |
-| `high_lossless` | FLAC lossless | HiFi |
-| `hi_res_lossless` | FLAC 24-bit/192kHz | HiFi+ |
-
-Set quality in `.env`:
-```bash
-TIDAL_QUALITY=high_lossless
-```
-
-**Environment variables:**
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TIDAL_SESSION_FILE` | `/config/tidal-session.json` | Session file path |
-| `TIDAL_QUALITY` | `high_lossless` | Audio quality |
-| `SNAPSERVER_HOST` | `127.0.0.1` | Snapserver hostname |
-| `SNAPSERVER_PORT` | `4953` | TCP input port |
-
-**Notes:**
-- Uses existing TCP-Input source (port 4953) — no snapserver config changes needed
-- No "cast" UX like Spotify Connect — playback is CLI-driven
-- Session tokens refresh automatically; re-login if expired
-- Optional service — pull image manually: `docker compose --profile tidal pull tidal`
-
----
-
 ## Available Sources
 
 These sources are included as commented-out examples in `config/snapserver.conf`. Uncomment to enable.
 
-### 6. ALSA Capture (alsa)
+### 5. ALSA Capture (alsa)
 
 Captures audio from an ALSA hardware device. Use for line-in inputs, microphones, or ALSA loopback devices.
 
@@ -302,7 +232,7 @@ docker exec snapserver cat /proc/asound/cards
 
 ---
 
-### 7. Meta Stream (meta)
+### 6. Meta Stream (meta)
 
 Reads and mixes audio from other stream sources with priority-based switching. Plays audio from the highest-priority active source.
 
@@ -333,7 +263,7 @@ source = meta:///MPD/Spotify/AirPlay?name=AutoSwitch
 
 ---
 
-### 8. File Playback (file)
+### 7. File Playback (file)
 
 Reads raw PCM audio from a file. Useful for alerts, doorbell sounds, or TTS announcements.
 
@@ -367,7 +297,7 @@ ffmpeg -i doorbell.mp3 \
 
 ---
 
-### 9. TCP Client (tcp client)
+### 8. TCP Client (tcp client)
 
 Connects to a remote TCP server to receive audio. The inverse of TCP server mode — Snapserver pulls audio from a remote source.
 
@@ -398,7 +328,7 @@ source = tcp://192.168.1.100:4953?name=Remote&mode=client
 
 Android doesn't have a built-in equivalent of Apple's AirPlay for audio casting to arbitrary receivers. Here are the methods to stream audio from Android apps to snapMULTI.
 
-> **Note:** For Tidal specifically, consider using the [native Tidal integration](#5-tidal-via-tidal-bridge) instead of these workarounds. It provides better audio quality and doesn't require an Android device as intermediary.
+> **Note:** For Tidal, use the [Tidal Connect](#2-tidal-connect-pipe-from-tidal-connect) source instead — cast directly from the Tidal app like Spotify Connect (ARM/Pi only).
 
 ### Method 1: TCP Input via BubbleUPnP
 
@@ -418,13 +348,11 @@ ffmpeg -i <upnp-audio-stream> \
   tcp://<snapmulti-server-ip>:4953
 ```
 
-**Stream any app (including Tidal):**
+**Stream any app:**
 1. Open any audio app on Android, start playing music
 2. Open **BubbleUPnP**, use Audio Cast to capture the app's output
-3. Audio is relayed to snapMULTI via TCP Input
+3. Audio is relayed to snapMULTI
 4. All Snapcast clients receive the stream
-
-> **For Tidal specifically:** Use the [native Tidal integration](#5-tidal-via-tidal-bridge) instead — better quality, no Android device required.
 
 ### Method 2: AirPlay from Android
 
