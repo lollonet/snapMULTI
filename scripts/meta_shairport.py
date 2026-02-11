@@ -160,20 +160,26 @@ def read_metadata_pipe():
 
     # Wait for pipe to exist
     while not os.path.exists(METADATA_PIPE):
+        log("warning", f"Waiting for pipe: {METADATA_PIPE}")
         import time
         time.sleep(1)
 
+    log("info", "Pipe exists, opening for read...")
     buffer = ""
 
     while True:
         try:
+            log("info", "Opening pipe...")
             with open(METADATA_PIPE, 'r', encoding='utf-8', errors='replace') as pipe:
+                log("info", "Pipe opened, reading...")
                 while True:
                     chunk = pipe.read(4096)
                     if not chunk:
+                        log("info", "Pipe EOF, reopening...")
                         break
 
                     buffer += chunk
+                    log("info", f"Read {len(chunk)} bytes from pipe")
 
                     # Process complete items
                     while '<item>' in buffer and '</item>' in buffer:
