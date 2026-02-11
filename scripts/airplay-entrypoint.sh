@@ -25,4 +25,5 @@ if [ -z "$SAFE_NAME" ]; then
     SAFE_NAME="snapMULTI AirPlay"
 fi
 
-exec shairport-sync -c /etc/shairport-sync.conf -a "$SAFE_NAME"
+# -M enables metadata output (cover art controlled by config file)
+exec shairport-sync -c /etc/shairport-sync.conf -M -a "$SAFE_NAME"

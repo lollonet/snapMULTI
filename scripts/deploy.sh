@@ -414,6 +414,12 @@ create_directories() {
         fi
     done
 
+    # Create metadata pipe for shairport-sync (if not exists)
+    # Note: shairport-sync will also create this, but we ensure it exists
+    if [[ ! -p "$PROJECT_ROOT/audio/shairport-metadata" ]]; then
+        mkfifo "$PROJECT_ROOT/audio/shairport-metadata"
+    fi
+
     # Pre-create MPD database file to avoid startup error
     touch "$PROJECT_ROOT/mpd/data/mpd.db"
 
