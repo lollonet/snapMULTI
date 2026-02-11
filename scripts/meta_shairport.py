@@ -55,7 +55,8 @@ def send_metadata() -> None:
         artist = props.get("artist", ["?"])
         artist_str = artist[0] if isinstance(artist, list) and artist else "?"
         log("info", f"Metadata: {artist_str} - {props.get('title', '?')}")
-        send({"jsonrpc": "2.0", "method": "Plugin.Stream.SetMetadata",
+        # Use Plugin.Stream.Player.Properties with metadata key (same as meta_mpd.py)
+        send({"jsonrpc": "2.0", "method": "Plugin.Stream.Player.Properties",
               "params": {"metadata": props}})
 
 
