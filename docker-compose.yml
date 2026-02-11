@@ -241,7 +241,6 @@ services:
     container_name: tidal
     network_mode: host
     user: "${PUID:-1000}:${PGID:-1000}"
-    profiles: ["tidal"]
     security_opt:
       - no-new-privileges:true
     cap_drop:

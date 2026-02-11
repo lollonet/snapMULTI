@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-02-11
+
+### Changed
+- **Tidal service enabled by default** — No longer requires `--profile tidal` flag
+
+### Fixed
+- **Script execute permissions** — deploy.sh ensures all scripts are executable after clone
+- **airplay-entrypoint.sh mode** — Fixed missing execute permission in git
+
 ## [0.1.2] — 2026-02-11
 
 ### Added
