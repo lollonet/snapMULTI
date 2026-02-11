@@ -7,12 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+- **TCP Input source removed** — Source 2 (tcp://0.0.0.0:4953) replaced by Tidal Connect. If you were using TCP input for custom ffmpeg streams, add it back to `config/snapserver.conf`:
+  ```ini
+  source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
+  ```
+
 ### Changed
 - **Tidal Connect replaces tidal-bridge** — Native casting from Tidal app instead of CLI-based streaming
-  - Uses `giof71/tidal-connect` image with ALSA→FIFO routing
+  - Uses `edgecrush3r/tidal-connect` image with ALSA→FIFO routing
   - ARM only (Pi 3/4/5), x86_64 not supported
   - No OAuth login required — just cast from app
-- **Removed TCP-Input source** — Replaced by Tidal source in snapserver config
 
 ### Removed
 - **Dockerfile.tidal** — No longer building custom tidal image
