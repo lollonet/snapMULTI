@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **AirPlay metadata support** — meta_shairport.py reads shairport-sync metadata pipe and forwards to snapserver
+- **Cover art server** — HTTP server on port 5858 serves album art with client-reachable IP detection
+- **COVER_ART_HOST env var** — Explicit override for cover art URL hostname
+
+### Changed
+- **meta_shairport.py rewrite** — Single-threaded select() event loop instead of daemon threads (more reliable as controlscript)
+- **shairport-sync entrypoint** — Added `-M` flag to enable metadata output
+
+### Fixed
+- **Metadata pipe creation** — deploy.sh now creates `/audio/shairport-metadata` FIFO
+- **Cover art IP resolution** — Uses actual host IP instead of container hostname (works across network)
+
 ## [0.1.1] — 2026-02-09
 
 ### Added
