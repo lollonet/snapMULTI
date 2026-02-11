@@ -55,6 +55,10 @@ COPY --from=builder /usr/share/snapserver /usr/share/snapserver
 COPY patches/meta_mpd.py /usr/share/snapserver/plug-ins/meta_mpd.py
 RUN chmod +x /usr/share/snapserver/plug-ins/meta_mpd.py
 
+# Add shairport-sync metadata reader for AirPlay stream
+COPY scripts/meta_shairport.py /usr/share/snapserver/plug-ins/meta_shairport.py
+RUN chmod +x /usr/share/snapserver/plug-ins/meta_shairport.py
+
 RUN mkdir -p /var/lib/snapserver /config /data /audio
 
 COPY config/snapserver.conf /etc/snapserver.conf
