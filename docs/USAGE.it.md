@@ -27,18 +27,18 @@ Per i tipi di sorgente audio e l'API JSON-RPC, vedi [SOURCES.it.md](SOURCES.it.m
 └─────────────────┘  │          │ (porta 1704)     │
                      │          │                  │
 ┌─────────────────┐  │          │ Sorgenti:        │
-│ Ingresso TCP    │──┘   ┌─────▶│  - MPD (FIFO)    │
-│ (porta 4953)    │      │      │  - TCP-Input     │
+│ AirPlay         │──┘   ┌─────▶│  - MPD (FIFO)    │
+│ (shairport-sync)│      │      │  - Tidal (FIFO)  │
 └─────────────────┘      │      │  - AirPlay       │
                          │      │  - Spotify       │
 ┌─────────────────┐      │      │                  │
-│ AirPlay         │──────┘  ┌──▶│                  │
-│ (shairport-sync)│         │   └────────┬─────────┘
+│ Spotify Connect │──────┘  ┌──▶│                  │
+│ (librespot)     │         │   └────────┬─────────┘
 └─────────────────┘         │            │
                             │  ┌─────────┼─────────────┐
 ┌─────────────────┐         │  ▼         ▼             ▼
-│ Spotify Connect │─────────┘ ┌────────┐ ┌────────┐ ┌────────┐
-│ (librespot)     │           │Client 1│ │Client 2│ │Client 3│
+│ Tidal Connect   │─────────┘ ┌────────┐ ┌────────┐ ┌────────┐
+│ (solo ARM)      │           │Client 1│ │Client 2│ │Client 3│
 └─────────────────┘           │(Snap)  │ │(Snap)  │ │(Snap)  │
                               └────────┘ └────────┘ └────────┘
 ```

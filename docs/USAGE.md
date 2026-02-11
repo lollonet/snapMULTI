@@ -26,24 +26,20 @@ For audio source types and JSON-RPC API, see [SOURCES.md](SOURCES.md).
 └─────────────────┘  │          │ (port 1704)      │
                      │          │                  │
 ┌─────────────────┐  │          │ Sources:         │
-│ TCP Input       │──┘   ┌─────▶│  - MPD (FIFO)    │
-│ (port 4953)     │      │      │  - TCP-Input     │
-└────────▲────────┘      │      │  - AirPlay       │
-         │               │      │  - Spotify       │
+│ AirPlay         │──┘   ┌─────▶│  - MPD (FIFO)    │
+│ (shairport-sync)│      │      │  - Tidal (FIFO)  │
+└─────────────────┘      │      │  - AirPlay       │
+                         │      │  - Spotify       │
 ┌─────────────────┐      │      │                  │
-│ AirPlay         │──────┘  ┌──▶│                  │
-│ (shairport-sync)│         │   └────────┬─────────┘
+│ Spotify Connect │──────┘  ┌──▶│                  │
+│ (librespot)     │         │   └────────┬─────────┘
 └─────────────────┘         │            │
                             │  ┌─────────┼─────────────┐
 ┌─────────────────┐         │  ▼         ▼             ▼
-│ Spotify Connect │─────────┘ ┌────────┐ ┌────────┐ ┌────────┐
-│ (librespot)     │           │Client 1│ │Client 2│ │Client 3│
+│ Tidal Connect   │─────────┘ ┌────────┐ ┌────────┐ ┌────────┐
+│ (ARM only)      │           │Client 1│ │Client 2│ │Client 3│
 └─────────────────┘           │(Snap)  │ │(Snap)  │ │(Snap)  │
                               └────────┘ └────────┘ └────────┘
-┌─────────────────┐
-│ Tidal           │───────────────┘ (via TCP Input)
-│ (tidal-bridge)  │
-└─────────────────┘
 ```
 
 ## Audio Format (Sample Rate)
@@ -388,7 +384,7 @@ docker compose up -d
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | **Build & Push** | Tag push (`v*`) | Build 5 multi-arch images (amd64 + arm64), push to ghcr.io, trigger deploy |
-| **Deploy** | Called by Build & Push | Pull images and restart 5 core containers on server via SSH (tidal is optional, requires manual pull) |
+| **Deploy** | Called by Build & Push | Pull images and restart 5 core containers on server via SSH |
 | **Validate** | Push to any branch, pull requests | Check docker-compose syntax, shellcheck scripts/, and environment template |
 | **Build Test** | Pull requests | Validate Docker images build correctly (no push) |
 
@@ -402,7 +398,7 @@ Docker images are hosted on GitHub Container Registry:
 | `ghcr.io/lollonet/snapmulti-airplay:latest` | AirPlay receiver (shairport-sync) |
 | `ghcr.io/lollonet/snapmulti-spotify:latest` | Spotify Connect (librespot) |
 | `ghcr.io/lollonet/snapmulti-mpd:latest` | Music Player Daemon |
-| `ghcr.io/lollonet/snapmulti-tidal:latest` | Tidal streaming bridge (tidalapi + ffmpeg) |
+| `edgecrush3r/tidal-connect:latest` | Tidal Connect (ARM only, third-party image) |
 
 All images support `linux/amd64` and `linux/arm64` architectures.
 
