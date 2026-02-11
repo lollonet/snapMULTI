@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Metadata pipe creation** — deploy.sh now creates `/audio/shairport-metadata` FIFO
 - **Cover art IP resolution** — Uses actual host IP instead of container hostname (works across network)
+- **AirPlay duration parsing** — Binary metadata fields (`astm`, `PICT`) now correctly decoded as bytes instead of UTF-8
 
 ## [0.1.1] — 2026-02-09
 

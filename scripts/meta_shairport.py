@@ -127,12 +127,14 @@ def parse_item(item_data: bytes) -> None:
         raw = data_m.group(1).replace("\n", "").replace("\r", "").strip()
         if raw:
             try:
-                data = base64.b64decode(raw).decode("utf-8", errors="replace")
+                raw_bytes = base64.b64decode(raw)
+                # Keep as bytes for binary codes (PICT, astm)
+                if code in ("PICT", "astm"):
+                    data = raw_bytes
+                else:
+                    data = raw_bytes.decode("utf-8", errors="replace")
             except Exception:
-                try:
-                    data = base64.b64decode(raw)  # Binary (cover art)
-                except Exception:
-                    pass
+                pass
 
     if code == "asal" and isinstance(data, str):
         metadata["album"] = data
