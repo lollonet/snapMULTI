@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-02-11
+
 ### Added
 - **AirPlay metadata support** — meta_shairport.py reads shairport-sync metadata pipe and forwards to snapserver
 - **Cover art server** — HTTP server on port 5858 serves album art with client-reachable IP detection
