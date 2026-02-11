@@ -18,7 +18,7 @@ snapMULTI gira su un server domestico e trasmette l'audio agli altoparlanti in t
 | **Tidal** | Apri l'app Tidal → Cast → "snapMULTI Tidal" (solo ARM/Pi) |
 | **AirPlay** | iPhone/iPad/Mac → AirPlay → "snapMULTI" |
 | **Libreria musicale** | Usa l'interfaccia web [myMPD](http://ip-del-server:8180), oppure un'app MPD ([Cantata](https://github.com/CDrummond/cantata), [MPDroid](https://play.google.com/store/apps/details?id=com.namelessdev.mpdroid)) → connettiti al server |
-| **Qualsiasi app** | Trasmetti audio via TCP al server |
+| **Qualsiasi app** | Aggiungi sorgente TCP al config, trasmetti via ffmpeg (vedi [Sorgenti](docs/SOURCES.it.md)) |
 | **Android / Tidal** | Vedi la [guida allo streaming](docs/SOURCES.it.md#streaming-da-android) |
 
 Altre sorgenti disponibili — vedi il [Riferimento Sorgenti Audio](docs/SOURCES.it.md).
@@ -109,7 +109,7 @@ Verifica:
 docker ps
 ```
 
-Dovresti vedere cinque container in esecuzione: `snapserver`, `shairport-sync`, `librespot`, `mpd` e `mympd`.
+Dovresti vedere cinque container in esecuzione: `snapserver`, `shairport-sync`, `librespot`, `mpd` e `mympd`. Su ARM (Raspberry Pi), vedrai anche `tidal-connect`.
 
 ---
 

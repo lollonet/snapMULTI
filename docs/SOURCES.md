@@ -328,7 +328,13 @@ source = tcp://192.168.1.100:4953?name=Remote&mode=client
 
 Android doesn't have a built-in equivalent of Apple's AirPlay for audio casting to arbitrary receivers. Here are the methods to stream audio from Android apps to snapMULTI.
 
-> **Note:** For Tidal, use the [Tidal Connect](#2-tidal-connect-pipe-from-tidal-connect) source instead — cast directly from the Tidal app like Spotify Connect (ARM/Pi only).
+> **Note:** For Tidal on ARM (Pi), use the [Tidal Connect](#2-tidal-connect-pipe-from-tidal-connect) source instead — cast directly from the Tidal app like Spotify Connect.
+
+> **Note:** TCP streaming methods below require adding a TCP source to your config first:
+> ```ini
+> # Add to config/snapserver.conf:
+> source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
+> ```
 
 ### Method 1: TCP Input via BubbleUPnP
 
