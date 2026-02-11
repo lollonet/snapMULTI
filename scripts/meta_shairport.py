@@ -12,6 +12,7 @@ import os
 import re
 import select
 import socket
+import struct
 import sys
 import time
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -20,7 +21,9 @@ from threading import Thread
 METADATA_PIPE = os.environ.get("METADATA_PIPE", "/audio/shairport-metadata")
 COVER_ART_PORT = int(os.environ.get("COVER_ART_PORT", "5858"))
 
-metadata: dict[str, str | list[str]] = {"artist": [], "album": "", "title": "", "artUrl": ""}
+metadata: dict[str, str | list[str] | float] = {
+    "artist": [], "album": "", "title": "", "artUrl": "", "duration": 0.0
+}
 cover_art_path = "/tmp/cover.jpg"
 
 
@@ -42,7 +45,7 @@ def log(level: str, msg: str) -> None:
 
 def send_metadata() -> None:
     """Send current metadata to snapserver."""
-    props: dict[str, str | list[str]] = {}
+    props: dict[str, str | list[str] | float] = {}
     if metadata["title"]:
         props["title"] = metadata["title"]
     if metadata["artist"]:
@@ -51,6 +54,8 @@ def send_metadata() -> None:
         props["album"] = metadata["album"]
     if metadata["artUrl"]:
         props["artUrl"] = metadata["artUrl"]
+    if metadata["duration"]:
+        props["duration"] = metadata["duration"]
     if props:
         artist = props.get("artist", ["?"])
         artist_str = artist[0] if isinstance(artist, list) and artist else "?"
@@ -140,11 +145,18 @@ def parse_item(item_data: bytes) -> None:
             metadata["artUrl"] = f"http://{_host_ip}:{COVER_ART_PORT}/cover.jpg"
         except Exception as e:
             log("warning", f"Cover art error: {e}")
+    elif code == "astm" and isinstance(data, bytes) and len(data) >= 4:
+        # Song time in milliseconds (32-bit big-endian unsigned int)
+        try:
+            ms = struct.unpack(">I", data[:4])[0]
+            metadata["duration"] = ms / 1000.0  # Convert to seconds
+        except Exception:
+            pass
     elif code == "mden":
         send_metadata()
     elif code == "pend":
         metadata["artist"], metadata["album"] = [], ""
-        metadata["title"], metadata["artUrl"] = "", ""
+        metadata["title"], metadata["artUrl"], metadata["duration"] = "", "", 0.0
         send_metadata()
 
 
