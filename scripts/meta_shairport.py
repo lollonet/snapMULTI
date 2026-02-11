@@ -22,7 +22,8 @@ METADATA_PIPE = os.environ.get("METADATA_PIPE", "/audio/shairport-metadata")
 COVER_ART_PORT = int(os.environ.get("COVER_ART_PORT", "5858"))
 
 metadata: dict[str, str | list[str] | float] = {
-    "artist": [], "album": "", "title": "", "artUrl": "", "duration": 0.0
+    "artist": [], "album": "", "title": "", "artUrl": "", "duration": 0.0,
+    "genre": [], "composer": [],
 }
 cover_art_path = "/tmp/cover.jpg"
 
@@ -56,6 +57,10 @@ def send_metadata() -> None:
         props["artUrl"] = metadata["artUrl"]
     if metadata["duration"]:
         props["duration"] = metadata["duration"]
+    if metadata["genre"]:
+        props["genre"] = metadata["genre"]
+    if metadata["composer"]:
+        props["composer"] = metadata["composer"]
     if props:
         artist = props.get("artist", ["?"])
         artist_str = artist[0] if isinstance(artist, list) and artist else "?"
@@ -135,6 +140,10 @@ def parse_item(item_data: bytes) -> None:
         metadata["artist"] = [data]
     elif code == "minm" and isinstance(data, str):
         metadata["title"] = data
+    elif code == "asgn" and isinstance(data, str) and data:
+        metadata["genre"] = [data]
+    elif code == "ascp" and isinstance(data, str) and data:
+        metadata["composer"] = [data]
     elif code == "PICT" and isinstance(data, bytes) and len(data) > 0:
         try:
             with open(cover_art_path, "wb") as f:
@@ -157,6 +166,7 @@ def parse_item(item_data: bytes) -> None:
     elif code == "pend":
         metadata["artist"], metadata["album"] = [], ""
         metadata["title"], metadata["artUrl"], metadata["duration"] = "", "", 0.0
+        metadata["genre"], metadata["composer"] = [], []
         send_metadata()
 
 
