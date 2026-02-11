@@ -82,6 +82,14 @@ def send_metadata():
         })
 
 
+def hex_to_str(hex_str):
+    """Convert hex string to ASCII."""
+    try:
+        return bytes.fromhex(hex_str).decode('ascii')
+    except Exception:
+        return hex_str
+
+
 def parse_metadata_item(item_xml):
     """Parse a single metadata item from XML."""
     global cover_art_data
@@ -94,8 +102,9 @@ def parse_metadata_item(item_xml):
     if not type_match or not code_match:
         return
 
-    item_type = type_match.group(1)
-    item_code = code_match.group(1)
+    # Type and code are hex-encoded ASCII
+    item_type = hex_to_str(type_match.group(1))
+    item_code = hex_to_str(code_match.group(1))
     item_data = ""
 
     if data_match and data_match.group(1):
