@@ -429,6 +429,9 @@ create_directories() {
     chmod 770 "$PROJECT_ROOT/audio"
     chmod 660 "$PROJECT_ROOT/audio"/*_fifo 2>/dev/null || true
 
+    # Ensure scripts are executable (git may not preserve permissions)
+    chmod +x "$PROJECT_ROOT/scripts/"*.sh "$PROJECT_ROOT/scripts/"*.py 2>/dev/null || true
+
     ok "Directories created: ${dirs[*]}"
 }
 
