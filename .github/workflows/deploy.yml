@@ -23,11 +23,12 @@ jobs:
         uses: appleboy/ssh-action@v1.0.0
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          DEPLOY_USER: ${{ github.repository_owner }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
           key: ${{ secrets.SSH_KEY }}
-          envs: GHCR_TOKEN
+          envs: GHCR_TOKEN,DEPLOY_USER
           script: |
             set -euo pipefail
 
@@ -44,11 +45,10 @@ jobs:
             echo "New commit: $NEW_COMMIT"
 
             echo "Logging in to ghcr.io..."
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u lollonet --password-stdin || { echo "ERROR: ghcr.io login failed"; exit 1; }
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$DEPLOY_USER" --password-stdin || { echo "ERROR: ghcr.io login failed"; exit 1; }
 
             echo "Pulling latest images..."
-            # Note: tidal uses 'tidal' profile (optional); pull separately with:
-            # docker compose --profile tidal pull tidal
+            # Note: tidal-connect uses third-party image (ARM only), pulled automatically on start
             docker compose pull snapserver shairport-sync librespot mpd mympd || { echo "ERROR: docker compose pull failed"; exit 1; }
 
             echo "Creating required directories..."
