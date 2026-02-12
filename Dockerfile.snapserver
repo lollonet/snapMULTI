@@ -44,7 +44,12 @@ RUN apk add --no-cache \
     py3-dbus \
     py3-pip
 
-RUN pip3 install --no-cache-dir --break-system-packages \
+# Use virtual environment instead of --break-system-packages
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv --system-site-packages $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+RUN pip install --no-cache-dir \
     python-mpd2==3.1.1 \
     musicbrainzngs==0.7.1
 
