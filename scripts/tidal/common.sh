@@ -1,5 +1,6 @@
 #!/bin/bash
-# From GioF71/tidal-connect - handles audio device configuration
+# Adapted from GioF71's tidal-connect wrapper - handles audio device configuration
+# Used with edgecrush3r/tidal-connect image
 
 ASOUND_CONF_FILE=/etc/asound.conf
 USER_CONFIG_DIR=/userconfig

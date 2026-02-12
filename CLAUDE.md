@@ -48,7 +48,7 @@ snapMULTI/
     prepare-sd.sh            # SD card preparation for new clients
     tidal/                   # Tidal Connect entrypoint scripts
       entrypoint.sh          # Container entrypoint (ALSA config, FRIENDLY_NAME sanitization)
-      common.sh              # Configuration helpers from GioF71 wrapper
+      common.sh              # Configuration helpers (adapted from GioF71's wrapper)
   docs/
     HARDWARE.md              # Hardware & network guide
     USAGE.md                 # Technical operations guide

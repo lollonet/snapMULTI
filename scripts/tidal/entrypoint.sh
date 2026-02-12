@@ -1,5 +1,6 @@
 #!/bin/bash
-# Simplified from GioF71/tidal-connect for FIFO output
+# Adapted from GioF71's tidal-connect wrapper for FIFO output
+# Used with edgecrush3r/tidal-connect image
 set -eu
 
 # Sanitize name: remove shell metacharacters, allow only safe chars
