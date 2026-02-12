@@ -398,6 +398,7 @@ Docker images are hosted on GitHub Container Registry:
 | `ghcr.io/lollonet/snapmulti-airplay:latest` | AirPlay receiver (shairport-sync) |
 | `ghcr.io/lollonet/snapmulti-spotify:latest` | Spotify Connect (librespot) |
 | `ghcr.io/lollonet/snapmulti-mpd:latest` | Music Player Daemon |
+| `ghcr.io/jcorporation/mympd/mympd:latest` | Web UI (third-party image) |
 | `edgecrush3r/tidal-connect:latest` | Tidal Connect (ARM only, third-party image) |
 
 All images support `linux/amd64` and `linux/arm64` architectures.
