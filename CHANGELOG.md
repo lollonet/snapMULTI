@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] — 2026-02-12
+
 ### Breaking Changes
 - **TCP Input source removed** — Source 2 (tcp://0.0.0.0:4953) replaced by Tidal Connect. If you were using TCP input for custom ffmpeg streams, add it back to `config/snapserver.conf`:
   ```ini
@@ -18,15 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Uses `edgecrush3r/tidal-connect` image with ALSA→FIFO routing
   - ARM only (Pi 3/4/5), x86_64 not supported
   - No OAuth login required — just cast from app
+- **Shared logging utilities** — `scripts/common/logging.sh` provides colored output functions used by deploy.sh
+- **meta_mpd.py refactor** — Split `_update_properties()` into focused helper methods for better maintainability
 
 ### Removed
 - **Dockerfile.tidal** — No longer building custom tidal image
 - **scripts/tidal-bridge.py** — Replaced by tidal-connect container
 - **tidal directory** — No longer needed for session storage
-
-### Refactored
-- **Shared logging utilities** — `scripts/common/logging.sh` provides colored output functions (`info`, `ok`, `warn`, `error`, `step`, `debug`) used by deploy.sh
-- **meta_mpd.py structure** — Split 72-line `_update_properties()` into focused helper methods: `_fetch_current_state()`, `_calculate_position()`, `_send_properties()`
 
 ### Security
 - **Tidal script hardening** — Removed unsafe `eval`, added shell safety settings (`set -euo pipefail`)
