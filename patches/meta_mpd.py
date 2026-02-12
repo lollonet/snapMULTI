@@ -641,19 +641,21 @@ class MPDWrapper(object):
         snapstatus['canControl'] = True
         return snapstatus
 
-    def _update_properties(self, force=False):
-        logger.debug(f'update_properties force: {force}')
-        old_position = self._position
-        old_time = self._time
+    def _fetch_current_state(self) -> tuple[dict, dict, dict, dict] | None:
+        """Fetch current MPD state and detect changes.
 
+        Returns:
+            Tuple of (new_status, new_song, changed_status, changed_song) if there
+            are changes, or None if nothing changed.
+        """
         new_song = self.client.currentsong()
         if not new_song:
-            logger.warning("_update_properties: failed to get current song")
+            logger.warning("_fetch_current_state: failed to get current song")
             new_song = {}
 
         new_status = self.client.status()
         if not new_status:
-            logger.warning("_update_properties: failed to get new status")
+            logger.warning("_fetch_current_state: failed to get new status")
             new_status = {}
 
         changed_status = self.__diff_map(self._status, new_status)
@@ -666,39 +668,58 @@ class MPDWrapper(object):
 
         if len(changed_song) == 0 and len(changed_status) == 0:
             logger.debug('nothing to do')
-            return
+            return None
 
         logger.info(
-            f'new status: {new_status}, changed_status: {changed_status}, changed_song: {changed_song}')
-        self._time = new_time = int(time.time())
+            f'new status: {new_status}, changed_status: {changed_status}, '
+            f'changed_song: {changed_song}'
+        )
+        return new_status, new_song, changed_status, changed_song
 
-        snapstatus = self._get_properties(new_status)
+    def _calculate_position(self, status: dict) -> float:
+        """Extract playback position from MPD status.
 
-        if 'elapsed' in new_status:
-            new_position = float(new_status['elapsed'])
-        elif 'time' in new_status:
-            new_position = int(new_status['time'].split(':')[0])
-        else:
-            new_position = 0
+        Args:
+            status: MPD status dictionary.
 
-        self._position = new_position
+        Returns:
+            Current playback position in seconds.
+        """
+        if 'elapsed' in status:
+            return float(status['elapsed'])
+        if 'time' in status:
+            return float(status['time'].split(':')[0])
+        return 0.0
 
-        # "player" subsystem
+    def _send_properties(
+        self,
+        snapstatus: dict,
+        song_changed: bool,
+        new_position: float,
+        old_position: float,
+        old_time: int,
+        new_time: int,
+        state: str,
+    ) -> None:
+        """Send player properties to snapserver via JSON-RPC.
 
-        new_song = len(changed_song) > 0
-
-        if not new_song:
-            if new_status['state'] == 'play':
+        Handles seek detection and album art fetching for new songs.
+        """
+        if not song_changed:
+            # Detect seek: compare actual position vs expected
+            if state == 'play':
                 expected_position = old_position + (new_time - old_time)
             else:
                 expected_position = old_position
             if abs(new_position - expected_position) > 0.6:
-                logger.debug("Expected pos %r, actual %r, diff %r" % (
-                    expected_position, new_position, new_position - expected_position))
-                logger.debug("Old position was %r at %r (%r seconds ago)" % (
-                    old_position, old_time, new_time - old_time))
-                # self._dbus_service.Seeked(new_position * 1000000)
-
+                logger.debug(
+                    "Expected pos %r, actual %r, diff %r",
+                    expected_position, new_position, new_position - expected_position
+                )
+                logger.debug(
+                    "Old position was %r at %r (%r seconds ago)",
+                    old_position, old_time, new_time - old_time
+                )
         else:
             # Update current song metadata
             snapstatus["metadata"] = self.get_metadata()
@@ -706,13 +727,49 @@ class MPDWrapper(object):
         send({"jsonrpc": "2.0", "method": "Plugin.Stream.Player.Properties",
              "params": snapstatus})
 
-        if new_song:
-            if 'artUrl' not in snapstatus['metadata']:
-                album_art = self.get_albumart(snapstatus['metadata'], False)
-                if album_art is not None:
-                    snapstatus['metadata']['artUrl'] = album_art
-                    send(
-                        {"jsonrpc": "2.0", "method": "Plugin.Stream.Player.Properties", "params": snapstatus})
+        # Fetch album art asynchronously for new songs
+        if song_changed and 'artUrl' not in snapstatus.get('metadata', {}):
+            album_art = self.get_albumart(snapstatus['metadata'], False)
+            if album_art is not None:
+                snapstatus['metadata']['artUrl'] = album_art
+                send({
+                    "jsonrpc": "2.0",
+                    "method": "Plugin.Stream.Player.Properties",
+                    "params": snapstatus
+                })
+
+    def _update_properties(self, force: bool = False) -> None:
+        """Update and send player properties to snapserver.
+
+        Fetches current MPD state, calculates position, and sends properties
+        via JSON-RPC if anything changed.
+        """
+        logger.debug(f'update_properties force: {force}')
+        old_position = self._position
+        old_time = self._time
+
+        state = self._fetch_current_state()
+        if state is None:
+            return
+
+        new_status, _, _, changed_song = state
+        self._time = new_time = int(time.time())
+
+        snapstatus = self._get_properties(new_status)
+        new_position = self._calculate_position(new_status)
+        self._position = new_position
+
+        song_changed = len(changed_song) > 0
+
+        self._send_properties(
+            snapstatus=snapstatus,
+            song_changed=song_changed,
+            new_position=new_position,
+            old_position=old_position,
+            old_time=old_time,
+            new_time=new_time,
+            state=new_status.get('state', 'stop'),
+        )
 
     # Compatibility functions
 

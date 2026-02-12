@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **scripts/tidal-bridge.py** — Replaced by tidal-connect container
 - **tidal directory** — No longer needed for session storage
 
+### Refactored
+- **Shared logging utilities** — `scripts/common/logging.sh` provides colored output functions (`info`, `ok`, `warn`, `error`, `step`, `debug`) used by deploy.sh
+- **meta_mpd.py structure** — Split 72-line `_update_properties()` into focused helper methods: `_fetch_current_state()`, `_calculate_position()`, `_send_properties()`
+
 ### Security
 - **Tidal script hardening** — Removed unsafe `eval`, added shell safety settings (`set -euo pipefail`)
 - **Input sanitization** — Extended to `model_name` in addition to `friendly_name`, removed risky apostrophe from allowed chars
