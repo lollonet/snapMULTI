@@ -1,6 +1,6 @@
 FROM alpine:3.23
 
-RUN apk add --no-cache shairport-sync
+RUN apk add --no-cache shairport-sync bash
 
 RUN mkdir -p /audio
 
