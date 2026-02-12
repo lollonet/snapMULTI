@@ -12,6 +12,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common/logging.sh
 source "$SCRIPT_DIR/common/logging.sh"
 
+# Global: set by preflight_checks based on architecture
+IS_ARM=false
+
 #######################################
 # Project Root Detection
 #######################################
@@ -282,11 +285,26 @@ preflight_checks() {
     local arch
     arch="$(uname -m)"
     case "$arch" in
-        x86_64)  info "Architecture: amd64" ;;
-        aarch64) info "Architecture: arm64" ;;
-        armv7l)  info "Architecture: armv7 (supported but arm64 recommended)" ;;
-        armv6l)  warn "Architecture: armv6 — too weak for server use (Pi Zero v1 / Pi 1)" ;;
-        *)       error "Unsupported architecture: $arch"; exit 1 ;;
+        x86_64)
+            info "Architecture: amd64"
+            IS_ARM=false
+            ;;
+        aarch64)
+            info "Architecture: arm64"
+            IS_ARM=true
+            ;;
+        armv7l)
+            info "Architecture: armv7 (supported but arm64 recommended)"
+            IS_ARM=true
+            ;;
+        armv6l)
+            warn "Architecture: armv6 — too weak for server use (Pi Zero v1 / Pi 1)"
+            IS_ARM=true
+            ;;
+        *)
+            error "Unsupported architecture: $arch"
+            exit 1
+            ;;
     esac
 
     # Network check
@@ -565,24 +583,45 @@ validate_config() {
 pull_images() {
     step "Pulling Docker images"
     cd "$PROJECT_ROOT"
-    docker compose pull
+
+    if [[ "$IS_ARM" == "true" ]]; then
+        docker compose pull
+    else
+        # Skip tidal-connect on x86 (ARM-only image)
+        info "Skipping tidal-connect (ARM-only) on x86"
+        docker compose pull snapserver mpd mympd shairport-sync librespot
+    fi
     ok "Images pulled"
 }
 
 start_services() {
     step "Starting services"
     cd "$PROJECT_ROOT"
-    if ! docker compose up -d; then
-        error "Failed to start services"
-        exit 1
+
+    if [[ "$IS_ARM" == "true" ]]; then
+        if ! docker compose up -d; then
+            error "Failed to start services"
+            exit 1
+        fi
+        ok "Services started (including Tidal Connect)"
+    else
+        # Skip tidal-connect on x86 (ARM-only image)
+        if ! docker compose up -d snapserver mpd mympd shairport-sync librespot; then
+            error "Failed to start services"
+            exit 1
+        fi
+        ok "Services started (Tidal Connect skipped — ARM only)"
     fi
-    ok "Services started"
 }
 
 verify_services() {
     step "Verifying services"
 
     local expected_services=("snapserver" "shairport-sync" "librespot" "mpd" "mympd")
+    # Include tidal-connect only on ARM
+    if [[ "$IS_ARM" == "true" ]]; then
+        expected_services+=("tidal-connect")
+    fi
     local max_attempts=6
     local wait_seconds=10
     local attempt=1
