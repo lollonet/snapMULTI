@@ -6,7 +6,8 @@ RUN mkdir -p /audio
 
 COPY config/shairport-sync.conf /etc/shairport-sync.conf
 COPY scripts/airplay-entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY scripts/common/sanitize.sh /usr/local/bin/common/sanitize.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/common/sanitize.sh
 
 ENV DEVICE_NAME=""
 

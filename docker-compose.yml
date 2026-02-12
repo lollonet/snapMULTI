@@ -252,6 +252,7 @@ services:
       - ./config/tidal-asound.conf:/userconfig/asound.conf:ro
       - ./scripts/tidal/entrypoint.sh:/entrypoint.sh:ro
       - ./scripts/tidal/common.sh:/common.sh:ro
+      - ./scripts/common/sanitize.sh:/common/sanitize.sh:ro
       - /var/run/dbus:/var/run/dbus
     environment:
       - TZ=${TZ:-Europe/Berlin}
