@@ -63,7 +63,9 @@ mpc status                  # Controlla stato
 
 ### 2. Tidal Connect (pipe da tidal-connect)
 
-Il container tidal-connect funziona come ricevitore Tidal Connect e scrive PCM grezzo su una named pipe tramite il plugin ALSA `file`. Snapserver legge dalla pipe.
+Trasmetti direttamente dall'app Tidal a snapMULTI, come Spotify Connect. Il container tidal-connect riceve l'audio Tidal e lo instrada tramite ALSA verso una named pipe.
+
+> **Nota:** Solo ARM (Raspberry Pi 3/4/5). Non funziona su x86_64.
 
 **Configurazione:**
 ```ini
@@ -78,33 +80,29 @@ source = pipe:////audio/tidal_fifo?name=Tidal
 
 **Impostazioni container tidal-connect** (docker-compose.yml):
 
-| Variabile | Valore | Descrizione |
-|-----------|--------|-------------|
+| Variabile | Default | Descrizione |
+|-----------|---------|-------------|
 | `FRIENDLY_NAME` | `snapMULTI Tidal` | Nome mostrato nell'app Tidal |
-| `FORCE_PLAYBACK_DEVICE` | `default` | Usa la configurazione ALSA personalizzata |
+| `FORCE_PLAYBACK_DEVICE` | `default` | Dispositivo ALSA (instrada alla FIFO) |
 
-**Formato campionamento:** 44100:16:2 (fisso)
-
-**Piattaforme supportate:** Solo ARM (Raspberry Pi 3/4/5). Non funziona su x86_64.
-
-**Connessione da Tidal:**
-1. Apri **Tidal** su qualsiasi dispositivo
-2. Avvia la riproduzione di un brano
-3. Tocca l'icona **Cast**
-4. Seleziona **"snapMULTI Tidal"**
-
-**Come funziona:**
-1. L'app Tidal si connette al container tidal-connect via rete locale
-2. tidal-connect decodifica l'audio e lo invia all'output ALSA
-3. La configurazione ALSA personalizzata (`tidal-asound.conf`) reindirizza l'audio alla FIFO
-4. Snapserver legge dalla FIFO e distribuisce ai client
-
-**Verifica visibilità:**
+**Nome personalizzato:** Imposta `TIDAL_NAME` in `.env` per sovrascrivere il nome predefinito:
 ```bash
-avahi-browse -r _tidal-connect._tcp --terminate
+TIDAL_NAME="Tidal Salotto"
 ```
 
-**Nota:** Tidal Connect non espone metadati (titolo, artista, copertina) — il binario è closed-source senza API di controllo.
+**Formato campionamento:** 44100:16:2 (fisso da tidal-connect)
+
+**Connessione da Tidal:**
+1. Apri **Tidal** sul tuo telefono/tablet
+2. Avvia la riproduzione di un brano
+3. Tocca l'**icona altoparlante** (selettore dispositivo)
+4. Seleziona **"snapMULTI Tidal"**
+
+**Limitazioni:**
+- **Solo ARM** — Il binario tidal-connect funziona solo su ARM (Pi 3/4/5)
+- **Nessun metadato** — Info sui brani non disponibili (limitazione del binario closed-source)
+
+**Requisiti Docker:** Modalità host network per mDNS. Volume `/audio` condiviso con snapserver.
 
 ---
 
