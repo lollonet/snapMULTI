@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **scripts/tidal-bridge.py** — Replaced by tidal-connect container
 - **tidal directory** — No longer needed for session storage
 
+### Security
+- **Tidal script hardening** — Removed unsafe `eval`, added shell safety settings (`set -euo pipefail`)
+- **Input sanitization** — Extended to `model_name` in addition to `friendly_name`, removed risky apostrophe from allowed chars
+- **Python venv** — Snapserver uses virtual environment instead of `--break-system-packages`
+- **CI deploy** — Parameterized GHCR username via `github.repository_owner`
+
 ## [0.1.3] — 2026-02-11
 
 ### Changed
