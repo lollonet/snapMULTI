@@ -3,11 +3,9 @@
 # Used with edgecrush3r/tidal-connect image
 set -euo pipefail
 
-# Sanitize name: remove shell metacharacters, allow only safe chars
-# Safe chars: alphanumeric, space, hyphen, underscore, period
-sanitize_name() {
-    printf '%s' "$1" | tr -cd 'A-Za-z0-9 _-.'
-}
+# Source shared utilities
+# shellcheck source=../common/sanitize.sh
+source "$(dirname "$0")/../common/sanitize.sh"
 
 if ! mkdir -p /config; then
     echo "ERROR: Cannot create /config directory" >&2
@@ -30,9 +28,9 @@ if [ -f /usr/bin/tmux ] && [ -f /app/ifi-tidal-release/bin/speaker_controller_ap
 fi
 
 friendly_name_raw=$(load_key_value "$KEY_FRIENDLY_NAME")
-friendly_name=$(sanitize_name "$friendly_name_raw")
+friendly_name=$(sanitize_device_name "$friendly_name_raw")
 model_name_raw=$(load_key_value "$KEY_MODEL_NAME")
-model_name=$(sanitize_name "$model_name_raw")
+model_name=$(sanitize_device_name "$model_name_raw")
 mqa_codec=$(load_key_value "$KEY_MQA_CODEC")
 mqa_passthrough=$(load_key_value "$KEY_MQA_PASSTHROUGH")
 

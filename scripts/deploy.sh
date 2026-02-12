@@ -5,28 +5,16 @@
 set -euo pipefail
 
 #######################################
-# Colors and Output
+# Common Utilities
 #######################################
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
-
-info()  { echo -e "${BLUE}[INFO]${NC} $*" >&2; }
-ok()    { echo -e "${GREEN}[OK]${NC} $*" >&2; }
-warn()  { echo -e "${YELLOW}[WARN]${NC} $*" >&2; }
-error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-step()  { echo -e "\n${CYAN}${BOLD}==> $*${NC}" >&2; }
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=common/logging.sh
+source "$SCRIPT_DIR/common/logging.sh"
 
 #######################################
 # Project Root Detection
 #######################################
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Handle both ./scripts/deploy.sh and ./deploy.sh (symlink) cases
 if [[ -f "$SCRIPT_DIR/../docker-compose.yml" ]]; then
