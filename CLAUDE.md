@@ -46,16 +46,18 @@ snapMULTI/
     firstboot.sh             # First-boot provisioning (network wait, healthcheck loop)
     airplay-entrypoint.sh    # AirPlay container entrypoint (DEVICE_NAME sanitization)
     prepare-sd.sh            # SD card preparation for new clients
-    tidal-bridge.py          # Tidal Connect → TCP bridge
+    tidal/                   # Tidal Connect entrypoint scripts
+      entrypoint.sh          # Container entrypoint (ALSA config, FRIENDLY_NAME sanitization)
+      common.sh              # Configuration helpers (adapted from GioF71's wrapper)
   docs/
     HARDWARE.md              # Hardware & network guide
     USAGE.md                 # Technical operations guide
     SOURCES.md               # Audio sources technical reference
     *.it.md                  # Italian translations
   .github/workflows/
-    build-push.yml           # Dual-arch build + push to ghcr.io (5 images)
+    build-push.yml           # Dual-arch build + push to ghcr.io (4 images)
     deploy.yml               # SSH deploy (workflow_call, 6 containers)
-    build-test.yml           # PR-only Docker build validation (5 Dockerfiles)
+    build-test.yml           # PR-only Docker build validation (4 Dockerfiles)
     validate.yml             # docker-compose syntax, shellcheck, env template
     claude-code-review.yml   # Automated PR review
     claude.yml               # Claude CI helper
@@ -66,17 +68,16 @@ snapMULTI/
   Dockerfile.shairport-sync  # AirPlay receiver (pipe output)
   Dockerfile.librespot       # Spotify Connect (pipe output)
   Dockerfile.mpd             # MPD + ffmpeg (Alpine)
-  Dockerfile.tidal           # Tidal Connect bridge
-  docker-compose.yml         # 5 default + 1 profile-gated service (host networking)
+  docker-compose.yml         # 6 services (5 core + tidal-connect third-party, host networking)
   .env.example               # Environment template
 ```
 
 ## Conventions
 
-- **Docker images**: `ghcr.io/lollonet/snapmulti-{server,airplay,spotify,mpd,tidal}:latest`
+- **Docker images**: `ghcr.io/lollonet/snapmulti-{server,airplay,spotify,mpd}:latest` + `edgecrush3r/tidal-connect:latest` (ARM only)
 - **Multi-arch**: linux/amd64 (raspy) + linux/arm64 (studio), native builds on self-hosted runners
 - **Config paths**: all config in `config/`, all scripts in `scripts/`
 - **Deployment**: tag push (`v*`) triggers build → manifest → deploy
 - **Git workflow**: always use PRs, never push directly to main unless explicitly requested
 - **Audio format**: 44100:16:2 (44.1kHz, 16-bit, stereo) across all sources
-- **CI gates**: shellcheck on all `scripts/*.sh`, docker-compose syntax validation
+- **CI gates**: shellcheck on all `scripts/**/*.sh`, docker-compose syntax validation

@@ -231,32 +231,46 @@ services:
         reservations:
           memory: ${MPD_MEM_RESERVE:-128M}
 
-  # Tidal streaming bridge (optional, run on-demand)
-  # Usage:
-  #   docker compose --profile tidal run --rm tidal login      # One-time OAuth setup
-  #   docker compose --profile tidal run --rm tidal play <url> # Play track/album/playlist
-  #   docker compose --profile tidal run --rm tidal search <q> # Search Tidal
-  tidal:
-    image: ghcr.io/lollonet/snapmulti-tidal:latest
-    container_name: tidal
+  # Tidal Connect - Cast from Tidal app (ARM only: Pi 3/4/5)
+  # Open Tidal app → Select device → "snapMULTI Tidal"
+  # Note: x86_64 not supported by tidal-connect image
+  tidal-connect:
+    image: edgecrush3r/tidal-connect:latest
+    container_name: tidal-connect
     network_mode: host
-    user: "${PUID:-1000}:${PGID:-1000}"
+    restart: unless-stopped
+    entrypoint: ["/bin/bash", "/entrypoint.sh"]
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    read_only: true
     tmpfs:
       - /tmp:size=64M
+      - /config:size=1M
     volumes:
-      - ./tidal:/config
+      - ./audio:/audio
+      - ./config/tidal-asound.conf:/userconfig/asound.conf:ro
+      - ./scripts/tidal/entrypoint.sh:/entrypoint.sh:ro
+      - ./scripts/tidal/common.sh:/common.sh:ro
+      - /var/run/dbus:/var/run/dbus
     environment:
       - TZ=${TZ:-Europe/Berlin}
-      - TIDAL_SESSION_FILE=/config/tidal-session.json
-      - TIDAL_QUALITY=${TIDAL_QUALITY:-high_lossless}
-      - SNAPSERVER_HOST=127.0.0.1
-      - SNAPSERVER_PORT=4953
+      - FRIENDLY_NAME=${TIDAL_NAME:-${DEVICE_NAME:-snapMULTI} Tidal}
+      - FORCE_PLAYBACK_DEVICE=default
     depends_on:
       snapserver:
         condition: service_healthy
     logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f tidal || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: ${TIDAL_MEM_LIMIT:-128M}
+          cpus: '${TIDAL_CPU_LIMIT:-0.5}'
+        reservations:
+          memory: ${TIDAL_MEM_RESERVE:-64M}

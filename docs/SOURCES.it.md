@@ -10,7 +10,7 @@ Progettato per applicazioni di gestione remota e configurazione avanzata.
 | # | Sorgente | Tipo | Stream ID | Stato | Binario/Dipendenza |
 |---|----------|------|-----------|-------|---------------------|
 | 1 | MPD | `pipe` | `MPD` | Attiva | — (FIFO) |
-| 2 | Ingresso TCP | `tcp` (server) | `TCP-Input` | Attiva | — (integrato) |
+| 2 | Tidal Connect | `pipe` | `Tidal` | Attiva | `tidal-connect` (container separato, solo ARM) |
 | 3 | AirPlay | `pipe` | `AirPlay` | Attiva | `shairport-sync` (container separato) |
 | 4 | Spotify Connect | `pipe` | `Spotify` | Attiva | `librespot` (container separato) |
 | 5 | Cattura ALSA | `alsa` | `LineIn` | Disponibile | Dispositivo ALSA |
@@ -61,52 +61,50 @@ mpc status                  # Controlla stato
 
 ---
 
-### 2. Ingresso TCP (tcp server)
+### 2. Tidal Connect (pipe da tidal-connect)
 
-Ascolta su una porta TCP per audio PCM in ingresso. Qualsiasi applicazione che possa inviare audio grezzo via TCP può usare questa sorgente.
+Il container tidal-connect funziona come ricevitore Tidal Connect e scrive PCM grezzo su una named pipe tramite il plugin ALSA `file`. Snapserver legge dalla pipe.
 
 **Configurazione:**
 ```ini
-source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
+source = pipe:////audio/tidal_fifo?name=Tidal
 ```
 
 **Parametri:**
 
 | Parametro | Valore | Descrizione |
 |-----------|--------|-------------|
-| `name` | `TCP-Input` | ID dello stream |
-| `mode` | `server` | Snapserver ascolta le connessioni |
-| `bind` | `0.0.0.0` | Accetta da qualsiasi interfaccia |
-| `port` | `4953` | Porta di ascolto |
+| `name` | `Tidal` | ID dello stream |
 
-**Formato campionamento:** 44100:16:2 (PCM s16le, stereo)
+**Impostazioni container tidal-connect** (docker-compose.yml):
 
-**Inviare audio:**
+| Variabile | Valore | Descrizione |
+|-----------|--------|-------------|
+| `FRIENDLY_NAME` | `snapMULTI Tidal` | Nome mostrato nell'app Tidal |
+| `FORCE_PLAYBACK_DEVICE` | `default` | Usa la configurazione ALSA personalizzata |
+
+**Formato campionamento:** 44100:16:2 (fisso)
+
+**Piattaforme supportate:** Solo ARM (Raspberry Pi 3/4/5). Non funziona su x86_64.
+
+**Connessione da Tidal:**
+1. Apri **Tidal** su qualsiasi dispositivo
+2. Avvia la riproduzione di un brano
+3. Tocca l'icona **Cast**
+4. Seleziona **"snapMULTI Tidal"**
+
+**Come funziona:**
+1. L'app Tidal si connette al container tidal-connect via rete locale
+2. tidal-connect decodifica l'audio e lo invia all'output ALSA
+3. La configurazione ALSA personalizzata (`tidal-asound.conf`) reindirizza l'audio alla FIFO
+4. Snapserver legge dalla FIFO e distribuisce ai client
+
+**Verifica visibilità:**
 ```bash
-# Trasmetti un file
-ffmpeg -i musica.mp3 \
-  -f s16le -ar 44100 -ac 2 \
-  tcp://<ip-del-server>:4953
-
-# Trasmetti radio internet
-ffmpeg -i http://stream.esempio.com/radio \
-  -f s16le -ar 44100 -ac 2 \
-  tcp://<ip-del-server>:4953
-
-# Genera tono di test
-ffmpeg -f lavfi -i "sine=frequency=440:duration=5" \
-  -f s16le -ar 44100 -ac 2 \
-  tcp://<ip-del-server>:4953
+avahi-browse -r _tidal-connect._tcp --terminate
 ```
 
-**Formato audio richiesto:**
-
-| Proprietà | Valore |
-|-----------|--------|
-| Frequenza di campionamento | 44100 Hz |
-| Profondità bit | 16 bit |
-| Canali | 2 (stereo) |
-| Codifica | PCM grezzo (s16le) |
+**Nota:** Tidal Connect non espone metadati (titolo, artista, copertina) — il binario è closed-source senza API di controllo.
 
 ---
 
@@ -320,9 +318,17 @@ source = tcp://192.168.1.100:4953?name=Remote&mode=client
 
 ## Streaming da Android
 
-Android non ha un equivalente integrato di AirPlay di Apple per la trasmissione audio verso ricevitori arbitrari. Ecco i metodi per trasmettere audio da app Android (incluso Tidal) a snapMULTI.
+Android non ha un equivalente integrato di AirPlay di Apple per la trasmissione audio verso ricevitori arbitrari. Ecco i metodi per trasmettere audio da app Android a snapMULTI.
 
-### Metodo 1: Ingresso TCP tramite BubbleUPnP (Consigliato per Tidal)
+> **Nota:** Per Tidal su ARM (Pi), usa la sorgente [Tidal Connect](#2-tidal-connect-pipe-da-tidal-connect) — trasmetti direttamente dall'app Tidal come Spotify Connect.
+
+> **Nota:** I metodi di streaming TCP seguenti richiedono l'aggiunta di una sorgente TCP alla configurazione:
+> ```ini
+> # Aggiungi a config/snapserver.conf:
+> source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
+> ```
+
+### Metodo 1: Ingresso TCP tramite BubbleUPnP
 
 [BubbleUPnP](https://play.google.com/store/apps/details?id=com.bubblesoft.android.bubbleupnp) ha una funzione **Audio Cast** che cattura l'output audio di qualsiasi app Android e lo trasmette sulla rete.
 

@@ -18,8 +18,6 @@ jobs:
             binary: librespot
           - dockerfile: Dockerfile.mpd
             binary: mpd
-          - dockerfile: Dockerfile.tidal
-            binary: tidal-bridge
     steps:
       - uses: actions/checkout@v4
 
