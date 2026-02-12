@@ -41,13 +41,19 @@ jobs:
 
       - name: Shellcheck scripts
         run: |
-          if ! ls scripts/*.sh 1>/dev/null 2>&1; then
-            echo "No shell scripts found in scripts/"
-            exit 0
-          fi
           echo "Running shellcheck on shell scripts..."
           FAILED=0
+          # Check top-level scripts
           for f in scripts/*.sh; do
+            [ -f "$f" ] || continue
+            echo "  Checking $f"
+            if ! shellcheck -x -S warning "$f"; then
+              FAILED=1
+            fi
+          done
+          # Check subdirectory scripts (e.g., scripts/tidal/)
+          for f in scripts/**/*.sh; do
+            [ -f "$f" ] || continue
             echo "  Checking $f"
             if ! shellcheck -x -S warning "$f"; then
               FAILED=1

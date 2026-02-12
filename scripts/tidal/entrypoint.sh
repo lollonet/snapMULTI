@@ -1,5 +1,12 @@
 #!/bin/bash
 # Simplified from GioF71/tidal-connect for FIFO output
+set -eu
+
+# Sanitize name: remove shell metacharacters, allow only safe chars
+# Safe chars: alphanumeric, space, hyphen, underscore, apostrophe, period
+sanitize_name() {
+    printf '%s' "$1" | tr -cd 'A-Za-z0-9 _-'\''.'
+}
 
 mkdir -p /config
 source /common.sh
@@ -15,7 +22,8 @@ if [ -f /usr/bin/tmux ] && [ -f /app/ifi-tidal-release/bin/speaker_controller_ap
     sleep ${SLEEP_TIME_SEC:-3}
 fi
 
-friendly_name=$(load_key_value $KEY_FRIENDLY_NAME)
+friendly_name_raw=$(load_key_value $KEY_FRIENDLY_NAME)
+friendly_name=$(sanitize_name "$friendly_name_raw")
 model_name=$(load_key_value $KEY_MODEL_NAME)
 mqa_codec=$(load_key_value $KEY_MQA_CODEC)
 mqa_passthrough=$(load_key_value $KEY_MQA_PASSTHROUGH)

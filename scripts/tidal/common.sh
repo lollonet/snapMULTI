@@ -34,8 +34,9 @@ check_provided_asound() {
 }
 
 enforce_playback_device_if_requested() {
-    local fpd=$(load_key_value $KEY_FORCE_PLAYBACK_DEVICE)
-    [ -n "$fpd" ] && save_playback_device $fpd
+    local fpd
+    fpd=$(load_key_value $KEY_FORCE_PLAYBACK_DEVICE)
+    [ -n "$fpd" ] && save_playback_device "$fpd"
 }
 
 configure() {
