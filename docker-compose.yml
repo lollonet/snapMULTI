@@ -271,6 +271,6 @@ services:
       resources:
         limits:
           memory: ${TIDAL_MEM_LIMIT:-128M}
-          cpus: '${TIDAL_CPU_LIMIT:-0.5}'
+          cpus: ${TIDAL_CPU_LIMIT:-0.5}
         reservations:
           memory: ${TIDAL_MEM_RESERVE:-64M}
