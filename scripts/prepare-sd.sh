@@ -123,12 +123,22 @@ else
     echo ""
 fi
 
+# ── Unmount SD card ────────────────────────────────────────────────
+echo ""
+echo "Unmounting SD card..."
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    diskutil unmount "$BOOT" || echo "WARNING: Could not unmount — eject manually"
+else
+    sync
+    umount "$BOOT" 2>/dev/null || echo "WARNING: Could not unmount — eject manually"
+fi
+
 # ── Done ────────────────────────────────────────────────────────────
 echo ""
 echo "=== SD card ready! ==="
 echo ""
 echo "Next steps:"
-echo "  1. Eject the SD card"
+echo "  1. Remove the SD card"
 echo "  2. Insert into Raspberry Pi"
 echo "  3. Power on — installation takes ~5-10 minutes, then auto-reboots"
 echo "  4. Access http://<your-hostname>.local:8180"
