@@ -65,6 +65,7 @@ mkdir -p "$DEST"
 # Copy install files
 cp "$SCRIPT_DIR/firstboot.sh" "$DEST/"
 cp "$SCRIPT_DIR/deploy.sh" "$DEST/"
+cp -r "$SCRIPT_DIR/common" "$DEST/"
 
 # Copy config files
 cp -r "$PROJECT_DIR/config" "$DEST/"

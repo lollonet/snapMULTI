@@ -97,6 +97,7 @@ cp -r "$SNAP_BOOT/config" "$INSTALL_DIR/"
 # Copy scripts to scripts/ (deploy.sh expects this structure)
 cp "$SNAP_BOOT/deploy.sh" "$INSTALL_DIR/scripts/"
 cp "$SNAP_BOOT/firstboot.sh" "$INSTALL_DIR/scripts/"
+cp -r "$SNAP_BOOT/common" "$INSTALL_DIR/scripts/" 2>/dev/null || true
 
 # Install Docker if needed
 if ! command -v docker &>/dev/null; then
@@ -113,7 +114,13 @@ if ! command -v docker &>/dev/null; then
     ARCH=$(dpkg --print-architecture)
     VERSION_CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
 
-    echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $VERSION_CODENAME stable" \
+    # Docker doesn't support all Debian versions - fallback to bookworm for newer/testing releases
+    case "$VERSION_CODENAME" in
+        bullseye|bookworm) DOCKER_CODENAME="$VERSION_CODENAME" ;;
+        *) DOCKER_CODENAME="bookworm" ;;  # trixie, sid, etc.
+    esac
+
+    echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $DOCKER_CODENAME stable" \
         > /etc/apt/sources.list.d/docker.list
 
     apt-get update -qq
