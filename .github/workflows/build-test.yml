@@ -18,6 +18,10 @@ jobs:
             binary: librespot
           - dockerfile: Dockerfile.mpd
             binary: mpd
+          # Tidal: ARM-only, base image has ARM binaries
+          - dockerfile: Dockerfile.tidal
+            binary: bash
+            arm_only: true
     steps:
       - uses: actions/checkout@v4
 
@@ -32,7 +36,12 @@ jobs:
           SHA=$(git ls-remote https://github.com/lollonet/santcasp.git HEAD | cut -f1)
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Check architecture
+        id: arch
+        run: echo "arch=$(uname -m)" >> "$GITHUB_OUTPUT"
+
       - name: Build ${{ matrix.dockerfile }}
+        if: "!matrix.arm_only || steps.arch.outputs.arch == 'aarch64'"
         run: |
           echo "Building image: ${{ steps.vars.outputs.TAG }}:latest"
           BUILD_ARGS=""
@@ -45,7 +54,12 @@ jobs:
             exit 1
           }
 
+      - name: Skip ARM-only build on x86
+        if: matrix.arm_only && steps.arch.outputs.arch != 'aarch64'
+        run: echo "⏭️ Skipping ${{ matrix.dockerfile }} - ARM-only, running on ${{ steps.arch.outputs.arch }}"
+
       - name: Test container
+        if: "!matrix.arm_only || steps.arch.outputs.arch == 'aarch64'"
         run: |
           echo "Testing container: ${{ steps.vars.outputs.TAG }}:latest"
           docker run --rm --entrypoint which ${{ steps.vars.outputs.TAG }}:latest ${{ matrix.binary }} || {

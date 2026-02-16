@@ -109,6 +109,23 @@ jobs:
           cache-from: type=gha,scope=mpd-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=mpd-${{ matrix.suffix }}
 
+      # Tidal Connect - ARM only (Pi 3/4/5)
+      # Base image edgecrush3r/tidal-connect only provides ARM binaries
+      - name: Build and push tidal
+        if: matrix.platform == 'linux/arm64'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.tidal
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/lollonet/snapmulti-tidal:arm64
+            ${{ env.REGISTRY }}/lollonet/snapmulti-tidal:latest
+            ${{ steps.version.outputs.tag && format('{0}/lollonet/snapmulti-tidal:{1}', env.REGISTRY, steps.version.outputs.tag) || '' }}
+          cache-from: type=gha,scope=tidal-arm64
+          cache-to: type=gha,mode=max,scope=tidal-arm64
+
   manifest:
     needs: build
     runs-on: snapcast-runner

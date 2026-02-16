@@ -82,10 +82,10 @@ source = pipe:////audio/tidal_fifo?name=Tidal
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FRIENDLY_NAME` | `snapMULTI Tidal` | Name shown in Tidal app |
+| `FRIENDLY_NAME` | `<hostname> Tidal` | Name shown in Tidal app (uses host's hostname) |
 | `FORCE_PLAYBACK_DEVICE` | `default` | ALSA device (routes to FIFO) |
 
-**Custom service name:** Set `TIDAL_NAME` in `.env` to override the default name:
+**Custom service name:** Set `TIDAL_NAME` in `.env` to override the hostname-based default:
 ```bash
 TIDAL_NAME="Living Room Tidal"
 ```
@@ -96,7 +96,7 @@ TIDAL_NAME="Living Room Tidal"
 1. Open **Tidal** on your phone/tablet
 2. Start playing a song
 3. Tap the **speaker icon** (device selector)
-4. Select **"snapMULTI Tidal"**
+4. Select **"<hostname> Tidal"** (e.g., "raspberrypi Tidal")
 
 **Limitations:**
 - **ARM only** — The tidal-connect binary only runs on ARM (Pi 3/4/5)
