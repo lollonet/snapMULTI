@@ -232,7 +232,7 @@ services:
           memory: ${MPD_MEM_RESERVE:-128M}
 
   # Tidal Connect - Cast from Tidal app (ARM only: Pi 3/4/5)
-  # Open Tidal app → Select device → "snapMULTI Tidal"
+  # Open Tidal app → Select device → "<hostname> Tidal"
   # Note: x86_64 not supported - tidal-connect binaries are ARM-only
   tidal-connect:
     image: ghcr.io/lollonet/snapmulti-tidal:latest
