@@ -233,13 +233,12 @@ services:
 
   # Tidal Connect - Cast from Tidal app (ARM only: Pi 3/4/5)
   # Open Tidal app → Select device → "snapMULTI Tidal"
-  # Note: x86_64 not supported by tidal-connect image
+  # Note: x86_64 not supported - tidal-connect binaries are ARM-only
   tidal-connect:
-    image: edgecrush3r/tidal-connect:latest
+    image: ghcr.io/lollonet/snapmulti-tidal:latest
     container_name: tidal-connect
     network_mode: host
     restart: unless-stopped
-    entrypoint: ["/bin/bash", "/entrypoint.sh"]
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -250,9 +249,6 @@ services:
     volumes:
       - ./audio:/audio
       - ./config/tidal-asound.conf:/userconfig/asound.conf:ro
-      - ./scripts/tidal/entrypoint.sh:/entrypoint.sh:ro
-      - ./scripts/tidal/common.sh:/common.sh:ro
-      - ./scripts/common/sanitize.sh:/common/sanitize.sh:ro
       - /var/run/dbus:/var/run/dbus
     environment:
       - TZ=${TZ:-Europe/Berlin}
