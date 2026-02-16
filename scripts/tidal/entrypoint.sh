@@ -3,9 +3,9 @@
 # Used with edgecrush3r/tidal-connect image
 set -euo pipefail
 
-# Source shared utilities
+# Source shared utilities (mounted at /common/sanitize.sh in container)
 # shellcheck source=../common/sanitize.sh
-source "$(dirname "$0")/../common/sanitize.sh"
+source /common/sanitize.sh
 
 if ! mkdir -p /config; then
     echo "ERROR: Cannot create /config directory" >&2
