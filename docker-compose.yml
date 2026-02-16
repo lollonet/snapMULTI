@@ -235,12 +235,8 @@ services:
   # Open Tidal app → Select device → "snapMULTI Tidal"
   # Note: x86_64 not supported - tidal-connect binaries are ARM-only
   tidal-connect:
-    build:
-      context: .
-      dockerfile: Dockerfile.tidal
-    image: snapmulti-tidal:local
+    image: ghcr.io/lollonet/snapmulti-tidal:latest
     container_name: tidal-connect
-    hostname: ${HOSTNAME:-tidal}
     network_mode: host
     restart: unless-stopped
     security_opt:
