@@ -82,10 +82,10 @@ source = pipe:////audio/tidal_fifo?name=Tidal
 
 | Variabile | Default | Descrizione |
 |-----------|---------|-------------|
-| `FRIENDLY_NAME` | `snapMULTI Tidal` | Nome mostrato nell'app Tidal |
+| `FRIENDLY_NAME` | `<hostname> Tidal` | Nome mostrato nell'app Tidal (usa l'hostname dell'host) |
 | `FORCE_PLAYBACK_DEVICE` | `default` | Dispositivo ALSA (instrada alla FIFO) |
 
-**Nome personalizzato:** Imposta `TIDAL_NAME` in `.env` per sovrascrivere il nome predefinito:
+**Nome personalizzato:** Imposta `TIDAL_NAME` in `.env` per sovrascrivere il nome basato su hostname:
 ```bash
 TIDAL_NAME="Tidal Salotto"
 ```
@@ -96,7 +96,7 @@ TIDAL_NAME="Tidal Salotto"
 1. Apri **Tidal** sul tuo telefono/tablet
 2. Avvia la riproduzione di un brano
 3. Tocca l'**icona altoparlante** (selettore dispositivo)
-4. Seleziona **"snapMULTI Tidal"**
+4. Seleziona **"<hostname> Tidal"** (es. "raspberrypi Tidal")
 
 **Limitazioni:**
 - **Solo ARM** — Il binario tidal-connect funziona solo su ARM (Pi 3/4/5)
