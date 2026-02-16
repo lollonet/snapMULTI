@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Tidal Connect ALSA plugins** — Base image missing `libasound2-plugins` for FIFO output
+  - Created `Dockerfile.tidal` extending base image with ALSA plugins
+  - Audio now correctly routes through FIFO to snapserver
+  - Built from Debian Stretch archive (base image uses EOL Raspbian Stretch)
+
 ## [0.1.4] — 2026-02-12
 
 ### Breaking Changes
@@ -17,14 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Tidal Connect replaces tidal-bridge** — Native casting from Tidal app instead of CLI-based streaming
-  - Uses `edgecrush3r/tidal-connect` image with ALSA→FIFO routing
+  - Uses `edgecrush3r/tidal-connect` as base with custom ALSA→FIFO routing
   - ARM only (Pi 3/4/5), x86_64 not supported
   - No OAuth login required — just cast from app
 - **Shared logging utilities** — `scripts/common/logging.sh` provides colored output functions used by deploy.sh
 - **meta_mpd.py refactor** — Split `_update_properties()` into focused helper methods for better maintainability
 
 ### Removed
-- **Dockerfile.tidal** — No longer building custom tidal image
 - **scripts/tidal-bridge.py** — Replaced by tidal-connect container
 - **tidal directory** — No longer needed for session storage
 
