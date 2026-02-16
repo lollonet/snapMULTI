@@ -19,7 +19,16 @@ save_playback_device() { save_key_value "$KEY_PLAYBACK_DEVICE" "$1"; }
 get_playback_device() { load_key_value "$KEY_PLAYBACK_DEVICE"; }
 
 set_defaults() {
-    save_key_value "$KEY_FRIENDLY_NAME" "${FRIENDLY_NAME:-Tidal connect}"
+    # Use host's hostname for friendly name if FRIENDLY_NAME not set
+    local default_name host_hostname
+    # Read from mounted /etc/hostname (host's actual hostname)
+    if [[ -f /etc/hostname ]]; then
+        host_hostname=$(tr -d '[:space:]' < /etc/hostname)
+    else
+        host_hostname=$(hostname)
+    fi
+    default_name="${host_hostname} Tidal"
+    save_key_value "$KEY_FRIENDLY_NAME" "${FRIENDLY_NAME:-$default_name}"
     save_key_value "$KEY_MODEL_NAME" "${MODEL_NAME:-Audio Streamer}"
     save_key_value "$KEY_MQA_CODEC" "${MQA_CODEC:-false}"
     save_key_value "$KEY_MQA_PASSTHROUGH" "${MQA_PASSTHROUGH:-false}"

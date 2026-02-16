@@ -18,14 +18,15 @@ configure
 PLAYBACK_DEVICE=$(get_playback_device)
 echo "PLAYBACK_DEVICE=[$PLAYBACK_DEVICE]"
 
-# Start speaker controller in background
-if [ -f /usr/bin/tmux ] && [ -f /app/ifi-tidal-release/bin/speaker_controller_application ]; then
-    echo "Starting Speaker Controller in background..."
-    if ! /usr/bin/tmux new-session -d -s speaker_controller_application '/app/ifi-tidal-release/bin/speaker_controller_application'; then
-        echo "WARNING: Failed to start speaker controller. Audio quality may be affected." >&2
-    fi
-    sleep "${SLEEP_TIME_SEC:-3}"
-fi
+# Speaker controller disabled - was causing duplicate device registration
+# If audio quality issues occur, re-enable this block
+#if [ -f /usr/bin/tmux ] && [ -f /app/ifi-tidal-release/bin/speaker_controller_application ]; then
+#    echo "Starting Speaker Controller in background..."
+#    if ! /usr/bin/tmux new-session -d -s speaker_controller_application '/app/ifi-tidal-release/bin/speaker_controller_application'; then
+#        echo "WARNING: Failed to start speaker controller. Audio quality may be affected." >&2
+#    fi
+#    sleep "${SLEEP_TIME_SEC:-3}"
+#fi
 
 friendly_name_raw=$(load_key_value "$KEY_FRIENDLY_NAME")
 friendly_name=$(sanitize_device_name "$friendly_name_raw")

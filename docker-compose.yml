@@ -235,8 +235,12 @@ services:
   # Open Tidal app → Select device → "snapMULTI Tidal"
   # Note: x86_64 not supported - tidal-connect binaries are ARM-only
   tidal-connect:
-    image: ghcr.io/lollonet/snapmulti-tidal:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.tidal
+    image: snapmulti-tidal:local
     container_name: tidal-connect
+    hostname: ${HOSTNAME:-tidal}
     network_mode: host
     restart: unless-stopped
     security_opt:
@@ -250,9 +254,10 @@ services:
       - ./audio:/audio
       - ./config/tidal-asound.conf:/userconfig/asound.conf:ro
       - /var/run/dbus:/var/run/dbus
+      - /etc/hostname:/etc/hostname:ro
     environment:
       - TZ=${TZ:-Europe/Berlin}
-      - FRIENDLY_NAME=${TIDAL_NAME:-${DEVICE_NAME:-snapMULTI} Tidal}
+      - FRIENDLY_NAME=${TIDAL_NAME:-}
       - FORCE_PLAYBACK_DEVICE=default
     depends_on:
       snapserver:
