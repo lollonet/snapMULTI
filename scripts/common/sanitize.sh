@@ -7,7 +7,7 @@
 # Note: Apostrophe explicitly excluded to prevent shell injection
 # Usage: sanitize_device_name "User Input Name"
 sanitize_device_name() {
-    printf '%s' "$1" | tr -cd 'A-Za-z0-9 _-.'
+    printf '%s' "$1" | tr -cd 'A-Za-z0-9 ._-'
 }
 
 # Alias for backward compatibility (both use same safe character set)
