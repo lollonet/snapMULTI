@@ -558,6 +558,11 @@ validate_config() {
         "config/shairport-sync.conf"
     )
 
+    # Tidal config only required on ARM (tidal-connect is ARM-only)
+    if [[ "$IS_ARM" == "true" ]]; then
+        required_configs+=("config/tidal-asound.conf")
+    fi
+
     for config in "${required_configs[@]}"; do
         if [[ ! -f "$PROJECT_ROOT/$config" ]]; then
             error "Missing config file: $config"
