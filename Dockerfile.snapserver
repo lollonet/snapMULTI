@@ -64,6 +64,10 @@ RUN chmod +x /usr/share/snapserver/plug-ins/meta_mpd.py
 COPY scripts/meta_shairport.py /usr/share/snapserver/plug-ins/meta_shairport.py
 RUN chmod +x /usr/share/snapserver/plug-ins/meta_shairport.py
 
+# Add Tidal Connect metadata reader
+COPY scripts/meta_tidal.py /usr/share/snapserver/plug-ins/meta_tidal.py
+RUN chmod +x /usr/share/snapserver/plug-ins/meta_tidal.py
+
 RUN mkdir -p /var/lib/snapserver /config /data /audio
 
 COPY config/snapserver.conf /etc/snapserver.conf
