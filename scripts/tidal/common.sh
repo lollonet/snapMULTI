@@ -34,7 +34,7 @@ check_provided_asound() {
             echo "ERROR: Failed to copy audio configuration" >&2
             exit 1
         fi
-        [ -z "$(load_key_value "$KEY_FORCE_PLAYBACK_DEVICE")" ] && save_key_value "$KEY_FORCE_PLAYBACK_DEVICE" default
+        [ -z "$(load_key_value "$KEY_FORCE_PLAYBACK_DEVICE")" ] && save_key_value "$KEY_FORCE_PLAYBACK_DEVICE" default || true
     fi
 }
 
