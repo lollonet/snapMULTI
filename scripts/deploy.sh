@@ -429,10 +429,13 @@ create_directories() {
     touch "$PROJECT_ROOT/mpd/data/mpd.db"
 
     # Set ownership and permissions
+    # Note: 777/666 needed because containers run with cap_drop: ALL
+    # and may run as different UIDs than the host user
     chown -R "$real_uid:$real_gid" "$PROJECT_ROOT/audio" "$PROJECT_ROOT/data" \
         "$PROJECT_ROOT/mpd" "$PROJECT_ROOT/mympd"
-    chmod 770 "$PROJECT_ROOT/audio"
-    chmod 660 "$PROJECT_ROOT/audio"/*_fifo 2>/dev/null || true
+    chmod 777 "$PROJECT_ROOT/audio"
+    chmod 666 "$PROJECT_ROOT/audio"/*_fifo 2>/dev/null || true
+    chmod 666 "$PROJECT_ROOT/audio"/shairport-metadata 2>/dev/null || true
 
     # Ensure scripts are executable (git may not preserve permissions)
     chmod +x "$PROJECT_ROOT/scripts/"*.sh "$PROJECT_ROOT/scripts/"*.py 2>/dev/null || true
