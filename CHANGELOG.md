@@ -18,7 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Setup resolution** — `prepare-sd.sh` sets temporary 800x600 via `cmdline.txt` `video=` parameter for consistent TUI layout
 
 ### Fixed
+- **firstboot.sh 5 GHz WiFi on first boot** — On Debian trixie, `brcmfmac` ignores the kernel `cfg80211.ieee80211_regdom` parameter, blocking auto-connect on 5 GHz DFS channels (e.g., channel 100). Fix applies regulatory domain via `iw reg set` and explicitly activates WiFi via `nmcli` after 30s timeout
 - **firstboot.sh DNS readiness** — Network check now verifies DNS resolution (`getent hosts deb.debian.org`) in addition to ping; prevents `apt-get` failure when ping succeeds but DNS lags behind on first boot
+- **firstboot.sh network timeout** — Increased from 2 to 3 minutes for first-boot WiFi scenarios
 - **progress.sh line_count bug** — Fixed `grep -c || echo 0` producing `"0\n0"` which broke arithmetic in the output area padding loop
 
 ## [0.1.5] — 2026-02-17
