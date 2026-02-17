@@ -89,9 +89,21 @@ snapMULTI/
   Dockerfile.shairport-sync  # AirPlay receiver (pipe output)
   Dockerfile.librespot       # Spotify Connect (pipe output)
   Dockerfile.mpd             # MPD + ffmpeg (Alpine)
-  docker-compose.yml         # 6 services (5 core + tidal-connect third-party, host networking)
+  Dockerfile.tidal           # Tidal Connect (extends edgecrush3r base with ALSA plugins)
+  docker-compose.yml         # 6 services (5 core + tidal-connect, host networking)
   .env.example               # Environment template
 ```
+
+### Tidal Connect
+
+ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian Stretch).
+
+- **Dockerfile.tidal**: Extends base image with `libasound2-plugins` from Debian Stretch archive (needed for ALSA FIFO routing). Base image is EOL Raspbian Stretch — packages come from `archive.raspbian.org`
+- **Audio routing**: Tidal app → ALSA default device → `config/tidal-asound.conf` (rate converter + FIFO plugin) → `/audio/tidal` named pipe → snapserver
+- **config/tidal-asound.conf**: speex rate converter (44100 Hz) → FIFO output. Validated by `deploy.sh` on ARM systems
+- **Device naming**: Uses hostname by default (e.g., "snapvideo Tidal"). Override with `TIDAL_NAME` env var
+- **scripts/tidal/entrypoint.sh**: Sanitizes `FRIENDLY_NAME`, disables `speaker_controller_application` (prevents duplicate mDNS entries), configures ALSA
+- **Constraints**: ARM only (Pi 3/4/5), no x86_64 support. No OAuth — users cast from the Tidal mobile/desktop app
 
 ## Conventions
 
