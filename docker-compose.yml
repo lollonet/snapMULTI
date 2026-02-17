@@ -123,7 +123,7 @@ services:
   # Open Spotify app → Connect to a device → Select "<hostname> Spotify"
   # Metadata + playback control via meta_go-librespot.py (Snapcast plugin)
   librespot:
-    image: ghcr.io/devgianlu/go-librespot:latest
+    image: ghcr.io/devgianlu/go-librespot:v0.7.0
     container_name: librespot
     restart: unless-stopped
     network_mode: host
@@ -144,6 +144,8 @@ services:
     command:
       - |
         NAME="$${SPOTIFY_NAME:-$$(hostname) Spotify}"
+        NAME=$$(printf '%s' "$$NAME" | tr -cd 'A-Za-z0-9 ._-')
+        [ -z "$$NAME" ] && NAME="snapMULTI Spotify"
         sed "s/^device_name:.*/device_name: \"$$NAME\"/" /config/config.yml > /tmp/config.yml
         exec go-librespot --config_dir /tmp
     depends_on:

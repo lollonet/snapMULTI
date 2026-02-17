@@ -55,7 +55,7 @@ jobs:
 
       - name: Skip ARM-only build on x86
         if: matrix.arm_only && steps.arch.outputs.arch != 'aarch64'
-        run: echo "⏭️ Skipping ${{ matrix.dockerfile }} - ARM-only, running on ${{ steps.arch.outputs.arch }}"
+        run: echo "Skipping ${{ matrix.dockerfile }} - ARM-only, running on ${{ steps.arch.outputs.arch }}"
 
       - name: Test container
         if: "!matrix.arm_only || steps.arch.outputs.arch == 'aarch64'"
