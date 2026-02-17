@@ -87,12 +87,17 @@ for i in $(seq 1 60); do
     if { [ -n "$GATEWAY" ] && ping -c1 -W2 "$GATEWAY" &>/dev/null; } || \
        ping -c1 -W2 1.1.1.1 &>/dev/null || \
        ping -c1 -W2 8.8.8.8 &>/dev/null; then
-        log_and_tty "Network ready."
-        log_progress "Network ready" 2>/dev/null || true
-        NETWORK_READY=true
-        break
+        # Ping works but DNS may lag behind — verify name resolution
+        if getent hosts deb.debian.org &>/dev/null; then
+            log_and_tty "Network ready."
+            log_progress "Network ready" 2>/dev/null || true
+            NETWORK_READY=true
+            break
+        fi
+        [ $((i % 10)) -eq 0 ] && log_progress "  DNS not ready yet ($i/60)..." 2>/dev/null || true
+    else
+        [ $((i % 10)) -eq 0 ] && log_progress "  Still waiting... ($i/60)" 2>/dev/null || true
     fi
-    [ $((i % 10)) -eq 0 ] && log_progress "  Still waiting... ($i/60)" 2>/dev/null || true
     sleep 2
 done
 
