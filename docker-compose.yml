@@ -131,7 +131,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=32M
-      - /config:size=1M       # Writable for credential caching (volatile)
+      - /config:size=1M       # Credential cache (volatile — re-auth via Spotify app after restart)
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./config/go-librespot.yml:/config/config.yml:ro
