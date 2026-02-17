@@ -7,10 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] — 2026-02-17
+
 ### Changed
 - **Tidal device naming** — Device name now uses hostname instead of hardcoded "snapMULTI"
   - Container reads `/etc/hostname` from host for dynamic naming (e.g., "snapdigi Tidal")
   - Set `TIDAL_NAME` env var to override
+- **prepare-sd.sh** — Auto-unmounts SD card after preparation (macOS + Linux)
 
 ### Fixed
 - **Tidal Connect ALSA plugins** — Base image missing `libasound2-plugins` for FIFO output
@@ -19,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Built from Debian Stretch archive (base image uses EOL Raspbian Stretch)
 - **Tidal duplicate devices** — Disabled `speaker_controller_application` which was advertising a second mDNS entry
 - **Tidal speedy playback** — Added speex rate converter to `tidal-asound.conf` for proper 44.1kHz resampling
+- **firstboot.sh Debian trixie support** — Docker repo fallback to bookworm for unsupported Debian releases (trixie, sid)
+- **firstboot.sh missing common scripts** — Now copies `scripts/common/` directory needed by deploy.sh
+- **deploy.sh tidal-asound.conf validation** — Added to required config check on ARM systems
+- **prepare-sd.sh hostname placeholder** — Instructions now show `<your-hostname>` instead of hardcoded name
 
 ## [0.1.4] — 2026-02-12
 
