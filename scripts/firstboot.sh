@@ -105,7 +105,7 @@ for i in $(seq 1 90); do
         fi
         [ $((i % 10)) -eq 0 ] && log_progress "  DNS not ready yet ($i/90)..." 2>/dev/null || true
     else
-        # After 30s without network, try to kick WiFi (may fail to
+        # After 30s (15 iterations × 2s) without network, try to kick WiFi (may fail to
         # auto-connect on 5 GHz DFS channels during first boot).
         if [[ "$WIFI_KICKED" == "false" ]] && (( i >= 15 )); then
             if command -v nmcli &>/dev/null; then

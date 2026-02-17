@@ -78,6 +78,7 @@ echo "  Copied $(du -sh "$DEST" | cut -f1) to boot partition."
 # KMS driver ignores hdmi_group/hdmi_mode; use kernel video= parameter.
 # firstboot.sh progress display is designed for 800x600.
 CMDLINE="$BOOT/cmdline.txt"
+# HDMI-A-1 is the default KMS connector name on Pi 4/5 (single or first port).
 SETUP_VIDEO="video=HDMI-A-1:800x600@60"
 if [[ -f "$CMDLINE" ]] && ! grep -qF "video=HDMI-A-1:" "$CMDLINE"; then
     sed -i.bak "s/$/ $SETUP_VIDEO/" "$CMDLINE"

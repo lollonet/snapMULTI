@@ -34,8 +34,8 @@ progress_init() {
     : > "$PROGRESS_LOG"
 
     # On HD screens the default 8x16 font yields 240 columns — far too small.
-    # Uni3-TerminusBold28x14 gives ~137 cols x 38 rows on 1080p with Unicode
-    # block elements (needed for progress bar and banner).
+    # Uni3-TerminusBold28x14 gives ~137 cols x 38 rows on 1080p, enough
+    # for the 74-char wide TUI layout.
     if [[ -c /dev/tty1 ]]; then
         local fb_width
         fb_width=$(cut -d, -f1 /sys/class/graphics/fb0/virtual_size 2>/dev/null || echo 0)
@@ -67,7 +67,7 @@ render_progress() {
     # Get last 8 lines of log for output area
     local log_lines=""
     if [[ -f "$PROGRESS_LOG" ]]; then
-        log_lines=$(tail -8 "$PROGRESS_LOG" 2>/dev/null | cut -c1-64 || true)
+        log_lines=$(tail -8 "$PROGRESS_LOG" 2>/dev/null | cut -c1-68 || true)
     fi
 
     {
