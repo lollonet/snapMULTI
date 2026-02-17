@@ -124,7 +124,7 @@ for i in $(seq 1 90); do
 done
 
 if [ "$NETWORK_READY" = false ]; then
-    log_and_tty "ERROR: Network not available after 2 minutes."
+    log_and_tty "ERROR: Network not available after 3 minutes."
     log_and_tty "Check WiFi credentials or Ethernet connection."
     exit 1
 fi

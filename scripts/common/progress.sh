@@ -3,7 +3,7 @@
 # Adapted from rpi-snapclient-usb/common/scripts/setup.sh
 #
 # Provides a full-screen TUI on /dev/tty1 (HDMI console) with:
-#   - Unicode progress bar with weighted percentages
+#   - ASCII progress bar with weighted percentages
 #   - Step checklist ([x] done, [>] current, [ ] pending)
 #   - Animated spinner for long-running operations
 #   - Live log output area (last 8 lines)
