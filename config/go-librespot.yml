@@ -1,0 +1,24 @@
+# go-librespot configuration for snapMULTY
+# Spotify Connect receiver → FIFO pipe → snapserver
+#
+# Device name: set SPOTIFY_NAME in .env to override (default: "<hostname> Spotify")
+# Docs: https://github.com/devgianlu/go-librespot
+
+device_name: ""
+device_type: speaker
+bitrate: 320
+
+# Audio: pipe to snapserver FIFO (44100:16:2 PCM)
+audio_backend: pipe
+audio_output_pipe: /audio/spotify_fifo
+audio_output_pipe_format: s16le
+
+# Zeroconf discovery (Spotify app finds device automatically)
+zeroconf_enabled: true
+zeroconf_backend: avahi
+
+# WebSocket API for Snapcast metadata plugin (meta_go-librespot.py)
+server:
+  enabled: true
+  address: 0.0.0.0
+  port: 24879

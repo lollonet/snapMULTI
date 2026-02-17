@@ -119,8 +119,11 @@ services:
         reservations:
           memory: ${AIRPLAY_MEM_RESERVE:-64M}
 
+  # Spotify Connect — go-librespot with metadata via WebSocket API
+  # Open Spotify app → Connect to a device → Select "<hostname> Spotify"
+  # Metadata + playback control via meta_go-librespot.py (Snapcast plugin)
   librespot:
-    image: ghcr.io/lollonet/snapmulti-spotify:latest
+    image: ghcr.io/devgianlu/go-librespot:latest
     container_name: librespot
     restart: unless-stopped
     network_mode: host
@@ -128,24 +131,31 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=32M
-      - /run:size=32M
+      - /config:size=1M       # Writable for credential caching (volatile)
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
+      - ./config/go-librespot.yml:/config/config.yml:ro
       - ./audio:/audio
-      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+      - /var/run/dbus:/var/run/dbus
     environment:
       - TZ=${TZ:-Europe/Berlin}
-      - DEVICE_NAME=${SPOTIFY_NAME:-}
+      - SPOTIFY_NAME=${SPOTIFY_NAME:-}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        NAME="$${SPOTIFY_NAME:-$$(hostname) Spotify}"
+        sed "s/^device_name:.*/device_name: \"$$NAME\"/" /config/config.yml > /tmp/config.yml
+        exec go-librespot --config_dir /tmp
     depends_on:
       snapserver:
         condition: service_healthy
     logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x librespot && test -p /audio/spotify_fifo || exit 1"]
+      test: ["CMD-SHELL", "pgrep go-librespot && test -p /audio/spotify_fifo || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     deploy:
       resources:
         limits:

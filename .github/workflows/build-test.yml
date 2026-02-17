@@ -14,8 +14,7 @@ jobs:
             binary: snapserver
           - dockerfile: Dockerfile.shairport-sync
             binary: shairport-sync
-          - dockerfile: Dockerfile.librespot
-            binary: librespot
+          # Spotify Connect: uses official ghcr.io/devgianlu/go-librespot (no build needed)
           - dockerfile: Dockerfile.mpd
             binary: mpd
           # Tidal: ARM-only, base image has ARM binaries

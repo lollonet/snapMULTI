@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Spotify Connect: switch to go-librespot** — Replaced Rust librespot v0.8.0 with go-librespot for Spotify Connect
+  - Full metadata support: track name, artist, album, cover art forwarded to Snapcast clients
+  - Bidirectional playback control: play/pause/next/previous/seek from any Snapcast client
+  - Uses Snapcast's official `meta_go-librespot.py` plugin (maintained upstream)
+  - Uses official `ghcr.io/devgianlu/go-librespot` Docker image (no custom build needed)
+  - Removed `Dockerfile.librespot` and `patches/librespot-ipv4-fallback.patch`
+  - New config file: `config/go-librespot.yml` (pipe backend, WebSocket API on port 24879)
+
 ### Added
 - **Progress display TUI** — Full-screen progress display on HDMI console (`/dev/tty1`) during first-boot installation
   - ASCII progress bar, step checklist (`[x]` done, `[>]` current, `[ ]` pending), animated spinner
