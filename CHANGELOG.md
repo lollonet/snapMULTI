@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Progress display TUI** — Full-screen progress display on HDMI console (`/dev/tty1`) during first-boot installation
+  - ASCII progress bar, step checklist (`[x]` done, `[>]` current, `[ ]` pending), animated spinner
+  - Live log output area showing last 8 lines of install progress
+  - Elapsed time tracking using monotonic clock (handles wrong system time on first boot)
+  - Weighted step percentages reflecting actual duration of each phase
+  - Console-safe characters only (no Unicode symbols that break on Linux framebuffer)
+- **HD screen font auto-detection** — Detects framebuffer > 1000px and switches to `Uni3-TerminusBold28x14` for readability on 1080p displays
+- **Setup resolution** — `prepare-sd.sh` sets temporary 800x600 via `cmdline.txt` `video=` parameter for consistent TUI layout
+
+### Fixed
+- **firstboot.sh 5 GHz WiFi on first boot** — On Debian trixie, `brcmfmac` ignores the kernel `cfg80211.ieee80211_regdom` parameter, blocking auto-connect on 5 GHz DFS channels (e.g., channel 100). Fix applies regulatory domain via `iw reg set` and explicitly activates WiFi via `nmcli` after 30s timeout
+- **firstboot.sh DNS readiness** — Network check now verifies DNS resolution (`getent hosts deb.debian.org`) in addition to ping; prevents `apt-get` failure when ping succeeds but DNS lags behind on first boot
+- **firstboot.sh network timeout** — Increased from 2 to 3 minutes for first-boot WiFi scenarios
+- **progress.sh line_count bug** — Fixed `grep -c || echo 0` producing `"0\n0"` which broke arithmetic in the output area padding loop
+
 ## [0.1.5] — 2026-02-17
 
 ### Changed

@@ -81,23 +81,50 @@ progress 1 "Waiting for network..." 2>/dev/null || true
 start_progress_animation 1 0 5 2>/dev/null || true
 log_progress "Waiting for network connectivity..." 2>/dev/null || true
 
+# Ensure WiFi regulatory domain is applied (brcmfmac may ignore the
+# kernel parameter on first boot, blocking 5 GHz DFS channels).
+REG_DOMAIN=$(sed -n 's/.*cfg80211.ieee80211_regdom=\([A-Z]*\).*/\1/p' /proc/cmdline)
+if [[ -n "$REG_DOMAIN" ]] && command -v iw &>/dev/null; then
+    iw reg set "$REG_DOMAIN" 2>/dev/null || true
+    log_progress "Set regulatory domain: $REG_DOMAIN" 2>/dev/null || true
+fi
+
 NETWORK_READY=false
-for i in $(seq 1 60); do
+WIFI_KICKED=false
+for i in $(seq 1 90); do
     GATEWAY=$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')
     if { [ -n "$GATEWAY" ] && ping -c1 -W2 "$GATEWAY" &>/dev/null; } || \
        ping -c1 -W2 1.1.1.1 &>/dev/null || \
        ping -c1 -W2 8.8.8.8 &>/dev/null; then
-        log_and_tty "Network ready."
-        log_progress "Network ready" 2>/dev/null || true
-        NETWORK_READY=true
-        break
+        # Ping works but DNS may lag behind — verify name resolution
+        if getent hosts deb.debian.org &>/dev/null; then
+            log_and_tty "Network ready."
+            log_progress "Network ready" 2>/dev/null || true
+            NETWORK_READY=true
+            break
+        fi
+        [ $((i % 10)) -eq 0 ] && log_progress "  DNS not ready yet ($i/90)..." 2>/dev/null || true
+    else
+        # After 30s (15 iterations × 2s) without network, try to kick WiFi (may fail to
+        # auto-connect on 5 GHz DFS channels during first boot).
+        if [[ "$WIFI_KICKED" == "false" ]] && (( i >= 15 )); then
+            if command -v nmcli &>/dev/null; then
+                WIFI_CONN=$(nmcli -t -f NAME,TYPE connection show 2>/dev/null \
+                    | awk -F: '/wifi/ {print $1; exit}')
+                if [[ -n "$WIFI_CONN" ]]; then
+                    log_progress "Activating WiFi: $WIFI_CONN" 2>/dev/null || true
+                    nmcli connection up "$WIFI_CONN" 2>/dev/null || true
+                    WIFI_KICKED=true
+                fi
+            fi
+        fi
+        [ $((i % 10)) -eq 0 ] && log_progress "  Still waiting... ($i/90)" 2>/dev/null || true
     fi
-    [ $((i % 10)) -eq 0 ] && log_progress "  Still waiting... ($i/60)" 2>/dev/null || true
     sleep 2
 done
 
 if [ "$NETWORK_READY" = false ]; then
-    log_and_tty "ERROR: Network not available after 2 minutes."
+    log_and_tty "ERROR: Network not available after 3 minutes."
     log_and_tty "Check WiFi credentials or Ethernet connection."
     exit 1
 fi
