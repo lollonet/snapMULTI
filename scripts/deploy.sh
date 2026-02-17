@@ -433,9 +433,9 @@ create_directories() {
     # and may run as different UIDs than the host user
     chown -R "$real_uid:$real_gid" "$PROJECT_ROOT/audio" "$PROJECT_ROOT/data" \
         "$PROJECT_ROOT/mpd" "$PROJECT_ROOT/mympd"
-    chmod 777 "$PROJECT_ROOT/audio"
-    chmod 666 "$PROJECT_ROOT/audio"/*_fifo 2>/dev/null || true
-    chmod 666 "$PROJECT_ROOT/audio"/shairport-metadata 2>/dev/null || true
+    chmod 750 "$PROJECT_ROOT/audio"
+    chmod 660 "$PROJECT_ROOT/audio"/*_fifo 2>/dev/null || true
+    chmod 660 "$PROJECT_ROOT/audio"/shairport-metadata 2>/dev/null || true
 
     # Ensure scripts are executable (git may not preserve permissions)
     chmod +x "$PROJECT_ROOT/scripts/"*.sh "$PROJECT_ROOT/scripts/"*.py 2>/dev/null || true
