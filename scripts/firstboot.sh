@@ -307,11 +307,38 @@ if ! command -v docker &>/dev/null; then
     log_progress "Installing docker-ce..." 2>/dev/null || true
     apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
+    # Configure Docker daemon: live-restore keeps containers running across
+    # daemon restarts/upgrades; log rotation prevents disk fill
+    mkdir -p /etc/docker
+    cat > /etc/docker/daemon.json <<'DJSON'
+{
+  "live-restore": true,
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+DJSON
+
     systemctl enable docker
     systemctl start docker
 
     FIRST_USER=$(getent passwd 1000 | cut -d: -f1 || true)
     [[ -n "$FIRST_USER" ]] && usermod -aG docker "$FIRST_USER"
+
+    # Enable cgroup memory controller for Docker resource limits on Pi
+    CMDLINE_FILE=""
+    if [[ -f /boot/firmware/cmdline.txt ]]; then
+        CMDLINE_FILE="/boot/firmware/cmdline.txt"
+    elif [[ -f /boot/cmdline.txt ]]; then
+        CMDLINE_FILE="/boot/cmdline.txt"
+    fi
+    if [[ -n "$CMDLINE_FILE" ]] && ! grep -q "cgroup_enable=memory" "$CMDLINE_FILE"; then
+        sed -i 's/$/ cgroup_enable=memory cgroup_memory=1/' "$CMDLINE_FILE"
+        log_progress "Enabled cgroup memory controller (reboot activates)" 2>/dev/null || true
+    fi
+
     log_progress "Docker installed" 2>/dev/null || true
 else
     log_progress "Docker already installed, skipping" 2>/dev/null || true

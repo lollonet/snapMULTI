@@ -399,6 +399,38 @@ install_docker() {
         info "Added $real_user to docker group (re-login to take effect)"
     fi
 
+    # Configure Docker daemon (live-restore keeps containers running across
+    # daemon restarts/upgrades; log rotation prevents disk fill)
+    if [[ ! -f /etc/docker/daemon.json ]]; then
+        info "Writing /etc/docker/daemon.json (live-restore, log rotation)..."
+        mkdir -p /etc/docker
+        cat > /etc/docker/daemon.json <<'DJSON'
+{
+  "live-restore": true,
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+DJSON
+    else
+        # Ensure live-restore is enabled in existing config
+        if ! grep -q '"live-restore"' /etc/docker/daemon.json; then
+            info "Adding live-restore to existing daemon.json..."
+            local tmp
+            tmp=$(mktemp)
+            python3 -c "
+import json, sys
+with open('/etc/docker/daemon.json') as f:
+    cfg = json.load(f)
+cfg['live-restore'] = True
+with open('$tmp', 'w') as f:
+    json.dump(cfg, f, indent=2)
+" 2>/dev/null && mv "$tmp" /etc/docker/daemon.json || rm -f "$tmp"
+        fi
+    fi
+
     # Enable and start Docker
     systemctl enable docker >/dev/null 2>&1 || true
     systemctl start docker
@@ -407,6 +439,20 @@ install_docker() {
     if ! docker info &>/dev/null; then
         error "Cannot connect to Docker daemon. Is it running?"
         exit 1
+    fi
+
+    # Enable cgroup memory controller for Docker resource limits on Pi.
+    # Without this, deploy.resources.limits.memory in docker-compose.yml is ignored.
+    local cmdline=""
+    if [[ -f /boot/firmware/cmdline.txt ]]; then
+        cmdline="/boot/firmware/cmdline.txt"
+    elif [[ -f /boot/cmdline.txt ]]; then
+        cmdline="/boot/cmdline.txt"
+    fi
+    if [[ -n "$cmdline" ]] && ! grep -q "cgroup_enable=memory" "$cmdline"; then
+        info "Enabling cgroup memory controller in $cmdline..."
+        sed -i 's/$/ cgroup_enable=memory cgroup_memory=1/' "$cmdline"
+        warn "Reboot required for memory limits to take effect"
     fi
 
     ok "Docker ready"
