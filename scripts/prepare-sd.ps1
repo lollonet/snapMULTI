@@ -49,6 +49,10 @@ function Assert-ClientSubmodule {
     # .git is a file (gitlink) in submodules, a directory in standalone clones
     $gitMarker = Join-Path $ClientDir '.git'
     if (-not (Test-Path $gitMarker)) {
+        if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+            Write-Error "Git is not installed. Please install Git for Windows: https://git-scm.com/download/win"
+            exit 1
+        }
         Write-Host 'Client submodule not initialized. Fetching...'
         & git -C $ProjectDir submodule update --init --recursive
         if ($LASTEXITCODE -ne 0) {

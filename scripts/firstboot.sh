@@ -319,6 +319,7 @@ if ! command -v docker &>/dev/null; then
     VERSION_CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
 
     # Docker doesn't support all Debian versions - fallback to bookworm
+    # (keep in sync with deploy.sh install_docker_apt)
     case "$VERSION_CODENAME" in
         bullseye|bookworm) DOCKER_CODENAME="$VERSION_CODENAME" ;;
         *) DOCKER_CODENAME="bookworm" ;;
