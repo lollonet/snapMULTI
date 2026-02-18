@@ -93,7 +93,7 @@ render_progress() {
         printf '\033[2J\033[H'
         printf '\n'
         printf '  +----------------------------------------------------------------------+\n'
-        printf '  |                     \033[1m%-38s\033[0m         |\n' "$PROGRESS_TITLE"
+        printf '  |                     \033[1m%-38.38s\033[0m         |\n' "$PROGRESS_TITLE"
         printf '  +----------------------------------------------------------------------+\n'
         printf '\n'
         printf '  \033[36mElapsed: %02d:%02d\033[0m\n\n' $((elapsed/60)) $((elapsed%60))
@@ -209,7 +209,7 @@ progress_complete() {
         printf '\033[2J\033[H'
         printf '\n'
         printf '  +----------------------------------------------------------------------+\n'
-        printf '  |                     \033[1m%-38s\033[0m         |\n' "$PROGRESS_TITLE"
+        printf '  |                     \033[1m%-38.38s\033[0m         |\n' "$PROGRESS_TITLE"
         printf '  +----------------------------------------------------------------------+\n'
         printf '\n'
         printf '  \033[36mElapsed: %02d:%02d\033[0m\n\n' $((elapsed/60)) $((elapsed%60))

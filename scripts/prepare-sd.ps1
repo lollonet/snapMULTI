@@ -20,6 +20,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Explicit UTF-8 (no BOM) for all file writes — PS 5.1 (.NET Framework)
+# defaults to UTF-16 with WriteAllText, which corrupts boot partition files.
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
 $ClientDir = Join-Path $ProjectDir 'client'
@@ -225,7 +229,7 @@ $setupVideo = 'video=HDMI-A-1:800x600@60'
 if (Test-Path $cmdline) {
     $content = [System.IO.File]::ReadAllText($cmdline).TrimEnd()
     if ($content -notmatch 'video=HDMI-A-1:') {
-        [System.IO.File]::WriteAllText($cmdline, "$content $setupVideo`n")
+        [System.IO.File]::WriteAllText($cmdline, "$content $setupVideo`n", $Utf8NoBom)
         Write-Host '  Set temporary setup resolution (800x600) in cmdline.txt'
     }
 }
@@ -248,7 +252,7 @@ if (Test-Path $firstrun) {
         } else {
             $frContent = $frContent -replace '(?m)(^exit 0)', "$insertLine`$1"
         }
-        [System.IO.File]::WriteAllText($firstrun, $frContent)
+        [System.IO.File]::WriteAllText($firstrun, $frContent, $Utf8NoBom)
         Write-Host '  firstrun.sh patched.'
     }
 } elseif (Test-Path $userData) {
@@ -263,7 +267,7 @@ if (Test-Path $firstrun) {
         } else {
             $udContent += "`n`nruncmd:`n  - [bash, /boot/firmware/snapmulti/firstboot.sh]`n"
         }
-        [System.IO.File]::WriteAllText($userData, $udContent)
+        [System.IO.File]::WriteAllText($userData, $udContent, $Utf8NoBom)
         Write-Host '  user-data patched.'
     }
 } else {

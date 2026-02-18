@@ -69,10 +69,8 @@ case "$INSTALL_TYPE" in
     client)
         STEP_NAMES=("Network connectivity" "Copy project files"
                     "Install git and dependencies" "Install Docker"
-                    "Audio HAT config" "ALSA loopback"
-                    "Boot settings" "Docker environment"
-                    "Pull images and start" "Verify and reboot")
-        STEP_WEIGHTS=(5 2 10 30 3 2 2 3 38 5)
+                    "Setup audio player" "Verify and reboot")
+        STEP_WEIGHTS=(5 2 10 30 48 5)
         PROGRESS_TITLE="snapMULTI Audio Player"
         ;;
     server)
@@ -97,10 +95,14 @@ case "$INSTALL_TYPE" in
         ;;
 esac
 
-# Source progress display
+# Source progress display (boot partition copy, or local fallback for manual testing)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "$SNAP_BOOT/common/progress.sh" ]]; then
     # shellcheck source=common/progress.sh
     source "$SNAP_BOOT/common/progress.sh"
+elif [[ -f "$SCRIPT_DIR/common/progress.sh" ]]; then
+    # shellcheck source=common/progress.sh
+    source "$SCRIPT_DIR/common/progress.sh"
 fi
 
 # Cleanup on failure
@@ -121,9 +123,6 @@ log_and_tty "========================================="
 log_and_tty "snapMULTI Auto-Install ($INSTALL_TYPE)"
 log_and_tty "========================================="
 
-# Initialize progress display
-progress_init 2>/dev/null || true
-
 # ── Headless detection (for client modes) ─────────────────────────
 has_display() {
     [[ -c /dev/fb0 ]] || return 1
@@ -133,6 +132,9 @@ has_display() {
     # fb0 exists but no HDMI status files — assume connected (Pi may lack status file)
     return 0
 }
+
+# Initialize progress display
+progress_init 2>/dev/null || true
 
 # ── Step counter (tracks current step across install phases) ──────
 CURRENT_STEP=0
@@ -416,24 +418,28 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
 
     cd "$CLIENT_DIR"
     if [[ -n "$CONFIG_FILE" ]]; then
-        bash scripts/setup.sh --auto "$CONFIG_FILE" >> "$LOG" 2>&1
+        if ! bash scripts/setup.sh --auto "$CONFIG_FILE" >> "$LOG" 2>&1; then
+            log_and_tty "ERROR: client setup.sh failed."
+            exit 1
+        fi
     else
-        bash scripts/setup.sh --auto >> "$LOG" 2>&1
+        if ! bash scripts/setup.sh --auto >> "$LOG" 2>&1; then
+            log_and_tty "ERROR: client setup.sh failed."
+            exit 1
+        fi
     fi
     log_progress "Client setup complete" 2>/dev/null || true
 
-    if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
-        next_step "Verifying client..."
-        log_progress "Checking client containers..." 2>/dev/null || true
+    next_step "Verifying client..."
+    log_progress "Checking client containers..." 2>/dev/null || true
 
-        # Brief wait for containers
-        sleep 5
-        CLIENT_CONTAINERS=$(docker ps --format '{{.Names}}' | grep -c "snapclient" || true)
-        if [[ "$CLIENT_CONTAINERS" -ge 1 ]]; then
-            log_progress "Client container running" 2>/dev/null || true
-        else
-            log_and_tty "WARNING: snapclient container not running."
-        fi
+    # Brief wait for containers
+    sleep 5
+    CLIENT_CONTAINERS=$(docker ps --format '{{.Names}}' | grep -c "snapclient" || true)
+    if [[ "$CLIENT_CONTAINERS" -ge 1 ]]; then
+        log_progress "Client container running" 2>/dev/null || true
+    else
+        log_and_tty "WARNING: snapclient container not running."
     fi
 fi
 
