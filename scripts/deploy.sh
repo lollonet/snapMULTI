@@ -379,7 +379,7 @@ install_docker() {
     else
         info "Installing Docker via official APT repository..."
         # shellcheck source=common/install-docker.sh
-        source "$(dirname "$0")/common/install-docker.sh"
+        source "$SCRIPT_DIR/common/install-docker.sh"
         install_docker_apt
         ok "Docker installed: $(docker --version)"
     fi
@@ -420,12 +420,12 @@ DJSON
             info "Adding live-restore to existing daemon.json..."
             local tmp
             tmp=$(mktemp)
-            python3 -c "
-import json, sys
+            TMPFILE="$tmp" python3 -c "
+import json, os
 with open('/etc/docker/daemon.json') as f:
     cfg = json.load(f)
 cfg['live-restore'] = True
-with open('$tmp', 'w') as f:
+with open(os.environ['TMPFILE'], 'w') as f:
     json.dump(cfg, f, indent=2)
 " 2>/dev/null && mv "$tmp" /etc/docker/daemon.json || rm -f "$tmp"
         fi

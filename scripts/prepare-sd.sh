@@ -239,13 +239,17 @@ elif [[ -f "$USERDATA" ]]; then
         echo "user-data already patched, skipping."
     else
         echo "Patching user-data to run installer on first boot ..."
+        # Convert "bash /path/to/firstboot.sh" to YAML list "[bash, /path/to/firstboot.sh]"
+        HOOK_PATH="${HOOK#bash }"
+        RUNCMD_ENTRY="  - [bash, $HOOK_PATH]"
         if grep -q '^runcmd:' "$USERDATA"; then
             # Append to existing runcmd section
-            sed -i.bak '/^runcmd:/a\  - [bash, /boot/firmware/snapmulti/firstboot.sh]' "$USERDATA"
+            sed -i.bak "/^runcmd:/a\\
+$RUNCMD_ENTRY" "$USERDATA"
             rm -f "${USERDATA}.bak"
         else
             # Add runcmd section
-            printf '\nruncmd:\n  - [bash, /boot/firmware/snapmulti/firstboot.sh]\n' >> "$USERDATA"
+            printf '\nruncmd:\n%s\n' "$RUNCMD_ENTRY" >> "$USERDATA"
         fi
         echo "  user-data patched."
     fi

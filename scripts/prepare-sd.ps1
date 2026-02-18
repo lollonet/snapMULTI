@@ -275,10 +275,13 @@ if (Test-Path $firstrun) {
         Write-Host 'user-data already patched, skipping.'
     } else {
         Write-Host 'Patching user-data to run installer on first boot ...'
+        # Derive runcmd YAML entry from $hook ("bash /path" -> "[bash, /path]")
+        $hookPath = $hook -replace '^bash ', ''
+        $runcmdEntry = "  - [bash, $hookPath]"
         if ($udContent -match '(?m)^runcmd:') {
-            $udContent = $udContent -replace '(?m)(^runcmd:)', "`$1`n  - [bash, /boot/firmware/snapmulti/firstboot.sh]"
+            $udContent = $udContent -replace '(?m)(^runcmd:)', "`$1`n$runcmdEntry"
         } else {
-            $udContent += "`n`nruncmd:`n  - [bash, /boot/firmware/snapmulti/firstboot.sh]`n"
+            $udContent += "`n`nruncmd:`n$runcmdEntry`n"
         }
         [System.IO.File]::WriteAllText($userData, $udContent, $Utf8NoBom)
         Write-Host '  user-data patched.'

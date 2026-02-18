@@ -314,7 +314,11 @@ start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(
 if ! command -v docker &>/dev/null; then
     log_progress "Setting up Docker repository..." 2>/dev/null || true
     # shellcheck source=common/install-docker.sh
-    source "$(dirname "$0")/common/install-docker.sh"
+    if [[ -f "$SNAP_BOOT/common/install-docker.sh" ]]; then
+        source "$SNAP_BOOT/common/install-docker.sh"
+    else
+        source "$SCRIPT_DIR/common/install-docker.sh"
+    fi
     log_progress "Installing docker-ce..." 2>/dev/null || true
     install_docker_apt
 
