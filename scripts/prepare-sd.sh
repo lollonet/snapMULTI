@@ -141,21 +141,22 @@ get_nfs_config() {
     echo ""
     echo "  NFS Server Configuration"
     echo "  Example: nas.local:/volume1/music"
-    echo ""
-    read -rp "  Server hostname or IP: " raw_server
-    read -rp "  Export path (e.g. /volume1/music): " raw_export
 
-    NFS_SERVER=$(sanitize_nfs_server "$raw_server")
-    NFS_EXPORT=$(sanitize_nfs_export "$raw_export")
+    while true; do
+        echo ""
+        read -rp "  Server hostname or IP: " raw_server
+        NFS_SERVER=$(sanitize_hostname "$raw_server")
+        if [[ -n "$NFS_SERVER" ]]; then break; fi
+        echo "  Invalid hostname. Use only letters, numbers, dots, hyphens."
+    done
 
-    if [[ -z "$NFS_SERVER" ]]; then
-        echo "  ERROR: Invalid server hostname."
-        exit 1
-    fi
-    if [[ -z "$NFS_EXPORT" ]]; then
-        echo "  ERROR: Invalid export path (must start with /)."
-        exit 1
-    fi
+    while true; do
+        read -rp "  Export path (e.g. /volume1/music): " raw_export
+        NFS_EXPORT=$(sanitize_nfs_export "$raw_export")
+        if [[ -n "$NFS_EXPORT" ]]; then break; fi
+        echo "  Invalid path. Must start with / (e.g. /volume1/music)."
+    done
+
     echo ""
     echo "  Will mount: $NFS_SERVER:$NFS_EXPORT"
 }
@@ -165,21 +166,21 @@ get_smb_config() {
     echo ""
     echo "  SMB/CIFS Configuration"
     printf '  Example: \\\\mypc\\Music  or  mynas/Music\n'
-    echo ""
-    read -rp "  Server hostname or IP: " raw_server
-    read -rp "  Share name (e.g. Music): " raw_share
 
-    SMB_SERVER=$(sanitize_nfs_server "$raw_server")
-    SMB_SHARE=$(sanitize_smb_share "$raw_share")
+    while true; do
+        echo ""
+        read -rp "  Server hostname or IP: " raw_server
+        SMB_SERVER=$(sanitize_hostname "$raw_server")
+        if [[ -n "$SMB_SERVER" ]]; then break; fi
+        echo "  Invalid hostname. Use only letters, numbers, dots, hyphens."
+    done
 
-    if [[ -z "$SMB_SERVER" ]]; then
-        echo "  ERROR: Invalid server hostname."
-        exit 1
-    fi
-    if [[ -z "$SMB_SHARE" ]]; then
-        echo "  ERROR: Invalid share name."
-        exit 1
-    fi
+    while true; do
+        read -rp "  Share name (e.g. Music): " raw_share
+        SMB_SHARE=$(sanitize_smb_share "$raw_share")
+        if [[ -n "$SMB_SHARE" ]]; then break; fi
+        echo "  Invalid share name. Use only letters, numbers, dots, underscores, hyphens."
+    done
 
     echo ""
     read -rp "  Username (leave empty for guest): " SMB_USER

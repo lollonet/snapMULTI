@@ -15,10 +15,16 @@ sanitize_airplay_name() {
     sanitize_device_name "$1"
 }
 
-# Sanitize NFS server hostname/IP: alphanumeric, dots, hyphens only
-# Usage: sanitize_nfs_server "nas.local"
-sanitize_nfs_server() {
+# Sanitize hostname/IP: alphanumeric, dots, hyphens only
+# Used for NFS servers, SMB servers, and any network hostname
+# Usage: sanitize_hostname "nas.local"
+sanitize_hostname() {
     printf '%s' "$1" | tr -cd 'A-Za-z0-9.-'
+}
+
+# Alias for backward compatibility
+sanitize_nfs_server() {
+    sanitize_hostname "$1"
 }
 
 # Sanitize NFS export path: alphanumeric, forward slash, dots, underscores, hyphens

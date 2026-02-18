@@ -69,8 +69,8 @@ if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     NFS_EXPORT=$(grep -m1 '^NFS_EXPORT=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
     SMB_SERVER=$(grep -m1 '^SMB_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
     SMB_SHARE=$(grep -m1 '^SMB_SHARE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
-    SMB_USER=$(grep -m1 '^SMB_USER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
-    SMB_PASS=$(grep -m1 '^SMB_PASS=' "$SNAP_BOOT/install.conf" | cut -d= -f2)
+    SMB_USER=$(grep -m1 '^SMB_USER=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '[:space:]')
+    SMB_PASS=$(grep -m1 '^SMB_PASS=' "$SNAP_BOOT/install.conf" | cut -d= -f2-)
 fi
 
 # Set install directories
@@ -443,6 +443,12 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
 
     # Set up music source before deploy.sh (mounts NFS/SMB, exports MUSIC_PATH)
     setup_music_source
+
+    # Scrub credentials from boot partition (FAT32 has no file permissions)
+    if [[ -f "$SNAP_BOOT/install.conf" ]]; then
+        sed -i 's/^SMB_PASS=.*/SMB_PASS=/' "$SNAP_BOOT/install.conf" 2>/dev/null || true
+        sed -i 's/^SMB_USER=.*/SMB_USER=/' "$SNAP_BOOT/install.conf" 2>/dev/null || true
+    fi
 
     if [[ ! -d "$SERVER_DIR" ]]; then
         log_and_tty "ERROR: Server directory missing: $SERVER_DIR"

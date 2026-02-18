@@ -71,6 +71,8 @@ When you choose Music Server or Server+Player, the installer asks where your mus
 | **Network share** | NAS or another computer | Enter your NFS or SMB server address during setup |
 | **Set up later** | Not sure yet | Configure manually after install (see [USAGE.md](docs/USAGE.md)) |
 
+> **Note**: For network shares with credentials, the password is temporarily stored on the SD card's boot partition during setup. It is automatically removed after the Pi completes its first boot. Keep the SD card secure until then.
+
 ---
 
 ### Advanced: Any Linux Server

@@ -168,15 +168,21 @@ function Get-NfsConfig {
     Write-Host ''
     Write-Host '  NFS Server Configuration'
     Write-Host '  Example: nas.local:/volume1/music'
-    Write-Host ''
-    $rawServer = Read-Host '  Server hostname or IP'
-    $rawExport = Read-Host '  Export path (e.g. /volume1/music)'
 
-    $server = Sanitize-Hostname $rawServer
-    $export = Sanitize-NfsExport $rawExport
+    $server = ''
+    while (-not $server) {
+        Write-Host ''
+        $rawServer = Read-Host '  Server hostname or IP'
+        $server = Sanitize-Hostname $rawServer
+        if (-not $server) { Write-Host '  Invalid hostname. Use only letters, numbers, dots, hyphens.' }
+    }
 
-    if (-not $server) { throw 'Invalid server hostname.' }
-    if (-not $export) { throw 'Invalid export path (must start with /).' }
+    $export = ''
+    while (-not $export) {
+        $rawExport = Read-Host '  Export path (e.g. /volume1/music)'
+        $export = Sanitize-NfsExport $rawExport
+        if (-not $export) { Write-Host '  Invalid path. Must start with / (e.g. /volume1/music).' }
+    }
 
     Write-Host ''
     Write-Host "  Will mount: ${server}:${export}"
@@ -187,15 +193,21 @@ function Get-SmbConfig {
     Write-Host ''
     Write-Host '  SMB/CIFS Configuration'
     Write-Host '  Example: \\mypc\Music  or  mynas/Music'
-    Write-Host ''
-    $rawServer = Read-Host '  Server hostname or IP'
-    $rawShare = Read-Host '  Share name (e.g. Music)'
 
-    $server = Sanitize-Hostname $rawServer
-    $share = Sanitize-ShareName $rawShare
+    $server = ''
+    while (-not $server) {
+        Write-Host ''
+        $rawServer = Read-Host '  Server hostname or IP'
+        $server = Sanitize-Hostname $rawServer
+        if (-not $server) { Write-Host '  Invalid hostname. Use only letters, numbers, dots, hyphens.' }
+    }
 
-    if (-not $server) { throw 'Invalid server hostname.' }
-    if (-not $share) { throw 'Invalid share name.' }
+    $share = ''
+    while (-not $share) {
+        $rawShare = Read-Host '  Share name (e.g. Music)'
+        $share = Sanitize-ShareName $rawShare
+        if (-not $share) { Write-Host '  Invalid share name. Use only letters, numbers, dots, underscores, hyphens.' }
+    }
 
     Write-Host ''
     $user = Read-Host '  Username (leave empty for guest)'
