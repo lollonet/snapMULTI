@@ -207,10 +207,13 @@ fi
 # ── Patch boot scripts ────────────────────────────────────────────
 FIRSTRUN="$BOOT/firstrun.sh"
 USERDATA="$BOOT/user-data"
-HOOK='bash /boot/firmware/snapmulti/firstboot.sh'
+# Bullseye mounts boot at /boot, Bookworm+ at /boot/firmware
+HOOK_BOOKWORM='bash /boot/firmware/snapmulti/firstboot.sh'
+HOOK_BULLSEYE='bash /boot/snapmulti/firstboot.sh'
 
 if [[ -f "$FIRSTRUN" ]]; then
-    # Legacy Pi Imager (Bullseye): patch firstrun.sh
+    # Legacy Pi Imager (Bullseye): boot partition is /boot
+    HOOK="$HOOK_BULLSEYE"
     if grep -qF "snapmulti/firstboot.sh" "$FIRSTRUN"; then
         echo "firstrun.sh already patched, skipping."
     else
@@ -231,7 +234,8 @@ if [[ -f "$FIRSTRUN" ]]; then
         echo "  firstrun.sh patched."
     fi
 elif [[ -f "$USERDATA" ]]; then
-    # Modern Pi Imager (Bookworm+): patch cloud-init user-data
+    # Modern Pi Imager (Bookworm+): boot partition is /boot/firmware
+    HOOK="$HOOK_BOOKWORM"
     if grep -qF "snapmulti/firstboot.sh" "$USERDATA"; then
         echo "user-data already patched, skipping."
     else

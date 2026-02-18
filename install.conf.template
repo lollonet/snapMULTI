@@ -2,7 +2,7 @@
 # Written by prepare-sd.sh on first use.
 #
 # INSTALL_TYPE controls what gets installed on first boot:
-#   client  — Audio Player (snapclient, optional display)
-#   server  — Music Server (Spotify, AirPlay, MPD, etc.)
-#   both    — Server + Player on the same Pi
+#   client  -- Audio Player (snapclient, optional display)
+#   server  -- Music Server (Spotify, AirPlay, MPD, etc.)
+#   both    -- Server + Player on the same Pi
 INSTALL_TYPE=

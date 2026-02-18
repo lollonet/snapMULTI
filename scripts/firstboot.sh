@@ -84,9 +84,8 @@ case "$INSTALL_TYPE" in
         STEP_NAMES=("Network connectivity" "Copy project files"
                     "Install git and dependencies" "Install Docker"
                     "Deploy server" "Verify server"
-                    "Setup audio player" "Pull client images"
-                    "Verify and reboot")
-        STEP_WEIGHTS=(4 2 7 25 35 4 10 10 3)
+                    "Setup audio player" "Verify and reboot")
+        STEP_WEIGHTS=(4 2 7 25 35 4 18 5)
         PROGRESS_TITLE="snapMULTI Server + Player"
         ;;
     *)
@@ -350,7 +349,8 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     for attempt in $(seq 1 12); do
         TOTAL=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps -q 2>/dev/null | wc -l)
         HEALTHY_COUNT=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps 2>/dev/null | grep -c "(healthy)" || true)
-        if [[ "$TOTAL" -ge 5 ]] && [[ "$HEALTHY_COUNT" -eq "$TOTAL" ]]; then
+        RUNNING_COUNT=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps --format '{{.Status}}' 2>/dev/null | grep -cE "(healthy)|^running" || true)
+        if [[ "$TOTAL" -ge 5 ]] && [[ "$RUNNING_COUNT" -eq "$TOTAL" ]]; then
             log_and_tty "All $TOTAL server containers healthy."
             log_progress "All $TOTAL server containers healthy" 2>/dev/null || true
             HEALTHY=true
