@@ -147,6 +147,9 @@ services:
         NAME=$$(printf '%s' "$$NAME" | tr -cd 'A-Za-z0-9 ._-')
         [ -z "$$NAME" ] && NAME="snapMULTI Spotify"
         sed "s/^device_name:.*/device_name: \"$$NAME\"/" /config/config.yml > /tmp/config.yml
+        # Hold FIFO open (read-write) so snapserver keeps its reader active;
+        # without this, go-librespot's O_NONBLOCK write open gets ENXIO
+        exec 3<>/audio/spotify_fifo
         exec go-librespot --config_dir /tmp
     depends_on:
       snapserver:
