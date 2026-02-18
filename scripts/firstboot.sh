@@ -159,6 +159,7 @@ cumulative_pct() {
     for w in "${STEP_WEIGHTS[@]}"; do
         total_weight=$(( total_weight + w ))
     done
+    if (( total_weight == 0 )); then echo 0; return; fi
     for ((i=0; i < step - 1; i++)); do
         weight_sum=$(( weight_sum + STEP_WEIGHTS[i] ))
     done

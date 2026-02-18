@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Configurable progress display** — `progress.sh` now accepts `STEP_NAMES`, `STEP_WEIGHTS`, and `PROGRESS_TITLE` from caller instead of hardcoded values
 
 ### Changed
+- **Docker daemon config ownership** — `deploy.sh` now exclusively owns `/etc/docker/daemon.json` (live-restore, log rotation) with python3 merge logic for existing configs; `firstboot.sh` no longer writes it to avoid conflicts
+- **firstboot.sh Docker install** — Uses official APT repository instead of `get.docker.com` convenience script for reproducible, auditable installs
 - **Spotify Connect: switch to go-librespot** ([#59](https://github.com/lollonet/snapMULTI/pull/59)) — Replaced Rust librespot v0.8.0 with go-librespot for Spotify Connect
   - Full metadata support: track name, artist, album, cover art forwarded to Snapcast clients
   - Bidirectional playback control: play/pause/next/previous/seek from any Snapcast client

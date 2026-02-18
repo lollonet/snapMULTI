@@ -334,7 +334,7 @@ tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :ver
 
 Prepare an SD card that automatically installs snapMULTI on first boot. No SSH required.
 
-**On your computer:**
+**On your computer (macOS/Linux):**
 
 1. Flash SD card with **Raspberry Pi Imager**:
    - Choose: Raspberry Pi OS Lite (64-bit)
@@ -342,23 +342,36 @@ Prepare an SD card that automatically installs snapMULTI on first boot. No SSH r
 
 2. Keep SD card mounted and run:
    ```bash
-   git clone https://github.com/lollonet/snapMULTI.git
+   git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
    ./snapMULTI/scripts/prepare-sd.sh
    ```
 
-3. Eject SD card, insert into Pi, power on
+3. Choose what to install:
+   - **1) Audio Player** — snapclient + optional HDMI display (cover art, visualizer)
+   - **2) Music Server** — Spotify, AirPlay, MPD, Tidal Connect
+   - **3) Server + Player** — both on the same Pi
+
+4. Eject SD card, insert into Pi, power on
+
+**On Windows (PowerShell):**
+```powershell
+git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
+.\snapMULTI\scripts\prepare-sd.ps1
+```
 
 **What happens on first boot:**
-- Waits for network connectivity
-- Installs Docker via official convenience script
-- Clones snapMULTI to `/opt/snapmulti`
-- Auto-detects music library and timezone
-- Starts all services
-- Shows progress on HDMI output
+- Reads `install.conf` to determine install type (client/server/both)
+- Waits for network (with WiFi regulatory domain fix for 5 GHz DFS channels)
+- Copies project files from boot partition to `/opt/snapmulti` and/or `/opt/snapclient`
+- Installs git, Docker, and system dependencies via APT
+- Server: runs `deploy.sh` (hardware detection, music library scan, container deploy)
+- Client: runs `setup.sh --auto` (audio HAT config, headless detection, container deploy)
+- Shows full-screen progress TUI on HDMI (step checklist, progress bar, log output)
+- Verifies containers healthy, then reboots
 
 Installation log saved to `/var/log/snapmulti-install.log`.
 
-**Supported OS versions:** Raspberry Pi OS Bookworm (recommended) and Bullseye. The script auto-detects the version and uses the correct boot paths.
+**Supported OS versions:** Raspberry Pi OS Bookworm (recommended) and Bullseye. The script auto-detects the version and uses the correct boot paths (`/boot/firmware` vs `/boot`).
 
 ### Automated Deployment (SSH)
 
@@ -580,10 +593,10 @@ For SD card installations, check:
 cat /var/log/snapmulti-install.log
 ```
 
-Failed installations create a marker at `/opt/snapmulti/.install-failed`. Remove it to retry:
+Failed installations create a marker at `/var/lib/snapmulti-installer/.install-failed`. Remove it to retry:
 ```bash
-rm /opt/snapmulti/.install-failed
-sudo /opt/snapmulti/scripts/firstboot.sh
+sudo rm /var/lib/snapmulti-installer/.install-failed
+sudo bash /boot/firmware/snapmulti/firstboot.sh
 ```
 
 ## Updating
