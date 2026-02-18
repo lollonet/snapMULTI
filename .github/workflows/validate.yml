@@ -9,7 +9,7 @@ jobs:
   validate:
     runs-on: snapcast-runner
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Create dummy .env for validation
         run: |
