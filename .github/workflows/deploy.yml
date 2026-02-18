@@ -2,6 +2,9 @@ name: Deploy to Home Server
 
 on:
   workflow_dispatch:
+    # Manual dispatch uses repository secrets directly (no inputs needed).
+    # Requires DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, HOST, USER, SSH_KEY
+    # to be configured as repository secrets.
   workflow_call:
     secrets:
       HOST:

@@ -144,10 +144,10 @@ jobs:
       - name: Create versioned tag for snapserver
         if: steps.version.outputs.tag != ''
         run: |
-          VERSION=${{ steps.version.outputs.tag }}
-          docker buildx imagetools create -t lollonet/snapmulti-server:$VERSION \
-            lollonet/snapmulti-server:$VERSION-amd64 \
-            lollonet/snapmulti-server:$VERSION-arm64
+          VERSION="${{ steps.version.outputs.tag }}"
+          docker buildx imagetools create -t "lollonet/snapmulti-server:$VERSION" \
+            "lollonet/snapmulti-server:$VERSION-amd64" \
+            "lollonet/snapmulti-server:$VERSION-arm64"
 
       - name: Create multi-arch manifest for airplay
         run: |
@@ -158,10 +158,10 @@ jobs:
       - name: Create versioned tag for airplay
         if: steps.version.outputs.tag != ''
         run: |
-          VERSION=${{ steps.version.outputs.tag }}
-          docker buildx imagetools create -t lollonet/snapmulti-airplay:$VERSION \
-            lollonet/snapmulti-airplay:$VERSION-amd64 \
-            lollonet/snapmulti-airplay:$VERSION-arm64
+          VERSION="${{ steps.version.outputs.tag }}"
+          docker buildx imagetools create -t "lollonet/snapmulti-airplay:$VERSION" \
+            "lollonet/snapmulti-airplay:$VERSION-amd64" \
+            "lollonet/snapmulti-airplay:$VERSION-arm64"
 
       # Spotify Connect: uses official ghcr.io/devgianlu/go-librespot image (no manifest needed)
 
@@ -174,10 +174,10 @@ jobs:
       - name: Create versioned tag for mpd
         if: steps.version.outputs.tag != ''
         run: |
-          VERSION=${{ steps.version.outputs.tag }}
-          docker buildx imagetools create -t lollonet/snapmulti-mpd:$VERSION \
-            lollonet/snapmulti-mpd:$VERSION-amd64 \
-            lollonet/snapmulti-mpd:$VERSION-arm64
+          VERSION="${{ steps.version.outputs.tag }}"
+          docker buildx imagetools create -t "lollonet/snapmulti-mpd:$VERSION" \
+            "lollonet/snapmulti-mpd:$VERSION-amd64" \
+            "lollonet/snapmulti-mpd:$VERSION-arm64"
 
   deploy:
     needs: manifest
