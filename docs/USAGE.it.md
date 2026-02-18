@@ -287,16 +287,16 @@ docker compose up -d
 
 ### Container Registry
 
-Le immagini Docker sono ospitate su GitHub Container Registry:
+Le immagini Docker sono ospitate su Docker Hub:
 
 | Immagine | Descrizione |
 |----------|-------------|
-| `ghcr.io/lollonet/snapmulti-server:latest` | Snapcast server (compilato da [santcasp](https://github.com/lollonet/santcasp)) |
-| `ghcr.io/lollonet/snapmulti-airplay:latest` | Ricevitore AirPlay (shairport-sync) |
+| `lollonet/snapmulti-server:latest` | Snapcast server (compilato da [santcasp](https://github.com/lollonet/santcasp)) |
+| `lollonet/snapmulti-airplay:latest` | Ricevitore AirPlay (shairport-sync) |
 | `ghcr.io/devgianlu/go-librespot:v0.7.0` | Spotify Connect (upstream, nessuna build personalizzata) |
-| `ghcr.io/lollonet/snapmulti-mpd:latest` | Music Player Daemon |
+| `lollonet/snapmulti-mpd:latest` | Music Player Daemon |
 | `ghcr.io/jcorporation/mympd/mympd:latest` | Interfaccia Web (immagine di terze parti) |
-| `ghcr.io/lollonet/snapmulti-tidal:latest` | Tidal Connect (solo ARM) |
+| `lollonet/snapmulti-tidal:latest` | Tidal Connect (solo ARM) |
 
 Le immagini supportano `linux/amd64` e `linux/arm64` tranne Tidal Connect (solo ARM).
 
@@ -311,7 +311,7 @@ Definisce tutti i servizi con immagini pre-compilate e rete host per mDNS. Ogni 
 ```yaml
 services:
   snapserver:
-    image: ghcr.io/lollonet/snapmulti-server:latest
+    image: lollonet/snapmulti-server:latest
     container_name: snapserver
     hostname: snapmulti
     restart: unless-stopped
@@ -330,7 +330,7 @@ services:
     command: ["snapserver", "-c", "/etc/snapserver.conf"]
 
   shairport-sync:
-    image: ghcr.io/lollonet/snapmulti-airplay:latest
+    image: lollonet/snapmulti-airplay:latest
     container_name: shairport-sync
     restart: unless-stopped
     network_mode: host
@@ -379,7 +379,7 @@ services:
       - MYMPD_SSL=false
 
   mpd:
-    image: ghcr.io/lollonet/snapmulti-mpd:latest
+    image: lollonet/snapmulti-mpd:latest
     container_name: mpd
     restart: unless-stopped
     network_mode: host

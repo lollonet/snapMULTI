@@ -391,16 +391,16 @@ docker compose up -d
 
 ### Container Registry
 
-Docker images are hosted on GitHub Container Registry:
+Docker images are hosted on Docker Hub:
 
 | Image | Description |
 |-------|-------------|
-| `ghcr.io/lollonet/snapmulti-server:latest` | Snapcast server (built from [santcasp](https://github.com/lollonet/santcasp)) |
-| `ghcr.io/lollonet/snapmulti-airplay:latest` | AirPlay receiver (shairport-sync) |
+| `lollonet/snapmulti-server:latest` | Snapcast server (built from [santcasp](https://github.com/lollonet/santcasp)) |
+| `lollonet/snapmulti-airplay:latest` | AirPlay receiver (shairport-sync) |
 | `ghcr.io/devgianlu/go-librespot:v0.7.0` | Spotify Connect (upstream, no custom build) |
-| `ghcr.io/lollonet/snapmulti-mpd:latest` | Music Player Daemon |
+| `lollonet/snapmulti-mpd:latest` | Music Player Daemon |
 | `ghcr.io/jcorporation/mympd/mympd:latest` | Web UI (third-party image) |
-| `ghcr.io/lollonet/snapmulti-tidal:latest` | Tidal Connect (ARM only) |
+| `lollonet/snapmulti-tidal:latest` | Tidal Connect (ARM only) |
 
 Images support `linux/amd64` and `linux/arm64` except Tidal Connect (ARM only).
 
@@ -415,7 +415,7 @@ Defines all services with pre-built images and host networking for mDNS. Each au
 ```yaml
 services:
   snapserver:
-    image: ghcr.io/lollonet/snapmulti-server:latest
+    image: lollonet/snapmulti-server:latest
     container_name: snapserver
     hostname: snapmulti
     restart: unless-stopped
@@ -434,7 +434,7 @@ services:
     command: ["snapserver", "-c", "/etc/snapserver.conf"]
 
   shairport-sync:
-    image: ghcr.io/lollonet/snapmulti-airplay:latest
+    image: lollonet/snapmulti-airplay:latest
     container_name: shairport-sync
     restart: unless-stopped
     network_mode: host
@@ -483,7 +483,7 @@ services:
       - MYMPD_SSL=false
 
   mpd:
-    image: ghcr.io/lollonet/snapmulti-mpd:latest
+    image: lollonet/snapmulti-mpd:latest
     container_name: mpd
     restart: unless-stopped
     network_mode: host
@@ -615,6 +615,6 @@ If an update breaks things:
 cp -r config.backup/* config/
 
 # Or use a specific image version
-docker compose pull ghcr.io/lollonet/snapmulti-server:v1.0.0
+docker compose pull lollonet/snapmulti-server:v1.0.0
 docker compose up -d
 ```
