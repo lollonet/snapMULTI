@@ -12,8 +12,11 @@ set -euo pipefail
 # Secure PATH - prevent PATH hijacking attacks
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-MARKER="/opt/snapmulti/.auto-installed"
-FAILED_MARKER="/opt/snapmulti/.install-failed"
+# Mode-neutral marker directory (works for client, server, or both)
+INSTALLER_STATE="/var/lib/snapmulti-installer"
+MARKER="$INSTALLER_STATE/.auto-installed"
+FAILED_MARKER="$INSTALLER_STATE/.install-failed"
+mkdir -p "$INSTALLER_STATE"
 
 # Skip if already installed
 if [[ -f "$MARKER" ]]; then
@@ -45,12 +48,12 @@ if [[ ! -d "$SNAP_BOOT" ]]; then
     exit 1
 fi
 
-# Read install type
+# Read install type (targeted parse — do not source FAT32 files as root)
+INSTALL_TYPE="server"
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
-    # shellcheck source=/dev/null
-    source "$SNAP_BOOT/install.conf"
+    INSTALL_TYPE=$(grep -m1 '^INSTALL_TYPE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
+    INSTALL_TYPE="${INSTALL_TYPE:-server}"
 fi
-INSTALL_TYPE="${INSTALL_TYPE:-server}"
 
 # Set install directories
 SERVER_DIR="/opt/snapmulti"
@@ -109,7 +112,6 @@ cleanup_on_failure() {
         log_and_tty "  --- Installation FAILED (exit code: $exit_code) ---"
         log_and_tty "  Check log: $LOG"
         log_and_tty ""
-        mkdir -p "$SERVER_DIR"
         touch "$FAILED_MARKER"
     fi
 }
@@ -139,11 +141,24 @@ next_step() {
     progress "$CURRENT_STEP" "$1" 2>/dev/null || true
 }
 
+# Compute cumulative base percentage for completed steps
+cumulative_pct() {
+    local step=$1
+    local total_weight=0 weight_sum=0
+    for w in "${STEP_WEIGHTS[@]}"; do
+        total_weight=$(( total_weight + w ))
+    done
+    for ((i=0; i < step - 1; i++)); do
+        weight_sum=$(( weight_sum + STEP_WEIGHTS[i] ))
+    done
+    echo $(( weight_sum * 100 / total_weight ))
+}
+
 # ══════════════════════════════════════════════════════════════════
 # STEP 1: Network
 # ══════════════════════════════════════════════════════════════════
 next_step "Waiting for network..."
-start_progress_animation "$CURRENT_STEP" 0 "${STEP_WEIGHTS[0]}" 2>/dev/null || true
+start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "${STEP_WEIGHTS[0]}" 2>/dev/null || true
 log_progress "Waiting for network connectivity..." 2>/dev/null || true
 
 # Ensure WiFi regulatory domain is applied (brcmfmac may ignore the
@@ -235,7 +250,7 @@ log_progress "Files copied" 2>/dev/null || true
 # STEP 3: Install git + system dependencies
 # ══════════════════════════════════════════════════════════════════
 next_step "Installing git and dependencies..."
-start_progress_animation "$CURRENT_STEP" 7 "${STEP_WEIGHTS[2]}" 2>/dev/null || true
+start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "${STEP_WEIGHTS[2]}" 2>/dev/null || true
 
 log_progress "apt-get update" 2>/dev/null || true
 apt-get update -qq
@@ -267,7 +282,7 @@ log_progress "System dependencies installed" 2>/dev/null || true
 # STEP 4: Docker
 # ══════════════════════════════════════════════════════════════════
 next_step "Installing Docker..."
-start_progress_animation "$CURRENT_STEP" "$((7 + STEP_WEIGHTS[2]))" "${STEP_WEIGHTS[3]}" 2>/dev/null || true
+start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "${STEP_WEIGHTS[3]}" 2>/dev/null || true
 
 if ! command -v docker &>/dev/null; then
     log_progress "Setting up Docker repository..." 2>/dev/null || true
@@ -315,7 +330,7 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
 
     # ── Deploy server ─────────────────────────────────────────────
     next_step "Deploy server..."
-    start_progress_animation "$CURRENT_STEP" 42 "${STEP_WEIGHTS[$((CURRENT_STEP-1))]}" 2>/dev/null || true
+    start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "${STEP_WEIGHTS[$((CURRENT_STEP-1))]}" 2>/dev/null || true
     log_progress "Running deploy.sh ..." 2>/dev/null || true
 
     cd "$SERVER_DIR"
@@ -327,7 +342,7 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
 
     # ── Verify server containers ──────────────────────────────────
     next_step "Verifying server containers..."
-    start_progress_animation "$CURRENT_STEP" 87 "${STEP_WEIGHTS[$((CURRENT_STEP-1))]}" 2>/dev/null || true
+    start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "${STEP_WEIGHTS[$((CURRENT_STEP-1))]}" 2>/dev/null || true
     log_progress "Waiting for containers to become healthy..." 2>/dev/null || true
 
     HEALTHY=false
@@ -395,15 +410,8 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
         fi
     fi
 
-    if [[ "$INSTALL_TYPE" == "client" ]]; then
-        # Client-only: steps 5-10 are audio HAT, ALSA, boot, env, pull, verify
-        next_step "Setting up audio player..."
-    else
-        # Both mode: combined step
-        next_step "Setting up audio player..."
-    fi
-
-    start_progress_animation "$CURRENT_STEP" 70 "${STEP_WEIGHTS[$((CURRENT_STEP-1))]}" 2>/dev/null || true
+    next_step "Setting up audio player..."
+    start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "${STEP_WEIGHTS[$((CURRENT_STEP-1))]}" 2>/dev/null || true
     log_progress "Running client setup.sh --auto ..." 2>/dev/null || true
 
     cd "$CLIENT_DIR"
@@ -432,14 +440,7 @@ fi
 # ══════════════════════════════════════════════════════════════════
 # COMPLETE
 # ══════════════════════════════════════════════════════════════════
-mkdir -p "$SERVER_DIR"
 touch "$MARKER"
-
-# Mark client as installed too (if applicable)
-if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
-    mkdir -p "$CLIENT_DIR"
-    touch "$CLIENT_DIR/.auto-installed"
-fi
 
 progress_complete 2>/dev/null || true
 

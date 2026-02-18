@@ -163,7 +163,9 @@ DEST="$BOOT/snapmulti"
 echo "Copying files to $DEST ..."
 
 # Clean previous install (if re-running)
-rm -rf "$DEST"
+if [[ "$DEST" == */snapmulti ]]; then
+    rm -rf "$DEST"
+fi
 mkdir -p "$DEST"
 
 # Always: install.conf + firstboot + common utilities

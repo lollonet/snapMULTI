@@ -235,21 +235,8 @@ $userData = Join-Path $Boot 'user-data'
 $firstrun = Join-Path $Boot 'firstrun.sh'
 $hook = 'bash /boot/firmware/snapmulti/firstboot.sh'
 
-if (Test-Path $userData) {
-    $udContent = [System.IO.File]::ReadAllText($userData)
-    if ($udContent -match 'snapmulti/firstboot\.sh') {
-        Write-Host 'user-data already patched, skipping.'
-    } else {
-        Write-Host 'Patching user-data to run installer on first boot ...'
-        if ($udContent -match '(?m)^runcmd:') {
-            $udContent = $udContent -replace '(?m)(^runcmd:)', "`$1`n  - [bash, /boot/firmware/snapmulti/firstboot.sh]"
-        } else {
-            $udContent += "`n`nruncmd:`n  - [bash, /boot/firmware/snapmulti/firstboot.sh]`n"
-        }
-        [System.IO.File]::WriteAllText($userData, $udContent)
-        Write-Host '  user-data patched.'
-    }
-} elseif (Test-Path $firstrun) {
+if (Test-Path $firstrun) {
+    # Legacy Pi Imager (Bullseye): patch firstrun.sh
     $frContent = [System.IO.File]::ReadAllText($firstrun)
     if ($frContent -match 'snapmulti/firstboot\.sh') {
         Write-Host 'firstrun.sh already patched, skipping.'
@@ -263,6 +250,21 @@ if (Test-Path $userData) {
         }
         [System.IO.File]::WriteAllText($firstrun, $frContent)
         Write-Host '  firstrun.sh patched.'
+    }
+} elseif (Test-Path $userData) {
+    # Modern Pi Imager (Bookworm+): patch cloud-init user-data
+    $udContent = [System.IO.File]::ReadAllText($userData)
+    if ($udContent -match 'snapmulti/firstboot\.sh') {
+        Write-Host 'user-data already patched, skipping.'
+    } else {
+        Write-Host 'Patching user-data to run installer on first boot ...'
+        if ($udContent -match '(?m)^runcmd:') {
+            $udContent = $udContent -replace '(?m)(^runcmd:)', "`$1`n  - [bash, /boot/firmware/snapmulti/firstboot.sh]"
+        } else {
+            $udContent += "`n`nruncmd:`n  - [bash, /boot/firmware/snapmulti/firstboot.sh]`n"
+        }
+        [System.IO.File]::WriteAllText($userData, $udContent)
+        Write-Host '  user-data patched.'
     }
 } else {
     Write-Host ''
