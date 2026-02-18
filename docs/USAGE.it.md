@@ -33,7 +33,7 @@ Per i tipi di sorgente audio e l'API JSON-RPC, vedi [SOURCES.it.md](SOURCES.it.m
                          │      │  - Spotify       │
 ┌─────────────────┐      │      │                  │
 │ Spotify Connect │──────┘  ┌──▶│                  │
-│ (librespot)     │         │   └────────┬─────────┘
+│ (go-librespot)  │         │   └────────┬─────────┘
 └─────────────────┘         │            │
                             │  ┌─────────┼─────────────┐
 ┌─────────────────┐         │  ▼         ▼             ▼
@@ -166,7 +166,7 @@ Snapcast usa **mDNS/Bonjour tramite Avahi** per la scoperta automatica dei clien
 
 ### Requisiti Critici
 
-Tre container necessitano di mDNS per la scoperta dei servizi: **snapserver** (scoperta client Snapcast), **shairport-sync** (annuncio AirPlay) e **librespot** (annuncio Spotify Connect). Tutti e tre usano il demone Avahi dell'host via D-Bus — nessun Avahi gira dentro i container.
+Tre container necessitano di mDNS per la scoperta dei servizi: **snapserver** (scoperta client Snapcast), **shairport-sync** (annuncio AirPlay) e **go-librespot** (annuncio Spotify Connect). Tutti e tre usano il demone Avahi dell'host via D-Bus — nessun Avahi gira dentro i container.
 
 Impostazioni docker-compose necessarie:
 
@@ -175,16 +175,18 @@ network_mode: host                    # Necessario per i broadcast mDNS
 security_opt:
   - apparmor:unconfined               # Necessario per accesso D-Bus (AppArmor lo blocca altrimenti)
 volumes:
-  - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket  # Avahi dell'host
+  - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket  # Avahi dell'host (snapserver, shairport-sync)
+  # oppure
+  - /var/run/dbus:/var/run/dbus       # Avahi dell'host (go-librespot, tidal-connect)
 ```
 
-Tutti e tre i container (snapserver, shairport-sync, librespot) necessitano di tutte e tre le impostazioni sopra.
+Tutti e tre i container (snapserver, shairport-sync, librespot) necessitano di rete host e accesso D-Bus.
 
 **Requisito host**: `avahi-daemon` deve essere in esecuzione sull'host (`systemctl status avahi-daemon`).
 
 **NON eseguire `avahi-daemon` dentro i container** — andrà in conflitto con l'Avahi dell'host sulla porta 5353.
 
-**Nota su librespot**: L'immagine è compilata da sorgente con il backend Zeroconf `with-avahi` (invece del default `libmdns`). Questo evita di richiedere il supporto socket IPv6 sull'host — `libmdns` fallisce su sistemi con `ipv6.disable=1`.
+**Nota su go-librespot**: Zeroconf è configurato tramite `zeroconf_backend: avahi` in `config/go-librespot.yml`. Nessun flag di compilazione necessario.
 
 ### Verifica
 
@@ -216,14 +218,13 @@ ss -tlnp | grep -E "1704|1705|1780"
 2. Verifica il mount del socket D-Bus: `docker exec shairport-sync ls -la /run/dbus/system_bus_socket`
 
 **Spotify Connect non visibile:**
-1. Controlla i log: `docker logs librespot | grep -i "discovery\|avahi\|error"`
-2. Verifica il mount del socket D-Bus: `docker exec librespot ls -la /run/dbus/system_bus_socket`
-3. Se errore `Address family not supported`: librespot è stato compilato senza backend Avahi — ricompilare l'immagine
+1. Controlla i log: `docker logs librespot | grep -i "zeroconf\|avahi\|error"`
+2. Verifica l'accesso D-Bus: `docker exec librespot ls -la /var/run/dbus/`
+3. Verifica la configurazione: `docker exec librespot cat /tmp/config.yml | grep zeroconf`
 
 **Errori comuni:**
 - `"Failed to create client: Access denied"` → Manca `security_opt: [apparmor:unconfined]` (snapserver)
 - `"couldn't create avahi client: Daemon not running!"` → Manca il mount del socket D-Bus o avahi-daemon non in esecuzione sull'host
-- `"Address family not supported by protocol"` → librespot usa `libmdns` su host con IPv6 disabilitato — serve il backend Avahi
 - `"Avahi already running"` → Rimuovi `avahi-daemon` dal comando del container
 - Nessun servizio trovato → Verifica che `network_mode: host` sia impostato
 
@@ -249,7 +250,7 @@ Il push di un tag di versione (es. `git tag v1.1.0 && git push origin v1.1.0`) a
 
 1. **Build** — Immagini Docker compilate su runner self-hosted (amd64 nativo + arm64 via cross-compilazione QEMU)
 2. **Manifest** — Le immagini per architettura vengono unite in tag multi-arch `:latest` su ghcr.io
-3. **Deploy** — Le immagini vengono scaricate e tutti e cinque i container (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`) riavviati sul server domestico via SSH
+3. **Deploy** — Le immagini vengono scaricate e tutti i container (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`, `tidal-connect`) riavviati sul server domestico via SSH
 
 ```
 tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :versione) → deploy.yml → server aggiornato
@@ -292,12 +293,12 @@ Le immagini Docker sono ospitate su GitHub Container Registry:
 |----------|-------------|
 | `ghcr.io/lollonet/snapmulti-server:latest` | Snapcast server (compilato da [santcasp](https://github.com/lollonet/santcasp)) |
 | `ghcr.io/lollonet/snapmulti-airplay:latest` | Ricevitore AirPlay (shairport-sync) |
-| `ghcr.io/lollonet/snapmulti-spotify:latest` | Spotify Connect (librespot) |
+| `ghcr.io/devgianlu/go-librespot:v0.7.0` | Spotify Connect (upstream, nessuna build personalizzata) |
 | `ghcr.io/lollonet/snapmulti-mpd:latest` | Music Player Daemon |
 | `ghcr.io/jcorporation/mympd/mympd:latest` | Interfaccia Web (immagine di terze parti) |
-| `edgecrush3r/tidal-connect:latest` | Tidal Connect (solo ARM, immagine di terze parti) |
+| `ghcr.io/lollonet/snapmulti-tidal:latest` | Tidal Connect (solo ARM) |
 
-Tutte le immagini supportano le architetture `linux/amd64` e `linux/arm64`.
+Le immagini supportano `linux/amd64` e `linux/arm64` tranne Tidal Connect (solo ARM).
 
 Vedi la scheda GitHub Actions per lo stato dei workflow e i log.
 
@@ -345,7 +346,7 @@ services:
       - snapserver
 
   librespot:
-    image: ghcr.io/lollonet/snapmulti-spotify:latest
+    image: ghcr.io/devgianlu/go-librespot:v0.7.0
     container_name: librespot
     restart: unless-stopped
     network_mode: host
@@ -353,8 +354,9 @@ services:
       - apparmor:unconfined
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
+      - ./config/go-librespot.yml:/config/config.yml:ro
       - ./audio:/audio
-      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+      - /var/run/dbus:/var/run/dbus
     environment:
       - TZ=${TZ:-Europe/Berlin}
     depends_on:

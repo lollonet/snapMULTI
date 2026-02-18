@@ -338,6 +338,22 @@ install_dependencies() {
         fi
     fi
 
+    # Lightweight monitoring tools (sar, iotop, dstat)
+    local mon_pkgs=()
+    command -v sar >/dev/null 2>&1 || mon_pkgs+=(sysstat)
+    command -v iotop >/dev/null 2>&1 || mon_pkgs+=(iotop-c)
+    command -v dstat >/dev/null 2>&1 || mon_pkgs+=(dstat)
+    if [[ ${#mon_pkgs[@]} -gt 0 ]]; then
+        info "Installing monitoring tools: ${mon_pkgs[*]}..."
+        apt-get install -y -qq "${mon_pkgs[@]}" >/dev/null
+        # Enable sysstat data collection (sar)
+        if [[ -f /etc/default/sysstat ]]; then
+            sed -i 's/^ENABLED="false"/ENABLED="true"/' /etc/default/sysstat
+            systemctl enable --now sysstat >/dev/null 2>&1 || true
+        fi
+        ok "Monitoring tools installed"
+    fi
+
     ok "System dependencies ready"
 }
 
@@ -433,9 +449,9 @@ create_directories() {
     # and may run as different UIDs than the host user
     chown -R "$real_uid:$real_gid" "$PROJECT_ROOT/audio" "$PROJECT_ROOT/data" \
         "$PROJECT_ROOT/mpd" "$PROJECT_ROOT/mympd"
-    chmod 777 "$PROJECT_ROOT/audio"
-    chmod 666 "$PROJECT_ROOT/audio"/*_fifo 2>/dev/null || true
-    chmod 666 "$PROJECT_ROOT/audio"/shairport-metadata 2>/dev/null || true
+    chmod 750 "$PROJECT_ROOT/audio"
+    chmod 660 "$PROJECT_ROOT/audio"/*_fifo 2>/dev/null || true
+    chmod 660 "$PROJECT_ROOT/audio"/shairport-metadata 2>/dev/null || true
 
     # Ensure scripts are executable (git may not preserve permissions)
     chmod +x "$PROJECT_ROOT/scripts/"*.sh "$PROJECT_ROOT/scripts/"*.py 2>/dev/null || true

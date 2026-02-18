@@ -14,8 +14,7 @@ jobs:
             binary: snapserver
           - dockerfile: Dockerfile.shairport-sync
             binary: shairport-sync
-          - dockerfile: Dockerfile.librespot
-            binary: librespot
+          # Spotify Connect: uses official ghcr.io/devgianlu/go-librespot (no build needed)
           - dockerfile: Dockerfile.mpd
             binary: mpd
           # Tidal: ARM-only, base image has ARM binaries
@@ -56,7 +55,7 @@ jobs:
 
       - name: Skip ARM-only build on x86
         if: matrix.arm_only && steps.arch.outputs.arch != 'aarch64'
-        run: echo "⏭️ Skipping ${{ matrix.dockerfile }} - ARM-only, running on ${{ steps.arch.outputs.arch }}"
+        run: echo "Skipping ${{ matrix.dockerfile }} - ARM-only, running on ${{ steps.arch.outputs.arch }}"
 
       - name: Test container
         if: "!matrix.arm_only || steps.arch.outputs.arch == 'aarch64'"

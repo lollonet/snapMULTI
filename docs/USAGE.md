@@ -32,7 +32,7 @@ For audio source types and JSON-RPC API, see [SOURCES.md](SOURCES.md).
                          │      │  - Spotify       │
 ┌─────────────────┐      │      │                  │
 │ Spotify Connect │──────┘  ┌──▶│                  │
-│ (librespot)     │         │   └────────┬─────────┘
+│ (go-librespot)  │         │   └────────┬─────────┘
 └─────────────────┘         │            │
                             │  ┌─────────┼─────────────┐
 ┌─────────────────┐         │  ▼         ▼             ▼
@@ -240,7 +240,7 @@ Snapcast uses **mDNS/Bonjour via Avahi** for automatic client discovery on the l
 
 ### Critical Requirements
 
-Three containers need mDNS for service discovery: **snapserver** (Snapcast client discovery), **shairport-sync** (AirPlay advertisement), and **librespot** (Spotify Connect advertisement). All three use the host's Avahi daemon via D-Bus — no Avahi runs inside containers.
+Three containers need mDNS for service discovery: **snapserver** (Snapcast client discovery), **shairport-sync** (AirPlay advertisement), and **go-librespot** (Spotify Connect advertisement). All three use the host's Avahi daemon via D-Bus — no Avahi runs inside containers.
 
 Required docker-compose settings:
 
@@ -249,16 +249,18 @@ network_mode: host                    # Required for mDNS broadcasts
 security_opt:
   - apparmor:unconfined               # Required for D-Bus access (AppArmor blocks it otherwise)
 volumes:
-  - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket  # Host's Avahi
+  - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket  # Host's Avahi (snapserver, shairport-sync)
+  # or
+  - /var/run/dbus:/var/run/dbus       # Host's Avahi (go-librespot, tidal-connect)
 ```
 
-All three containers (snapserver, shairport-sync, librespot) need all three settings above.
+All three containers (snapserver, shairport-sync, librespot) need host networking and D-Bus access.
 
 **Host requirement**: `avahi-daemon` must be running on the host (`systemctl status avahi-daemon`).
 
 **Do NOT run `avahi-daemon` inside containers** — it will conflict with the host's Avahi on port 5353.
 
-**Note on librespot**: The image is built from source with the `with-avahi` Zeroconf backend (instead of the default `libmdns`). This avoids requiring IPv6 socket support on the host — `libmdns` fails on systems with `ipv6.disable=1`.
+**Note on go-librespot**: Zeroconf is configured via `zeroconf_backend: avahi` in `config/go-librespot.yml`. No build-time flags needed.
 
 ### Verification
 
@@ -290,14 +292,13 @@ ss -tlnp | grep -E "1704|1705|1780"
 2. Verify D-Bus socket mount: `docker exec shairport-sync ls -la /run/dbus/system_bus_socket`
 
 **Spotify Connect not visible:**
-1. Check logs: `docker logs librespot | grep -i "discovery\|avahi\|error"`
-2. Verify D-Bus socket mount: `docker exec librespot ls -la /run/dbus/system_bus_socket`
-3. If `Address family not supported` error: librespot was built without Avahi backend — rebuild image
+1. Check logs: `docker logs librespot | grep -i "zeroconf\|avahi\|error"`
+2. Verify D-Bus access: `docker exec librespot ls -la /var/run/dbus/`
+3. Verify config: `docker exec librespot cat /tmp/config.yml | grep zeroconf`
 
 **Common errors:**
 - `"Failed to create client: Access denied"` → Missing `security_opt: [apparmor:unconfined]` (snapserver)
 - `"couldn't create avahi client: Daemon not running!"` → Missing D-Bus socket mount or host avahi-daemon not running
-- `"Address family not supported by protocol"` → librespot using `libmdns` on host with IPv6 disabled — need Avahi backend
 - `"Avahi already running"` → Remove `avahi-daemon` from container command
 - No services found → Check `network_mode: host` is set
 
@@ -323,7 +324,7 @@ Pushing a version tag (e.g. `git tag v1.1.0 && git push origin v1.1.0`) triggers
 
 1. **Build** — Docker images built on self-hosted runner (amd64 native + arm64 via QEMU cross-compilation)
 2. **Manifest** — Per-arch images combined into multi-arch `:latest` tags on ghcr.io
-3. **Deploy** — Images pulled and all five containers (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`) restarted on the home server via SSH
+3. **Deploy** — Images pulled and all containers (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`, `tidal-connect`) restarted on the home server via SSH
 
 ```
 tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :version) → deploy.yml → server updated
@@ -396,12 +397,12 @@ Docker images are hosted on GitHub Container Registry:
 |-------|-------------|
 | `ghcr.io/lollonet/snapmulti-server:latest` | Snapcast server (built from [santcasp](https://github.com/lollonet/santcasp)) |
 | `ghcr.io/lollonet/snapmulti-airplay:latest` | AirPlay receiver (shairport-sync) |
-| `ghcr.io/lollonet/snapmulti-spotify:latest` | Spotify Connect (librespot) |
+| `ghcr.io/devgianlu/go-librespot:v0.7.0` | Spotify Connect (upstream, no custom build) |
 | `ghcr.io/lollonet/snapmulti-mpd:latest` | Music Player Daemon |
 | `ghcr.io/jcorporation/mympd/mympd:latest` | Web UI (third-party image) |
-| `edgecrush3r/tidal-connect:latest` | Tidal Connect (ARM only, third-party image) |
+| `ghcr.io/lollonet/snapmulti-tidal:latest` | Tidal Connect (ARM only) |
 
-All images support `linux/amd64` and `linux/arm64` architectures.
+Images support `linux/amd64` and `linux/arm64` except Tidal Connect (ARM only).
 
 See GitHub Actions tab for workflow status and logs.
 
@@ -449,7 +450,7 @@ services:
       - snapserver
 
   librespot:
-    image: ghcr.io/lollonet/snapmulti-spotify:latest
+    image: ghcr.io/devgianlu/go-librespot:v0.7.0
     container_name: librespot
     restart: unless-stopped
     network_mode: host
@@ -457,8 +458,9 @@ services:
       - apparmor:unconfined
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
+      - ./config/go-librespot.yml:/config/config.yml:ro
       - ./audio:/audio
-      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+      - /var/run/dbus:/var/run/dbus
     environment:
       - TZ=${TZ:-Europe/Berlin}
     depends_on:
@@ -555,7 +557,7 @@ docker compose logs --tail 100 snapserver
 |---------|---------|---------|
 | snapserver | `Avahi daemon not running` | Host's avahi-daemon not started |
 | shairport-sync | `Connection refused on dbus` | Missing D-Bus socket mount |
-| librespot | `Address family not supported` | Built without Avahi backend |
+| librespot | `zeroconf: failed to register` | Avahi daemon not running on host |
 | mpd | `Failed to open FIFO` | FIFO pipe not created |
 
 ### Health Checks

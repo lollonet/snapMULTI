@@ -12,7 +12,7 @@ Progettato per applicazioni di gestione remota e configurazione avanzata.
 | 1 | MPD | `pipe` | `MPD` | Attiva | — (FIFO) |
 | 2 | Tidal Connect | `pipe` | `Tidal` | Attiva | `tidal-connect` (container separato, solo ARM) |
 | 3 | AirPlay | `pipe` | `AirPlay` | Attiva | `shairport-sync` (container separato) |
-| 4 | Spotify Connect | `pipe` | `Spotify` | Attiva | `librespot` (container separato) |
+| 4 | Spotify Connect | `pipe` | `Spotify` | Attiva | `go-librespot` (container separato) |
 | 5 | Cattura ALSA | `alsa` | `LineIn` | Disponibile | Dispositivo ALSA |
 | 6 | Meta Stream | `meta` | `AutoSwitch` | Disponibile | — (integrato) |
 | 7 | Riproduzione File | `file` | `Alert` | Disponibile | — (integrato) |
@@ -144,13 +144,13 @@ avahi-browse -r _raop._tcp --terminate
 
 ---
 
-### 4. Spotify Connect (pipe da librespot)
+### 4. Spotify Connect (pipe da go-librespot)
 
-Il container librespot funziona come ricevitore Spotify Connect e scrive PCM grezzo su una named pipe. Snapserver legge dalla pipe.
+Il container go-librespot (reimplementazione in Go di Spotify Connect) funziona come ricevitore Spotify Connect e scrive PCM grezzo su una named pipe. Snapserver legge dalla pipe. Metadati (brano, artista, album, copertina) e controllo bidirezionale della riproduzione sono forniti tramite API WebSocket e il plugin ufficiale Snapcast `meta_go-librespot.py`.
 
 **Configurazione:**
 ```ini
-source = pipe:////audio/spotify_fifo?name=Spotify
+source = pipe:////audio/spotify_fifo?name=Spotify&controlscript=meta_go-librespot.py
 ```
 
 **Parametri:**
@@ -158,25 +158,43 @@ source = pipe:////audio/spotify_fifo?name=Spotify
 | Parametro | Valore | Descrizione |
 |-----------|--------|-------------|
 | `name` | `Spotify` | ID dello stream |
+| `controlscript` | `meta_go-librespot.py` | Recupera metadati e abilita il controllo della riproduzione tramite API WebSocket |
 
-**Impostazioni container librespot** (Dockerfile.librespot CMD):
+**Configurazione go-librespot** (`config/go-librespot.yml`):
 
-| Flag | Valore | Descrizione |
-|------|--------|-------------|
-| `--name` | `snapMULTI` | Nome mostrato nell'app Spotify |
-| `--bitrate` | `320` | Qualità audio: 96, 160 o 320 kbps |
-| `--backend` | `pipe` | Output su named pipe |
-| `--device` | `/audio/spotify_fifo` | Percorso della named pipe per l'output audio |
+| Impostazione | Valore | Descrizione |
+|--------------|--------|-------------|
+| `device_name` | `<hostname> Spotify` | Nome mostrato nell'app Spotify (impostato all'avvio del container) |
+| `device_type` | `speaker` | Tipo di dispositivo per l'interfaccia Spotify |
+| `bitrate` | `320` | Qualità audio: 96, 160 o 320 kbps |
+| `audio_backend` | `pipe` | Output su named pipe |
+| `audio_output_pipe` | `/audio/spotify_fifo` | Percorso della named pipe per l'output audio |
+| `audio_output_pipe_format` | `s16le` | PCM signed 16-bit little-endian |
+| `sample_rate` | `44100` | Frequenza di campionamento in Hz |
+| `zeroconf_enabled` | `true` | L'app Spotify scopre automaticamente il dispositivo |
+| `zeroconf_backend` | `avahi` | Usa il demone Avahi dell'host tramite D-Bus |
+| `server.enabled` | `true` | API WebSocket per il plugin metadati |
+| `server.address` | `127.0.0.1` | API vincolata solo a localhost |
+| `server.port` | `24879` | Porta API WebSocket (default di meta_go-librespot.py) |
 
-**Formato campionamento:** 44100:16:2 (fisso, impostato da librespot)
+**Nome personalizzato:** Imposta `SPOTIFY_NAME` in `.env` per sovrascrivere il nome basato su hostname:
+```bash
+SPOTIFY_NAME="Spotify Salotto"
+```
+
+**Formato campionamento:** 44100:16:2 (configurato in go-librespot.yml)
 
 **Requisiti:** Account Spotify Premium (l'abbonamento gratuito non è supportato).
+
+**Metadati:** Nome del brano, artista, album e URL della copertina vengono inoltrati a tutti i client Snapcast. Il controllo della riproduzione (play/pausa/successivo/precedente/seek) è bidirezionale — controllabile da qualsiasi client Snapcast.
 
 **Connessione da Spotify:**
 1. Apri **Spotify** su qualsiasi dispositivo
 2. Avvia la riproduzione di un brano
 3. Tocca **Connetti a un dispositivo**
-4. Seleziona **"snapMULTI"**
+4. Seleziona **"<hostname> Spotify"** (es. "raspberrypi Spotify")
+
+**Immagine Docker:** `ghcr.io/devgianlu/go-librespot:v0.7.0` (upstream, nessuna build personalizzata)
 
 ---
 
@@ -514,7 +532,7 @@ Il tipo sorgente `airplay://` integrato in Snapcast avvia shairport-sync come pr
 
 ### librespot (non usato — snapMULTI usa pipe)
 
-Il tipo sorgente `librespot://` integrato in Snapcast avvia librespot come processo figlio. snapMULTI esegue librespot in un container separato e usa `pipe://` per leggerne l'output.
+Il tipo sorgente `librespot://` integrato in Snapcast avvia librespot come processo figlio. snapMULTI esegue go-librespot in un container separato e usa `pipe://` per leggerne l'output, con `controlscript=meta_go-librespot.py` per metadati e controllo della riproduzione.
 
 | Proprietà | Valore |
 |-----------|--------|

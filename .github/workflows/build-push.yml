@@ -83,18 +83,7 @@ jobs:
           cache-from: type=gha,scope=airplay-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=airplay-${{ matrix.suffix }}
 
-      - name: Build and push librespot
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.librespot
-          platforms: ${{ matrix.platform }}
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/lollonet/snapmulti-spotify:${{ matrix.suffix }}
-            ${{ steps.version.outputs.tag && format('{0}/lollonet/snapmulti-spotify:{1}-{2}', env.REGISTRY, steps.version.outputs.tag, matrix.suffix) || '' }}
-          cache-from: type=gha,scope=spotify-${{ matrix.suffix }}
-          cache-to: type=gha,mode=max,scope=spotify-${{ matrix.suffix }}
+      # Spotify Connect: uses official ghcr.io/devgianlu/go-librespot image (no build needed)
 
       - name: Build and push mpd
         uses: docker/build-push-action@v6
@@ -180,19 +169,7 @@ jobs:
             $REGISTRY/lollonet/snapmulti-airplay:$VERSION-amd64 \
             $REGISTRY/lollonet/snapmulti-airplay:$VERSION-arm64
 
-      - name: Create multi-arch manifest for spotify
-        run: |
-          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-spotify:latest \
-            $REGISTRY/lollonet/snapmulti-spotify:amd64 \
-            $REGISTRY/lollonet/snapmulti-spotify:arm64
-
-      - name: Create versioned tag for spotify
-        if: steps.version.outputs.tag != ''
-        run: |
-          VERSION=${{ steps.version.outputs.tag }}
-          docker buildx imagetools create -t $REGISTRY/lollonet/snapmulti-spotify:$VERSION \
-            $REGISTRY/lollonet/snapmulti-spotify:$VERSION-amd64 \
-            $REGISTRY/lollonet/snapmulti-spotify:$VERSION-arm64
+      # Spotify Connect: uses official ghcr.io/devgianlu/go-librespot image (no manifest needed)
 
       - name: Create multi-arch manifest for mpd
         run: |

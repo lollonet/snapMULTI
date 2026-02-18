@@ -58,6 +58,7 @@ snapMULTI/
     mpd.conf                 # MPD config (FIFO + HTTP outputs)
     shairport-sync.conf      # shairport-sync pipe backend config
     tidal-asound.conf        # ALSA config for Tidal Connect FIFO output (ARM only)
+    go-librespot.yml         # go-librespot config (pipe backend, WebSocket API, zeroconf)
   scripts/
     deploy.sh                # Server deployment (profiles, FIFO setup, validation)
     firstboot.sh             # First-boot provisioning (TUI progress, WiFi kick, Docker install)
@@ -76,9 +77,9 @@ snapMULTI/
     SOURCES.md               # Audio sources technical reference
     *.it.md                  # Italian translations
   .github/workflows/
-    build-push.yml           # Dual-arch build + push to ghcr.io (4 images)
+    build-push.yml           # Dual-arch build + push to ghcr.io (3 images; Spotify uses upstream)
     deploy.yml               # SSH deploy (workflow_call, 6 containers)
-    build-test.yml           # PR-only Docker build validation (4 Dockerfiles)
+    build-test.yml           # PR-only Docker build validation (3 Dockerfiles; Spotify uses upstream)
     validate.yml             # docker-compose syntax, shellcheck, env template
     claude-code-review.yml   # Automated PR review
     claude.yml               # Claude CI helper
@@ -87,12 +88,23 @@ snapMULTI/
     cachedir/                # myMPD cache (album art, etc.)
   Dockerfile.snapserver      # Snapserver (from lollonet/santcasp, multi-stage)
   Dockerfile.shairport-sync  # AirPlay receiver (pipe output)
-  Dockerfile.librespot       # Spotify Connect (pipe output)
   Dockerfile.mpd             # MPD + ffmpeg (Alpine)
   Dockerfile.tidal           # Tidal Connect (extends edgecrush3r base with ALSA plugins)
   docker-compose.yml         # 6 services (5 core + tidal-connect, host networking)
   .env.example               # Environment template
 ```
+
+### Spotify Connect
+
+Uses `ghcr.io/devgianlu/go-librespot` (Go reimplementation of Spotify Connect).
+
+- **No custom Dockerfile** — uses upstream image directly, configured via `config/go-librespot.yml`
+- **Audio routing**: Spotify app → go-librespot → pipe backend → `/audio/spotify_fifo` → snapserver
+- **Metadata**: WebSocket API on port 24879 → `meta_go-librespot.py` (ships with Snapcast) → JSON-RPC to snapserver
+- **Playback control**: Bidirectional — play/pause/next/seek from Snapcast clients back to Spotify
+- **Device naming**: Uses hostname by default (e.g., "snapvideo Spotify"). Override with `SPOTIFY_NAME` env var
+- **Requires**: Spotify Premium (Connect is a Premium feature)
+- **Architectures**: amd64 + arm64
 
 ### Tidal Connect
 
@@ -107,7 +119,7 @@ ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian 
 
 ## Conventions
 
-- **Docker images**: `ghcr.io/lollonet/snapmulti-{server,airplay,spotify,mpd}:latest` + `edgecrush3r/tidal-connect:latest` (ARM only)
+- **Docker images**: `ghcr.io/lollonet/snapmulti-{server,airplay,mpd}:latest` (built in CI) + `ghcr.io/devgianlu/go-librespot:latest` (upstream) + `ghcr.io/lollonet/snapmulti-tidal:latest` (ARM only)
 - **Multi-arch**: linux/amd64 (raspy) + linux/arm64 (studio), native builds on self-hosted runners
 - **Config paths**: all config in `config/`, all scripts in `scripts/`, shared libs in `scripts/common/`
 - **Deployment**: tag push (`v*`) triggers build → manifest → deploy
