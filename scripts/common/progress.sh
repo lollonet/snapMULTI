@@ -28,7 +28,8 @@ PROGRESS_ANIM_PID=""
 # Title displayed in the TUI header (can be overridden before progress_init)
 PROGRESS_TITLE="${PROGRESS_TITLE:-snapMULTI Auto-Install}"
 
-# Default steps — caller should override before progress_init or use progress_set_steps()
+# Default steps — fallback for standalone testing only.
+# Callers (firstboot.sh) always set STEP_NAMES/STEP_WEIGHTS before sourcing.
 if [[ ${#STEP_NAMES[@]} -eq 0 ]]; then
     STEP_NAMES=("Network connectivity" "Copy project files" "Install Docker"
                 "Deploy & pull images" "Verify containers")

@@ -196,7 +196,7 @@ $Dest = Join-Path $Boot 'snapmulti'
 Write-Host "Copying files to $Dest ..."
 
 # Clean previous install
-if (Test-Path $Dest) {
+if ((Test-Path $Dest) -and $Dest.EndsWith('snapmulti')) {
     Remove-Item $Dest -Recurse -Force
 }
 New-Item -ItemType Directory -Path $Dest -Force | Out-Null

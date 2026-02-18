@@ -229,7 +229,6 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
             [[ -f "$df" ]] && cp "$df" "$SERVER_DIR/"
         done
     fi
-    cp "$SNAP_BOOT/firstboot.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
     cp -r "$SNAP_BOOT/common" "$SERVER_DIR/scripts/" 2>/dev/null || true
     log_progress "Server files copied to $SERVER_DIR" 2>/dev/null || true
 fi
@@ -349,8 +348,8 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
 
     HEALTHY=false
     for attempt in $(seq 1 12); do
-        TOTAL=$(docker ps --format '{{.Names}}' | wc -l)
-        HEALTHY_COUNT=$(docker ps --format '{{.Status}}' | grep -c "(healthy)" || true)
+        TOTAL=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps -q 2>/dev/null | wc -l)
+        HEALTHY_COUNT=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps 2>/dev/null | grep -c "(healthy)" || true)
         if [[ "$TOTAL" -ge 5 ]] && [[ "$HEALTHY_COUNT" -eq "$TOTAL" ]]; then
             log_and_tty "All $TOTAL server containers healthy."
             log_progress "All $TOTAL server containers healthy" 2>/dev/null || true
@@ -398,14 +397,14 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     if [[ -n "$CONFIG_FILE" ]]; then
         # Override DISPLAY_MODE in the config
         if grep -q '^DISPLAY_MODE=' "$CONFIG_FILE"; then
-            sed -i "s/^DISPLAY_MODE=.*/DISPLAY_MODE=$DISPLAY_MODE/" "$CONFIG_FILE"
+            sed -i "s|^DISPLAY_MODE=.*|DISPLAY_MODE=${DISPLAY_MODE}|" "$CONFIG_FILE"
         else
             echo "DISPLAY_MODE=$DISPLAY_MODE" >> "$CONFIG_FILE"
         fi
         # Set snapserver host for "both" mode
         if [[ -n "$SNAPSERVER_HOST" ]]; then
             if grep -q '^SNAPSERVER_HOST=' "$CONFIG_FILE"; then
-                sed -i "s/^SNAPSERVER_HOST=.*/SNAPSERVER_HOST=$SNAPSERVER_HOST/" "$CONFIG_FILE"
+                sed -i "s|^SNAPSERVER_HOST=.*|SNAPSERVER_HOST=${SNAPSERVER_HOST}|" "$CONFIG_FILE"
             else
                 echo "SNAPSERVER_HOST=$SNAPSERVER_HOST" >> "$CONFIG_FILE"
             fi
