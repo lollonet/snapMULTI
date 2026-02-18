@@ -142,6 +142,16 @@ next_step() {
     progress "$CURRENT_STEP" "$1" 2>/dev/null || true
 }
 
+# Get weight for the current step (safe accessor, returns 5 as fallback)
+current_weight() {
+    local idx=$(( CURRENT_STEP - 1 ))
+    if (( idx >= 0 && idx < ${#STEP_WEIGHTS[@]} )); then
+        echo "${STEP_WEIGHTS[$idx]}"
+    else
+        echo 5
+    fi
+}
+
 # Compute cumulative base percentage for completed steps
 cumulative_pct() {
     local step=$1
@@ -159,7 +169,7 @@ cumulative_pct() {
 # STEP 1: Network
 # ══════════════════════════════════════════════════════════════════
 next_step "Waiting for network..."
-start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "${STEP_WEIGHTS[0]}" 2>/dev/null || true
+start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 log_progress "Waiting for network connectivity..." 2>/dev/null || true
 
 # Ensure WiFi regulatory domain is applied (brcmfmac may ignore the
@@ -250,7 +260,7 @@ log_progress "Files copied" 2>/dev/null || true
 # STEP 3: Install git + system dependencies
 # ══════════════════════════════════════════════════════════════════
 next_step "Installing git and dependencies..."
-start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "${STEP_WEIGHTS[2]}" 2>/dev/null || true
+start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
 log_progress "apt-get update" 2>/dev/null || true
 apt-get update -qq
@@ -282,7 +292,7 @@ log_progress "System dependencies installed" 2>/dev/null || true
 # STEP 4: Docker
 # ══════════════════════════════════════════════════════════════════
 next_step "Installing Docker..."
-start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "${STEP_WEIGHTS[3]}" 2>/dev/null || true
+start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
 if ! command -v docker &>/dev/null; then
     log_progress "Setting up Docker repository..." 2>/dev/null || true
@@ -307,19 +317,9 @@ if ! command -v docker &>/dev/null; then
     log_progress "Installing docker-ce..." 2>/dev/null || true
     apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
-    # Configure Docker daemon: live-restore keeps containers running across
-    # daemon restarts/upgrades; log rotation prevents disk fill
-    mkdir -p /etc/docker
-    cat > /etc/docker/daemon.json <<'DJSON'
-{
-  "live-restore": true,
-  "log-driver": "json-file",
-  "log-opts": {
-    "max-size": "10m",
-    "max-file": "3"
-  }
-}
-DJSON
+    # daemon.json (live-restore, log rotation) is written by deploy.sh's
+    # install_docker() which has python3 merge logic for existing configs.
+    # Do not duplicate it here — deploy.sh owns Docker daemon configuration.
 
     systemctl enable docker
     systemctl start docker
@@ -327,17 +327,7 @@ DJSON
     FIRST_USER=$(getent passwd 1000 | cut -d: -f1 || true)
     [[ -n "$FIRST_USER" ]] && usermod -aG docker "$FIRST_USER"
 
-    # Enable cgroup memory controller for Docker resource limits on Pi
-    CMDLINE_FILE=""
-    if [[ -f /boot/firmware/cmdline.txt ]]; then
-        CMDLINE_FILE="/boot/firmware/cmdline.txt"
-    elif [[ -f /boot/cmdline.txt ]]; then
-        CMDLINE_FILE="/boot/cmdline.txt"
-    fi
-    if [[ -n "$CMDLINE_FILE" ]] && ! grep -q "cgroup_enable=memory" "$CMDLINE_FILE"; then
-        sed -i 's/$/ cgroup_enable=memory cgroup_memory=1/' "$CMDLINE_FILE"
-        log_progress "Enabled cgroup memory controller (reboot activates)" 2>/dev/null || true
-    fi
+    # cgroup memory controller (cmdline.txt) is also handled by deploy.sh
 
     log_progress "Docker installed" 2>/dev/null || true
 else
@@ -357,9 +347,13 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
 
     # ── Deploy server ─────────────────────────────────────────────
     next_step "Deploy server..."
-    start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "${STEP_WEIGHTS[$((CURRENT_STEP-1))]}" 2>/dev/null || true
+    start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
     log_progress "Running deploy.sh ..." 2>/dev/null || true
 
+    if [[ ! -d "$SERVER_DIR" ]]; then
+        log_and_tty "ERROR: Server directory missing: $SERVER_DIR"
+        exit 1
+    fi
     cd "$SERVER_DIR"
     if ! bash scripts/deploy.sh >> "$LOG" 2>&1; then
         log_and_tty "ERROR: deploy.sh failed."
@@ -369,7 +363,7 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
 
     # ── Verify server containers ──────────────────────────────────
     next_step "Verifying server containers..."
-    start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "${STEP_WEIGHTS[$((CURRENT_STEP-1))]}" 2>/dev/null || true
+    start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
     log_progress "Waiting for containers to become healthy..." 2>/dev/null || true
 
     HEALTHY=false
@@ -439,9 +433,13 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     fi
 
     next_step "Setting up audio player..."
-    start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "${STEP_WEIGHTS[$((CURRENT_STEP-1))]}" 2>/dev/null || true
+    start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
     log_progress "Running client setup.sh --auto ..." 2>/dev/null || true
 
+    if [[ ! -d "$CLIENT_DIR" ]]; then
+        log_and_tty "ERROR: Client directory missing: $CLIENT_DIR"
+        exit 1
+    fi
     cd "$CLIENT_DIR"
     if [[ -n "$CONFIG_FILE" ]]; then
         if ! bash scripts/setup.sh --auto "$CONFIG_FILE" >> "$LOG" 2>&1; then
@@ -457,6 +455,7 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     log_progress "Client setup complete" 2>/dev/null || true
 
     next_step "Verifying client..."
+    start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
     log_progress "Checking client containers..." 2>/dev/null || true
 
     # Brief wait for containers

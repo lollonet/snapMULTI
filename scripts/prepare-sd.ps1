@@ -46,11 +46,12 @@ function Find-BootPartition {
 
 # ── Check client submodule ────────────────────────────────────────
 function Assert-ClientSubmodule {
-    $setupPath = Join-Path $ClientDir 'common\scripts\setup.sh'
-    if (-not (Test-Path $setupPath)) {
+    # .git is a file (gitlink) in submodules, a directory in standalone clones
+    $gitMarker = Join-Path $ClientDir '.git'
+    if (-not (Test-Path $gitMarker)) {
         Write-Host 'Client submodule not initialized. Fetching...'
         & git -C $ProjectDir submodule update --init --recursive
-        if (-not (Test-Path $setupPath)) {
+        if (-not (Test-Path $gitMarker)) {
             Write-Error 'client/ submodule is missing. Run: git submodule update --init --recursive'
             exit 1
         }
