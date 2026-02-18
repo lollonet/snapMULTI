@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.0
+        uses: appleboy/ssh-action@v1.2.5
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           DEPLOY_USER: ${{ github.repository_owner }}
