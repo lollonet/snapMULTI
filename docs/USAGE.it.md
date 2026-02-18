@@ -256,7 +256,51 @@ Il push di un tag di versione (es. `git tag v1.1.0 && git push origin v1.1.0`) a
 tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :versione) → deploy.yml → server aggiornato
 ```
 
-### Deployment Automatico (Prima Installazione)
+### Scheda SD Zero-Touch (Raspberry Pi)
+
+Prepara una scheda SD che installa automaticamente snapMULTI al primo avvio. Nessun SSH necessario.
+
+**Sul tuo computer (macOS/Linux):**
+
+1. Scrivi la SD con **Raspberry Pi Imager**:
+   - Scegli: Raspberry Pi OS Lite (64-bit)
+   - Configura (icona ingranaggio): hostname, utente/password, WiFi, abilita SSH
+
+2. Mantieni la SD montata ed esegui:
+   ```bash
+   git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
+   ./snapMULTI/scripts/prepare-sd.sh
+   ```
+
+3. Scegli cosa installare:
+   - **1) Audio Player** — snapclient + display HDMI opzionale (copertine, visualizer)
+   - **2) Music Server** — Spotify, AirPlay, MPD, Tidal Connect
+   - **3) Server + Player** — entrambi sullo stesso Pi
+
+4. Espelli la SD, inserisci nel Pi, accendi
+
+**Su Windows (PowerShell):**
+```powershell
+git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
+.\snapMULTI\scripts\prepare-sd.ps1
+```
+
+Il primo avvio installa tutto automaticamente (~5-10 min). L'HDMI mostra una schermata di progresso. Il Pi si riavvia quando ha finito.
+
+Log di installazione salvato in `/var/log/snapmulti-install.log`.
+
+#### Modalita "Server + Player" (Entrambi)
+
+Selezionando l'opzione 3, il Pi esegue sia il music server che un audio player locale sullo stesso dispositivo. I due stack coesistono senza conflitti di porte:
+
+| Componente | Percorso | Rete | Porte |
+|------------|----------|------|-------|
+| Server | `/opt/snapmulti/` | Host networking | 1704, 1705, 1780, 6600, 8180 |
+| Client | `/opt/snapclient/` | Bridge networking | 8080, 8081, 8082 |
+
+Il client si connette automaticamente al server locale (`SNAPSERVER_HOST=127.0.0.1`) e usa l'uscita audio locale del Pi (HAT o DAC USB).
+
+### Deployment Automatico (deploy.sh)
 
 ```bash
 git clone https://github.com/lollonet/snapMULTI.git

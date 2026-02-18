@@ -7,17 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- **Registry migration** — Custom images (`snapmulti-{server,airplay,mpd,tidal}`) moved from GitHub Container Registry (`ghcr.io/lollonet/`) to Docker Hub (`lollonet/`) for faster pulls on Pi hardware ([#64](https://github.com/lollonet/snapMULTI/pull/64))
-- **Spotify Connect: switch to go-librespot** ([#59](https://github.com/lollonet/snapMULTI/pull/59)) — Replaced Rust librespot v0.8.0 with go-librespot for Spotify Connect
-  - Full metadata support: track name, artist, album, cover art forwarded to Snapcast clients
-  - Bidirectional playback control: play/pause/next/previous/seek from any Snapcast client
-  - Uses Snapcast's official `meta_go-librespot.py` plugin (maintained upstream)
-  - Uses official `ghcr.io/devgianlu/go-librespot:v0.7.0` Docker image (no custom build needed)
-  - Removed `Dockerfile.librespot` and `patches/librespot-ipv4-fallback.patch`
-  - New config file: `config/go-librespot.yml` (pipe backend, WebSocket API on port 24879)
-
 ### Added
+- **Unified installer** — Single `prepare-sd.sh` supports both server and client installation
+  - 3-option menu: Audio Player (client), Music Server (server), Server + Player (both)
+  - `install.conf` marker controls what `firstboot.sh` installs on the Pi
+  - Client repo (`rpi-snapclient-usb`) added as git submodule at `client/`
+- **Windows SD card preparation** — `prepare-sd.ps1` PowerShell script with same functionality as `prepare-sd.sh`
+  - Auto-detects bootfs drive, 3-option menu, patches cloud-init, safe eject
+- **Git installed on Pi** — `deploy.sh` and `firstboot.sh` install `git` so users can `git pull` for updates
+- **Headless client detection** — `firstboot.sh` detects HDMI via `/dev/fb0` and DRM status files
+  - Display attached: full visual stack (snapclient + visualizer + cover art display)
+  - Headless: audio-only (snapclient container only)
+- **Both mode** — Server + Player on the same Pi with no port conflicts
+  - Server at `/opt/snapmulti/` (host networking), client at `/opt/snapclient/` (bridge networking)
+  - Client auto-connects to `127.0.0.1`
+- **Configurable progress display** — `progress.sh` now accepts `STEP_NAMES`, `STEP_WEIGHTS`, and `PROGRESS_TITLE` from caller instead of hardcoded values
 - **Progress display TUI** ([#58](https://github.com/lollonet/snapMULTI/pull/58)) — Full-screen progress display on HDMI console (`/dev/tty1`) during first-boot installation
   - ASCII progress bar, step checklist (`[x]` done, `[>]` current, `[ ]` pending), animated spinner
   - Live log output area showing last 8 lines of install progress
@@ -28,6 +32,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Setup resolution** — `prepare-sd.sh` sets temporary 800x600 via `cmdline.txt` `video=` parameter for consistent TUI layout
 - **Monitoring tools** — `deploy.sh` installs `sysstat` (sar), `iotop-c`, and `dstat` for system monitoring
 - **Dependabot** — Weekly automated dependency update PRs for Docker images and GitHub Actions
+
+### Changed
+- **Registry migration** — Custom images (`snapmulti-{server,airplay,mpd,tidal}`) moved from GitHub Container Registry (`ghcr.io/lollonet/`) to Docker Hub (`lollonet/`) for faster pulls on Pi hardware ([#64](https://github.com/lollonet/snapMULTI/pull/64))
+- **Docker daemon config ownership** — `deploy.sh` now exclusively owns `/etc/docker/daemon.json` (live-restore, log rotation) with python3 merge logic for existing configs; `firstboot.sh` no longer writes it to avoid conflicts
+- **firstboot.sh Docker install** — Uses official APT repository instead of `get.docker.com` convenience script for reproducible, auditable installs
+- **Spotify Connect: switch to go-librespot** ([#59](https://github.com/lollonet/snapMULTI/pull/59)) — Replaced Rust librespot v0.8.0 with go-librespot for Spotify Connect
+  - Full metadata support: track name, artist, album, cover art forwarded to Snapcast clients
+  - Bidirectional playback control: play/pause/next/previous/seek from any Snapcast client
+  - Uses Snapcast's official `meta_go-librespot.py` plugin (maintained upstream)
+  - Uses official `ghcr.io/devgianlu/go-librespot:v0.7.0` Docker image (no custom build needed)
+  - Removed `Dockerfile.librespot` and `patches/librespot-ipv4-fallback.patch`
+  - New config file: `config/go-librespot.yml` (pipe backend, WebSocket API on port 24879)
 
 ### Fixed
 - **Spotify FIFO ENXIO** ([#62](https://github.com/lollonet/snapMULTI/pull/62)) — go-librespot opens the FIFO with `O_NONBLOCK` only at playback start; if snapserver has no active writer it closes the read end, causing `ENXIO`. Fix holds the FIFO open in read-write mode (`exec 3<>`) before starting go-librespot

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Progress display library for snapMULTI auto-install.
-# Adapted from rpi-snapclient-usb/common/scripts/setup.sh
 #
 # Provides a full-screen TUI on /dev/tty1 (HDMI console) with:
 #   - ASCII progress bar with weighted percentages
@@ -9,9 +8,13 @@
 #   - Live log output area (last 8 lines)
 #   - Elapsed time tracking
 #
+# The caller sets STEP_NAMES and STEP_WEIGHTS arrays before sourcing.
+#
 # Usage:
+#   STEP_NAMES=("Network" "Docker" "Deploy")
+#   STEP_WEIGHTS=(5 35 60)
 #   source scripts/common/progress.sh
-#   progress_init  # call once at start
+#   progress_init
 #   progress 1 "Waiting for network..."
 #   start_progress_animation 1 0 5
 #   ...
@@ -21,11 +24,16 @@
 PROGRESS_START_MONO=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
 PROGRESS_ANIM_PID=""
 
-STEP_NAMES=("Network connectivity" "Copy project files" "Install Docker"
-            "Deploy & pull images" "Verify containers")
+# Title displayed in the TUI header (can be overridden before progress_init)
+PROGRESS_TITLE="${PROGRESS_TITLE:-snapMULTI Auto-Install}"
 
-# Weights reflect actual duration
-STEP_WEIGHTS=(5 2 35 50 8)
+# Default steps — fallback for standalone testing only.
+# Callers (firstboot.sh) always set STEP_NAMES/STEP_WEIGHTS before sourcing.
+if [[ ${#STEP_NAMES[@]} -eq 0 ]]; then
+    STEP_NAMES=("Network connectivity" "Copy project files" "Install Docker"
+                "Deploy & pull images" "Verify containers")
+    STEP_WEIGHTS=(5 2 35 50 8)
+fi
 
 # Log file for capturing output to display
 PROGRESS_LOG="/tmp/snapmulti-progress.log"
@@ -74,7 +82,8 @@ render_progress() {
         printf '\033[2J\033[H'
         printf '\n'
         printf '  +----------------------------------------------------------------------+\n'
-        printf '  |                     \033[1msnapMULTI Auto-Install\033[0m                       |\n'
+        # Box interior = 70 chars: 21 leading spaces + 38 title field + 11 trailing spaces
+        printf '  |                     \033[1m%-38.38s\033[0m           |\n' "$PROGRESS_TITLE"
         printf '  +----------------------------------------------------------------------+\n'
         printf '\n'
         printf '  \033[36mElapsed: %02d:%02d\033[0m\n\n' $((elapsed/60)) $((elapsed%60))
@@ -190,7 +199,8 @@ progress_complete() {
         printf '\033[2J\033[H'
         printf '\n'
         printf '  +----------------------------------------------------------------------+\n'
-        printf '  |                     \033[1msnapMULTI Auto-Install\033[0m                       |\n'
+        # Box interior = 70 chars: 21 leading spaces + 38 title field + 11 trailing spaces
+        printf '  |                     \033[1m%-38.38s\033[0m           |\n' "$PROGRESS_TITLE"
         printf '  +----------------------------------------------------------------------+\n'
         printf '\n'
         printf '  \033[36mElapsed: %02d:%02d\033[0m\n\n' $((elapsed/60)) $((elapsed%60))

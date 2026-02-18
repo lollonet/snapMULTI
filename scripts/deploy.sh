@@ -323,6 +323,16 @@ preflight_checks() {
 install_dependencies() {
     step "System dependencies"
 
+    # Git for updates (git pull)
+    if ! command -v git >/dev/null 2>&1; then
+        info "Installing git..."
+        apt-get update -qq
+        apt-get install -y -qq git >/dev/null
+        ok "Git installed"
+    else
+        info "Git already installed"
+    fi
+
     # Avahi is required for mDNS discovery (Spotify Connect, AirPlay)
     if ! command -v avahi-daemon >/dev/null 2>&1; then
         info "Installing Avahi for mDNS discovery..."
@@ -367,10 +377,10 @@ install_docker() {
     if command -v docker >/dev/null 2>&1; then
         info "Docker already installed: $(docker --version)"
     else
-        info "Installing Docker via official script (https://get.docker.com)..."
-        curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-        sh /tmp/get-docker.sh
-        rm -f /tmp/get-docker.sh
+        info "Installing Docker via official APT repository..."
+        # shellcheck source=common/install-docker.sh
+        source "$SCRIPT_DIR/common/install-docker.sh"
+        install_docker_apt
         ok "Docker installed: $(docker --version)"
     fi
 
@@ -389,6 +399,38 @@ install_docker() {
         info "Added $real_user to docker group (re-login to take effect)"
     fi
 
+    # Configure Docker daemon (live-restore keeps containers running across
+    # daemon restarts/upgrades; log rotation prevents disk fill)
+    if [[ ! -f /etc/docker/daemon.json ]]; then
+        info "Writing /etc/docker/daemon.json (live-restore, log rotation)..."
+        mkdir -p /etc/docker
+        cat > /etc/docker/daemon.json <<'DJSON'
+{
+  "live-restore": true,
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+DJSON
+    else
+        # Ensure live-restore is enabled in existing config
+        if ! grep -q '"live-restore"' /etc/docker/daemon.json; then
+            info "Adding live-restore to existing daemon.json..."
+            local tmp
+            tmp=$(mktemp)
+            TMPFILE="$tmp" python3 -c "
+import json, os
+with open('/etc/docker/daemon.json') as f:
+    cfg = json.load(f)
+cfg['live-restore'] = True
+with open(os.environ['TMPFILE'], 'w') as f:
+    json.dump(cfg, f, indent=2)
+" 2>/dev/null && mv "$tmp" /etc/docker/daemon.json || rm -f "$tmp"
+        fi
+    fi
+
     # Enable and start Docker
     systemctl enable docker >/dev/null 2>&1 || true
     systemctl start docker
@@ -397,6 +439,20 @@ install_docker() {
     if ! docker info &>/dev/null; then
         error "Cannot connect to Docker daemon. Is it running?"
         exit 1
+    fi
+
+    # Enable cgroup memory controller for Docker resource limits on Pi.
+    # Without this, deploy.resources.limits.memory in docker-compose.yml is ignored.
+    local cmdline=""
+    if [[ -f /boot/firmware/cmdline.txt ]]; then
+        cmdline="/boot/firmware/cmdline.txt"
+    elif [[ -f /boot/cmdline.txt ]]; then
+        cmdline="/boot/cmdline.txt"
+    fi
+    if [[ -n "$cmdline" ]] && ! grep -q "cgroup_enable=memory" "$cmdline"; then
+        info "Enabling cgroup memory controller in $cmdline..."
+        sed -i '1s/$/ cgroup_enable=memory cgroup_memory=1/' "$cmdline"
+        warn "Reboot required for memory limits to take effect"
     fi
 
     ok "Docker ready"
