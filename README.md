@@ -27,28 +27,38 @@ More source types available — see [Audio Sources Reference](docs/SOURCES.md).
 
 ### Beginners: Plug-and-Play (Raspberry Pi)
 
-No terminal skills required. Flash an SD card, insert it, power on — done.
+No terminal skills required. Flash an SD card, answer one question, insert it, power on — done.
 
 **You need:**
 - Raspberry Pi 4 (2GB+ RAM recommended)
 - microSD card (16GB+)
-- USB drive or NAS with your music
-- Another computer to flash the SD card
+- Another computer to prepare the SD card
 
-**On your computer:**
+**On your computer (macOS/Linux):**
 ```bash
 # 1. Flash SD card with Raspberry Pi Imager
 #    - Choose: Raspberry Pi OS Lite (64-bit)
 #    - Configure: hostname, user/password, WiFi, SSH
 
 # 2. Keep SD mounted, run:
-git clone https://github.com/lollonet/snapMULTI.git
+git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
 ./snapMULTI/scripts/prepare-sd.sh
 
-# 3. Eject SD, insert in Pi, power on
+# 3. Choose what to install:
+#    1) Audio Player   — play music from your server on speakers
+#    2) Music Server   — central hub for Spotify, AirPlay, etc.
+#    3) Server+Player  — both on the same Pi
+
+# 4. Eject SD, insert in Pi, power on
 ```
 
-First boot installs Docker and snapMULTI automatically. Access at `http://snapmulti.local:8180`.
+**On Windows (PowerShell):**
+```powershell
+git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
+.\snapMULTI\scripts\prepare-sd.ps1
+```
+
+First boot installs everything automatically (~5-10 min). HDMI shows a progress screen. The Pi reboots when done.
 
 ---
 
@@ -119,15 +129,19 @@ Open `http://<server-ip>:8180` in a browser — myMPD lets you browse and play y
 
 ## Listen on Your Speakers
 
-Install a Snapcast client on each device where you want audio.
+### Option A: Dedicated Pi Speaker (recommended)
 
-**Debian / Ubuntu:**
+Use `prepare-sd.sh` and choose "Audio Player" to turn another Pi into a speaker. It auto-discovers the server, displays cover art on HDMI, and supports audio HATs.
+
+### Option B: Manual Snapclient
+
+Install a Snapcast client on any Linux device:
+
 ```bash
+# Debian/Ubuntu
 sudo apt install snapclient
-```
 
-**Arch Linux:**
-```bash
+# Arch Linux
 sudo pacman -S snapcast
 ```
 
@@ -158,8 +172,17 @@ For detailed troubleshooting, see [Usage Guide — Autodiscovery](docs/USAGE.md#
 
 ## Upgrading
 
+Git is installed automatically during setup, so you can update directly on the Pi:
+
 ```bash
-cd /path/to/snapMULTI
+# Server
+cd /opt/snapmulti
+git pull
+docker compose pull
+docker compose up -d
+
+# Client (if installed)
+cd /opt/snapclient
 git pull
 docker compose pull
 docker compose up -d

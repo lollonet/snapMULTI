@@ -323,6 +323,16 @@ preflight_checks() {
 install_dependencies() {
     step "System dependencies"
 
+    # Git for updates (git pull)
+    if ! command -v git >/dev/null 2>&1; then
+        info "Installing git..."
+        apt-get update -qq
+        apt-get install -y -qq git >/dev/null
+        ok "Git installed"
+    else
+        info "Git already installed"
+    fi
+
     # Avahi is required for mDNS discovery (Spotify Connect, AirPlay)
     if ! command -v avahi-daemon >/dev/null 2>&1; then
         info "Installing Avahi for mDNS discovery..."

@@ -26,33 +26,62 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 
 | Audience | Hardware | Method | Scripts |
 |----------|----------|--------|---------|
-| **Beginners** | Raspberry Pi 4 | Zero-touch SD | `prepare-sd.sh` → `firstboot.sh` → `deploy.sh` |
+| **Beginners** | Raspberry Pi 4 | Zero-touch SD | `prepare-sd.sh` → `firstboot.sh` → `deploy.sh`/`setup.sh` |
 | **Advanced** | Pi4 or x86_64 | Automated or Manual | `deploy.sh` (optional) |
 
-**Beginners**: No terminal required. Flash SD card on another computer, run `prepare-sd.sh`, insert in Pi, power on. HDMI shows a TUI progress display during installation (~5-10 min). The Pi becomes a dedicated audio appliance.
+**Beginners**: No terminal required. Flash SD card on another computer, run `prepare-sd.sh` (or `prepare-sd.ps1` on Windows), choose what to install, insert in Pi, power on. HDMI shows a TUI progress display during installation (~5-10 min). The Pi becomes a dedicated audio appliance.
 
 **Advanced**: Clone repo on any Linux host (Pi, x86_64, VM, NAS). Use `deploy.sh` for automation (hardware detection, directory setup, resource profiles) or skip it and just run `docker compose up`.
 
+### Unified Installer
+
+snapMULTI is the umbrella project. The client repo (`rpi-snapclient-usb`) is included as a git submodule at `client/`.
+
+`prepare-sd.sh` presents a 3-option menu:
+1. **Audio Player** (client) — snapclient + optional cover art display
+2. **Music Server** (server) — Spotify, AirPlay, MPD, Tidal, Snapcast
+3. **Server + Player** (both) — both on the same Pi
+
+The choice is written to `install.conf` on the SD card. `firstboot.sh` reads it and runs the appropriate installer(s).
+
 ### First-Boot Chain
 
-`prepare-sd.sh` → cloud-init `runcmd` → `firstboot.sh` → `deploy.sh` → reboot
+`prepare-sd.sh` → cloud-init `runcmd` → `firstboot.sh` → `deploy.sh` / `setup.sh` → reboot
 
-1. **prepare-sd.sh** (runs on host Mac/Linux): copies project files to boot partition, sets 800x600 HDMI resolution in `cmdline.txt`, patches cloud-init `user-data` to chain `firstboot.sh`
-2. **firstboot.sh** (runs on Pi as root): sources `common/progress.sh` for TUI display, waits for network (with WiFi regulatory domain fix for 5 GHz DFS channels), installs Docker, runs `deploy.sh`, verifies containers healthy, reboots
-3. **deploy.sh** (runs on Pi): hardware detection, directory setup, `.env` generation, `docker compose pull && up`
+1. **prepare-sd.sh** (runs on host Mac/Linux/Windows): shows install menu, copies project files to boot partition, writes `install.conf`, sets 800x600 HDMI resolution, patches cloud-init `user-data`
+2. **firstboot.sh** (runs on Pi as root): reads `install.conf`, sources `common/progress.sh` for TUI display, waits for network (with WiFi regulatory domain fix for 5 GHz DFS channels), installs git + Docker, runs `deploy.sh` (server) and/or `setup.sh --auto` (client), verifies containers healthy, reboots
+3. **deploy.sh** (server): hardware detection, directory setup, `.env` generation, `docker compose pull && up`
+4. **setup.sh** (client): audio HAT detection, ALSA config, Docker environment, image pull
+
+### Headless Client Detection
+
+For client installs, `firstboot.sh` detects whether an HDMI display is connected:
+- **Display attached**: Full stack — snapclient + metadata-service + audio-visualizer + fb-display + nginx
+- **Headless**: Audio only — snapclient container (no visual components)
+
+Detection checks `/dev/fb0` and `/sys/class/drm/card*-HDMI-*/status`.
+
+### Both Mode (Server + Player)
+
+When both are installed on the same Pi:
+- Server: `/opt/snapmulti/` — host networking (ports 1704, 1705, 1780, 6600, 8180)
+- Client: `/opt/snapclient/` — bridge networking (ports 8080-8082)
+- Client auto-connects to `127.0.0.1` (local server)
 
 ### Progress Display (`scripts/common/progress.sh`)
 
 Full-screen TUI on `/dev/tty1` (HDMI console), no-op when run via SSH.
 - ASCII-safe characters only (Linux framebuffer PSF fonts lack Unicode symbols)
 - Auto-detects HD screens (>1000px) and sets `Uni3-TerminusBold28x14` font
-- 5 weighted steps: Network (5%), Copy files (2%), Docker (35%), Deploy (50%), Verify (8%)
+- Configurable step names and weights — caller sets `STEP_NAMES` and `STEP_WEIGHTS` arrays before sourcing
+- `PROGRESS_TITLE` controls the header text (defaults to "snapMULTI Auto-Install")
 - Background spinner animation with ease-out progress curve
 
 ## Project Structure
 
 ```
 snapMULTI/
+  client/                    # Git submodule: rpi-snapclient-usb (audio player)
   config/
     snapserver.conf          # Snapcast server config (4 active + 4 commented sources)
     mpd.conf                 # MPD config (FIFO + HTTP outputs)
@@ -61,9 +90,10 @@ snapMULTI/
     go-librespot.yml         # go-librespot config (pipe backend, WebSocket API, zeroconf)
   scripts/
     deploy.sh                # Server deployment (profiles, FIFO setup, validation)
-    firstboot.sh             # First-boot provisioning (TUI progress, WiFi kick, Docker install)
+    firstboot.sh             # Unified first-boot installer (reads install.conf)
+    prepare-sd.sh            # Unified SD card prep (menu: client/server/both)
+    prepare-sd.ps1           # Windows PowerShell equivalent of prepare-sd.sh
     airplay-entrypoint.sh    # AirPlay container entrypoint (DEVICE_NAME sanitization)
-    prepare-sd.sh            # SD card preparation (file copy, 800x600 resolution, boot patching)
     common/                  # Shared shell libraries
       progress.sh            # TUI progress display for HDMI console (/dev/tty1)
       logging.sh             # Colored output functions (info, warn, error)
@@ -86,6 +116,7 @@ snapMULTI/
   mympd/
     workdir/                 # myMPD persistent data
     cachedir/                # myMPD cache (album art, etc.)
+  install.conf.template      # Template for install type marker
   Dockerfile.snapserver      # Snapserver (from lollonet/santcasp, multi-stage)
   Dockerfile.shairport-sync  # AirPlay receiver (pipe output)
   Dockerfile.mpd             # MPD + ffmpeg (Alpine)

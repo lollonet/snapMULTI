@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# snapMULTI Auto-Install — runs once on first boot.
-# Copies project files from the boot partition to /opt/snapmulti,
-# runs deploy.sh, then reboots.
+# snapMULTI Unified Auto-Install — runs once on first boot.
+#
+# Reads install.conf to determine what to install:
+#   client — Audio Player (snapclient + optional display)
+#   server — Music Server (Spotify, AirPlay, MPD, etc.)
+#   both   — Server + Player on the same Pi
+#
+# Called by cloud-init runcmd or firstrun.sh (patched by prepare-sd.sh).
 set -euo pipefail
 
 # Secure PATH - prevent PATH hijacking attacks
@@ -11,74 +16,134 @@ MARKER="/opt/snapmulti/.auto-installed"
 FAILED_MARKER="/opt/snapmulti/.install-failed"
 
 # Skip if already installed
-if [ -f "$MARKER" ]; then
+if [[ -f "$MARKER" ]]; then
     echo "snapMULTI already installed, skipping."
     exit 0
 fi
 
 # Skip if previous install failed (requires manual intervention)
-if [ -f "$FAILED_MARKER" ]; then
+if [[ -f "$FAILED_MARKER" ]]; then
     echo "Previous install failed. Check /var/log/snapmulti-install.log"
     echo "Remove $FAILED_MARKER to retry."
     exit 1
 fi
 
 # Detect boot partition path
-if [ -d /boot/firmware ]; then
+if [[ -d /boot/firmware ]]; then
     BOOT="/boot/firmware"
 else
     BOOT="/boot"
 fi
 
 SNAP_BOOT="$BOOT/snapmulti"
-INSTALL_DIR="/opt/snapmulti"
 LOG="/var/log/snapmulti-install.log"
 export DEBIAN_FRONTEND=noninteractive
 
 # Verify source files exist
-if [ ! -d "$SNAP_BOOT" ]; then
+if [[ ! -d "$SNAP_BOOT" ]]; then
     echo "ERROR: $SNAP_BOOT not found on boot partition." | tee -a "$LOG"
     exit 1
 fi
 
+# Read install type
+if [[ -f "$SNAP_BOOT/install.conf" ]]; then
+    # shellcheck source=/dev/null
+    source "$SNAP_BOOT/install.conf"
+fi
+INSTALL_TYPE="${INSTALL_TYPE:-server}"
+
+# Set install directories
+SERVER_DIR="/opt/snapmulti"
+CLIENT_DIR="/opt/snapclient"
+
 # Helper: write to both log and HDMI console
 log_and_tty() { echo "$*" | tee -a "$LOG" /dev/tty1 2>/dev/null || true; }
 
-# Source progress display (if available)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# ── Configure progress steps based on install type ────────────────
+# These variables are read by progress.sh when sourced below
+# shellcheck disable=SC2034
+case "$INSTALL_TYPE" in
+    client)
+        STEP_NAMES=("Network connectivity" "Copy project files"
+                    "Install git and dependencies" "Install Docker"
+                    "Audio HAT config" "ALSA loopback"
+                    "Boot settings" "Docker environment"
+                    "Pull images and start" "Verify and reboot")
+        STEP_WEIGHTS=(5 2 10 30 3 2 2 3 38 5)
+        PROGRESS_TITLE="snapMULTI Audio Player"
+        ;;
+    server)
+        STEP_NAMES=("Network connectivity" "Copy project files"
+                    "Install git and dependencies" "Install Docker"
+                    "Deploy server" "Verify containers" "Reboot")
+        STEP_WEIGHTS=(5 2 8 30 45 5 5)
+        PROGRESS_TITLE="snapMULTI Music Server"
+        ;;
+    both)
+        STEP_NAMES=("Network connectivity" "Copy project files"
+                    "Install git and dependencies" "Install Docker"
+                    "Deploy server" "Verify server"
+                    "Setup audio player" "Pull client images"
+                    "Verify and reboot")
+        STEP_WEIGHTS=(4 2 7 25 35 4 10 10 3)
+        PROGRESS_TITLE="snapMULTI Server + Player"
+        ;;
+    *)
+        echo "ERROR: Unknown INSTALL_TYPE=$INSTALL_TYPE" | tee -a "$LOG"
+        exit 1
+        ;;
+esac
+
+# Source progress display
 if [[ -f "$SNAP_BOOT/common/progress.sh" ]]; then
     # shellcheck source=common/progress.sh
     source "$SNAP_BOOT/common/progress.sh"
-elif [[ -f "$SCRIPT_DIR/common/progress.sh" ]]; then
-    # shellcheck source=common/progress.sh
-    source "$SCRIPT_DIR/common/progress.sh"
 fi
 
 # Cleanup on failure
 cleanup_on_failure() {
     local exit_code=$?
-    if [ $exit_code -ne 0 ]; then
+    if [[ $exit_code -ne 0 ]]; then
         stop_progress_animation 2>/dev/null || true
         log_and_tty ""
-        log_and_tty "  ━━━ Installation FAILED (exit code: $exit_code) ━━━"
+        log_and_tty "  --- Installation FAILED (exit code: $exit_code) ---"
         log_and_tty "  Check log: $LOG"
         log_and_tty ""
-        mkdir -p "$INSTALL_DIR"
+        mkdir -p "$SERVER_DIR"
         touch "$FAILED_MARKER"
     fi
 }
 trap cleanup_on_failure EXIT
 
 log_and_tty "========================================="
-log_and_tty "snapMULTI Auto-Install"
+log_and_tty "snapMULTI Auto-Install ($INSTALL_TYPE)"
 log_and_tty "========================================="
 
 # Initialize progress display
 progress_init 2>/dev/null || true
 
-# ── Step 1: Network ───────────────────────────────────────────────
-progress 1 "Waiting for network..." 2>/dev/null || true
-start_progress_animation 1 0 5 2>/dev/null || true
+# ── Headless detection (for client modes) ─────────────────────────
+has_display() {
+    [[ -c /dev/fb0 ]] || return 1
+    for card in /sys/class/drm/card*-HDMI-*/status; do
+        [[ -f "$card" ]] && grep -q "^connected" "$card" && return 0
+    done
+    # fb0 exists but no HDMI status files — assume connected (Pi may lack status file)
+    return 0
+}
+
+# ── Step counter (tracks current step across install phases) ──────
+CURRENT_STEP=0
+next_step() {
+    CURRENT_STEP=$(( CURRENT_STEP + 1 ))
+    progress "$CURRENT_STEP" "$1" 2>/dev/null || true
+}
+
+# ══════════════════════════════════════════════════════════════════
+# STEP 1: Network
+# ══════════════════════════════════════════════════════════════════
+next_step "Waiting for network..."
+start_progress_animation "$CURRENT_STEP" 0 "${STEP_WEIGHTS[0]}" 2>/dev/null || true
 log_progress "Waiting for network connectivity..." 2>/dev/null || true
 
 # Ensure WiFi regulatory domain is applied (brcmfmac may ignore the
@@ -93,7 +158,7 @@ NETWORK_READY=false
 WIFI_KICKED=false
 for i in $(seq 1 90); do
     GATEWAY=$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')
-    if { [ -n "$GATEWAY" ] && ping -c1 -W2 "$GATEWAY" &>/dev/null; } || \
+    if { [[ -n "$GATEWAY" ]] && ping -c1 -W2 "$GATEWAY" &>/dev/null; } || \
        ping -c1 -W2 1.1.1.1 &>/dev/null || \
        ping -c1 -W2 8.8.8.8 &>/dev/null; then
         # Ping works but DNS may lag behind — verify name resolution
@@ -103,10 +168,9 @@ for i in $(seq 1 90); do
             NETWORK_READY=true
             break
         fi
-        [ $((i % 10)) -eq 0 ] && log_progress "  DNS not ready yet ($i/90)..." 2>/dev/null || true
+        [[ $((i % 10)) -eq 0 ]] && log_progress "  DNS not ready yet ($i/90)..." 2>/dev/null || true
     else
-        # After 30s (15 iterations × 2s) without network, try to kick WiFi (may fail to
-        # auto-connect on 5 GHz DFS channels during first boot).
+        # After 30s without network, try to kick WiFi
         if [[ "$WIFI_KICKED" == "false" ]] && (( i >= 15 )); then
             if command -v nmcli &>/dev/null; then
                 WIFI_CONN=$(nmcli -t -f NAME,TYPE connection show 2>/dev/null \
@@ -118,44 +182,96 @@ for i in $(seq 1 90); do
                 fi
             fi
         fi
-        [ $((i % 10)) -eq 0 ] && log_progress "  Still waiting... ($i/90)" 2>/dev/null || true
+        [[ $((i % 10)) -eq 0 ]] && log_progress "  Still waiting... ($i/90)" 2>/dev/null || true
     fi
     sleep 2
 done
 
-if [ "$NETWORK_READY" = false ]; then
+if [[ "$NETWORK_READY" == "false" ]]; then
     log_and_tty "ERROR: Network not available after 3 minutes."
     log_and_tty "Check WiFi credentials or Ethernet connection."
     exit 1
 fi
 
-# ── Step 2: Copy files ────────────────────────────────────────────
-progress 2 "Copying project files..." 2>/dev/null || true
-log_progress "Copying files to $INSTALL_DIR ..." 2>/dev/null || true
+# ══════════════════════════════════════════════════════════════════
+# STEP 2: Copy files
+# ══════════════════════════════════════════════════════════════════
+next_step "Copying project files..."
+log_progress "Copying files from boot partition..." 2>/dev/null || true
 
-mkdir -p "$INSTALL_DIR/scripts"
-cp "$SNAP_BOOT/docker-compose.yml" "$INSTALL_DIR/"
-cp "$SNAP_BOOT/.env.example" "$INSTALL_DIR/" 2>/dev/null || true
-cp -r "$SNAP_BOOT/config" "$INSTALL_DIR/"
-cp "$SNAP_BOOT/deploy.sh" "$INSTALL_DIR/scripts/"
-cp "$SNAP_BOOT/firstboot.sh" "$INSTALL_DIR/scripts/"
-cp -r "$SNAP_BOOT/common" "$INSTALL_DIR/scripts/" 2>/dev/null || true
+# Copy server files
+if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+    mkdir -p "$SERVER_DIR/scripts"
+    if [[ -d "$SNAP_BOOT/server" ]]; then
+        cp "$SNAP_BOOT/server/docker-compose.yml" "$SERVER_DIR/"
+        cp "$SNAP_BOOT/server/.env.example" "$SERVER_DIR/" 2>/dev/null || true
+        cp -r "$SNAP_BOOT/server/config" "$SERVER_DIR/"
+        cp "$SNAP_BOOT/server/deploy.sh" "$SERVER_DIR/scripts/"
+        # Copy Dockerfiles for local builds
+        for df in "$SNAP_BOOT/server"/Dockerfile.*; do
+            [[ -f "$df" ]] && cp "$df" "$SERVER_DIR/"
+        done
+    fi
+    cp "$SNAP_BOOT/firstboot.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
+    cp -r "$SNAP_BOOT/common" "$SERVER_DIR/scripts/" 2>/dev/null || true
+    log_progress "Server files copied to $SERVER_DIR" 2>/dev/null || true
+fi
+
+# Copy client files
+if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+    mkdir -p "$CLIENT_DIR"
+    if [[ -d "$SNAP_BOOT/client" ]]; then
+        # Copy all client files
+        cp -r "$SNAP_BOOT/client/"* "$CLIENT_DIR/" 2>/dev/null || true
+        # Copy dotfiles (.env.example)
+        cp -r "$SNAP_BOOT/client/".??* "$CLIENT_DIR/" 2>/dev/null || true
+    fi
+    log_progress "Client files copied to $CLIENT_DIR" 2>/dev/null || true
+fi
 
 log_progress "Files copied" 2>/dev/null || true
 
-# ── Step 3: Docker ────────────────────────────────────────────────
-progress 3 "Installing Docker..." 2>/dev/null || true
-start_progress_animation 3 7 35 2>/dev/null || true
+# ══════════════════════════════════════════════════════════════════
+# STEP 3: Install git + system dependencies
+# ══════════════════════════════════════════════════════════════════
+next_step "Installing git and dependencies..."
+start_progress_animation "$CURRENT_STEP" 7 "${STEP_WEIGHTS[2]}" 2>/dev/null || true
+
+log_progress "apt-get update" 2>/dev/null || true
+apt-get update -qq
+
+# Core dependencies (always needed)
+PKGS=(curl ca-certificates gnupg)
+
+# Git for updates
+if ! command -v git &>/dev/null; then
+    PKGS+=(git)
+fi
+
+# Avahi for mDNS (server needs it for Spotify/AirPlay, client for discovery)
+if ! command -v avahi-daemon &>/dev/null; then
+    PKGS+=(avahi-daemon)
+fi
+
+log_progress "Installing: ${PKGS[*]}" 2>/dev/null || true
+apt-get install -y -qq "${PKGS[@]}" >/dev/null
+
+# Enable avahi if just installed
+if command -v avahi-daemon &>/dev/null; then
+    systemctl enable --now avahi-daemon >/dev/null 2>&1 || true
+fi
+
+log_progress "System dependencies installed" 2>/dev/null || true
+
+# ══════════════════════════════════════════════════════════════════
+# STEP 4: Docker
+# ══════════════════════════════════════════════════════════════════
+next_step "Installing Docker..."
+start_progress_animation "$CURRENT_STEP" "$((7 + STEP_WEIGHTS[2]))" "${STEP_WEIGHTS[3]}" 2>/dev/null || true
 
 if ! command -v docker &>/dev/null; then
-    log_progress "apt-get update" 2>/dev/null || true
-    apt-get update -qq
-    log_progress "apt-get install: curl ca-certificates gnupg" 2>/dev/null || true
-    apt-get install -y -qq curl ca-certificates gnupg
-
-    # Install Docker using official repository
+    log_progress "Setting up Docker repository..." 2>/dev/null || true
     install -m 0755 -d /etc/apt/keyrings
-    log_progress "Downloading Docker GPG key..." 2>/dev/null || true
     curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
     chmod a+r /etc/apt/keyrings/docker.asc
 
@@ -173,16 +289,14 @@ if ! command -v docker &>/dev/null; then
         > /etc/apt/sources.list.d/docker.list
 
     apt-get update -qq
-    log_progress "apt-get install: docker-ce docker-ce-cli..." 2>/dev/null || true
-    log_progress "apt-get install: containerd.io docker-compose-plugin..." 2>/dev/null || true
+    log_progress "Installing docker-ce..." 2>/dev/null || true
     apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
-    log_progress "systemctl enable docker" 2>/dev/null || true
     systemctl enable docker
     systemctl start docker
 
     FIRST_USER=$(getent passwd 1000 | cut -d: -f1 || true)
-    [ -n "$FIRST_USER" ] && usermod -aG docker "$FIRST_USER"
+    [[ -n "$FIRST_USER" ]] && usermod -aG docker "$FIRST_USER"
     log_progress "Docker installed" 2>/dev/null || true
 else
     log_progress "Docker already installed, skipping" 2>/dev/null || true
@@ -194,52 +308,143 @@ if ! docker info &>/dev/null; then
     exit 1
 fi
 
-# ── Step 4: Deploy ────────────────────────────────────────────────
-progress 4 "Deploy & pull images..." 2>/dev/null || true
-start_progress_animation 4 42 50 2>/dev/null || true
-log_progress "Running deploy.sh ..." 2>/dev/null || true
+# ══════════════════════════════════════════════════════════════════
+# SERVER INSTALL
+# ══════════════════════════════════════════════════════════════════
+if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
 
-cd "$INSTALL_DIR"
-if ! bash scripts/deploy.sh >> "$LOG" 2>&1; then
-    log_and_tty "ERROR: deploy.sh failed."
-    exit 1
-fi
-log_progress "Deploy complete" 2>/dev/null || true
+    # ── Deploy server ─────────────────────────────────────────────
+    next_step "Deploy server..."
+    start_progress_animation "$CURRENT_STEP" 42 "${STEP_WEIGHTS[$((CURRENT_STEP-1))]}" 2>/dev/null || true
+    log_progress "Running deploy.sh ..." 2>/dev/null || true
 
-# ── Step 5: Verify ────────────────────────────────────────────────
-progress 5 "Verifying containers..." 2>/dev/null || true
-start_progress_animation 5 92 8 2>/dev/null || true
-log_progress "Waiting for containers to become healthy..." 2>/dev/null || true
-
-HEALTHY=false
-for attempt in $(seq 1 12); do
-    TOTAL=$(docker ps --format '{{.Names}}' | wc -l)
-    HEALTHY_COUNT=$(docker ps --format '{{.Status}}' | grep -c "(healthy)" || true)
-    if [ "$TOTAL" -ge 5 ] && [ "$HEALTHY_COUNT" -eq "$TOTAL" ]; then
-        log_and_tty "All $TOTAL containers healthy."
-        log_progress "All $TOTAL containers healthy" 2>/dev/null || true
-        HEALTHY=true
-        break
+    cd "$SERVER_DIR"
+    if ! bash scripts/deploy.sh >> "$LOG" 2>&1; then
+        log_and_tty "ERROR: deploy.sh failed."
+        exit 1
     fi
-    log_progress "  Attempt $attempt/12: $HEALTHY_COUNT/$TOTAL healthy..." 2>/dev/null || true
-    sleep 10
-done
+    log_progress "Server deploy complete" 2>/dev/null || true
 
-if [ "$HEALTHY" = false ]; then
-    log_and_tty "WARNING: Not all containers healthy after 2 minutes."
-    docker ps --format '{{.Names}}\t{{.Status}}' | while read -r line; do
-        log_and_tty "  $line"
+    # ── Verify server containers ──────────────────────────────────
+    next_step "Verifying server containers..."
+    start_progress_animation "$CURRENT_STEP" 87 "${STEP_WEIGHTS[$((CURRENT_STEP-1))]}" 2>/dev/null || true
+    log_progress "Waiting for containers to become healthy..." 2>/dev/null || true
+
+    HEALTHY=false
+    for attempt in $(seq 1 12); do
+        TOTAL=$(docker ps --format '{{.Names}}' | wc -l)
+        HEALTHY_COUNT=$(docker ps --format '{{.Status}}' | grep -c "(healthy)" || true)
+        if [[ "$TOTAL" -ge 5 ]] && [[ "$HEALTHY_COUNT" -eq "$TOTAL" ]]; then
+            log_and_tty "All $TOTAL server containers healthy."
+            log_progress "All $TOTAL server containers healthy" 2>/dev/null || true
+            HEALTHY=true
+            break
+        fi
+        log_progress "  Attempt $attempt/12: $HEALTHY_COUNT/$TOTAL healthy..." 2>/dev/null || true
+        sleep 10
     done
-    log_and_tty "Check: docker compose logs"
+
+    if [[ "$HEALTHY" == "false" ]]; then
+        log_and_tty "WARNING: Not all server containers healthy after 2 minutes."
+        docker ps --format '{{.Names}}\t{{.Status}}' | while read -r line; do
+            log_and_tty "  $line"
+        done
+    fi
 fi
 
-# ── Complete ──────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# CLIENT INSTALL
+# ══════════════════════════════════════════════════════════════════
+if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+
+    # Detect display for headless mode
+    DISPLAY_MODE="framebuffer"
+    if ! has_display; then
+        DISPLAY_MODE="headless"
+        log_progress "No display detected -- headless mode" 2>/dev/null || true
+    else
+        log_progress "Display detected -- full visual stack" 2>/dev/null || true
+    fi
+
+    # For "both" mode, set client to connect to local server
+    SNAPSERVER_HOST=""
+    if [[ "$INSTALL_TYPE" == "both" ]]; then
+        SNAPSERVER_HOST="127.0.0.1"
+    fi
+
+    CONFIG_FILE=""
+    if [[ -f "$CLIENT_DIR/snapclient.conf" ]]; then
+        CONFIG_FILE="$CLIENT_DIR/snapclient.conf"
+    fi
+
+    # Write display mode override to config so setup.sh picks it up
+    if [[ -n "$CONFIG_FILE" ]]; then
+        # Override DISPLAY_MODE in the config
+        if grep -q '^DISPLAY_MODE=' "$CONFIG_FILE"; then
+            sed -i "s/^DISPLAY_MODE=.*/DISPLAY_MODE=$DISPLAY_MODE/" "$CONFIG_FILE"
+        else
+            echo "DISPLAY_MODE=$DISPLAY_MODE" >> "$CONFIG_FILE"
+        fi
+        # Set snapserver host for "both" mode
+        if [[ -n "$SNAPSERVER_HOST" ]]; then
+            if grep -q '^SNAPSERVER_HOST=' "$CONFIG_FILE"; then
+                sed -i "s/^SNAPSERVER_HOST=.*/SNAPSERVER_HOST=$SNAPSERVER_HOST/" "$CONFIG_FILE"
+            else
+                echo "SNAPSERVER_HOST=$SNAPSERVER_HOST" >> "$CONFIG_FILE"
+            fi
+        fi
+    fi
+
+    if [[ "$INSTALL_TYPE" == "client" ]]; then
+        # Client-only: steps 5-10 are audio HAT, ALSA, boot, env, pull, verify
+        next_step "Setting up audio player..."
+    else
+        # Both mode: combined step
+        next_step "Setting up audio player..."
+    fi
+
+    start_progress_animation "$CURRENT_STEP" 70 "${STEP_WEIGHTS[$((CURRENT_STEP-1))]}" 2>/dev/null || true
+    log_progress "Running client setup.sh --auto ..." 2>/dev/null || true
+
+    cd "$CLIENT_DIR"
+    if [[ -n "$CONFIG_FILE" ]]; then
+        bash scripts/setup.sh --auto "$CONFIG_FILE" >> "$LOG" 2>&1
+    else
+        bash scripts/setup.sh --auto >> "$LOG" 2>&1
+    fi
+    log_progress "Client setup complete" 2>/dev/null || true
+
+    if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+        next_step "Verifying client..."
+        log_progress "Checking client containers..." 2>/dev/null || true
+
+        # Brief wait for containers
+        sleep 5
+        CLIENT_CONTAINERS=$(docker ps --format '{{.Names}}' | grep -c "snapclient" || true)
+        if [[ "$CLIENT_CONTAINERS" -ge 1 ]]; then
+            log_progress "Client container running" 2>/dev/null || true
+        else
+            log_and_tty "WARNING: snapclient container not running."
+        fi
+    fi
+fi
+
+# ══════════════════════════════════════════════════════════════════
+# COMPLETE
+# ══════════════════════════════════════════════════════════════════
+mkdir -p "$SERVER_DIR"
 touch "$MARKER"
+
+# Mark client as installed too (if applicable)
+if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+    mkdir -p "$CLIENT_DIR"
+    touch "$CLIENT_DIR/.auto-installed"
+fi
 
 progress_complete 2>/dev/null || true
 
 log_and_tty ""
-log_and_tty "  ━━━ Installation complete! ━━━"
+log_and_tty "  --- Installation complete! ($INSTALL_TYPE) ---"
 log_and_tty ""
 for i in 5 4 3 2 1; do
     log_and_tty "  Rebooting in $i..."
