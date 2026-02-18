@@ -338,6 +338,22 @@ install_dependencies() {
         fi
     fi
 
+    # Lightweight monitoring tools (sar, iotop, dstat)
+    local mon_pkgs=()
+    command -v sar >/dev/null 2>&1 || mon_pkgs+=(sysstat)
+    command -v iotop >/dev/null 2>&1 || mon_pkgs+=(iotop-c)
+    command -v dstat >/dev/null 2>&1 || mon_pkgs+=(dstat)
+    if [[ ${#mon_pkgs[@]} -gt 0 ]]; then
+        info "Installing monitoring tools: ${mon_pkgs[*]}..."
+        apt-get install -y -qq "${mon_pkgs[@]}" >/dev/null
+        # Enable sysstat data collection (sar)
+        if [[ -f /etc/default/sysstat ]]; then
+            sed -i 's/^ENABLED="false"/ENABLED="true"/' /etc/default/sysstat
+            systemctl enable --now sysstat >/dev/null 2>&1 || true
+        fi
+        ok "Monitoring tools installed"
+    fi
+
     ok "System dependencies ready"
 }
 
