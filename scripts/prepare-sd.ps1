@@ -251,6 +251,8 @@ if (Test-Path $firstrun) {
     # Legacy Pi Imager (Bullseye): boot partition is /boot
     $hook = $hookBullseye
     $frContent = [System.IO.File]::ReadAllText($firstrun)
+    # Normalize CRLF to LF so (?m)^ anchors work reliably
+    $frContent = $frContent.Replace("`r`n", "`n")
     if ($frContent -match 'snapmulti/firstboot\.sh') {
         Write-Host 'firstrun.sh already patched, skipping.'
     } else {

@@ -69,14 +69,14 @@ case "$INSTALL_TYPE" in
     client)
         STEP_NAMES=("Network connectivity" "Copy project files"
                     "Install git and dependencies" "Install Docker"
-                    "Setup audio player" "Verify and reboot")
+                    "Setup audio player" "Verify containers")
         STEP_WEIGHTS=(5 2 10 30 48 5)
         PROGRESS_TITLE="snapMULTI Audio Player"
         ;;
     server)
         STEP_NAMES=("Network connectivity" "Copy project files"
                     "Install git and dependencies" "Install Docker"
-                    "Deploy server" "Verify and reboot")
+                    "Deploy server" "Verify containers")
         STEP_WEIGHTS=(5 2 8 30 45 10)
         PROGRESS_TITLE="snapMULTI Music Server"
         ;;
@@ -84,7 +84,7 @@ case "$INSTALL_TYPE" in
         STEP_NAMES=("Network connectivity" "Copy project files"
                     "Install git and dependencies" "Install Docker"
                     "Deploy server" "Verify server"
-                    "Setup audio player" "Verify and reboot")
+                    "Setup audio player" "Verify containers")
         STEP_WEIGHTS=(4 2 7 25 35 4 18 5)
         PROGRESS_TITLE="snapMULTI Server + Player"
         ;;
@@ -385,6 +385,10 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     for attempt in $(seq 1 12); do
         TOTAL=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps -q 2>/dev/null | wc -l)
         RUNNING_COUNT=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps --format '{{.State}}' 2>/dev/null | grep -c '^running' || true)
+        # Fallback for Compose < v2.23 where --format may not work
+        if [[ "$RUNNING_COUNT" -eq 0 ]] && [[ "$TOTAL" -gt 0 ]]; then
+            RUNNING_COUNT=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps 2>/dev/null | grep -c ' Up ' || true)
+        fi
         if [[ "$TOTAL" -ge 5 ]] && [[ "$RUNNING_COUNT" -eq "$TOTAL" ]]; then
             log_and_tty "All $TOTAL server containers running."
             log_progress "All $TOTAL server containers running" 2>/dev/null || true

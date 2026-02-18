@@ -22,6 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Server at `/opt/snapmulti/` (host networking), client at `/opt/snapclient/` (bridge networking)
   - Client auto-connects to `127.0.0.1`
 - **Configurable progress display** — `progress.sh` now accepts `STEP_NAMES`, `STEP_WEIGHTS`, and `PROGRESS_TITLE` from caller instead of hardcoded values
+- **Progress display TUI** ([#58](https://github.com/lollonet/snapMULTI/pull/58)) — Full-screen progress display on HDMI console (`/dev/tty1`) during first-boot installation
+  - ASCII progress bar, step checklist (`[x]` done, `[>]` current, `[ ]` pending), animated spinner
+  - Live log output area showing last 8 lines of install progress
+  - Elapsed time tracking using monotonic clock (handles wrong system time on first boot)
+  - Weighted step percentages reflecting actual duration of each phase
+  - Console-safe characters only (no Unicode symbols that break on Linux framebuffer)
+- **HD screen font auto-detection** — Detects framebuffer > 1000px and switches to `Uni3-TerminusBold28x14` for readability on 1080p displays
+- **Setup resolution** — `prepare-sd.sh` sets temporary 800x600 via `cmdline.txt` `video=` parameter for consistent TUI layout
+- **Monitoring tools** — `deploy.sh` installs `sysstat` (sar), `iotop-c`, and `dstat` for system monitoring
+- **Dependabot** — Weekly automated dependency update PRs for Docker images and GitHub Actions
 
 ### Changed
 - **Docker daemon config ownership** — `deploy.sh` now exclusively owns `/etc/docker/daemon.json` (live-restore, log rotation) with python3 merge logic for existing configs; `firstboot.sh` no longer writes it to avoid conflicts
@@ -33,18 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Uses official `ghcr.io/devgianlu/go-librespot:v0.7.0` Docker image (no custom build needed)
   - Removed `Dockerfile.librespot` and `patches/librespot-ipv4-fallback.patch`
   - New config file: `config/go-librespot.yml` (pipe backend, WebSocket API on port 24879)
-
-### Added
-- **Progress display TUI** ([#58](https://github.com/lollonet/snapMULTI/pull/58)) — Full-screen progress display on HDMI console (`/dev/tty1`) during first-boot installation
-  - ASCII progress bar, step checklist (`[x]` done, `[>]` current, `[ ]` pending), animated spinner
-  - Live log output area showing last 8 lines of install progress
-  - Elapsed time tracking using monotonic clock (handles wrong system time on first boot)
-  - Weighted step percentages reflecting actual duration of each phase
-  - Console-safe characters only (no Unicode symbols that break on Linux framebuffer)
-- **HD screen font auto-detection** — Detects framebuffer > 1000px and switches to `Uni3-TerminusBold28x14` for readability on 1080p displays
-- **Setup resolution** — `prepare-sd.sh` sets temporary 800x600 via `cmdline.txt` `video=` parameter for consistent TUI layout
-- **Monitoring tools** — `deploy.sh` installs `sysstat` (sar), `iotop-c`, and `dstat` for system monitoring
-- **Dependabot** — Weekly automated dependency update PRs for Docker images and GitHub Actions
 
 ### Fixed
 - **Spotify FIFO ENXIO** ([#62](https://github.com/lollonet/snapMULTI/pull/62)) — go-librespot opens the FIFO with `O_NONBLOCK` only at playback start; if snapserver has no active writer it closes the read end, causing `ENXIO`. Fix holds the FIFO open in read-write mode (`exec 3<>`) before starting go-librespot
