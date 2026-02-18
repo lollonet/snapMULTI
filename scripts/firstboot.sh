@@ -76,8 +76,8 @@ case "$INSTALL_TYPE" in
     server)
         STEP_NAMES=("Network connectivity" "Copy project files"
                     "Install git and dependencies" "Install Docker"
-                    "Deploy server" "Verify containers" "Reboot")
-        STEP_WEIGHTS=(5 2 8 30 45 5 5)
+                    "Deploy server" "Verify and reboot")
+        STEP_WEIGHTS=(5 2 8 30 45 10)
         PROGRESS_TITLE="snapMULTI Music Server"
         ;;
     both)
@@ -93,6 +93,12 @@ case "$INSTALL_TYPE" in
         exit 1
         ;;
 esac
+
+# Guard: step names and weights must match
+if [[ ${#STEP_NAMES[@]} -ne ${#STEP_WEIGHTS[@]} ]]; then
+    echo "BUG: STEP_NAMES (${#STEP_NAMES[@]}) != STEP_WEIGHTS (${#STEP_WEIGHTS[@]})" | tee -a "$LOG"
+    exit 1
+fi
 
 # Source progress display (boot partition copy, or local fallback for manual testing)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -128,7 +134,9 @@ has_display() {
     for card in /sys/class/drm/card*-HDMI-*/status; do
         [[ -f "$card" ]] && grep -q "^connected" "$card" && return 0
     done
-    # fb0 exists but no HDMI status files — assume connected (Pi may lack status file)
+    # fb0 exists but no HDMI status files found (some Pi firmware versions
+    # don't expose DRM status). Default to "display present" — worst case,
+    # visual containers start but fail gracefully at runtime.
     return 0
 }
 
@@ -371,7 +379,7 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     for attempt in $(seq 1 12); do
         TOTAL=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps -q 2>/dev/null | wc -l)
         HEALTHY_COUNT=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps 2>/dev/null | grep -c "(healthy)" || true)
-        RUNNING_COUNT=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps --format '{{.Status}}' 2>/dev/null | grep -cE "(healthy)|^running" || true)
+        RUNNING_COUNT=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps --format '{{.State}}' 2>/dev/null | grep -c '^running' || true)
         if [[ "$TOTAL" -ge 5 ]] && [[ "$RUNNING_COUNT" -eq "$TOTAL" ]]; then
             log_and_tty "All $TOTAL server containers healthy."
             log_progress "All $TOTAL server containers healthy" 2>/dev/null || true

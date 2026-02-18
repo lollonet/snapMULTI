@@ -373,6 +373,17 @@ Installation log saved to `/var/log/snapmulti-install.log`.
 
 **Supported OS versions:** Raspberry Pi OS Bookworm (recommended) and Bullseye. The script auto-detects the version and uses the correct boot paths (`/boot/firmware` vs `/boot`).
 
+#### "Server + Player" (Both) Mode
+
+When option 3 is selected, the Pi runs both the music server and a local audio player on the same device. The two stacks coexist without port conflicts:
+
+| Component | Path | Networking | Ports |
+|-----------|------|------------|-------|
+| Server | `/opt/snapmulti/` | Host networking | 1704, 1705, 1780, 6600, 8180 |
+| Client | `/opt/snapclient/` | Bridge networking | 8080, 8081, 8082 |
+
+The client auto-connects to the local server (`SNAPSERVER_HOST=127.0.0.1`) and uses the Pi's local audio output (HAT or USB DAC).
+
 ### Automated Deployment (SSH)
 
 ```bash
@@ -627,7 +638,7 @@ If an update breaks things:
 # Restore config
 cp -r config.backup/* config/
 
-# Or use a specific image version
-docker compose pull ghcr.io/lollonet/snapmulti-server:v1.0.0
+# Or pin a specific image version
+docker pull ghcr.io/lollonet/snapmulti-server:v1.0.0
 docker compose up -d
 ```

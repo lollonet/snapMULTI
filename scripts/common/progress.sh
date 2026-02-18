@@ -8,8 +8,7 @@
 #   - Live log output area (last 8 lines)
 #   - Elapsed time tracking
 #
-# The caller sets STEP_NAMES and STEP_WEIGHTS arrays before sourcing,
-# or calls progress_set_steps() to configure them dynamically.
+# The caller sets STEP_NAMES and STEP_WEIGHTS arrays before sourcing.
 #
 # Usage:
 #   STEP_NAMES=("Network" "Docker" "Deploy")
@@ -38,15 +37,6 @@ fi
 
 # Log file for capturing output to display
 PROGRESS_LOG="/tmp/snapmulti-progress.log"
-
-# Set step names and weights dynamically
-progress_set_steps() {
-    STEP_NAMES=("$@")
-}
-
-progress_set_weights() {
-    STEP_WEIGHTS=("$@")
-}
 
 progress_init() {
     : > "$PROGRESS_LOG"
@@ -88,12 +78,11 @@ render_progress() {
         log_lines=$(tail -8 "$PROGRESS_LOG" 2>/dev/null | cut -c1-68 || true)
     fi
 
-    # PROGRESS_TITLE is used in the printf below
-
     {
         printf '\033[2J\033[H'
         printf '\n'
         printf '  +----------------------------------------------------------------------+\n'
+        # Box interior = 70 chars: 21 leading spaces + 38 title field + 11 trailing spaces
         printf '  |                     \033[1m%-38.38s\033[0m           |\n' "$PROGRESS_TITLE"
         printf '  +----------------------------------------------------------------------+\n'
         printf '\n'
@@ -210,6 +199,7 @@ progress_complete() {
         printf '\033[2J\033[H'
         printf '\n'
         printf '  +----------------------------------------------------------------------+\n'
+        # Box interior = 70 chars: 21 leading spaces + 38 title field + 11 trailing spaces
         printf '  |                     \033[1m%-38.38s\033[0m           |\n' "$PROGRESS_TITLE"
         printf '  +----------------------------------------------------------------------+\n'
         printf '\n'

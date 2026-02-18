@@ -289,6 +289,17 @@ Il primo avvio installa tutto automaticamente (~5-10 min). L'HDMI mostra una sch
 
 Log di installazione salvato in `/var/log/snapmulti-install.log`.
 
+#### Modalita "Server + Player" (Entrambi)
+
+Selezionando l'opzione 3, il Pi esegue sia il music server che un audio player locale sullo stesso dispositivo. I due stack coesistono senza conflitti di porte:
+
+| Componente | Percorso | Rete | Porte |
+|------------|----------|------|-------|
+| Server | `/opt/snapmulti/` | Host networking | 1704, 1705, 1780, 6600, 8180 |
+| Client | `/opt/snapclient/` | Bridge networking | 8080, 8081, 8082 |
+
+Il client si connette automaticamente al server locale (`SNAPSERVER_HOST=127.0.0.1`) e usa l'uscita audio locale del Pi (HAT o DAC USB).
+
 ### Deployment Automatico (deploy.sh)
 
 ```bash
