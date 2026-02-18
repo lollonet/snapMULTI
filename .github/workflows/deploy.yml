@@ -17,7 +17,7 @@ jobs:
   deploy:
     runs-on: snapcast-runner
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.0
