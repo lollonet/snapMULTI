@@ -615,6 +615,6 @@ If an update breaks things:
 cp -r config.backup/* config/
 
 # Or use a specific image version
-docker compose pull lollonet/snapmulti-server:v1.0.0
+docker pull lollonet/snapmulti-server:v1.0.0
 docker compose up -d
 ```
