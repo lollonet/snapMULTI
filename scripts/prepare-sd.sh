@@ -15,6 +15,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLIENT_DIR="$PROJECT_DIR/client"
 
+# shellcheck source=common/sanitize.sh
+source "$SCRIPT_DIR/common/sanitize.sh"
+
 # ── Preflight: check submodule ────────────────────────────────────
 check_client_submodule() {
     # .git is a file (gitlink) in submodules, a directory in standalone clones
@@ -78,6 +81,116 @@ get_install_type() {
             *) echo "  Invalid choice. Enter 1, 2, or 3." ;;
         esac
     done
+}
+
+# ── Music source menu (server/both only) ─────────────────────────
+show_music_menu() {
+    echo ""
+    echo "  +---------------------------------------------+"
+    echo "  |        Where is your music?                  |"
+    echo "  |                                              |"
+    echo "  |  1) Streaming only                           |"
+    echo "  |     Spotify, AirPlay, Tidal (no local files) |"
+    echo "  |                                              |"
+    echo "  |  2) USB drive                                |"
+    echo "  |     Plug in before powering on the Pi        |"
+    echo "  |                                              |"
+    echo "  |  3) Network share (NFS/SMB)                  |"
+    echo "  |     Music on a NAS or another computer       |"
+    echo "  |                                              |"
+    echo "  |  4) I'll set it up later                     |"
+    echo "  |     Mount music dir manually after install   |"
+    echo "  |                                              |"
+    echo "  +---------------------------------------------+"
+    echo ""
+}
+
+get_music_source() {
+    local choice
+    while true; do
+        read -rp "  Choose [1-4]: " choice
+        case "$choice" in
+            1) echo "streaming"; return ;;
+            2) echo "usb";       return ;;
+            3) echo "network";   return ;;
+            4) echo "manual";    return ;;
+            *) echo "  Invalid choice. Enter 1, 2, 3, or 4." ;;
+        esac
+    done
+}
+
+get_network_type() {
+    local choice
+    echo ""
+    echo "  Share type:"
+    echo "    a) NFS  (Linux/Mac/NAS — most common)"
+    echo "    b) SMB  (Windows share)"
+    echo ""
+    while true; do
+        read -rp "  Choose [a/b]: " choice
+        case "$choice" in
+            a|A) echo "nfs"; return ;;
+            b|B) echo "smb"; return ;;
+            *) echo "  Invalid choice. Enter a or b." ;;
+        esac
+    done
+}
+
+get_nfs_config() {
+    local raw_server raw_export
+    echo ""
+    echo "  NFS Server Configuration"
+    echo "  Example: nas.local:/volume1/music"
+    echo ""
+    read -rp "  Server hostname or IP: " raw_server
+    read -rp "  Export path (e.g. /volume1/music): " raw_export
+
+    NFS_SERVER=$(sanitize_nfs_server "$raw_server")
+    NFS_EXPORT=$(sanitize_nfs_export "$raw_export")
+
+    if [[ -z "$NFS_SERVER" ]]; then
+        echo "  ERROR: Invalid server hostname."
+        exit 1
+    fi
+    if [[ -z "$NFS_EXPORT" ]]; then
+        echo "  ERROR: Invalid export path (must start with /)."
+        exit 1
+    fi
+    echo ""
+    echo "  Will mount: $NFS_SERVER:$NFS_EXPORT"
+}
+
+get_smb_config() {
+    local raw_server raw_share
+    echo ""
+    echo "  SMB/CIFS Configuration"
+    printf '  Example: \\\\mypc\\Music  or  mynas/Music\n'
+    echo ""
+    read -rp "  Server hostname or IP: " raw_server
+    read -rp "  Share name (e.g. Music): " raw_share
+
+    SMB_SERVER=$(sanitize_nfs_server "$raw_server")
+    SMB_SHARE=$(sanitize_smb_share "$raw_share")
+
+    if [[ -z "$SMB_SERVER" ]]; then
+        echo "  ERROR: Invalid server hostname."
+        exit 1
+    fi
+    if [[ -z "$SMB_SHARE" ]]; then
+        echo "  ERROR: Invalid share name."
+        exit 1
+    fi
+
+    echo ""
+    read -rp "  Username (leave empty for guest): " SMB_USER
+    if [[ -n "$SMB_USER" ]]; then
+        read -rsp "  Password: " SMB_PASS
+        echo ""
+    else
+        SMB_PASS=""
+    fi
+    echo ""
+    echo "  Will mount: //$SMB_SERVER/$SMB_SHARE"
 }
 
 # ── Copy server files ─────────────────────────────────────────────
@@ -154,6 +267,30 @@ echo ""
 echo "Installing as: $INSTALL_TYPE"
 echo ""
 
+# ── Music source (server/both only) ─────────────────────────────
+MUSIC_SOURCE=""
+NFS_SERVER=""
+NFS_EXPORT=""
+SMB_SERVER=""
+SMB_SHARE=""
+SMB_USER=""
+SMB_PASS=""
+
+if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+    show_music_menu
+    MUSIC_SOURCE=$(get_music_source)
+
+    if [[ "$MUSIC_SOURCE" == "network" ]]; then
+        NET_TYPE=$(get_network_type)
+        MUSIC_SOURCE="$NET_TYPE"
+        if [[ "$NET_TYPE" == "nfs" ]]; then
+            get_nfs_config
+        else
+            get_smb_config
+        fi
+    fi
+fi
+
 # ── Copy files to SD card ─────────────────────────────────────────
 DEST="$BOOT/snapmulti"
 echo "Copying files to $DEST ..."
@@ -172,6 +309,13 @@ cat > "$DEST/install.conf" <<EOF
 # snapMULTI Installation Configuration
 # Generated by prepare-sd.sh on $(date -Iseconds)
 INSTALL_TYPE=$INSTALL_TYPE
+MUSIC_SOURCE=$MUSIC_SOURCE
+NFS_SERVER=$NFS_SERVER
+NFS_EXPORT=$NFS_EXPORT
+SMB_SERVER=$SMB_SERVER
+SMB_SHARE=$SMB_SHARE
+SMB_USER=$SMB_USER
+SMB_PASS=$SMB_PASS
 EOF
 
 cp "$SCRIPT_DIR/firstboot.sh" "$DEST/"

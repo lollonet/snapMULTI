@@ -557,15 +557,25 @@ setup_env() {
             tz_detected="Europe/Berlin"
         fi
 
-        # Auto-detect music library
+        # Music library path: use pre-configured MUSIC_PATH if set by firstboot.sh,
+        # otherwise auto-detect
         local music_path
-        music_path="$(detect_music_library)"
-        if [[ -n "$music_path" ]]; then
-            info "Auto-detected music library: $music_path"
+        if [[ -n "${MUSIC_PATH:-}" ]]; then
+            music_path="$MUSIC_PATH"
+            if [[ "${SKIP_MUSIC_SCAN:-}" == "1" ]]; then
+                info "Streaming-only setup — skipping music library scan"
+            else
+                info "Using pre-configured music path: $music_path"
+            fi
         else
-            music_path="/media/music"
-            warn "No music library found — using default: $music_path"
-            warn "Mount your music there or edit .env to set MUSIC_PATH"
+            music_path="$(detect_music_library)"
+            if [[ -n "$music_path" ]]; then
+                info "Auto-detected music library: $music_path"
+            else
+                music_path="/media/music"
+                warn "No music library found — using default: $music_path"
+                warn "Mount your music there or edit .env to set MUSIC_PATH"
+            fi
         fi
 
         # Detect if music is on network mount

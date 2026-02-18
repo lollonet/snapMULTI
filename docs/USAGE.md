@@ -81,6 +81,56 @@ Snapserver supports multiple codecs (configured in `config/snapserver.conf`):
 | ogg | Lossy | Low | Legacy clients |
 | pcm | None | Lowest | LAN only, high bandwidth |
 
+## Music Library
+
+### Beginner Setup (SD card)
+
+During `prepare-sd.sh`, choose your music source:
+
+| Option | Config value | What happens on first boot |
+|--------|-------------|---------------------------|
+| Streaming only | `streaming` | Empty `/media/music` created, music scan skipped |
+| USB drive | `usb` | `deploy.sh` auto-detects at `/media/*` |
+| NFS share | `nfs` | Mounted read-only at `/media/nfs-music`, added to `/etc/fstab` |
+| SMB share | `smb` | Mounted read-only at `/media/smb-music`, credentials in `/etc/snapmulti-smb-credentials` |
+| Manual | `manual` | No auto-setup — configure after install |
+
+### Advanced Setup
+
+For manual NFS/SMB configuration after install:
+
+**NFS** (Linux/Mac/NAS):
+```bash
+sudo apt install nfs-common
+sudo mkdir -p /media/nfs-music
+sudo mount -t nfs nas.local:/volume1/music /media/nfs-music -o ro,soft,timeo=50,_netdev
+# Persist across reboots:
+echo "nas.local:/volume1/music /media/nfs-music nfs ro,soft,timeo=50,_netdev 0 0" | sudo tee -a /etc/fstab
+```
+
+**SMB/CIFS** (Windows/NAS):
+```bash
+sudo apt install cifs-utils
+sudo mkdir -p /media/smb-music
+# Guest access:
+sudo mount -t cifs //mynas/Music /media/smb-music -o ro,guest,_netdev,iocharset=utf8
+# With credentials:
+echo -e "username=myuser\npassword=mypass" | sudo tee /etc/snapmulti-smb-credentials
+sudo chmod 600 /etc/snapmulti-smb-credentials
+sudo mount -t cifs //mynas/Music /media/smb-music -o ro,_netdev,iocharset=utf8,credentials=/etc/snapmulti-smb-credentials
+```
+
+Then update `.env`:
+```bash
+# Edit MUSIC_PATH in /opt/snapmulti/.env
+MUSIC_PATH=/media/nfs-music   # or /media/smb-music
+```
+
+Restart MPD to pick up the new library:
+```bash
+cd /opt/snapmulti && docker compose restart mpd
+```
+
 ## Network Mode
 
 All snapMULTI containers use **host network mode** (`network_mode: host`). This is required for:

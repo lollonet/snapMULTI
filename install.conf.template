@@ -7,3 +7,19 @@
 #   both    -- Server + Player on the same Pi
 # Leave the value empty (keep the line) to default to 'server'.
 INSTALL_TYPE=
+#
+# MUSIC_SOURCE controls where the Pi finds your music library.
+# Only used for server and both modes. Options:
+#   streaming -- Spotify/AirPlay/Tidal only, no local files
+#   usb       -- USB drive (auto-detected at /media/*)
+#   nfs       -- NFS network share (set NFS_SERVER and NFS_EXPORT)
+#   smb       -- SMB/CIFS share (set SMB_SERVER, SMB_SHARE, optionally SMB_USER/SMB_PASS)
+#   manual    -- Skip auto-setup, configure manually after install
+# Leave empty to auto-detect (existing behavior).
+MUSIC_SOURCE=
+NFS_SERVER=
+NFS_EXPORT=
+SMB_SERVER=
+SMB_SHARE=
+SMB_USER=
+SMB_PASS=

@@ -60,6 +60,17 @@ git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
 
 First boot installs everything automatically (~5-10 min). HDMI shows a progress screen. The Pi reboots when done.
 
+#### Connect Your Music
+
+When you choose Music Server or Server+Player, the installer asks where your music is:
+
+| Option | Best for | What happens |
+|--------|----------|-------------|
+| **Streaming only** | Spotify, AirPlay, Tidal users | No local files needed — just cast from your phone |
+| **USB drive** | Portable collections | Plug the drive into the Pi before powering on |
+| **Network share** | NAS or another computer | Enter your NFS or SMB server address during setup |
+| **Set up later** | Not sure yet | Configure manually after install (see [USAGE.md](docs/USAGE.md)) |
+
 ---
 
 ### Advanced: Any Linux Server
