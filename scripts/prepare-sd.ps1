@@ -51,6 +51,10 @@ function Assert-ClientSubmodule {
     if (-not (Test-Path $gitMarker)) {
         Write-Host 'Client submodule not initialized. Fetching...'
         & git -C $ProjectDir submodule update --init --recursive
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "git submodule update failed (exit code $LASTEXITCODE). Is Git installed?"
+            exit 1
+        }
         if (-not (Test-Path $gitMarker)) {
             Write-Error 'client/ submodule is missing. Run: git submodule update --init --recursive'
             exit 1

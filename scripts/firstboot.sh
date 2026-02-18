@@ -89,7 +89,7 @@ case "$INSTALL_TYPE" in
         PROGRESS_TITLE="snapMULTI Server + Player"
         ;;
     *)
-        echo "ERROR: Unknown INSTALL_TYPE=$INSTALL_TYPE" | tee -a "$LOG"
+        log_and_tty "ERROR: Unknown INSTALL_TYPE=$INSTALL_TYPE"
         exit 1
         ;;
 esac
@@ -184,7 +184,7 @@ log_progress "Waiting for network connectivity..." 2>/dev/null || true
 # Ensure WiFi regulatory domain is applied (brcmfmac may ignore the
 # kernel parameter on first boot, blocking 5 GHz DFS channels).
 REG_DOMAIN=$(sed -n 's/.*cfg80211.ieee80211_regdom=\([A-Z]*\).*/\1/p' /proc/cmdline)
-if [[ -n "$REG_DOMAIN" ]] && command -v iw &>/dev/null; then
+if [[ "$REG_DOMAIN" =~ ^[A-Z]{2}$ ]] && command -v iw &>/dev/null; then
     iw reg set "$REG_DOMAIN" 2>/dev/null || true
     log_progress "Set regulatory domain: $REG_DOMAIN" 2>/dev/null || true
 fi
@@ -232,6 +232,7 @@ fi
 # STEP 2: Copy files
 # ══════════════════════════════════════════════════════════════════
 next_step "Copying project files..."
+start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 log_progress "Copying files from boot partition..." 2>/dev/null || true
 
 # Copy server files
@@ -259,6 +260,11 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
         cp -r "$SNAP_BOOT/client/"* "$CLIENT_DIR/" 2>/dev/null || true
         # Copy dotfiles (.env.example)
         cp -r "$SNAP_BOOT/client/".??* "$CLIENT_DIR/" 2>/dev/null || true
+    fi
+    # Verify critical client files were copied
+    if [[ ! -f "$CLIENT_DIR/docker-compose.yml" ]]; then
+        log_and_tty "ERROR: Client docker-compose.yml missing after copy."
+        exit 1
     fi
     log_progress "Client files copied to $CLIENT_DIR" 2>/dev/null || true
 fi
@@ -378,15 +384,14 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     HEALTHY=false
     for attempt in $(seq 1 12); do
         TOTAL=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps -q 2>/dev/null | wc -l)
-        HEALTHY_COUNT=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps 2>/dev/null | grep -c "(healthy)" || true)
         RUNNING_COUNT=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps --format '{{.State}}' 2>/dev/null | grep -c '^running' || true)
         if [[ "$TOTAL" -ge 5 ]] && [[ "$RUNNING_COUNT" -eq "$TOTAL" ]]; then
-            log_and_tty "All $TOTAL server containers healthy."
-            log_progress "All $TOTAL server containers healthy" 2>/dev/null || true
+            log_and_tty "All $TOTAL server containers running."
+            log_progress "All $TOTAL server containers running" 2>/dev/null || true
             HEALTHY=true
             break
         fi
-        log_progress "  Attempt $attempt/12: $HEALTHY_COUNT/$TOTAL healthy..." 2>/dev/null || true
+        log_progress "  Attempt $attempt/12: $RUNNING_COUNT/$TOTAL running..." 2>/dev/null || true
         sleep 10
     done
 

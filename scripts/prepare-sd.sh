@@ -203,7 +203,7 @@ echo "  Copied $(du -sh "$DEST" | cut -f1) to boot partition."
 CMDLINE="$BOOT/cmdline.txt"
 SETUP_VIDEO="video=HDMI-A-1:800x600@60"
 if [[ -f "$CMDLINE" ]] && ! grep -qF "video=HDMI-A-1:" "$CMDLINE"; then
-    sed -i.bak "s/$/ $SETUP_VIDEO/" "$CMDLINE"
+    sed -i.bak "1s/$/ $SETUP_VIDEO/" "$CMDLINE"
     rm -f "${CMDLINE}.bak"
     echo "  Set temporary setup resolution (800x600) in cmdline.txt"
 fi

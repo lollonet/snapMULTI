@@ -467,7 +467,7 @@ with open('$tmp', 'w') as f:
     fi
     if [[ -n "$cmdline" ]] && ! grep -q "cgroup_enable=memory" "$cmdline"; then
         info "Enabling cgroup memory controller in $cmdline..."
-        sed -i 's/$/ cgroup_enable=memory cgroup_memory=1/' "$cmdline"
+        sed -i '1s/$/ cgroup_enable=memory cgroup_memory=1/' "$cmdline"
         warn "Reboot required for memory limits to take effect"
     fi
 

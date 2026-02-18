@@ -5,4 +5,5 @@
 #   client  -- Audio Player (snapclient, optional display)
 #   server  -- Music Server (Spotify, AirPlay, MPD, etc.)
 #   both    -- Server + Player on the same Pi
+# Leave blank to default to 'server'.
 INSTALL_TYPE=
