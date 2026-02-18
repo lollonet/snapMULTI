@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Registry migration** — Custom images (`snapmulti-{server,airplay,mpd,tidal}`) moved from GitHub Container Registry (`ghcr.io/lollonet/`) to Docker Hub (`lollonet/`) for faster pulls on Pi hardware ([#64](https://github.com/lollonet/snapMULTI/pull/64))
 - **Spotify Connect: switch to go-librespot** ([#59](https://github.com/lollonet/snapMULTI/pull/59)) — Replaced Rust librespot v0.8.0 with go-librespot for Spotify Connect
   - Full metadata support: track name, artist, album, cover art forwarded to Snapcast clients
   - Bidirectional playback control: play/pause/next/previous/seek from any Snapcast client

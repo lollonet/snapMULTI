@@ -308,10 +308,10 @@ preflight_checks() {
     esac
 
     # Network check
-    if curl -sf --max-time 5 https://ghcr.io >/dev/null 2>&1; then
-        info "Network: OK (ghcr.io reachable)"
+    if curl -sf --max-time 5 https://hub.docker.com >/dev/null 2>&1; then
+        info "Network: OK (Docker Hub reachable)"
     else
-        error "Cannot reach ghcr.io — check network connectivity"
+        error "Cannot reach Docker Hub — check network connectivity"
         exit 1
     fi
 }
