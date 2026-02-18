@@ -50,6 +50,11 @@ jobs:
             echo "New commit: $NEW_COMMIT"
 
             echo "Logging in to Docker Hub..."
+            if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
+              echo "ERROR: DOCKERHUB_USERNAME or DOCKERHUB_TOKEN secret is empty."
+              echo "Ensure both are configured as repository secrets."
+              exit 1
+            fi
             echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin || { echo "ERROR: Docker Hub login failed"; exit 1; }
 
             echo "Pulling latest images..."
