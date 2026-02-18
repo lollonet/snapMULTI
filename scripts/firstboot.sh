@@ -258,8 +258,10 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     if [[ -d "$SNAP_BOOT/client" ]]; then
         # Copy all client files
         cp -r "$SNAP_BOOT/client/"* "$CLIENT_DIR/" 2>/dev/null || true
-        # Copy dotfiles (.env.example)
-        cp -r "$SNAP_BOOT/client/".??* "$CLIENT_DIR/" 2>/dev/null || true
+        # Copy dotfiles (.env.example) — glob may match nothing, which is OK
+        if ! cp -r "$SNAP_BOOT/client/".??* "$CLIENT_DIR/" 2>/dev/null; then
+            echo "Note: no dotfiles found in client source (non-fatal)" >> "$LOG"
+        fi
     fi
     # Verify critical client files were copied
     if [[ ! -f "$CLIENT_DIR/docker-compose.yml" ]]; then
@@ -311,27 +313,10 @@ start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(
 
 if ! command -v docker &>/dev/null; then
     log_progress "Setting up Docker repository..." 2>/dev/null || true
-    install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
-    chmod a+r /etc/apt/keyrings/docker.asc
-
-    ARCH=$(dpkg --print-architecture)
-    VERSION_CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
-
-    # Docker doesn't support all Debian versions - fallback to bookworm
-    # (keep in sync with deploy.sh install_docker_apt)
-    case "$VERSION_CODENAME" in
-        bullseye|bookworm) DOCKER_CODENAME="$VERSION_CODENAME" ;;
-        *) DOCKER_CODENAME="bookworm" ;;
-    esac
-
-    log_progress "Adding Docker repo ($DOCKER_CODENAME)..." 2>/dev/null || true
-    echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $DOCKER_CODENAME stable" \
-        > /etc/apt/sources.list.d/docker.list
-
-    apt-get update -qq
+    # shellcheck source=common/install-docker.sh
+    source "$(dirname "$0")/common/install-docker.sh"
     log_progress "Installing docker-ce..." 2>/dev/null || true
-    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    install_docker_apt
 
     # daemon.json (live-restore, log rotation) is written by deploy.sh's
     # install_docker() which has python3 merge logic for existing configs.

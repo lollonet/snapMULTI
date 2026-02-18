@@ -50,18 +50,15 @@ function Assert-ClientSubmodule {
     $gitMarker = Join-Path $ClientDir '.git'
     if (-not (Test-Path $gitMarker)) {
         if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-            Write-Error "Git is not installed. Please install Git for Windows: https://git-scm.com/download/win"
-            exit 1
+            throw "Git is not installed. Please install Git for Windows: https://git-scm.com/download/win"
         }
         Write-Host 'Client submodule not initialized. Fetching...'
         & git -C $ProjectDir submodule update --init --recursive
         if ($LASTEXITCODE -ne 0) {
-            Write-Error "git submodule update failed (exit code $LASTEXITCODE). Is Git installed?"
-            exit 1
+            throw "git submodule update failed (exit code $LASTEXITCODE). Is Git installed?"
         }
         if (-not (Test-Path $gitMarker)) {
-            Write-Error 'client/ submodule is missing. Run: git submodule update --init --recursive'
-            exit 1
+            throw 'client/ submodule is missing. Run: git submodule update --init --recursive'
         }
     }
 }

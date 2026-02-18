@@ -607,7 +607,10 @@ cat /var/log/snapmulti-install.log
 Failed installations create a marker at `/var/lib/snapmulti-installer/.install-failed`. Remove it to retry:
 ```bash
 sudo rm /var/lib/snapmulti-installer/.install-failed
+# Bookworm+ (boot partition at /boot/firmware):
 sudo bash /boot/firmware/snapmulti/firstboot.sh
+# Bullseye (boot partition at /boot):
+# sudo bash /boot/snapmulti/firstboot.sh
 ```
 
 ## Updating

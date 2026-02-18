@@ -90,11 +90,6 @@ copy_server_files() {
     cp -r "$PROJECT_DIR/config" "$dest/"
     cp "$PROJECT_DIR/docker-compose.yml" "$dest/"
     cp "$PROJECT_DIR/.env.example" "$dest/" 2>/dev/null || true
-
-    # Dockerfiles needed for local builds (if images aren't pulled from registry)
-    for df in Dockerfile.snapserver Dockerfile.shairport-sync Dockerfile.mpd Dockerfile.tidal; do
-        [[ -f "$PROJECT_DIR/$df" ]] && cp "$PROJECT_DIR/$df" "$dest/"
-    done
 }
 
 # ── Copy client files ─────────────────────────────────────────────
