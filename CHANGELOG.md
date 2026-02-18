@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dependabot** — Weekly automated dependency update PRs for Docker images and GitHub Actions
 
 ### Changed
+- **Registry migration** — Custom images (`snapmulti-{server,airplay,mpd,tidal}`) moved from GitHub Container Registry (`ghcr.io/lollonet/`) to Docker Hub (`lollonet/`) for faster pulls on Pi hardware ([#64](https://github.com/lollonet/snapMULTI/pull/64))
 - **Docker daemon config ownership** — `deploy.sh` now exclusively owns `/etc/docker/daemon.json` (live-restore, log rotation) with python3 merge logic for existing configs; `firstboot.sh` no longer writes it to avoid conflicts
 - **firstboot.sh Docker install** — Uses official APT repository instead of `get.docker.com` convenience script for reproducible, auditable installs
 - **Spotify Connect: switch to go-librespot** ([#59](https://github.com/lollonet/snapMULTI/pull/59)) — Replaced Rust librespot v0.8.0 with go-librespot for Spotify Connect

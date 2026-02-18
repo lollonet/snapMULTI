@@ -2,6 +2,9 @@ name: Deploy to Home Server
 
 on:
   workflow_dispatch:
+    # Manual dispatch uses repository secrets directly (no inputs needed).
+    # Requires DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, HOST, USER, SSH_KEY
+    # to be configured as repository secrets.
   workflow_call:
     secrets:
       HOST:
@@ -10,7 +13,9 @@ on:
         required: true
       SSH_KEY:
         required: true
-      GHCR_TOKEN:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
         required: true
 
 jobs:
@@ -22,13 +27,13 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.5
         env:
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          DEPLOY_USER: ${{ github.repository_owner }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
           key: ${{ secrets.SSH_KEY }}
-          envs: GHCR_TOKEN,DEPLOY_USER
+          envs: DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
           script: |
             set -euo pipefail
 
@@ -44,8 +49,13 @@ jobs:
             NEW_COMMIT=$(git rev-parse HEAD)
             echo "New commit: $NEW_COMMIT"
 
-            echo "Logging in to ghcr.io..."
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$DEPLOY_USER" --password-stdin || { echo "ERROR: ghcr.io login failed"; exit 1; }
+            echo "Logging in to Docker Hub..."
+            if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
+              echo "ERROR: DOCKERHUB_USERNAME or DOCKERHUB_TOKEN secret is empty."
+              echo "Ensure both are configured as repository secrets."
+              exit 1
+            fi
+            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin || { echo "ERROR: Docker Hub login failed"; exit 1; }
 
             echo "Pulling latest images..."
             # Note: tidal-connect uses third-party image (ARM only), pulled automatically on start
@@ -64,4 +74,4 @@ jobs:
             sleep 5
             docker ps --format "table {{.Names}}\t{{.Status}}"
 
-            echo "✓ Deployment complete ($CURRENT_COMMIT → $NEW_COMMIT)"
+            echo "Deployment complete ($CURRENT_COMMIT -> $NEW_COMMIT)"

@@ -177,10 +177,10 @@ sudo ufw allow 5353/udp   # Discovery mDNS
 
 | Immagine | Dimensione |
 |----------|------------|
-| `ghcr.io/lollonet/snapmulti-server:latest` | ~80–120 MB |
-| `ghcr.io/lollonet/snapmulti-airplay:latest` | ~30–50 MB |
-| `ghcr.io/lollonet/snapmulti-spotify:latest` | ~30–50 MB |
-| `ghcr.io/lollonet/snapmulti-mpd:latest` | ~50–80 MB |
+| `lollonet/snapmulti-server:latest` | ~80–120 MB |
+| `lollonet/snapmulti-airplay:latest` | ~30–50 MB |
+| `ghcr.io/devgianlu/go-librespot:v0.7.0` | ~30–50 MB |
+| `lollonet/snapmulti-mpd:latest` | ~50–80 MB |
 
 ### Libreria Musicale
 
