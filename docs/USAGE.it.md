@@ -91,6 +91,26 @@ Per i tipi di sorgente audio e l'API JSON-RPC, vedi [SOURCES.it.md](SOURCES.it.m
 - I client si iscrivono via WebSocket con `{"subscribe": "CLIENT_ID"}` per ricevere i metadati del loro stream
 - Copertine servite su `http://<server>:8083/artwork/<filename>`
 
+### AirPlay (shairport-sync)
+
+| Porta | Protocollo | Scopo |
+|-------|------------|-------|
+| 5858 | HTTP | Server copertine (usato dal controlscript `meta_shairport.py`) |
+
+### Spotify Connect (go-librespot)
+
+| Porta | Protocollo | Scopo |
+|-------|------------|-------|
+| 24879 | HTTP/WS | API WebSocket (usata dal controlscript `meta_go-librespot.py`) |
+
+### Tidal Connect
+
+| Porta | Protocollo | Scopo |
+|-------|------------|-------|
+| 8888 | WebSocket | API eventi riproduzione (usata dal controlscript `meta_tidal.py`) |
+
+> **Nota:** Le porte 5858, 8888 e 24879 sono usate per lo scambio di metadati tra container co-locati. La porta 5858 deve essere raggiungibile dalla LAN (i client Snapcast scaricano le copertine da essa). Le porte 8888 e 24879 sono consumate localmente dai controlscript ma si collegano a tutte le interfacce — non è necessario accesso esterno intenzionale.
+
 ### MPD
 
 | Porta | Protocollo | Scopo |

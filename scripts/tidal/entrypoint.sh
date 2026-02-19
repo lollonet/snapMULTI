@@ -50,7 +50,8 @@ while true; do
         --disable-web-security true \
         --enable-mqa-passthrough "${mqa_passthrough}" \
         --log-level "${LOG_LEVEL:-3}" \
-        --enable-websocket-log 0
+        --enable-websocket-log 0 \
+        --websocket-port 8888
     echo "TIDAL Connect stopped."
     [ "${RESTART_ON_FAIL:-1}" -eq 1 ] || break
     echo "Restarting in ${RESTART_WAIT_SEC:-10} seconds..."

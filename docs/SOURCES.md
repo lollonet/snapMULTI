@@ -63,13 +63,13 @@ mpc status                  # Check status
 
 ### 2. Tidal Connect (pipe from tidal-connect)
 
-Cast directly from the Tidal app to snapMULTI, like Spotify Connect. The tidal-connect container receives Tidal audio and routes it through ALSA to a named pipe.
+Cast directly from the Tidal app to snapMULTI, like Spotify Connect. The tidal-connect container receives Tidal audio and routes it through ALSA to a named pipe. Metadata (track title, artist, album, artwork, duration) is read from tidal-connect's WebSocket API by the `meta_tidal.py` controlscript.
 
 > **Note:** ARM only (Raspberry Pi 3/4/5). Does not work on x86_64.
 
 **Config:**
 ```ini
-source = pipe:////audio/tidal_fifo?name=Tidal
+source = pipe:////audio/tidal_fifo?name=Tidal&controlscript=meta_tidal.py
 ```
 
 **Parameters:**
@@ -77,6 +77,7 @@ source = pipe:////audio/tidal_fifo?name=Tidal
 | Parameter | Value | Description |
 |-----------|-------|-------------|
 | `name` | `Tidal` | Stream ID |
+| `controlscript` | `meta_tidal.py` | Reads metadata from tidal-connect WebSocket API (port 8888) |
 
 **tidal-connect container settings** (docker-compose.yml):
 
@@ -92,6 +93,8 @@ TIDAL_NAME="Living Room Tidal"
 
 **Sample format:** 44100:16:2 (fixed by tidal-connect)
 
+**Metadata:** Track name, artist, album, artwork URL, and duration are forwarded to Snapcast clients. Playback control is not supported (Tidal controls playback from the app only).
+
 **Connect from Tidal:**
 1. Open **Tidal** on your phone/tablet
 2. Start playing a song
@@ -100,7 +103,7 @@ TIDAL_NAME="Living Room Tidal"
 
 **Limitations:**
 - **ARM only** — The tidal-connect binary only runs on ARM (Pi 3/4/5)
-- **No metadata** — Track info not available (closed-source binary limitation)
+- **No playback control** — Play/pause/next must be controlled from the Tidal app
 
 **Docker requirements:** Host network mode for mDNS. Shared `/audio` volume with snapserver.
 
