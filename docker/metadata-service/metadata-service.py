@@ -98,19 +98,23 @@ class MetadataService:
 
         # Trusted IPs: local interfaces + snapserver — artwork from these is allowed
         # even though they're private IPs (SSRF exemption for co-located services)
-        self._trusted_ips: set[str] = set()
+        self._trusted_ips: set[str] = {"127.0.0.1", "::1"}
         try:
-            for _fam, _, _, _, sa in socket.getaddrinfo(
-                socket.gethostname(), None, socket.AF_UNSPEC
-            ):
-                self._trusted_ips.add(sa[0])
             for _fam, _, _, _, sa in socket.getaddrinfo(
                 self.snapserver_host, None, socket.AF_UNSPEC
             ):
                 self._trusted_ips.add(sa[0])
-            self._trusted_ips.add("127.0.0.1")
-            self._trusted_ips.add("::1")
         except (socket.gaierror, OSError):
+            pass
+        # Get all local interface IPs (hostname resolution misses them on Debian)
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["hostname", "-I"], capture_output=True, text=True, timeout=5
+            )
+            for ip_str in result.stdout.split():
+                self._trusted_ips.add(ip_str.strip())
+        except Exception:
             pass
         logger.info(f"Trusted IPs for artwork: {self._trusted_ips}")
 
