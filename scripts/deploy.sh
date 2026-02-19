@@ -716,10 +716,14 @@ pull_images() {
     fi
     ok "Images pulled"
 
-    # Build images that aren't available on registry (metadata)
-    step "Building local images"
-    docker compose build metadata
-    ok "Local images built"
+    # metadata has a build: directive in docker-compose.yml. Pull from Hub if
+    # available (CI pushes after merge); fall back to local build on first
+    # bootstrap before the image is published.
+    if ! docker compose pull metadata 2>/dev/null; then
+        step "Building metadata image (not yet on registry)"
+        docker compose build metadata
+        ok "Local metadata image built"
+    fi
 }
 
 start_services() {

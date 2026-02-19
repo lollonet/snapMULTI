@@ -515,9 +515,17 @@ class MetadataService:
                 filename = f"artwork_{art_hash}{ext}"
                 local_path = self.artwork_dir / filename
                 tmp_path = local_path.parent / (local_path.name + ".tmp")
-                with open(tmp_path, "wb") as f:
-                    f.write(image_data)
-                tmp_path.rename(local_path)
+                try:
+                    with open(tmp_path, "wb") as f:
+                        f.write(image_data)
+                    tmp_path.rename(local_path)
+                except Exception as e:
+                    logger.warning(f"MPD artwork write/rename failed: {e}")
+                    try:
+                        tmp_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    return ""
                 logger.info(f"Got MPD artwork ({len(image_data)} bytes) for {file_path}")
                 return filename
 
@@ -1016,12 +1024,15 @@ class MetadataService:
         if not metadata.get("artwork") and is_radio:
             metadata["artwork"] = f"http://{EXTERNAL_HOST}:{HTTP_PORT}/defaults/default-radio.png"
 
-        # Artist image (not for radio)
+        # Artist image (not for radio) — download through SSRF-safe pipeline
         if not is_radio and metadata.get("artist"):
-            artist_image = self.fetch_artist_image(metadata["artist"])
-            if artist_image:
-                # Artist images are external URLs (Wikimedia), serve as-is
-                metadata["artist_image"] = artist_image
+            artist_image_url = self.fetch_artist_image(metadata["artist"])
+            if artist_image_url:
+                cached = self.download_artwork(artist_image_url)
+                if cached:
+                    metadata["artist_image"] = (
+                        f"http://{EXTERNAL_HOST}:{HTTP_PORT}/artwork/{cached}"
+                    )
 
     # ──────────────────────────────────────────────
     # Main polling loop
@@ -1087,7 +1098,6 @@ class MetadataService:
                         if (new_title or new_artist) and (new_title, new_artist) != (old_title, old_artist):
                             self._failed_downloads.clear()
 
-                        sm.current = metadata
                         title = metadata.get("title", "N/A")
                         artist = metadata.get("artist", "N/A")
                         logger.info(f"[{stream_id}] Updated: {title} - {artist}")
