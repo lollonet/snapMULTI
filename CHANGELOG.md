@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-02-19
+
 ### Added
 - **Tidal Connect metadata** — Track info (title, artist, album, artwork, duration) now displayed for Tidal streams
   - `meta_tidal.py` controlscript connects to tidal-connect's WebSocket API (port 8888)
