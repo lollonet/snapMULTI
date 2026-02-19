@@ -32,6 +32,21 @@ fi
 ENV_FILE="$PROJECT_ROOT/.env"
 
 #######################################
+# User Detection
+#######################################
+
+# Detect the real (non-root) user who should own files.
+# In sudo context: SUDO_USER is set. In firstboot/cloud-init: neither
+# SUDO_USER nor a non-root login exists, so fall back to uid 1000.
+detect_real_user() {
+    local user="${SUDO_USER:-}"
+    if [[ -z "$user" ]] || [[ "$user" == "root" ]]; then
+        user=$(getent passwd 1000 2>/dev/null | cut -d: -f1) || true
+    fi
+    printf '%s' "${user:-root}"
+}
+
+#######################################
 # Music Library Detection
 #######################################
 
@@ -57,7 +72,8 @@ is_network_mount() {
 detect_music_library() {
     local best_path=""
     local best_count=0
-    local real_user="${SUDO_USER:-$(whoami)}"
+    local real_user
+    real_user="$(detect_real_user)"
 
     # Ensure globs that don't match expand to nothing
     local old_nullglob
@@ -393,7 +409,8 @@ install_docker() {
     fi
 
     # Add real user to docker group
-    local real_user="${SUDO_USER:-$(whoami)}"
+    local real_user
+    real_user="$(detect_real_user)"
     if ! id -nG "$real_user" | grep -qw docker; then
         usermod -aG docker "$real_user"
         info "Added $real_user to docker group (re-login to take effect)"
@@ -465,7 +482,8 @@ with open(os.environ['TMPFILE'], 'w') as f:
 create_directories() {
     step "Creating directories"
 
-    local real_user="${SUDO_USER:-$(whoami)}"
+    local real_user
+    real_user="$(detect_real_user)"
     local real_uid real_gid
     real_uid="$(id -u "$real_user")"
     real_gid="$(id -g "$real_user")"
@@ -524,7 +542,8 @@ setup_env() {
 
     step "Environment configuration"
 
-    local real_user="${SUDO_USER:-$(whoami)}"
+    local real_user
+    real_user="$(detect_real_user)"
     local real_uid real_gid
     real_uid="$(id -u "$real_user")"
     real_gid="$(id -g "$real_user")"

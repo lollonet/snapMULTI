@@ -114,24 +114,24 @@ get_music_source() {
             2) echo "usb";       return ;;
             3) echo "network";   return ;;
             4) echo "manual";    return ;;
-            *) echo "  Invalid choice. Enter 1, 2, 3, or 4." ;;
+            *) echo "  Invalid choice. Enter 1, 2, 3, or 4." >&2 ;;
         esac
     done
 }
 
 get_network_type() {
     local choice
-    echo ""
-    echo "  Share type:"
-    echo "    a) NFS  (Linux/Mac/NAS — most common)"
-    echo "    b) SMB  (Windows share)"
-    echo ""
+    echo "" >&2
+    echo "  Share type:" >&2
+    echo "    a) NFS  (Linux/Mac/NAS — most common)" >&2
+    echo "    b) SMB  (Windows share)" >&2
+    echo "" >&2
     while true; do
         read -rp "  Choose [a/b]: " choice
         case "$choice" in
             a|A) echo "nfs"; return ;;
             b|B) echo "smb"; return ;;
-            *) echo "  Invalid choice. Enter a or b." ;;
+            *) echo "  Invalid choice. Enter a or b." >&2 ;;
         esac
     done
 }
