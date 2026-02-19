@@ -534,6 +534,7 @@ create_directories() {
     chown -R "$real_uid:$real_gid" "$PROJECT_ROOT/audio" "$PROJECT_ROOT/artwork" \
         "$PROJECT_ROOT/data" "$PROJECT_ROOT/mpd" "$PROJECT_ROOT/mympd"
     chmod 750 "$PROJECT_ROOT/audio"
+    chmod 755 "$PROJECT_ROOT/artwork"
     chmod 660 "$PROJECT_ROOT/audio"/*_fifo 2>/dev/null || true
     chmod 660 "$PROJECT_ROOT/audio"/shairport-metadata 2>/dev/null || true
 

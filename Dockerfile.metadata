@@ -3,17 +3,17 @@ FROM python:3.13-slim
 WORKDIR /app
 
 # Install uv for fast dependency installation
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.6.3 /uv /usr/local/bin/uv
 
 # Install dependencies: WebSocket server + HTTP server
-RUN uv pip install --system --no-cache websockets aiohttp
+RUN uv pip install --system --no-cache "websockets==14.2" "aiohttp==3.11.12"
 
 # Copy metadata service
 COPY docker/metadata-service/metadata-service.py /app/
 
-# Create artwork directory and copy default assets
-RUN mkdir -p /app/artwork
-COPY docker/metadata-service/default-radio.png /app/artwork/
+# Default assets (stored outside /app/artwork which is bind-mounted at runtime)
+RUN mkdir -p /app/defaults /app/artwork
+COPY docker/metadata-service/default-radio.png /app/defaults/
 
 # Health check endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

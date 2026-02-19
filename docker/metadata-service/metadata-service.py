@@ -13,6 +13,7 @@ Replaces per-client metadata-service containers — N clients no longer make N r
 """
 
 import asyncio
+import collections
 import hashlib
 import html
 import ipaddress
@@ -27,6 +28,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+_MAX_CACHE_ENTRIES = 500
+
 import websockets
 from aiohttp import web
 
@@ -38,6 +41,7 @@ SNAPSERVER_RPC_PORT = int(os.environ.get("SNAPSERVER_RPC_PORT", "1705"))
 MPD_HOST = os.environ.get("MPD_HOST", "127.0.0.1")
 MPD_PORT = int(os.environ.get("MPD_PORT", "6600"))
 ARTWORK_DIR = Path(os.environ.get("ARTWORK_DIR", "/app/artwork"))
+DEFAULTS_DIR = Path(os.environ.get("DEFAULTS_DIR", "/app/defaults"))
 
 # External hostname for artwork URLs sent to remote clients.
 # SNAPSERVER_HOST may be 127.0.0.1 (for local socket connections),
@@ -85,9 +89,12 @@ class MetadataService:
         self.streams: dict[str, StreamMetadata] = {}
 
         # Caches (shared across all streams — same album art doesn't need re-fetch)
-        self.artwork_cache: dict[str, str] = {}
-        self.artist_image_cache: dict[str, str] = {}
+        # Bounded to _MAX_CACHE_ENTRIES to prevent unbounded memory growth
+        self.artwork_cache: collections.OrderedDict[str, str] = collections.OrderedDict()
+        self.artist_image_cache: collections.OrderedDict[str, str] = collections.OrderedDict()
         self._failed_downloads: set[str] = set()
+
+        self._cache_limit = _MAX_CACHE_ENTRIES
 
         # Snapserver persistent socket
         self._snap_sock: socket.socket | None = None
@@ -101,6 +108,15 @@ class MetadataService:
 
         # Client → stream mapping cache (refreshed each poll cycle)
         self._client_stream_map: dict[str, str] = {}
+
+    @staticmethod
+    def _cache_set(cache: collections.OrderedDict, key: str, value: str,
+                   limit: int = _MAX_CACHE_ENTRIES) -> None:
+        """Set a cache entry, evicting oldest if at capacity."""
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > limit:
+            cache.popitem(last=False)
 
     # ──────────────────────────────────────────────
     # Socket helpers
@@ -539,7 +555,7 @@ class MetadataService:
         url = f"https://de1.api.radio-browser.info/json/stations/byname/{query}?limit=20&order=votes&reverse=true"
         data = self._make_api_request(url)
         if not data or not isinstance(data, list):
-            self.artwork_cache[cache_key] = ""
+            self._cache_set(self.artwork_cache, cache_key, "")
             return ""
 
         stream_domain = ""
@@ -568,7 +584,7 @@ class MetadataService:
 
         if best_url:
             logger.info(f"Found radio logo for '{station_name}': {best_url}")
-        self.artwork_cache[cache_key] = best_url
+        self._cache_set(self.artwork_cache, cache_key, best_url)
         return best_url
 
     def fetch_musicbrainz_artwork(self, artist: str, album: str) -> str:
@@ -610,12 +626,12 @@ class MetadataService:
         url = f"https://musicbrainz.org/ws/2/artist/?query={query}&fmt=json&limit=1"
         data = self._make_api_request(url)
         if not data or not isinstance(data, dict) or not (artists := data.get("artists", [])):
-            self.artist_image_cache[artist] = ""
+            self._cache_set(self.artist_image_cache, artist, "")
             return ""
 
         artist_mbid = artists[0].get("id")
         if not artist_mbid:
-            self.artist_image_cache[artist] = ""
+            self._cache_set(self.artist_image_cache, artist, "")
             return ""
 
         time.sleep(1.1)  # MusicBrainz rate limit
@@ -623,12 +639,12 @@ class MetadataService:
         url = f"https://musicbrainz.org/ws/2/artist/{artist_mbid}?inc=url-rels&fmt=json"
         data = self._make_api_request(url)
         if not data or not isinstance(data, dict):
-            self.artist_image_cache[artist] = ""
+            self._cache_set(self.artist_image_cache, artist, "")
             return ""
 
         wikidata_id = self._get_wikidata_id_from_relations(data.get("relations", []))
         if not wikidata_id:
-            self.artist_image_cache[artist] = ""
+            self._cache_set(self.artist_image_cache, artist, "")
             return ""
 
         time.sleep(1.1)
@@ -636,7 +652,7 @@ class MetadataService:
         url = f"https://www.wikidata.org/wiki/Special:EntityData/{wikidata_id}.json"
         data = self._make_api_request(url)
         if not data or not isinstance(data, dict):
-            self.artist_image_cache[artist] = ""
+            self._cache_set(self.artist_image_cache, artist, "")
             return ""
 
         entity = data.get("entities", {}).get(wikidata_id, {})
@@ -649,11 +665,11 @@ class MetadataService:
             .get("value", "")
         ):
             image_url = self._build_wikimedia_image_url(image_name)
-            self.artist_image_cache[artist] = image_url
+            self._cache_set(self.artist_image_cache, artist, image_url)
             logger.info(f"Found artist image for {artist}")
             return image_url
 
-        self.artist_image_cache[artist] = ""
+        self._cache_set(self.artist_image_cache, artist, "")
         return ""
 
     def fetch_album_artwork(self, artist: str, album: str) -> str:
@@ -666,17 +682,17 @@ class MetadataService:
 
         artwork_url = self._fetch_itunes_artwork(artist, album)
         if artwork_url:
-            self.artwork_cache[cache_key] = artwork_url
+            self._cache_set(self.artwork_cache, cache_key, artwork_url)
             logger.info(f"Found iTunes artwork for {artist} - {album}")
             return artwork_url
 
         artwork_url = self.fetch_musicbrainz_artwork(artist, album)
         if artwork_url:
-            self.artwork_cache[cache_key] = artwork_url
+            self._cache_set(self.artwork_cache, cache_key, artwork_url)
             logger.info(f"Found MusicBrainz artwork for {artist} - {album}")
             return artwork_url
 
-        self.artwork_cache[cache_key] = ""
+        self._cache_set(self.artwork_cache, cache_key, "")
         return ""
 
     def _fetch_itunes_artwork(self, artist: str, album: str) -> str:
@@ -972,7 +988,7 @@ class MetadataService:
 
         # Final radio fallback
         if not metadata.get("artwork") and is_radio:
-            metadata["artwork"] = f"http://{EXTERNAL_HOST}:{HTTP_PORT}/artwork/default-radio.png"
+            metadata["artwork"] = f"http://{EXTERNAL_HOST}:{HTTP_PORT}/defaults/default-radio.png"
 
         # Artist image (not for radio)
         if not is_radio and metadata.get("artist"):
@@ -987,7 +1003,7 @@ class MetadataService:
 
     async def poll_loop(self) -> None:
         """Main loop: poll Snapserver, enrich metadata, broadcast to clients."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         while True:
             try:
@@ -1103,7 +1119,7 @@ class MetadataService:
             cmd_type = cmd.get("cmd")
             logger.info(f"Control command from {client_id}: {cmd_type}")
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             if cmd_type == "toggle_play":
                 await loop.run_in_executor(None, self.toggle_playback)
@@ -1130,7 +1146,7 @@ class MetadataService:
 # WebSocket handler
 # ──────────────────────────────────────────────
 
-async def ws_handler(websocket: Any, path: str | None = None) -> None:
+async def ws_handler(websocket: Any) -> None:
     """Handle WebSocket connections. Clients must subscribe with CLIENT_ID."""
     client_addr = websocket.remote_address
     logger.info(f"WebSocket client connected: {client_addr}")
@@ -1163,7 +1179,7 @@ async def ws_handler(websocket: Any, path: str | None = None) -> None:
                         sc.stream_id = stream_id
                         sm = _service.streams.get(stream_id)
                         if sm and sm.current:
-                            loop = asyncio.get_event_loop()
+                            loop = asyncio.get_running_loop()
                             server = await loop.run_in_executor(
                                 None, _service.get_server_status
                             )
@@ -1218,6 +1234,32 @@ async def handle_artwork(request: web.Request) -> web.StreamResponse:
     return web.FileResponse(filepath, headers={
         "Content-Type": content_type,
         "Cache-Control": "public, max-age=3600",
+        "Access-Control-Allow-Origin": "*",
+    })
+
+
+async def handle_defaults(request: web.Request) -> web.StreamResponse:
+    """Serve default asset files (not shadowed by artwork bind mount)."""
+    filename = request.match_info["filename"]
+    if not all(c.isalnum() or c in "-_." for c in filename):
+        return web.Response(status=400, text="Invalid filename")
+    if ".." in filename or "/" in filename:
+        return web.Response(status=400, text="Invalid filename")
+
+    filepath = DEFAULTS_DIR / filename
+    if not filepath.exists():
+        return web.Response(status=404)
+
+    ext = filepath.suffix.lower()
+    content_types = {
+        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".gif": "image/gif", ".webp": "image/webp",
+    }
+    content_type = content_types.get(ext, "application/octet-stream")
+
+    return web.FileResponse(filepath, headers={
+        "Content-Type": content_type,
+        "Cache-Control": "public, max-age=86400",
         "Access-Control-Allow-Origin": "*",
     })
 
@@ -1280,6 +1322,7 @@ async def main() -> None:
     # Start HTTP server
     app = web.Application()
     app.router.add_get("/artwork/{filename}", handle_artwork)
+    app.router.add_get("/defaults/{filename}", handle_defaults)
     app.router.add_get("/metadata.json", handle_metadata)
     app.router.add_get("/health", handle_health)
     runner = web.AppRunner(app)
