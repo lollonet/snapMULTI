@@ -251,7 +251,7 @@ services:
   # HTTP (port 8083): serves artwork files and metadata.json
   metadata:
     image: lollonet/snapmulti-metadata:latest
-    container_name: snapmulti-metadata
+    container_name: metadata
     build:
       context: .
       dockerfile: Dockerfile.metadata

@@ -740,7 +740,7 @@ start_services() {
 verify_services() {
     step "Verifying services"
 
-    local expected_services=("snapserver" "shairport-sync" "librespot" "mpd" "mympd" "snapmulti-metadata")
+    local expected_services=("snapserver" "shairport-sync" "librespot" "mpd" "mympd" "metadata")
     # Include tidal-connect only on ARM
     if [[ "$IS_ARM" == "true" ]]; then
         expected_services+=("tidal-connect")

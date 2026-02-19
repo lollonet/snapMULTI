@@ -92,7 +92,7 @@ class MetadataService:
         # Bounded to _MAX_CACHE_ENTRIES to prevent unbounded memory growth
         self.artwork_cache: collections.OrderedDict[str, str] = collections.OrderedDict()
         self.artist_image_cache: collections.OrderedDict[str, str] = collections.OrderedDict()
-        self._failed_downloads: set[str] = set()
+        self._failed_downloads: collections.OrderedDict[str, None] = collections.OrderedDict()
 
         self._cache_limit = _MAX_CACHE_ENTRIES
 
@@ -117,6 +117,13 @@ class MetadataService:
         cache.move_to_end(key)
         while len(cache) > limit:
             cache.popitem(last=False)
+
+    def _mark_failed(self, url: str) -> None:
+        """Record a failed download URL, bounded to _MAX_CACHE_ENTRIES."""
+        self._failed_downloads[url] = None
+        self._failed_downloads.move_to_end(url)
+        while len(self._failed_downloads) > self._cache_limit:
+            self._failed_downloads.popitem(last=False)
 
     # ──────────────────────────────────────────────
     # Socket helpers
@@ -728,7 +735,7 @@ class MetadataService:
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme not in ("http", "https"):
             logger.warning(f"Rejected artwork URL with scheme: {parsed.scheme}")
-            self._failed_downloads.add(url)
+            self._mark_failed(url)
             return ""
 
         # Block private/loopback IPs (SSRF protection)
@@ -749,11 +756,11 @@ class MetadataService:
                         break
             if blocked_addr:
                 logger.warning(f"Blocked artwork download to restricted IP: {blocked_addr}")
-                self._failed_downloads.add(url)
+                self._mark_failed(url)
                 return ""
         except (socket.gaierror, ValueError, OSError) as e:
             logger.warning(f"Cannot resolve artwork host {parsed.hostname}: {e}")
-            self._failed_downloads.add(url)
+            self._mark_failed(url)
             return ""
 
         try:
@@ -771,7 +778,7 @@ class MetadataService:
                 while len(data) < self._MAX_ARTWORK_BYTES:
                     if time.monotonic() - dl_start > 15:
                         logger.warning("Artwork download total timeout (15s)")
-                        self._failed_downloads.add(url)
+                        self._mark_failed(url)
                         return ""
                     chunk = response.read(8192)
                     if not chunk:
@@ -780,7 +787,7 @@ class MetadataService:
 
                 if len(data) >= self._MAX_ARTWORK_BYTES:
                     logger.warning(f"Artwork exceeded size limit ({self._MAX_ARTWORK_BYTES} bytes)")
-                    self._failed_downloads.add(url)
+                    self._mark_failed(url)
                     return ""
 
                 if len(data) > 0:
@@ -792,11 +799,11 @@ class MetadataService:
                     return filename
                 else:
                     logger.warning("Downloaded empty artwork")
-                    self._failed_downloads.add(url)
+                    self._mark_failed(url)
                     return ""
         except Exception as e:
             logger.error(f"Failed to download artwork: {e}")
-            self._failed_downloads.add(url)
+            self._mark_failed(url)
             try:
                 tmp = local_path.parent / (local_path.name + ".tmp")
                 tmp.unlink(missing_ok=True)
@@ -1130,7 +1137,7 @@ class MetadataService:
                     server = await loop.run_in_executor(None, self.get_server_status)
                     if server:
                         vol = self._find_client_volume(server, client_id)
-                        new_vol = max(0, min(100, vol.get("percent", 50) + delta))
+                        new_vol = int(max(0, min(100, vol.get("percent", 50) + delta)))
                         await loop.run_in_executor(
                             None, self.set_client_volume, client_id, new_vol
                         )
