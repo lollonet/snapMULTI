@@ -132,7 +132,7 @@ Verify:
 docker ps
 ```
 
-You should see five running containers: `snapserver`, `shairport-sync`, `librespot`, `mpd`, and `mympd`. On ARM (Raspberry Pi), you'll also see `tidal-connect`.
+You should see six running containers: `snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`, and `metadata`. On ARM (Raspberry Pi), you'll also see `tidal-connect`.
 
 ---
 
@@ -144,7 +144,7 @@ Open `http://<server-ip>:8180` in a browser — myMPD lets you browse and play y
 
 ### Option A: Dedicated Pi Speaker (recommended)
 
-Use `prepare-sd.sh` and choose "Audio Player" to turn another Pi into a speaker. It auto-discovers the server, displays cover art on HDMI, and supports audio HATs.
+Use `prepare-sd.sh` and choose "Audio Player" to turn another Pi into a speaker. It auto-discovers the server, displays cover art on HDMI (served by the server's metadata service), and supports audio HATs.
 
 ### Option B: Manual Snapclient
 

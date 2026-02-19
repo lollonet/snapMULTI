@@ -246,6 +246,48 @@ services:
         reservations:
           memory: ${MPD_MEM_RESERVE:-128M}
 
+  # Metadata Service — centralized cover art + track info for all streams
+  # WebSocket (port 8082): clients subscribe with CLIENT_ID to get their stream's metadata
+  # HTTP (port 8083): serves artwork files and metadata.json
+  metadata:
+    image: lollonet/snapmulti-metadata:latest
+    container_name: metadata
+    build:
+      context: .
+      dockerfile: Dockerfile.metadata
+    restart: unless-stopped
+    network_mode: host
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+    user: "${PUID:-1000}:${PGID:-1000}"
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+      - EXTERNAL_HOST=${EXTERNAL_HOST:-}
+    volumes:
+      - ./artwork:/app/artwork
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    depends_on:
+      snapserver:
+        condition: service_healthy
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: ${METADATA_MEM_LIMIT:-128M}
+          cpus: '${METADATA_CPU_LIMIT:-0.5}'
+        reservations:
+          memory: ${METADATA_MEM_RESERVE:-64M}
+
   # Tidal Connect - Cast from Tidal app (ARM only: Pi 3/4/5)
   # Open Tidal app → Select device → "<hostname> Tidal"
   # Note: x86_64 not supported - tidal-connect binaries are ARM-only
@@ -258,6 +300,8 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - DAC_OVERRIDE   # Restore after cap_drop: ALL — root needs it to write FIFOs owned by PUID
     tmpfs:
       - /tmp:size=64M
       - /config:size=1M

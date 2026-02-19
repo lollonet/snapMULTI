@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Centralized metadata service** — Cover art and track info now served by the snapMULTI server instead of per-client
+  - Server-side `metadata-service` container (ports 8082 WS, 8083 HTTP) polls Snapserver JSON-RPC for all streams
+  - Multi-stream support: clients subscribe with `{"subscribe": "CLIENT_ID"}` to receive their stream's metadata
+  - Cover art chain: MPD embedded → iTunes → MusicBrainz → Radio-Browser (fetched once, shared across all clients)
+  - Artwork served via built-in HTTP server (`/artwork/{filename}`, `/metadata.json`, `/health`)
+  - Clients no longer need metadata-service or nginx containers (2 fewer containers per client)
+  - New Docker image: `lollonet/snapmulti-metadata:latest` (amd64 + arm64)
 - **Music source configuration** — `prepare-sd.sh` now asks where your music is (streaming only, USB drive, NFS/SMB network share, or manual)
   - NFS and SMB shares are mounted automatically on first boot with fstab persistence
   - Streaming-only mode skips music library scan (no confusing "not found" warning)
@@ -24,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Display attached: full visual stack (snapclient + visualizer + cover art display)
   - Headless: audio-only (snapclient container only)
 - **Both mode** — Server + Player on the same Pi with no port conflicts
-  - Server at `/opt/snapmulti/` (host networking), client at `/opt/snapclient/` (bridge networking)
+  - Server at `/opt/snapmulti/` (host networking: 1704, 1705, 1780, 6600, 8082, 8083, 8180), client at `/opt/snapclient/` (bridge networking: 8080, 8081)
   - Client auto-connects to `127.0.0.1`
 - **Configurable progress display** — `progress.sh` now accepts `STEP_NAMES`, `STEP_WEIGHTS`, and `PROGRESS_TITLE` from caller instead of hardcoded values
 - **Progress display TUI** ([#58](https://github.com/lollonet/snapMULTI/pull/58)) — Full-screen progress display on HDMI console (`/dev/tty1`) during first-boot installation

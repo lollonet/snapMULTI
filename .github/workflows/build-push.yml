@@ -93,6 +93,19 @@ jobs:
           cache-from: type=gha,scope=mpd-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=mpd-${{ matrix.suffix }}
 
+      - name: Build and push metadata
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.metadata
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: |
+            lollonet/snapmulti-metadata:${{ matrix.suffix }}
+            ${{ steps.version.outputs.tag && format('lollonet/snapmulti-metadata:{0}-{1}', steps.version.outputs.tag, matrix.suffix) || '' }}
+          cache-from: type=gha,scope=metadata-${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=metadata-${{ matrix.suffix }}
+
       # Tidal Connect - ARM only (Pi 3/4/5)
       # Base image edgecrush3r/tidal-connect only provides ARM binaries
       - name: Build and push tidal
@@ -161,6 +174,20 @@ jobs:
             "lollonet/snapmulti-airplay:$VERSION-arm64"
 
       # Spotify Connect: uses official ghcr.io/devgianlu/go-librespot image (no manifest needed)
+
+      - name: Create multi-arch manifest for metadata
+        run: |
+          docker buildx imagetools create -t lollonet/snapmulti-metadata:latest \
+            lollonet/snapmulti-metadata:amd64 \
+            lollonet/snapmulti-metadata:arm64
+
+      - name: Create versioned tag for metadata
+        if: steps.version.outputs.tag != ''
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          docker buildx imagetools create -t "lollonet/snapmulti-metadata:$VERSION" \
+            "lollonet/snapmulti-metadata:$VERSION-amd64" \
+            "lollonet/snapmulti-metadata:$VERSION-arm64"
 
       - name: Create multi-arch manifest for mpd
         run: |

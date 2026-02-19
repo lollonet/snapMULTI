@@ -17,6 +17,8 @@ jobs:
           # Spotify Connect: uses official ghcr.io/devgianlu/go-librespot (no build needed)
           - dockerfile: Dockerfile.mpd
             binary: mpd
+          - dockerfile: Dockerfile.metadata
+            binary: python3
           # Tidal: ARM-only, base image has ARM binaries
           - dockerfile: Dockerfile.tidal
             binary: bash
