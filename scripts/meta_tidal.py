@@ -122,7 +122,9 @@ def parse_tidal_message(data: dict) -> bool:
         changed = True
     if "duration" in data:
         dur = data["duration"]
-        # Could be seconds or milliseconds
+        # Heuristic: values > 10000 are likely milliseconds (longest common
+        # track ~30 min = 1800s). Misclassifies tracks > 2.7 hours as ms,
+        # but Tidal streaming content is virtually always under that.
         metadata["duration"] = float(dur) / 1000.0 if float(dur) > 10000 else float(dur)
         changed = True
 
@@ -168,17 +170,29 @@ def parse_tidal_message(data: dict) -> bool:
 
 
 def ws_thread() -> None:
-    """Background thread: connect to tidal-connect WebSocket and parse messages."""
+    """Background thread: connect to tidal-connect WebSocket and parse messages.
+
+    On x86_64 deployments (no tidal-connect), this backs off to 5-minute
+    retries after the first failure to avoid log noise.
+    """
     delay = RECONNECT_DELAY
+    ever_connected = False
 
     while True:
         url = f"ws://{WS_HOST}:{WS_PORT}"
+        ws = None
         try:
-            log("info", f"Connecting to {url}")
+            if not ever_connected and delay > RECONNECT_DELAY:
+                # Quiet mode: tidal-connect likely absent (x86_64)
+                sys.stderr.write(f"[INFO] meta_tidal: Retrying {url} in {delay}s (tidal-connect not detected)\n")
+                sys.stderr.flush()
+            else:
+                log("info", f"Connecting to {url}")
             ws = websocket.WebSocket()
             ws.connect(url, timeout=10)
             log("info", "Connected to tidal-connect WebSocket")
             delay = RECONNECT_DELAY  # Reset backoff on success
+            ever_connected = True
 
             while True:
                 raw = ws.recv()
@@ -193,20 +207,23 @@ def ws_thread() -> None:
                     if debug_mode:
                         log("debug", f"Non-JSON message: {raw[:200]}")
         except (ConnectionRefusedError, OSError) as e:
-            log("warning", f"Connection failed: {e}")
+            if ever_connected:
+                log("warning", f"Connection failed: {e}")
         except websocket.WebSocketException as e:
             log("warning", f"WebSocket error: {e}")
         except Exception as e:
             log("error", f"Unexpected error: {e}")
         finally:
-            try:
-                ws.close()
-            except Exception:
-                pass
+            if ws is not None:
+                try:
+                    ws.close()
+                except Exception:
+                    pass
 
-        log("info", f"Reconnecting in {delay}s...")
         time.sleep(delay)
-        delay = min(delay * 2, MAX_RECONNECT_DELAY)
+        # Back off to 5 minutes max if never connected (likely no tidal-connect)
+        max_delay = MAX_RECONNECT_DELAY if ever_connected else 300
+        delay = min(delay * 2, max_delay)
 
 
 def _filtered_metadata() -> dict:

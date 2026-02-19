@@ -109,7 +109,7 @@ Per i tipi di sorgente audio e l'API JSON-RPC, vedi [SOURCES.it.md](SOURCES.it.m
 |-------|------------|-------|
 | 8888 | WebSocket | API eventi riproduzione (usata dal controlscript `meta_tidal.py`) |
 
-> **Nota:** Le porte 5858, 8888 e 24879 sono interne (solo localhost) — usate per lo scambio di metadati tra container. Non servono regole firewall.
+> **Nota:** Le porte 5858, 8888 e 24879 sono usate per lo scambio di metadati tra container co-locati. La porta 5858 deve essere raggiungibile dalla LAN (i client Snapcast scaricano le copertine da essa). Le porte 8888 e 24879 sono consumate localmente dai controlscript ma si collegano a tutte le interfacce — non è necessario accesso esterno intenzionale.
 
 ### MPD
 

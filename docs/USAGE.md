@@ -233,7 +233,7 @@ Host mode is recommended for single-server deployments.
 |------|----------|---------|
 | 8888 | WebSocket | Playback events API (used by `meta_tidal.py` controlscript) |
 
-> **Note:** Ports 5858, 8888, and 24879 are internal (localhost only) — used for metadata exchange between containers. No firewall rules needed.
+> **Note:** Ports 5858, 8888, and 24879 are used for metadata exchange between co-located containers. Port 5858 must be LAN-reachable (Snapcast clients fetch cover art from it). Ports 8888 and 24879 are consumed locally by controlscripts but bind to all interfaces — no intentional external access is needed.
 
 ### MPD
 
