@@ -421,7 +421,11 @@ DJSON
                 rm -rf /var/lib/docker/*
                 log_progress "Docker storage driver: fuse-overlayfs" 2>/dev/null || true
             fi
-            systemctl start docker
+            if ! systemctl start docker; then
+                log_and_tty "ERROR: Docker failed to start after storage driver switch."
+                log_and_tty "       Manual recovery required (reflash SD or fix /etc/docker/daemon.json)."
+                exit 1
+            fi
         fi
     fi
 fi

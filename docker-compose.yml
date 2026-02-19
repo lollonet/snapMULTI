@@ -301,7 +301,7 @@ services:
     cap_drop:
       - ALL
     cap_add:
-      - DAC_OVERRIDE   # Runs as root; needs to write FIFOs owned by PUID
+      - DAC_OVERRIDE   # Restore after cap_drop: ALL — root needs it to write FIFOs owned by PUID
     tmpfs:
       - /tmp:size=64M
       - /config:size=1M

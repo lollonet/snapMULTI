@@ -634,6 +634,7 @@ class MetadataService:
         return best_url
 
     def fetch_musicbrainz_artwork(self, artist: str, album: str) -> str:
+        time.sleep(1.1)  # MusicBrainz rate limit: 1 req/s
         query = urllib.parse.quote(f'artist:"{artist}" AND release:"{album}"')
         url = f"https://musicbrainz.org/ws/2/release/?query={query}&fmt=json&limit=1"
         data = self._make_api_request(url)
