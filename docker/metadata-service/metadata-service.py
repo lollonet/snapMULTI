@@ -96,6 +96,24 @@ class MetadataService:
 
         self._cache_limit = _MAX_CACHE_ENTRIES
 
+        # Trusted IPs: local interfaces + snapserver — artwork from these is allowed
+        # even though they're private IPs (SSRF exemption for co-located services)
+        self._trusted_ips: set[str] = set()
+        try:
+            for _fam, _, _, _, sa in socket.getaddrinfo(
+                socket.gethostname(), None, socket.AF_UNSPEC
+            ):
+                self._trusted_ips.add(sa[0])
+            for _fam, _, _, _, sa in socket.getaddrinfo(
+                self.snapserver_host, None, socket.AF_UNSPEC
+            ):
+                self._trusted_ips.add(sa[0])
+            self._trusted_ips.add("127.0.0.1")
+            self._trusted_ips.add("::1")
+        except (socket.gaierror, OSError):
+            pass
+        logger.info(f"Trusted IPs for artwork: {self._trusted_ips}")
+
         # Snapserver persistent socket
         self._snap_sock: socket.socket | None = None
         self._snap_buffer: bytes = b""
@@ -748,13 +766,11 @@ class MetadataService:
             return ""
 
         # Block private/loopback IPs (SSRF protection)
-        # Exception: allow Snapserver host and EXTERNAL_HOST (internal, trusted)
-        # Snapserver serves album art; shairport-sync serves AirPlay cover art
-        # on EXTERNAL_HOST — both are local services we trust.
+        # Exception: allow IPs belonging to this host (snapserver, shairport-sync,
+        # and other co-located services serve artwork on local interfaces).
         # Resolve once and connect to the resolved IP to prevent DNS rebinding
         resolved_ip = None
         try:
-            is_trusted_host = parsed.hostname in (self.snapserver_host, EXTERNAL_HOST)
             blocked_addr = None
             for _family, _, _, _, sockaddr in socket.getaddrinfo(
                 parsed.hostname or "", None, socket.AF_UNSPEC
@@ -762,8 +778,8 @@ class MetadataService:
                 addr = sockaddr[0]
                 ip = ipaddress.ip_address(addr)
                 if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
-                    if is_trusted_host:
-                        logger.debug(f"Allowing artwork from trusted host: {addr}")
+                    if addr in self._trusted_ips:
+                        logger.debug(f"Allowing artwork from trusted local IP: {addr}")
                         resolved_ip = addr
                     else:
                         blocked_addr = addr
