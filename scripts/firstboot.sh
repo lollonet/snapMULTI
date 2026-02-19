@@ -63,6 +63,7 @@ SMB_SERVER=""
 SMB_SHARE=""
 SMB_USER=""
 SMB_PASS=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     MUSIC_SOURCE=$(grep -m1 '^MUSIC_SOURCE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
     # Source sanitize.sh for re-validation (FAT32 has no file permissions —
@@ -128,7 +129,6 @@ if [[ ${#STEP_NAMES[@]} -ne ${#STEP_WEIGHTS[@]} ]]; then
 fi
 
 # Source progress display (boot partition copy, or local fallback for manual testing)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "$SNAP_BOOT/common/progress.sh" ]]; then
     # shellcheck source=common/progress.sh
     source "$SNAP_BOOT/common/progress.sh"
@@ -398,7 +398,7 @@ setup_music_source() {
             if mount -t nfs "$NFS_SERVER:$NFS_EXPORT" "$mount_point" -o ro,soft,timeo=50,_netdev; then
                 # Persist in fstab for reboots
                 if ! grep -qF "$NFS_SERVER:$NFS_EXPORT" /etc/fstab; then
-                    echo "$NFS_SERVER:$NFS_EXPORT $mount_point nfs ro,soft,timeo=50,_netdev 0 0" >> /etc/fstab
+                    echo "$NFS_SERVER:$NFS_EXPORT $mount_point nfs ro,soft,timeo=50,_netdev,nofail 0 0" >> /etc/fstab
                 fi
                 export MUSIC_PATH="$mount_point"
                 log_progress "NFS mounted: $mount_point" 2>/dev/null || true
@@ -423,10 +423,10 @@ setup_music_source() {
                 mount_opts="${mount_opts},guest"
             fi
 
-            if mount -t cifs "//$SMB_SERVER/$SMB_SHARE" "$mount_point" -o "$mount_opts"; then
+            if timeout 60 mount -t cifs "//$SMB_SERVER/$SMB_SHARE" "$mount_point" -o "$mount_opts"; then
                 # Persist in fstab
                 if ! grep -qF "//$SMB_SERVER/$SMB_SHARE" /etc/fstab; then
-                    echo "//$SMB_SERVER/$SMB_SHARE $mount_point cifs $mount_opts 0 0" >> /etc/fstab
+                    echo "//$SMB_SERVER/$SMB_SHARE $mount_point cifs ${mount_opts},nofail 0 0" >> /etc/fstab
                 fi
                 export MUSIC_PATH="$mount_point"
                 log_progress "SMB mounted: $mount_point" 2>/dev/null || true
@@ -453,12 +453,17 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     # Set up music source before deploy.sh (mounts NFS/SMB, exports MUSIC_PATH)
     setup_music_source
 
-    # Scrub credentials from boot partition (FAT32 has no file permissions)
+    # Scrub credentials and network topology from boot partition
+    # (FAT32 has no file permissions — anyone mounting the SD can read these)
     if [[ -f "$SNAP_BOOT/install.conf" ]]; then
-        sed -i 's/^SMB_PASS=.*/SMB_PASS=/' "$SNAP_BOOT/install.conf" 2>/dev/null \
-            || log_and_tty "WARNING: Could not scrub SMB_PASS from boot partition — remove manually"
-        sed -i 's/^SMB_USER=.*/SMB_USER=/' "$SNAP_BOOT/install.conf" 2>/dev/null \
-            || log_and_tty "WARNING: Could not scrub SMB_USER from boot partition — remove manually"
+        scrub_failed=false
+        for field in SMB_PASS SMB_USER SMB_SERVER SMB_SHARE NFS_SERVER NFS_EXPORT; do
+            sed -i "s/^${field}=.*/${field}=/" "$SNAP_BOOT/install.conf" 2>/dev/null \
+                || scrub_failed=true
+        done
+        if [[ "$scrub_failed" == "true" ]]; then
+            log_and_tty "WARNING: Could not scrub some fields from boot partition — remove manually"
+        fi
     fi
 
     if [[ ! -d "$SERVER_DIR" ]]; then

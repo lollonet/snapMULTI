@@ -22,7 +22,7 @@ sanitize_hostname() {
     printf '%s' "$1" | tr -cd 'A-Za-z0-9.-' | sed 's/^[.-]*//;s/[.-]*$//'
 }
 
-# Alias for backward compatibility
+# Semantic alias for NFS server validation
 sanitize_nfs_server() {
     sanitize_hostname "$1"
 }
