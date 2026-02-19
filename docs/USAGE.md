@@ -450,8 +450,8 @@ When option 3 is selected, the Pi runs both the music server and a local audio p
 
 | Component | Path | Networking | Ports |
 |-----------|------|------------|-------|
-| Server | `/opt/snapmulti/` | Host networking | 1704, 1705, 1780, 6600, 8180 |
-| Client | `/opt/snapclient/` | Bridge networking | 8080, 8081, 8082 |
+| Server | `/opt/snapmulti/` | Host networking | 1704, 1705, 1780, 6600, 8082, 8083, 8180 |
+| Client | `/opt/snapclient/` | Bridge networking | 8080, 8081 |
 
 The client auto-connects to the local server (`SNAPSERVER_HOST=127.0.0.1`) and uses the Pi's local audio output (HAT or USB DAC).
 

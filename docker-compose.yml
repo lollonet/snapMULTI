@@ -270,6 +270,12 @@ services:
       - EXTERNAL_HOST=${EXTERNAL_HOST:-}
     volumes:
       - ./artwork:/app/artwork
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     depends_on:
       snapserver:
         condition: service_healthy

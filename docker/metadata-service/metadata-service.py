@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import socket
+import subprocess
 import threading
 import time
 import urllib.parse
@@ -112,7 +113,6 @@ class MetadataService:
             pass
         # Get all local interface IPs (hostname resolution misses them on Debian)
         try:
-            import subprocess
             result = subprocess.run(
                 ["hostname", "-I"], capture_output=True, text=True, timeout=5
             )

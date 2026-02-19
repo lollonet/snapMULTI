@@ -383,21 +383,29 @@ if [[ "$INSTALL_TYPE" == "both" ]]; then
     current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "none")
     if [[ "$current_driver" != "fuse-overlayfs" ]]; then
         log_progress "Switching Docker to fuse-overlayfs (read-only FS support)..." 2>/dev/null || true
-        apt-get install -y fuse-overlayfs >> "$LOG" 2>&1
-        systemctl stop docker
-        mkdir -p /etc/docker
-        # Merge fuse-overlayfs into existing daemon.json (or create new)
-        if [[ -f /etc/docker/daemon.json ]]; then
-            python3 -c "
+        fuse_ok=false
+        if ! apt-get install -y fuse-overlayfs >> "$LOG" 2>&1; then
+            log_and_tty "ERROR: Failed to install fuse-overlayfs — cannot switch storage driver."
+            log_and_tty "       Docker data NOT wiped. Continuing with default driver."
+        else
+            systemctl stop docker
+            mkdir -p /etc/docker
+            # Merge fuse-overlayfs into existing daemon.json (or create new)
+            if [[ -f /etc/docker/daemon.json ]]; then
+                if python3 -c "
 import json
 with open('/etc/docker/daemon.json') as f:
     cfg = json.load(f)
 cfg['storage-driver'] = 'fuse-overlayfs'
 with open('/etc/docker/daemon.json', 'w') as f:
     json.dump(cfg, f, indent=2)
-" 2>/dev/null
-        else
-            cat > /etc/docker/daemon.json <<'DJSON'
+" 2>>"$LOG"; then
+                    fuse_ok=true
+                else
+                    log_and_tty "ERROR: Failed to merge daemon.json — aborting storage driver switch."
+                fi
+            else
+                cat > /etc/docker/daemon.json <<'DJSON'
 {
   "storage-driver": "fuse-overlayfs",
   "log-driver": "json-file",
@@ -407,10 +415,14 @@ with open('/etc/docker/daemon.json', 'w') as f:
   }
 }
 DJSON
+                fuse_ok=true
+            fi
+            if [[ "$fuse_ok" == "true" ]]; then
+                rm -rf /var/lib/docker/*
+                log_progress "Docker storage driver: fuse-overlayfs" 2>/dev/null || true
+            fi
+            systemctl start docker
         fi
-        rm -rf /var/lib/docker/*
-        systemctl start docker
-        log_progress "Docker storage driver: fuse-overlayfs" 2>/dev/null || true
     fi
 fi
 

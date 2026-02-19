@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Display attached: full visual stack (snapclient + visualizer + cover art display)
   - Headless: audio-only (snapclient container only)
 - **Both mode** — Server + Player on the same Pi with no port conflicts
-  - Server at `/opt/snapmulti/` (host networking), client at `/opt/snapclient/` (bridge networking)
+  - Server at `/opt/snapmulti/` (host networking: 1704, 1705, 1780, 6600, 8082, 8083, 8180), client at `/opt/snapclient/` (bridge networking: 8080, 8081)
   - Client auto-connects to `127.0.0.1`
 - **Configurable progress display** — `progress.sh` now accepts `STEP_NAMES`, `STEP_WEIGHTS`, and `PROGRESS_TITLE` from caller instead of hardcoded values
 - **Progress display TUI** ([#58](https://github.com/lollonet/snapMULTI/pull/58)) — Full-screen progress display on HDMI console (`/dev/tty1`) during first-boot installation

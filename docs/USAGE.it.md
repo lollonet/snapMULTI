@@ -366,7 +366,7 @@ Selezionando l'opzione 3, il Pi esegue sia il music server che un audio player l
 | Componente | Percorso | Rete | Porte |
 |------------|----------|------|-------|
 | Server | `/opt/snapmulti/` | Host networking | 1704, 1705, 1780, 6600, 8082, 8083, 8180 |
-| Client | `/opt/snapclient/` | Bridge networking | 8080, 8081, 8082 |
+| Client | `/opt/snapclient/` | Bridge networking | 8080, 8081 |
 
 Il client si connette automaticamente al server locale (`SNAPSERVER_HOST=127.0.0.1`) e usa l'uscita audio locale del Pi (HAT o DAC USB).
 
