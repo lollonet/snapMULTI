@@ -179,9 +179,9 @@ get_smb_config() {
         read -rp "  Share name (e.g. Music): " raw_share
         # Detect spaces early — SMB shares with spaces need manual fstab escaping
         if [[ "$raw_share" == *" "* ]]; then
-            echo "  Share names with spaces are not supported in auto-setup."
-            echo "  Choose option 4 (manual) and see docs/USAGE.md for instructions."
-            exit 1
+            echo "  Share names with spaces are not supported. Try again without spaces,"
+            echo "  or restart and choose option 4 (manual). See docs/USAGE.md."
+            continue
         fi
         SMB_SHARE=$(sanitize_smb_share "$raw_share")
         if [[ -n "$SMB_SHARE" ]]; then break; fi
@@ -321,9 +321,11 @@ NFS_SERVER=$NFS_SERVER
 NFS_EXPORT=$NFS_EXPORT
 SMB_SERVER=$SMB_SERVER
 SMB_SHARE=$SMB_SHARE
-SMB_USER=$SMB_USER
-SMB_PASS=$SMB_PASS
 EOF
+# Write credentials outside heredoc — unquoted <<EOF expands $, backticks,
+# and $() which corrupts passwords containing shell metacharacters.
+printf 'SMB_USER=%s\n' "$SMB_USER" >> "$DEST/install.conf"
+printf 'SMB_PASS=%s\n' "$SMB_PASS" >> "$DEST/install.conf"
 
 cp "$SCRIPT_DIR/firstboot.sh" "$DEST/"
 cp -r "$SCRIPT_DIR/common" "$DEST/"

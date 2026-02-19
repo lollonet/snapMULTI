@@ -150,7 +150,7 @@ function Get-NetworkType {
 function Sanitize-Hostname {
     param([string]$Value)
     $cleaned = $Value -replace '[^A-Za-z0-9.\-]', ''
-    return $cleaned.Trim('.').TrimStart('-')
+    return $cleaned.Trim('.').Trim('-')
 }
 
 function Sanitize-NfsExport {
@@ -208,8 +208,9 @@ function Get-SmbConfig {
         $rawShare = Read-Host '  Share name (e.g. Music)'
         # SMB shares with spaces need manual fstab escaping — not supported in auto-setup
         if ($rawShare -match ' ') {
-            Write-Host '  Share names with spaces are not supported in auto-setup.'
-            throw 'Choose option 4 (manual) and see docs/USAGE.md for instructions.'
+            Write-Host '  Share names with spaces are not supported. Try again without spaces,'
+            Write-Host '  or restart and choose option 4 (manual). See docs/USAGE.md.'
+            continue
         }
         $share = Sanitize-ShareName $rawShare
         if (-not $share) { Write-Host '  Invalid share name. Use only letters, numbers, dots, underscores, hyphens.' }

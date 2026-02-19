@@ -19,7 +19,7 @@ sanitize_airplay_name() {
 # Used for NFS servers, SMB servers, and any network hostname
 # Usage: sanitize_hostname "nas.local"
 sanitize_hostname() {
-    printf '%s' "$1" | tr -cd 'A-Za-z0-9.-' | sed 's/^[.-]*//;s/[.]*$//'
+    printf '%s' "$1" | tr -cd 'A-Za-z0-9.-' | sed 's/^[.-]*//;s/[.-]*$//'
 }
 
 # Alias for backward compatibility
