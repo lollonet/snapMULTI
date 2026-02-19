@@ -115,7 +115,7 @@ sudo mkdir -p /media/smb-music
 # Guest access:
 sudo mount -t cifs //mynas/Music /media/smb-music -o ro,guest,_netdev,iocharset=utf8
 # With credentials:
-echo -e "username=myuser\npassword=mypass" | sudo tee /etc/snapmulti-smb-credentials
+printf 'username=myuser\npassword=mypass\n' | sudo tee /etc/snapmulti-smb-credentials
 sudo chmod 600 /etc/snapmulti-smb-credentials
 sudo mount -t cifs //mynas/Music /media/smb-music -o ro,_netdev,iocharset=utf8,credentials=/etc/snapmulti-smb-credentials
 ```

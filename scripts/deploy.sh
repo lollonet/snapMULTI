@@ -562,6 +562,9 @@ setup_env() {
         local music_path
         if [[ -n "${MUSIC_PATH:-}" ]]; then
             music_path="$MUSIC_PATH"
+            # SKIP_MUSIC_SCAN controls the log message only — MPD still scans
+            # the (empty) directory, which is a no-op. The variable signals intent
+            # so deploy.sh doesn't emit a confusing "no music found" warning.
             if [[ "${SKIP_MUSIC_SCAN:-}" == "1" ]]; then
                 info "Streaming-only setup — skipping music library scan"
             else

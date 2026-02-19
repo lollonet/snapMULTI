@@ -65,10 +65,19 @@ SMB_USER=""
 SMB_PASS=""
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     MUSIC_SOURCE=$(grep -m1 '^MUSIC_SOURCE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
-    NFS_SERVER=$(grep -m1 '^NFS_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
-    NFS_EXPORT=$(grep -m1 '^NFS_EXPORT=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
-    SMB_SERVER=$(grep -m1 '^SMB_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
-    SMB_SHARE=$(grep -m1 '^SMB_SHARE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
+    # Source sanitize.sh for re-validation (FAT32 has no file permissions —
+    # values could be hand-edited before first boot)
+    if [[ -f "$SNAP_BOOT/common/sanitize.sh" ]]; then
+        # shellcheck source=common/sanitize.sh
+        source "$SNAP_BOOT/common/sanitize.sh"
+    elif [[ -f "$SCRIPT_DIR/common/sanitize.sh" ]]; then
+        # shellcheck source=common/sanitize.sh
+        source "$SCRIPT_DIR/common/sanitize.sh"
+    fi
+    NFS_SERVER=$(sanitize_hostname "$(grep -m1 '^NFS_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
+    NFS_EXPORT=$(sanitize_nfs_export "$(grep -m1 '^NFS_EXPORT=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
+    SMB_SERVER=$(sanitize_hostname "$(grep -m1 '^SMB_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
+    SMB_SHARE=$(sanitize_smb_share "$(grep -m1 '^SMB_SHARE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
     SMB_USER=$(grep -m1 '^SMB_USER=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '[:space:]')
     SMB_PASS=$(grep -m1 '^SMB_PASS=' "$SNAP_BOOT/install.conf" | cut -d= -f2-)
 fi

@@ -205,6 +205,11 @@ function Get-SmbConfig {
     $share = ''
     while (-not $share) {
         $rawShare = Read-Host '  Share name (e.g. Music)'
+        # SMB shares with spaces need manual fstab escaping — not supported in auto-setup
+        if ($rawShare -match ' ') {
+            Write-Host '  Share names with spaces are not supported in auto-setup.'
+            throw 'Choose option 4 (manual) and see docs/USAGE.md for instructions.'
+        }
         $share = Sanitize-ShareName $rawShare
         if (-not $share) { Write-Host '  Invalid share name. Use only letters, numbers, dots, underscores, hyphens.' }
     }
