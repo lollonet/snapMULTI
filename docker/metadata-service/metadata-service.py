@@ -28,10 +28,10 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-_MAX_CACHE_ENTRIES = 500
-
 import websockets
 from aiohttp import web
+
+_MAX_CACHE_ENTRIES = 500
 
 # Configuration
 WS_PORT = int(os.environ.get("METADATA_WS_PORT", "8082"))
