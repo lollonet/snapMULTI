@@ -13,7 +13,7 @@ COPY docker/metadata-service/metadata-service.py /app/
 
 # Create artwork directory and copy default assets
 RUN mkdir -p /app/artwork
-COPY client/common/public/default-radio.png /app/artwork/
+COPY docker/metadata-service/default-radio.png /app/artwork/
 
 # Health check endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
