@@ -766,15 +766,22 @@ class MetadataService:
 
     _MAX_ARTWORK_BYTES = 10_000_000
 
-    def download_artwork(self, url: str) -> str:
-        """Download artwork, save to artwork dir. Returns filename or ""."""
-        if not url or url in self._failed_downloads:
+    def download_artwork(self, url: str, cache_key: str = "") -> str:
+        """Download artwork, save to artwork dir. Returns filename or "".
+
+        Args:
+            url: The URL to download from.
+            cache_key: Optional override for the cache hash. Use when the same
+                URL serves different content (e.g. shairport-sync /cover.jpg).
+        """
+        fail_key = cache_key or url
+        if not url or fail_key in self._failed_downloads:
             return ""
 
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme not in ("http", "https"):
             logger.warning(f"Rejected artwork URL with scheme: {parsed.scheme}")
-            self._mark_failed(url)
+            self._mark_failed(fail_key)
             return ""
 
         # Block private/loopback IPs (SSRF protection)
@@ -801,15 +808,15 @@ class MetadataService:
                     break
             if blocked_addr:
                 logger.warning(f"Blocked artwork download to restricted IP: {blocked_addr}")
-                self._mark_failed(url)
+                self._mark_failed(fail_key)
                 return ""
         except (socket.gaierror, ValueError, OSError) as e:
             logger.warning(f"Cannot resolve artwork host {parsed.hostname}: {e}")
-            self._mark_failed(url)
+            self._mark_failed(fail_key)
             return ""
 
         try:
-            url_hash = hashlib.md5(url.encode()).hexdigest()
+            url_hash = hashlib.md5((cache_key or url).encode()).hexdigest()
 
             # Check if already downloaded with any extension
             for ext in (".jpg", ".png", ".gif", ".webp"):
@@ -833,7 +840,7 @@ class MetadataService:
                 while len(data) < self._MAX_ARTWORK_BYTES:
                     if time.monotonic() - dl_start > 15:
                         logger.warning("Artwork download total timeout (15s)")
-                        self._mark_failed(url)
+                        self._mark_failed(fail_key)
                         return ""
                     chunk = response.read(8192)
                     if not chunk:
@@ -842,7 +849,7 @@ class MetadataService:
 
                 if len(data) >= self._MAX_ARTWORK_BYTES:
                     logger.warning(f"Artwork exceeded size limit ({self._MAX_ARTWORK_BYTES} bytes)")
-                    self._mark_failed(url)
+                    self._mark_failed(fail_key)
                     return ""
 
                 if len(data) > 0:
@@ -857,11 +864,11 @@ class MetadataService:
                     return filename
                 else:
                     logger.warning("Downloaded empty artwork")
-                    self._mark_failed(url)
+                    self._mark_failed(fail_key)
                     return ""
         except Exception as e:
             logger.error(f"Failed to download artwork: {e}")
-            self._mark_failed(url)
+            self._mark_failed(fail_key)
             try:
                 for tmp in self.artwork_dir.glob(f"artwork_{url_hash}*"):
                     tmp.unlink(missing_ok=True)
@@ -1097,7 +1104,15 @@ class MetadataService:
 
         # Download external artwork locally
         if artwork_url:
-            local_file = self.download_artwork(artwork_url)
+            # shairport-sync serves all tracks at the same URL (/cover.jpg).
+            # Use track identity as cache key so each track gets its own file.
+            cache_key = ""
+            if "/cover.jpg" in artwork_url and metadata.get("title"):
+                cache_key = (
+                    f"{artwork_url}|{metadata.get('title', '')}"
+                    f"|{metadata.get('artist', '')}"
+                )
+            local_file = self.download_artwork(artwork_url, cache_key=cache_key)
             metadata["artwork"] = self._artwork_url(local_file) if local_file else ""
 
         # Fallback: radio logo
