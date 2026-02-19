@@ -544,7 +544,7 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         if [[ "$RUNNING_COUNT" -eq 0 ]] && [[ "$TOTAL" -gt 0 ]]; then
             RUNNING_COUNT=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps 2>/dev/null | grep -c ' Up ' || true)
         fi
-        if [[ "$TOTAL" -ge 5 ]] && [[ "$RUNNING_COUNT" -eq "$TOTAL" ]]; then
+        if [[ "$TOTAL" -ge 6 ]] && [[ "$RUNNING_COUNT" -eq "$TOTAL" ]]; then
             log_and_tty "All $TOTAL server containers running."
             log_progress "All $TOTAL server containers running" 2>/dev/null || true
             HEALTHY=true

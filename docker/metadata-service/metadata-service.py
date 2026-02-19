@@ -801,6 +801,7 @@ class MetadataService:
                     if addr in self._trusted_ips:
                         logger.debug(f"Allowing artwork from trusted local IP: {addr}")
                         resolved_ip = addr
+                        break
                     else:
                         blocked_addr = addr
                         break
