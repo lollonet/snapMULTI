@@ -63,13 +63,13 @@ mpc status                  # Controlla stato
 
 ### 2. Tidal Connect (pipe da tidal-connect)
 
-Trasmetti direttamente dall'app Tidal a snapMULTI, come Spotify Connect. Il container tidal-connect riceve l'audio Tidal e lo instrada tramite ALSA verso una named pipe.
+Trasmetti direttamente dall'app Tidal a snapMULTI, come Spotify Connect. Il container tidal-connect riceve l'audio Tidal e lo instrada tramite ALSA verso una named pipe. I metadati (titolo, artista, album, copertina, durata) vengono letti dall'API WebSocket di tidal-connect tramite il controlscript `meta_tidal.py`.
 
 > **Nota:** Solo ARM (Raspberry Pi 3/4/5). Non funziona su x86_64.
 
 **Configurazione:**
 ```ini
-source = pipe:////audio/tidal_fifo?name=Tidal
+source = pipe:////audio/tidal_fifo?name=Tidal&controlscript=meta_tidal.py
 ```
 
 **Parametri:**
@@ -77,6 +77,7 @@ source = pipe:////audio/tidal_fifo?name=Tidal
 | Parametro | Valore | Descrizione |
 |-----------|--------|-------------|
 | `name` | `Tidal` | ID dello stream |
+| `controlscript` | `meta_tidal.py` | Legge i metadati dall'API WebSocket di tidal-connect (porta 8888) |
 
 **Impostazioni container tidal-connect** (docker-compose.yml):
 
@@ -92,6 +93,8 @@ TIDAL_NAME="Tidal Salotto"
 
 **Formato campionamento:** 44100:16:2 (fisso da tidal-connect)
 
+**Metadati:** Nome del brano, artista, album, URL copertina e durata vengono inoltrati ai client Snapcast. Il controllo della riproduzione non è supportato (Tidal controlla la riproduzione solo dall'app).
+
 **Connessione da Tidal:**
 1. Apri **Tidal** sul tuo telefono/tablet
 2. Avvia la riproduzione di un brano
@@ -100,7 +103,7 @@ TIDAL_NAME="Tidal Salotto"
 
 **Limitazioni:**
 - **Solo ARM** — Il binario tidal-connect funziona solo su ARM (Pi 3/4/5)
-- **Nessun metadato** — Info sui brani non disponibili (limitazione del binario closed-source)
+- **Nessun controllo riproduzione** — Play/pausa/successivo devono essere controllati dall'app Tidal
 
 **Requisiti Docker:** Modalità host network per mDNS. Volume `/audio` condiviso con snapserver.
 

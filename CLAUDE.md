@@ -149,7 +149,8 @@ ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian 
 - **Audio routing**: Tidal app → ALSA default device → `config/tidal-asound.conf` (rate converter + FIFO plugin) → `/audio/tidal` named pipe → snapserver
 - **config/tidal-asound.conf**: speex rate converter (44100 Hz) → FIFO output. Validated by `deploy.sh` on ARM systems
 - **Device naming**: Uses hostname by default (e.g., "snapvideo Tidal"). Override with `TIDAL_NAME` env var
-- **scripts/tidal/entrypoint.sh**: Sanitizes `FRIENDLY_NAME`, disables `speaker_controller_application` (prevents duplicate mDNS entries), configures ALSA
+- **scripts/tidal/entrypoint.sh**: Sanitizes `FRIENDLY_NAME`, disables `speaker_controller_application` (prevents duplicate mDNS entries), configures ALSA, enables WebSocket API on port 8888
+- **Metadata**: `meta_tidal.py` controlscript connects to tidal-connect's WebSocket API (port 8888) and forwards track info to snapserver. No playback control (Tidal controls from app only)
 - **Constraints**: ARM only (Pi 3/4/5), no x86_64 support. No OAuth — users cast from the Tidal mobile/desktop app
 
 ## Conventions

@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Tidal Connect metadata** — Track info (title, artist, album, artwork, duration) now displayed for Tidal streams
+  - `meta_tidal.py` controlscript connects to tidal-connect's WebSocket API (port 8888)
+  - Follows the same Snapcast controlscript pattern as MPD, AirPlay, and Spotify
+  - All four active sources now have full metadata support
 - **Centralized metadata service** — Cover art and track info now served by the snapMULTI server instead of per-client
   - Server-side `metadata-service` container (ports 8082 WS, 8083 HTTP) polls Snapserver JSON-RPC for all streams
   - Multi-stream support: clients subscribe with `{"subscribe": "CLIENT_ID"}` to receive their stream's metadata
