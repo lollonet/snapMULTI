@@ -96,6 +96,140 @@ function Get-InstallType {
     }
 }
 
+# ── Music source menu (server/both only) ─────────────────────────
+function Show-MusicMenu {
+    Write-Host ''
+    Write-Host '  +---------------------------------------------+'
+    Write-Host '  |        Where is your music?                  |'
+    Write-Host '  |                                              |'
+    Write-Host '  |  1) Streaming only                           |'
+    Write-Host '  |     Spotify, AirPlay, Tidal (no local files) |'
+    Write-Host '  |                                              |'
+    Write-Host '  |  2) USB drive                                |'
+    Write-Host '  |     Plug in before powering on the Pi        |'
+    Write-Host '  |                                              |'
+    Write-Host '  |  3) Network share (NFS/SMB)                  |'
+    Write-Host '  |     Music on a NAS or another computer       |'
+    Write-Host '  |                                              |'
+    Write-Host '  |  4) I''ll set it up later                     |'
+    Write-Host '  |     Mount music dir manually after install   |'
+    Write-Host '  |                                              |'
+    Write-Host '  +---------------------------------------------+'
+    Write-Host ''
+}
+
+function Get-MusicSource {
+    while ($true) {
+        $choice = Read-Host '  Choose [1-4]'
+        switch ($choice) {
+            '1' { return 'streaming' }
+            '2' { return 'usb' }
+            '3' { return 'network' }
+            '4' { return 'manual' }
+            default { Write-Host '  Invalid choice. Enter 1, 2, 3, or 4.' }
+        }
+    }
+}
+
+function Get-NetworkType {
+    Write-Host ''
+    Write-Host '  Share type:'
+    Write-Host '    a) NFS  (Linux/Mac/NAS -- most common)'
+    Write-Host '    b) SMB  (Windows share)'
+    Write-Host ''
+    while ($true) {
+        $choice = Read-Host '  Choose [a/b]'
+        switch ($choice.ToLower()) {
+            'a' { return 'nfs' }
+            'b' { return 'smb' }
+            default { Write-Host '  Invalid choice. Enter a or b.' }
+        }
+    }
+}
+
+function Sanitize-Hostname {
+    param([string]$Value)
+    $cleaned = $Value -replace '[^A-Za-z0-9.\-]', ''
+    return $cleaned.Trim('.').Trim('-')
+}
+
+function Sanitize-NfsExport {
+    param([string]$Value)
+    $cleaned = $Value -replace '[^A-Za-z0-9/._\-]', ''
+    if ($cleaned -match '^/') { return $cleaned }
+    return ''
+}
+
+function Sanitize-ShareName {
+    param([string]$Value)
+    return ($Value -replace '[^A-Za-z0-9._\-]', '')
+}
+
+function Get-NfsConfig {
+    Write-Host ''
+    Write-Host '  NFS Server Configuration'
+    Write-Host '  Example: nas.local:/volume1/music'
+
+    $server = ''
+    while (-not $server) {
+        Write-Host ''
+        $rawServer = Read-Host '  Server hostname or IP'
+        $server = Sanitize-Hostname $rawServer
+        if (-not $server) { Write-Host '  Invalid hostname. Use only letters, numbers, dots, hyphens.' }
+    }
+
+    $export = ''
+    while (-not $export) {
+        $rawExport = Read-Host '  Export path (e.g. /volume1/music)'
+        $export = Sanitize-NfsExport $rawExport
+        if (-not $export) { Write-Host '  Invalid path. Must start with / (e.g. /volume1/music).' }
+    }
+
+    Write-Host ''
+    Write-Host "  Will mount: ${server}:${export}"
+    return @{ Server = $server; Export = $export }
+}
+
+function Get-SmbConfig {
+    Write-Host ''
+    Write-Host '  SMB/CIFS Configuration'
+    Write-Host '  Example: \\mypc\Music  or  mynas/Music'
+
+    $server = ''
+    while (-not $server) {
+        Write-Host ''
+        $rawServer = Read-Host '  Server hostname or IP'
+        $server = Sanitize-Hostname $rawServer
+        if (-not $server) { Write-Host '  Invalid hostname. Use only letters, numbers, dots, hyphens.' }
+    }
+
+    $share = ''
+    while (-not $share) {
+        $rawShare = Read-Host '  Share name (e.g. Music)'
+        # SMB shares with spaces need manual fstab escaping — not supported in auto-setup
+        if ($rawShare -match ' ') {
+            Write-Host '  Share names with spaces are not supported. Try again without spaces,'
+            Write-Host '  or restart and choose option 4 (manual). See docs/USAGE.md.'
+            continue
+        }
+        $share = Sanitize-ShareName $rawShare
+        if (-not $share) { Write-Host '  Invalid share name. Use only letters, numbers, dots, underscores, hyphens.' }
+    }
+
+    Write-Host ''
+    $user = Read-Host '  Username (leave empty for guest)'
+    $pass = ''
+    if ($user) {
+        $secPass = Read-Host '  Password' -AsSecureString
+        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPass)
+        try   { $pass = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr) }
+        finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+    }
+    Write-Host ''
+    Write-Host "  Will mount: //$server/$share"
+    return @{ Server = $server; Share = $share; User = $user; Pass = $pass }
+}
+
 # ── Copy helpers ──────────────────────────────────────────────────
 function Copy-ServerFiles {
     param([string]$Dest)
@@ -197,6 +331,36 @@ Write-Host ''
 Write-Host "Installing as: $InstallType"
 Write-Host ''
 
+# ── Music source (server/both only) ─────────────────────────────
+$MusicSource = ''
+$NfsServer = ''
+$NfsExport = ''
+$SmbServer = ''
+$SmbShare = ''
+$SmbUser = ''
+$SmbPass = ''
+
+if ($InstallType -in @('server', 'both')) {
+    Show-MusicMenu
+    $MusicSource = Get-MusicSource
+
+    if ($MusicSource -eq 'network') {
+        $netType = Get-NetworkType
+        $MusicSource = $netType
+        if ($netType -eq 'nfs') {
+            $nfsCfg = Get-NfsConfig
+            $NfsServer = $nfsCfg.Server
+            $NfsExport = $nfsCfg.Export
+        } else {
+            $smbCfg = Get-SmbConfig
+            $SmbServer = $smbCfg.Server
+            $SmbShare = $smbCfg.Share
+            $SmbUser = $smbCfg.User
+            $SmbPass = $smbCfg.Pass
+        }
+    }
+}
+
 # ── Copy files to SD card ─────────────────────────────────────────
 $Dest = Join-Path $Boot 'snapmulti'
 Write-Host "Copying files to $Dest ..."
@@ -213,6 +377,13 @@ $confContent = @"
 # snapMULTI Installation Configuration
 # Generated by prepare-sd.ps1 on $timestamp
 INSTALL_TYPE=$InstallType
+MUSIC_SOURCE=$MusicSource
+NFS_SERVER=$NfsServer
+NFS_EXPORT=$NfsExport
+SMB_SERVER=$SmbServer
+SMB_SHARE=$SmbShare
+SMB_USER=$SmbUser
+SMB_PASS=$SmbPass
 "@
 [System.IO.File]::WriteAllText((Join-Path $Dest 'install.conf'), $confContent, $Utf8NoBom)
 

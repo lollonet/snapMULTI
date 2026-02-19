@@ -82,6 +82,55 @@ Per i tipi di sorgente audio e l'API JSON-RPC, vedi [SOURCES.it.md](SOURCES.it.m
 - Directory musicale: `/music` (mappata a `MUSIC_PATH` sull'host)
 - Database: `/data/mpd.db`
 
+## Libreria Musicale
+
+### Setup per principianti (SD card)
+
+Durante `prepare-sd.sh`, scegli la sorgente musicale:
+
+| Opzione | Valore config | Cosa succede al primo avvio |
+|---------|--------------|----------------------------|
+| Solo streaming | `streaming` | Cartella `/media/music` vuota, scansione saltata |
+| Drive USB | `usb` | `deploy.sh` rileva automaticamente in `/media/*` |
+| Condivisione NFS | `nfs` | Montaggio read-only in `/media/nfs-music`, aggiunto a `/etc/fstab` |
+| Condivisione SMB | `smb` | Montaggio read-only in `/media/smb-music`, credenziali in `/etc/snapmulti-smb-credentials` |
+| Manuale | `manual` | Nessun setup automatico — configura dopo l'installazione |
+
+### Setup avanzato
+
+Per configurazione manuale NFS/SMB dopo l'installazione:
+
+**NFS** (Linux/Mac/NAS):
+```bash
+sudo apt install nfs-common
+sudo mkdir -p /media/nfs-music
+sudo mount -t nfs nas.local:/volume1/music /media/nfs-music -o ro,soft,timeo=50,_netdev
+# Persistere tra i riavvii:
+echo "nas.local:/volume1/music /media/nfs-music nfs ro,soft,timeo=50,_netdev 0 0" | sudo tee -a /etc/fstab
+```
+
+**SMB/CIFS** (Windows/NAS):
+```bash
+sudo apt install cifs-utils
+sudo mkdir -p /media/smb-music
+# Accesso guest:
+sudo mount -t cifs //mynas/Music /media/smb-music -o ro,guest,_netdev,iocharset=utf8
+# Con credenziali:
+printf 'username=utente\npassword=password\n' | sudo tee /etc/snapmulti-smb-credentials
+sudo chmod 600 /etc/snapmulti-smb-credentials
+sudo mount -t cifs //mynas/Music /media/smb-music -o ro,_netdev,iocharset=utf8,credentials=/etc/snapmulti-smb-credentials
+```
+
+Poi aggiorna `.env`:
+```bash
+MUSIC_PATH=/media/nfs-music   # oppure /media/smb-music
+```
+
+Riavvia MPD per aggiornare la libreria:
+```bash
+cd /opt/snapmulti && docker compose restart mpd
+```
+
 ## Controllare MPD
 
 ### Tramite myMPD (Interfaccia Web — Consigliato)

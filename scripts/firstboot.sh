@@ -55,6 +55,34 @@ if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     INSTALL_TYPE="${INSTALL_TYPE:-server}"
 fi
 
+# Read music source config (server/both only)
+MUSIC_SOURCE=""
+NFS_SERVER=""
+NFS_EXPORT=""
+SMB_SERVER=""
+SMB_SHARE=""
+SMB_USER=""
+SMB_PASS=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SNAP_BOOT/install.conf" ]]; then
+    MUSIC_SOURCE=$(grep -m1 '^MUSIC_SOURCE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
+    # Source sanitize.sh for re-validation (FAT32 has no file permissions —
+    # values could be hand-edited before first boot)
+    if [[ -f "$SNAP_BOOT/common/sanitize.sh" ]]; then
+        # shellcheck source=common/sanitize.sh
+        source "$SNAP_BOOT/common/sanitize.sh"
+    elif [[ -f "$SCRIPT_DIR/common/sanitize.sh" ]]; then
+        # shellcheck source=common/sanitize.sh
+        source "$SCRIPT_DIR/common/sanitize.sh"
+    fi
+    NFS_SERVER=$(sanitize_hostname "$(grep -m1 '^NFS_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
+    NFS_EXPORT=$(sanitize_nfs_export "$(grep -m1 '^NFS_EXPORT=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
+    SMB_SERVER=$(sanitize_hostname "$(grep -m1 '^SMB_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
+    SMB_SHARE=$(sanitize_smb_share "$(grep -m1 '^SMB_SHARE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
+    SMB_USER=$(grep -m1 '^SMB_USER=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '[:space:]')
+    SMB_PASS=$(grep -m1 '^SMB_PASS=' "$SNAP_BOOT/install.conf" | cut -d= -f2-)
+fi
+
 # Set install directories
 SERVER_DIR="/opt/snapmulti"
 CLIENT_DIR="/opt/snapclient"
@@ -101,7 +129,6 @@ if [[ ${#STEP_NAMES[@]} -ne ${#STEP_WEIGHTS[@]} ]]; then
 fi
 
 # Source progress display (boot partition copy, or local fallback for manual testing)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "$SNAP_BOOT/common/progress.sh" ]]; then
     # shellcheck source=common/progress.sh
     source "$SNAP_BOOT/common/progress.sh"
@@ -291,6 +318,14 @@ if ! command -v avahi-daemon &>/dev/null; then
     PKGS+=(avahi-daemon)
 fi
 
+# NFS/SMB packages for music source mounts
+if [[ "$MUSIC_SOURCE" == "nfs" ]]; then
+    PKGS+=(nfs-common)
+fi
+if [[ "$MUSIC_SOURCE" == "smb" ]]; then
+    PKGS+=(cifs-utils)
+fi
+
 log_progress "Installing: ${PKGS[*]}" 2>/dev/null || true
 apt-get install -y -qq "${PKGS[@]}" >/dev/null
 
@@ -342,6 +377,70 @@ if ! docker info &>/dev/null; then
 fi
 
 # ══════════════════════════════════════════════════════════════════
+# Music source setup (runs inside deploy step — no extra progress step)
+# ══════════════════════════════════════════════════════════════════
+setup_music_source() {
+    case "${MUSIC_SOURCE:-}" in
+        streaming)
+            mkdir -p /media/music
+            export MUSIC_PATH="/media/music"
+            export SKIP_MUSIC_SCAN=1
+            log_progress "Streaming-only mode — no local music library" 2>/dev/null || true
+            ;;
+        usb)
+            # No-op: deploy.sh auto-detects USB drives at /media/*
+            log_progress "USB mode — deploy.sh will auto-detect" 2>/dev/null || true
+            ;;
+        nfs)
+            local mount_point="/media/nfs-music"
+            mkdir -p "$mount_point"
+            log_progress "Mounting NFS: $NFS_SERVER:$NFS_EXPORT" 2>/dev/null || true
+            if mount -t nfs "$NFS_SERVER:$NFS_EXPORT" "$mount_point" -o ro,soft,timeo=50,_netdev; then
+                # Persist in fstab for reboots
+                if ! grep -qF "$NFS_SERVER:$NFS_EXPORT" /etc/fstab; then
+                    echo "$NFS_SERVER:$NFS_EXPORT $mount_point nfs ro,soft,timeo=50,_netdev,nofail 0 0" >> /etc/fstab
+                fi
+                export MUSIC_PATH="$mount_point"
+                log_progress "NFS mounted: $mount_point" 2>/dev/null || true
+            else
+                log_and_tty "WARNING: NFS mount failed — falling back to auto-detect"
+            fi
+            ;;
+        smb)
+            local mount_point="/media/smb-music"
+            local creds_file="/etc/snapmulti-smb-credentials"
+            mkdir -p "$mount_point"
+            log_progress "Mounting SMB: //$SMB_SERVER/$SMB_SHARE" 2>/dev/null || true
+
+            # Build mount options
+            local mount_opts="ro,_netdev,iocharset=utf8"
+            if [[ -n "$SMB_USER" ]]; then
+                # Write credentials to a root-only file
+                printf 'username=%s\npassword=%s\n' "$SMB_USER" "$SMB_PASS" > "$creds_file"
+                chmod 600 "$creds_file"
+                mount_opts="${mount_opts},credentials=$creds_file"
+            else
+                mount_opts="${mount_opts},guest"
+            fi
+
+            if timeout 60 mount -t cifs "//$SMB_SERVER/$SMB_SHARE" "$mount_point" -o "$mount_opts"; then
+                # Persist in fstab
+                if ! grep -qF "//$SMB_SERVER/$SMB_SHARE" /etc/fstab; then
+                    echo "//$SMB_SERVER/$SMB_SHARE $mount_point cifs ${mount_opts},nofail 0 0" >> /etc/fstab
+                fi
+                export MUSIC_PATH="$mount_point"
+                log_progress "SMB mounted: $mount_point" 2>/dev/null || true
+            else
+                log_and_tty "WARNING: SMB mount failed — falling back to auto-detect"
+            fi
+            ;;
+        manual|"")
+            # No-op: deploy.sh auto-detect fallback
+            ;;
+    esac
+}
+
+# ══════════════════════════════════════════════════════════════════
 # SERVER INSTALL
 # ══════════════════════════════════════════════════════════════════
 if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
@@ -350,6 +449,22 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     next_step "Deploy server..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
     log_progress "Running deploy.sh ..." 2>/dev/null || true
+
+    # Set up music source before deploy.sh (mounts NFS/SMB, exports MUSIC_PATH)
+    setup_music_source
+
+    # Scrub credentials and network topology from boot partition
+    # (FAT32 has no file permissions — anyone mounting the SD can read these)
+    if [[ -f "$SNAP_BOOT/install.conf" ]]; then
+        scrub_failed=false
+        for field in SMB_PASS SMB_USER SMB_SERVER SMB_SHARE NFS_SERVER NFS_EXPORT; do
+            sed -i "s/^${field}=.*/${field}=/" "$SNAP_BOOT/install.conf" 2>/dev/null \
+                || scrub_failed=true
+        done
+        if [[ "$scrub_failed" == "true" ]]; then
+            log_and_tty "WARNING: Could not scrub some fields from boot partition — remove manually"
+        fi
+    fi
 
     if [[ ! -d "$SERVER_DIR" ]]; then
         log_and_tty "ERROR: Server directory missing: $SERVER_DIR"

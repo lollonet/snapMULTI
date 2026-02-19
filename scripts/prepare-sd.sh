@@ -15,6 +15,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLIENT_DIR="$PROJECT_DIR/client"
 
+# shellcheck source=common/sanitize.sh
+source "$SCRIPT_DIR/common/sanitize.sh"
+
 # ── Preflight: check submodule ────────────────────────────────────
 check_client_submodule() {
     # .git is a file (gitlink) in submodules, a directory in standalone clones
@@ -78,6 +81,123 @@ get_install_type() {
             *) echo "  Invalid choice. Enter 1, 2, or 3." ;;
         esac
     done
+}
+
+# ── Music source menu (server/both only) ─────────────────────────
+show_music_menu() {
+    echo ""
+    echo "  +---------------------------------------------+"
+    echo "  |        Where is your music?                  |"
+    echo "  |                                              |"
+    echo "  |  1) Streaming only                           |"
+    echo "  |     Spotify, AirPlay, Tidal (no local files) |"
+    echo "  |                                              |"
+    echo "  |  2) USB drive                                |"
+    echo "  |     Plug in before powering on the Pi        |"
+    echo "  |                                              |"
+    echo "  |  3) Network share (NFS/SMB)                  |"
+    echo "  |     Music on a NAS or another computer       |"
+    echo "  |                                              |"
+    echo "  |  4) I'll set it up later                     |"
+    echo "  |     Mount music dir manually after install   |"
+    echo "  |                                              |"
+    echo "  +---------------------------------------------+"
+    echo ""
+}
+
+get_music_source() {
+    local choice
+    while true; do
+        read -rp "  Choose [1-4]: " choice
+        case "$choice" in
+            1) echo "streaming"; return ;;
+            2) echo "usb";       return ;;
+            3) echo "network";   return ;;
+            4) echo "manual";    return ;;
+            *) echo "  Invalid choice. Enter 1, 2, 3, or 4." >&2 ;;
+        esac
+    done
+}
+
+get_network_type() {
+    local choice
+    echo "" >&2
+    echo "  Share type:" >&2
+    echo "    a) NFS  (Linux/Mac/NAS — most common)" >&2
+    echo "    b) SMB  (Windows share)" >&2
+    echo "" >&2
+    while true; do
+        read -rp "  Choose [a/b]: " choice
+        case "$choice" in
+            a|A) echo "nfs"; return ;;
+            b|B) echo "smb"; return ;;
+            *) echo "  Invalid choice. Enter a or b." >&2 ;;
+        esac
+    done
+}
+
+get_nfs_config() {
+    local raw_server raw_export
+    echo ""
+    echo "  NFS Server Configuration"
+    echo "  Example: nas.local:/volume1/music"
+
+    while true; do
+        echo ""
+        read -rp "  Server hostname or IP: " raw_server
+        NFS_SERVER=$(sanitize_hostname "$raw_server")
+        if [[ -n "$NFS_SERVER" ]]; then break; fi
+        echo "  Invalid hostname. Use only letters, numbers, dots, hyphens."
+    done
+
+    while true; do
+        read -rp "  Export path (e.g. /volume1/music): " raw_export
+        NFS_EXPORT=$(sanitize_nfs_export "$raw_export")
+        if [[ -n "$NFS_EXPORT" ]]; then break; fi
+        echo "  Invalid path. Must start with / (e.g. /volume1/music)."
+    done
+
+    echo ""
+    echo "  Will mount: $NFS_SERVER:$NFS_EXPORT"
+}
+
+get_smb_config() {
+    local raw_server raw_share
+    echo ""
+    echo "  SMB/CIFS Configuration"
+    printf '  Example: \\\\mypc\\Music  or  mynas/Music\n'
+
+    while true; do
+        echo ""
+        read -rp "  Server hostname or IP: " raw_server
+        SMB_SERVER=$(sanitize_hostname "$raw_server")
+        if [[ -n "$SMB_SERVER" ]]; then break; fi
+        echo "  Invalid hostname. Use only letters, numbers, dots, hyphens."
+    done
+
+    while true; do
+        read -rp "  Share name (e.g. Music): " raw_share
+        # Detect spaces early — SMB shares with spaces need manual fstab escaping
+        if [[ "$raw_share" == *" "* ]]; then
+            echo "  Share names with spaces are not supported. Try again without spaces,"
+            echo "  or restart and choose option 4 (manual). See docs/USAGE.md."
+            continue
+        fi
+        SMB_SHARE=$(sanitize_smb_share "$raw_share")
+        if [[ -n "$SMB_SHARE" ]]; then break; fi
+        echo "  Invalid share name. Use only letters, numbers, dots, underscores, hyphens."
+    done
+
+    echo ""
+    read -rp "  Username (leave empty for guest): " SMB_USER
+    if [[ -n "$SMB_USER" ]]; then
+        read -rsp "  Password: " SMB_PASS
+        echo ""
+    else
+        SMB_PASS=""
+    fi
+    echo ""
+    echo "  Will mount: //$SMB_SERVER/$SMB_SHARE"
 }
 
 # ── Copy server files ─────────────────────────────────────────────
@@ -154,6 +274,30 @@ echo ""
 echo "Installing as: $INSTALL_TYPE"
 echo ""
 
+# ── Music source (server/both only) ─────────────────────────────
+MUSIC_SOURCE=""
+NFS_SERVER=""
+NFS_EXPORT=""
+SMB_SERVER=""
+SMB_SHARE=""
+SMB_USER=""
+SMB_PASS=""
+
+if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+    show_music_menu
+    MUSIC_SOURCE=$(get_music_source)
+
+    if [[ "$MUSIC_SOURCE" == "network" ]]; then
+        NET_TYPE=$(get_network_type)
+        MUSIC_SOURCE="$NET_TYPE"
+        if [[ "$NET_TYPE" == "nfs" ]]; then
+            get_nfs_config
+        else
+            get_smb_config
+        fi
+    fi
+fi
+
 # ── Copy files to SD card ─────────────────────────────────────────
 DEST="$BOOT/snapmulti"
 echo "Copying files to $DEST ..."
@@ -172,7 +316,16 @@ cat > "$DEST/install.conf" <<EOF
 # snapMULTI Installation Configuration
 # Generated by prepare-sd.sh on $(date -Iseconds)
 INSTALL_TYPE=$INSTALL_TYPE
+MUSIC_SOURCE=$MUSIC_SOURCE
+NFS_SERVER=$NFS_SERVER
+NFS_EXPORT=$NFS_EXPORT
+SMB_SERVER=$SMB_SERVER
+SMB_SHARE=$SMB_SHARE
 EOF
+# Write credentials outside heredoc — unquoted <<EOF expands $, backticks,
+# and $() which corrupts passwords containing shell metacharacters.
+printf 'SMB_USER=%s\n' "$SMB_USER" >> "$DEST/install.conf"
+printf 'SMB_PASS=%s\n' "$SMB_PASS" >> "$DEST/install.conf"
 
 cp "$SCRIPT_DIR/firstboot.sh" "$DEST/"
 cp -r "$SCRIPT_DIR/common" "$DEST/"

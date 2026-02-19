@@ -14,3 +14,33 @@ sanitize_device_name() {
 sanitize_airplay_name() {
     sanitize_device_name "$1"
 }
+
+# Sanitize hostname/IP: alphanumeric, dots, hyphens only
+# Used for NFS servers, SMB servers, and any network hostname
+# Usage: sanitize_hostname "nas.local"
+sanitize_hostname() {
+    printf '%s' "$1" | tr -cd 'A-Za-z0-9.-' | sed 's/^[.-]*//;s/[.-]*$//'
+}
+
+# Semantic alias for NFS server validation
+sanitize_nfs_server() {
+    sanitize_hostname "$1"
+}
+
+# Sanitize NFS export path: alphanumeric, forward slash, dots, underscores, hyphens
+# Must start with /. Returns empty string if input doesn't start with /.
+# Usage: sanitize_nfs_export "/volume1/music"
+sanitize_nfs_export() {
+    local cleaned
+    cleaned=$(printf '%s' "$1" | tr -cd 'A-Za-z0-9/._-')
+    # Must start with /
+    if [[ "$cleaned" == /* ]]; then
+        printf '%s' "$cleaned"
+    fi
+}
+
+# Sanitize SMB share name: alphanumeric, dots, underscores, hyphens
+# Usage: sanitize_smb_share "Music"
+sanitize_smb_share() {
+    printf '%s' "$1" | tr -cd 'A-Za-z0-9._-'
+}

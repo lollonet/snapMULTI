@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Music source configuration** — `prepare-sd.sh` now asks where your music is (streaming only, USB drive, NFS/SMB network share, or manual)
+  - NFS and SMB shares are mounted automatically on first boot with fstab persistence
+  - Streaming-only mode skips music library scan (no confusing "not found" warning)
+  - Input sanitization for all network share parameters
+  - Windows `prepare-sd.ps1` has the same music source menu
 - **Unified installer** — Single `prepare-sd.sh` supports both server and client installation
   - 3-option menu: Audio Player (client), Music Server (server), Server + Player (both)
   - `install.conf` marker controls what `firstboot.sh` installs on the Pi
