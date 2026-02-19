@@ -64,8 +64,8 @@ Detection checks `/dev/fb0` and `/sys/class/drm/card*-HDMI-*/status`.
 ### Both Mode (Server + Player)
 
 When both are installed on the same Pi:
-- Server: `/opt/snapmulti/` — host networking (ports 1704, 1705, 1780, 6600, 8180)
-- Client: `/opt/snapclient/` — bridge networking (ports 8080-8082)
+- Server: `/opt/snapmulti/` — host networking (ports 1704, 1705, 1780, 6600, 8082, 8083, 8180)
+- Client: `/opt/snapclient/` — bridge networking (ports 8080, 8081)
 - Client auto-connects to `127.0.0.1` (local server)
 
 ### Progress Display (`scripts/common/progress.sh`)

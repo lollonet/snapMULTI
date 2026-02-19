@@ -870,7 +870,7 @@ class MetadataService:
             logger.error(f"Failed to download artwork: {e}")
             self._mark_failed(fail_key)
             try:
-                for tmp in self.artwork_dir.glob(f"artwork_{url_hash}*"):
+                for tmp in self.artwork_dir.glob(f"artwork_{url_hash}*.tmp"):
                     tmp.unlink(missing_ok=True)
             except Exception:
                 pass
@@ -1413,8 +1413,12 @@ async def handle_artwork(request: web.Request) -> web.StreamResponse:
     if not filepath.exists():
         return web.Response(status=404)
 
-    # Detect content type
+    # Only serve image files (prevent leaking metadata_*.json)
     ext = filepath.suffix.lower()
+    if ext not in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}:
+        return web.Response(status=404)
+
+    # Detect content type
     content_types = {
         ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
         ".png": "image/png", ".gif": "image/gif",
