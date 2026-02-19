@@ -149,7 +149,8 @@ function Get-NetworkType {
 
 function Sanitize-Hostname {
     param([string]$Value)
-    return ($Value -replace '[^A-Za-z0-9.\-]', '')
+    $cleaned = $Value -replace '[^A-Za-z0-9.\-]', ''
+    return $cleaned.Trim('.').TrimStart('-')
 }
 
 function Sanitize-NfsExport {
@@ -219,8 +220,9 @@ function Get-SmbConfig {
     $pass = ''
     if ($user) {
         $secPass = Read-Host '  Password' -AsSecureString
-        $pass = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-            [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPass))
+        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPass)
+        try   { $pass = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr) }
+        finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
     }
     Write-Host ''
     Write-Host "  Will mount: //$server/$share"

@@ -455,8 +455,10 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
 
     # Scrub credentials from boot partition (FAT32 has no file permissions)
     if [[ -f "$SNAP_BOOT/install.conf" ]]; then
-        sed -i 's/^SMB_PASS=.*/SMB_PASS=/' "$SNAP_BOOT/install.conf" 2>/dev/null || true
-        sed -i 's/^SMB_USER=.*/SMB_USER=/' "$SNAP_BOOT/install.conf" 2>/dev/null || true
+        sed -i 's/^SMB_PASS=.*/SMB_PASS=/' "$SNAP_BOOT/install.conf" 2>/dev/null \
+            || log_and_tty "WARNING: Could not scrub SMB_PASS from boot partition — remove manually"
+        sed -i 's/^SMB_USER=.*/SMB_USER=/' "$SNAP_BOOT/install.conf" 2>/dev/null \
+            || log_and_tty "WARNING: Could not scrub SMB_USER from boot partition — remove manually"
     fi
 
     if [[ ! -d "$SERVER_DIR" ]]; then
