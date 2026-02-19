@@ -376,6 +376,44 @@ if ! docker info &>/dev/null; then
     exit 1
 fi
 
+# In "both" mode, client's read-only filesystem requires fuse-overlayfs storage
+# driver. Switch BEFORE any images are pulled so deploy.sh and setup.sh both
+# use the same driver — avoids a destructive wipe mid-install.
+if [[ "$INSTALL_TYPE" == "both" ]]; then
+    current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "none")
+    if [[ "$current_driver" != "fuse-overlayfs" ]]; then
+        log_progress "Switching Docker to fuse-overlayfs (read-only FS support)..." 2>/dev/null || true
+        apt-get install -y fuse-overlayfs >> "$LOG" 2>&1
+        systemctl stop docker
+        mkdir -p /etc/docker
+        # Merge fuse-overlayfs into existing daemon.json (or create new)
+        if [[ -f /etc/docker/daemon.json ]]; then
+            python3 -c "
+import json
+with open('/etc/docker/daemon.json') as f:
+    cfg = json.load(f)
+cfg['storage-driver'] = 'fuse-overlayfs'
+with open('/etc/docker/daemon.json', 'w') as f:
+    json.dump(cfg, f, indent=2)
+" 2>/dev/null
+        else
+            cat > /etc/docker/daemon.json <<'DJSON'
+{
+  "storage-driver": "fuse-overlayfs",
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+DJSON
+        fi
+        rm -rf /var/lib/docker/*
+        systemctl start docker
+        log_progress "Docker storage driver: fuse-overlayfs" 2>/dev/null || true
+    fi
+fi
+
 # ══════════════════════════════════════════════════════════════════
 # Music source setup (runs inside deploy step — no extra progress step)
 # ══════════════════════════════════════════════════════════════════
