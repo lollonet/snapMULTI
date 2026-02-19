@@ -35,12 +35,20 @@ Per i tipi di sorgente audio e l'API JSON-RPC, vedi [SOURCES.it.md](SOURCES.it.m
 │ Spotify Connect │──────┘  ┌──▶│                  │
 │ (go-librespot)  │         │   └────────┬─────────┘
 └─────────────────┘         │            │
-                            │  ┌─────────┼─────────────┐
-┌─────────────────┐         │  ▼         ▼             ▼
-│ Tidal Connect   │─────────┘ ┌────────┐ ┌────────┐ ┌────────┐
-│ (solo ARM)      │           │Client 1│ │Client 2│ │Client 3│
-└─────────────────┘           │(Snap)  │ │(Snap)  │ │(Snap)  │
-                              └────────┘ └────────┘ └────────┘
+                            │            │
+┌─────────────────┐         │  ┌─────────────────────┐
+│ Tidal Connect   │─────────┘  │ Docker: Metadata    │
+│ (solo ARM)      │            │ (WS:8082, HTTP:8083)│
+└─────────────────┘            │ copertine + info    │
+                               │ tracce per i client │
+                               └──────────┬──────────┘
+                                          │
+                            ┌─────────────┼─────────────┐
+                            ▼             ▼             ▼
+                          ┌────────┐ ┌────────┐ ┌────────┐
+                          │Client 1│ │Client 2│ │Client 3│
+                          │(Snap)  │ │(Snap)  │ │(Snap)  │
+                          └────────┘ └────────┘ └────────┘
 ```
 
 ## Servizi e Porte
@@ -69,6 +77,19 @@ Per i tipi di sorgente audio e l'API JSON-RPC, vedi [SOURCES.it.md](SOURCES.it.m
 - Si connette a MPD su `localhost:6600`
 - SSL disabilitato (rete locale)
 - Dati: `mympd/workdir/`, cache: `mympd/cachedir/`
+
+### Servizio Metadata
+
+| Porta | Protocollo | Scopo |
+|-------|------------|-------|
+| 8082 | WebSocket | Push metadati traccia (sottoscrizione con CLIENT_ID) |
+| 8083 | HTTP | File copertine, JSON metadati, health check |
+
+**Configurazione**: variabili d'ambiente (default: localhost per connessioni Snapserver/MPD)
+- Interroga Snapserver JSON-RPC ogni 2s per i metadati degli stream
+- Catena copertine: MPD embedded → iTunes → MusicBrainz → Radio-Browser
+- I client si iscrivono via WebSocket con `{"subscribe": "CLIENT_ID"}` per ricevere i metadati del loro stream
+- Copertine servite su `http://<server>:8083/artwork/<filename>`
 
 ### MPD
 
@@ -299,7 +320,7 @@ Il push di un tag di versione (es. `git tag v1.1.0 && git push origin v1.1.0`) a
 
 1. **Build** — Immagini Docker compilate su runner self-hosted (amd64 nativo + arm64 via cross-compilazione QEMU)
 2. **Manifest** — Le immagini per architettura vengono unite in tag multi-arch `:latest` su ghcr.io
-3. **Deploy** — Le immagini vengono scaricate e tutti i container (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`, `tidal-connect`) riavviati sul server domestico via SSH
+3. **Deploy** — Le immagini vengono scaricate e tutti i container (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`, `metadata`, `tidal-connect`) riavviati sul server domestico via SSH
 
 ```
 tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :versione) → deploy.yml → server aggiornato
@@ -344,7 +365,7 @@ Selezionando l'opzione 3, il Pi esegue sia il music server che un audio player l
 
 | Componente | Percorso | Rete | Porte |
 |------------|----------|------|-------|
-| Server | `/opt/snapmulti/` | Host networking | 1704, 1705, 1780, 6600, 8180 |
+| Server | `/opt/snapmulti/` | Host networking | 1704, 1705, 1780, 6600, 8082, 8083, 8180 |
 | Client | `/opt/snapclient/` | Bridge networking | 8080, 8081, 8082 |
 
 Il client si connette automaticamente al server locale (`SNAPSERVER_HOST=127.0.0.1`) e usa l'uscita audio locale del Pi (HAT o DAC USB).
@@ -373,8 +394,8 @@ docker compose up -d
 
 | Workflow | Trigger | Scopo |
 |----------|---------|-------|
-| **Build & Push** | Push tag (`v*`) | Compila 4 immagini multi-arch con versione, push su ghcr.io, avvia deploy |
-| **Deploy** | Chiamato da Build & Push | Scarica immagini e riavvia tutti i container (snapserver, shairport-sync, librespot, mpd, mympd) sul server via SSH |
+| **Build & Push** | Push tag (`v*`) | Compila 5 immagini (4 multi-arch + 1 solo ARM), push su Docker Hub, avvia deploy |
+| **Deploy** | Chiamato da Build & Push | Scarica immagini e riavvia 7 container principali sul server via SSH |
 | **Validate** | Push su qualsiasi branch, pull request | Verifica sintassi docker-compose e template environment |
 | **Build Test** | Pull request | Valida che le immagini Docker si compilino correttamente (senza push) |
 
@@ -388,6 +409,7 @@ Le immagini Docker sono ospitate su Docker Hub:
 | `lollonet/snapmulti-airplay:latest` | Ricevitore AirPlay (shairport-sync) |
 | `ghcr.io/devgianlu/go-librespot:v0.7.0` | Spotify Connect (upstream, nessuna build personalizzata) |
 | `lollonet/snapmulti-mpd:latest` | Music Player Daemon |
+| `lollonet/snapmulti-metadata:latest` | Servizio Metadata (copertine + info tracce) |
 | `ghcr.io/jcorporation/mympd/mympd:latest` | Interfaccia Web (immagine di terze parti) |
 | `lollonet/snapmulti-tidal:latest` | Tidal Connect (solo ARM) |
 

@@ -284,7 +284,7 @@ class MetadataService:
             if not chunk:
                 break
             response += chunk
-            if b"OK\n" in chunk or b"ACK" in chunk:
+            if b"OK\n" in response or b"ACK" in response:
                 break
         return response
 
@@ -1191,7 +1191,7 @@ async def ws_handler(websocket: Any) -> None:
 
             # Subscription message
             if "subscribe" in data:
-                client_id = str(data["subscribe"])
+                client_id = str(data["subscribe"])[:256]
                 if sc:
                     ws_clients.discard(sc)
                 sc = SubscribedClient(websocket, client_id)
