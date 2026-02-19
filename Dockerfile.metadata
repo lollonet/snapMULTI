@@ -1,0 +1,22 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Install uv for fast dependency installation
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Install dependencies: WebSocket server + HTTP server
+RUN uv pip install --system --no-cache websockets aiohttp
+
+# Copy metadata service
+COPY docker/metadata-service/metadata-service.py /app/
+
+# Create artwork directory and copy default assets
+RUN mkdir -p /app/artwork
+COPY client/common/public/default-radio.png /app/artwork/
+
+# Health check endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)" || exit 1
+
+CMD ["python3", "/app/metadata-service.py"]

@@ -223,6 +223,9 @@ MPD_CPU_LIMIT=0.5
 MYMPD_MEM_LIMIT=64M
 MYMPD_MEM_RESERVE=32M
 MYMPD_CPU_LIMIT=0.25
+METADATA_MEM_LIMIT=96M
+METADATA_MEM_RESERVE=48M
+METADATA_CPU_LIMIT=0.3
 # Hardware Profile: END
 EOF
             ;;
@@ -247,6 +250,9 @@ MPD_CPU_LIMIT=1.0
 MYMPD_MEM_LIMIT=128M
 MYMPD_MEM_RESERVE=64M
 MYMPD_CPU_LIMIT=0.5
+METADATA_MEM_LIMIT=128M
+METADATA_MEM_RESERVE=64M
+METADATA_CPU_LIMIT=0.5
 # Hardware Profile: END
 EOF
             ;;
@@ -271,6 +277,9 @@ MPD_CPU_LIMIT=2.0
 MYMPD_MEM_LIMIT=256M
 MYMPD_MEM_RESERVE=128M
 MYMPD_CPU_LIMIT=1.0
+METADATA_MEM_LIMIT=192M
+METADATA_MEM_RESERVE=96M
+METADATA_CPU_LIMIT=1.0
 # Hardware Profile: END
 EOF
             ;;
@@ -490,6 +499,7 @@ create_directories() {
 
     local dirs=(
         "audio"
+        "artwork"
         "data"
         "config"
         "mpd/data"
@@ -521,8 +531,8 @@ create_directories() {
     # Set ownership and permissions
     # Note: 777/666 needed because containers run with cap_drop: ALL
     # and may run as different UIDs than the host user
-    chown -R "$real_uid:$real_gid" "$PROJECT_ROOT/audio" "$PROJECT_ROOT/data" \
-        "$PROJECT_ROOT/mpd" "$PROJECT_ROOT/mympd"
+    chown -R "$real_uid:$real_gid" "$PROJECT_ROOT/audio" "$PROJECT_ROOT/artwork" \
+        "$PROJECT_ROOT/data" "$PROJECT_ROOT/mpd" "$PROJECT_ROOT/mympd"
     chmod 750 "$PROJECT_ROOT/audio"
     chmod 660 "$PROJECT_ROOT/audio"/*_fifo 2>/dev/null || true
     chmod 660 "$PROJECT_ROOT/audio"/shairport-metadata 2>/dev/null || true
@@ -701,7 +711,7 @@ pull_images() {
     else
         # Skip tidal-connect on x86 (ARM-only image)
         info "Skipping tidal-connect (ARM-only) on x86"
-        docker compose pull snapserver mpd mympd shairport-sync librespot
+        docker compose pull snapserver mpd mympd shairport-sync librespot metadata
     fi
     ok "Images pulled"
 }
@@ -718,7 +728,7 @@ start_services() {
         ok "Services started (including Tidal Connect)"
     else
         # Skip tidal-connect on x86 (ARM-only image)
-        if ! docker compose up -d snapserver mpd mympd shairport-sync librespot; then
+        if ! docker compose up -d snapserver mpd mympd shairport-sync librespot metadata; then
             error "Failed to start services"
             exit 1
         fi
@@ -729,7 +739,7 @@ start_services() {
 verify_services() {
     step "Verifying services"
 
-    local expected_services=("snapserver" "shairport-sync" "librespot" "mpd" "mympd")
+    local expected_services=("snapserver" "shairport-sync" "librespot" "mpd" "mympd" "snapmulti-metadata")
     # Include tidal-connect only on ARM
     if [[ "$IS_ARM" == "true" ]]; then
         expected_services+=("tidal-connect")
@@ -793,6 +803,8 @@ show_status() {
     echo ""
     echo "    myMPD Web UI:  http://${ip}:8180"
     echo "    Snapcast API:  http://${ip}:1780"
+    echo "    Metadata WS:   ws://${ip}:8082"
+    echo "    Artwork HTTP:  http://${ip}:8083"
     echo "    MPD Control:   ${ip}:6600"
     echo ""
     echo "    Connect clients:"

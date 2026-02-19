@@ -34,12 +34,20 @@ For audio source types and JSON-RPC API, see [SOURCES.md](SOURCES.md).
 │ Spotify Connect │──────┘  ┌──▶│                  │
 │ (go-librespot)  │         │   └────────┬─────────┘
 └─────────────────┘         │            │
-                            │  ┌─────────┼─────────────┐
-┌─────────────────┐         │  ▼         ▼             ▼
-│ Tidal Connect   │─────────┘ ┌────────┐ ┌────────┐ ┌────────┐
-│ (ARM only)      │           │Client 1│ │Client 2│ │Client 3│
-└─────────────────┘           │(Snap)  │ │(Snap)  │ │(Snap)  │
-                              └────────┘ └────────┘ └────────┘
+                            │            │
+┌─────────────────┐         │  ┌─────────────────────┐
+│ Tidal Connect   │─────────┘  │ Docker: Metadata    │
+│ (ARM only)      │            │ (WS:8082, HTTP:8083)│
+└─────────────────┘            │ cover art + track   │
+                               │ info for clients    │
+                               └──────────┬──────────┘
+                                          │
+                            ┌─────────────┼─────────────┐
+                            ▼             ▼             ▼
+                          ┌────────┐ ┌────────┐ ┌────────┐
+                          │Client 1│ │Client 2│ │Client 3│
+                          │(Snap)  │ │(Snap)  │ │(Snap)  │
+                          └────────┘ └────────┘ └────────┘
 ```
 
 ## Audio Format (Sample Rate)
@@ -153,7 +161,7 @@ Audio streaming requires consistent, low-latency networking. Host mode eliminate
 
 ### Implications
 
-1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 6600, 8180)
+1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 6600, 8082, 8083, 8180)
 2. **Firewall rules**: Must allow traffic on service ports (see [HARDWARE.md](HARDWARE.md))
 3. **Single instance**: Cannot run multiple snapMULTI stacks on the same host
 
@@ -193,6 +201,19 @@ Host mode is recommended for single-server deployments.
 - Connects to MPD at `localhost:6600`
 - SSL disabled (local network)
 - Data: `mympd/workdir/`, cache: `mympd/cachedir/`
+
+### Metadata Service
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 8082 | WebSocket | Track metadata push (subscribe with CLIENT_ID) |
+| 8083 | HTTP | Cover art files, metadata JSON, health check |
+
+**Configuration**: environment variables (defaults to localhost for Snapserver/MPD connections)
+- Polls Snapserver JSON-RPC every 2s for stream metadata
+- Cover art chain: MPD embedded → iTunes → MusicBrainz → Radio-Browser
+- Clients subscribe via WebSocket with `{"subscribe": "CLIENT_ID"}` to receive their stream's metadata
+- Artwork served at `http://<server>:8083/artwork/<filename>`
 
 ### MPD
 
@@ -374,7 +395,7 @@ Pushing a version tag (e.g. `git tag v1.1.0 && git push origin v1.1.0`) triggers
 
 1. **Build** — Docker images built on self-hosted runner (amd64 native + arm64 via QEMU cross-compilation)
 2. **Manifest** — Per-arch images combined into multi-arch `:latest` tags on ghcr.io
-3. **Deploy** — Images pulled and all containers (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`, `tidal-connect`) restarted on the home server via SSH
+3. **Deploy** — Images pulled and all containers (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`, `metadata`, `tidal-connect`) restarted on the home server via SSH
 
 ```
 tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :version) → deploy.yml → server updated
@@ -458,8 +479,8 @@ docker compose up -d
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| **Build & Push** | Tag push (`v*`) | Build 5 multi-arch images (amd64 + arm64), push to ghcr.io, trigger deploy |
-| **Deploy** | Called by Build & Push | Pull images and restart 5 core containers on server via SSH |
+| **Build & Push** | Tag push (`v*`) | Build 6 multi-arch images (amd64 + arm64), push to Docker Hub, trigger deploy |
+| **Deploy** | Called by Build & Push | Pull images and restart 6 core containers on server via SSH |
 | **Validate** | Push to any branch, pull requests | Check docker-compose syntax, shellcheck scripts/, and environment template |
 | **Build Test** | Pull requests | Validate Docker images build correctly (no push) |
 
@@ -473,6 +494,7 @@ Docker images are hosted on Docker Hub:
 | `lollonet/snapmulti-airplay:latest` | AirPlay receiver (shairport-sync) |
 | `ghcr.io/devgianlu/go-librespot:v0.7.0` | Spotify Connect (upstream, no custom build) |
 | `lollonet/snapmulti-mpd:latest` | Music Player Daemon |
+| `lollonet/snapmulti-metadata:latest` | Metadata service (cover art + track info) |
 | `ghcr.io/jcorporation/mympd/mympd:latest` | Web UI (third-party image) |
 | `lollonet/snapmulti-tidal:latest` | Tidal Connect (ARM only) |
 

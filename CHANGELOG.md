@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Centralized metadata service** — Cover art and track info now served by the snapMULTI server instead of per-client
+  - Server-side `metadata-service` container (ports 8082 WS, 8083 HTTP) polls Snapserver JSON-RPC for all streams
+  - Multi-stream support: clients subscribe with `{"subscribe": "CLIENT_ID"}` to receive their stream's metadata
+  - Cover art chain: MPD embedded → iTunes → MusicBrainz → Radio-Browser (fetched once, shared across all clients)
+  - Artwork served via built-in HTTP server (`/artwork/{filename}`, `/metadata.json`, `/health`)
+  - Clients no longer need metadata-service or nginx containers (2 fewer containers per client)
+  - New Docker image: `lollonet/snapmulti-metadata:latest` (amd64 + arm64)
 - **Music source configuration** — `prepare-sd.sh` now asks where your music is (streaming only, USB drive, NFS/SMB network share, or manual)
   - NFS and SMB shares are mounted automatically on first boot with fstab persistence
   - Streaming-only mode skips music library scan (no confusing "not found" warning)

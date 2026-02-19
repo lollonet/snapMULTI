@@ -56,7 +56,7 @@ The choice is written to `install.conf` on the SD card. `firstboot.sh` reads it 
 ### Headless Client Detection
 
 For client installs, `firstboot.sh` detects whether an HDMI display is connected:
-- **Display attached**: Full stack — snapclient + metadata-service + audio-visualizer + fb-display + nginx
+- **Display attached**: Full stack — snapclient + audio-visualizer + fb-display
 - **Headless**: Audio only — snapclient container (no visual components)
 
 Detection checks `/dev/fb0` and `/sys/class/drm/card*-HDMI-*/status`.
@@ -107,21 +107,25 @@ snapMULTI/
     SOURCES.md               # Audio sources technical reference
     *.it.md                  # Italian translations
   .github/workflows/
-    build-push.yml           # Dual-arch build + push to Docker Hub (3 images; Spotify uses upstream)
-    deploy.yml               # SSH deploy (workflow_call, 6 containers)
-    build-test.yml           # PR-only Docker build validation (3 Dockerfiles; Spotify uses upstream)
+    build-push.yml           # Dual-arch build + push to Docker Hub (5 images; Spotify uses upstream)
+    deploy.yml               # SSH deploy (workflow_call, 7 containers)
+    build-test.yml           # PR-only Docker build validation (5 Dockerfiles; Spotify uses upstream)
     validate.yml             # docker-compose syntax, shellcheck, env template
     claude-code-review.yml   # Automated PR review
     claude.yml               # Claude CI helper
   mympd/
     workdir/                 # myMPD persistent data
     cachedir/                # myMPD cache (album art, etc.)
+  docker/
+    metadata-service/
+      metadata-service.py    # Server-side metadata + cover art service (WS:8082, HTTP:8083)
   install.conf.template      # Template for install type marker
   Dockerfile.snapserver      # Snapserver (from lollonet/santcasp, multi-stage)
   Dockerfile.shairport-sync  # AirPlay receiver (pipe output)
   Dockerfile.mpd             # MPD + ffmpeg (Alpine)
+  Dockerfile.metadata        # Metadata service (Python 3.13, aiohttp + websockets)
   Dockerfile.tidal           # Tidal Connect (extends edgecrush3r base with ALSA plugins)
-  docker-compose.yml         # 6 services (5 core + tidal-connect, host networking)
+  docker-compose.yml         # 7 services (6 core + tidal-connect, host networking)
   .env.example               # Environment template
 ```
 
@@ -150,7 +154,7 @@ ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian 
 
 ## Conventions
 
-- **Docker images**: `lollonet/snapmulti-{server,airplay,mpd}:latest` (Docker Hub, built in CI) + `ghcr.io/devgianlu/go-librespot:v0.7.0` (upstream) + `lollonet/snapmulti-tidal:latest` (ARM only)
+- **Docker images**: `lollonet/snapmulti-{server,airplay,mpd,metadata}:latest` (Docker Hub, built in CI) + `ghcr.io/devgianlu/go-librespot:v0.7.0` (upstream) + `lollonet/snapmulti-tidal:latest` (ARM only)
 - **Multi-arch**: linux/amd64 (raspy) + linux/arm64 (studio), native builds on self-hosted runners
 - **Config paths**: all config in `config/`, all scripts in `scripts/`, shared libs in `scripts/common/`
 - **Deployment**: tag push (`v*`) triggers build → manifest → deploy
