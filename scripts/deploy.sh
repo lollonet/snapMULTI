@@ -708,13 +708,18 @@ pull_images() {
     cd "$PROJECT_ROOT"
 
     if [[ "$IS_ARM" == "true" ]]; then
-        docker compose pull
+        docker compose pull --ignore-buildable
     else
         # Skip tidal-connect on x86 (ARM-only image)
         info "Skipping tidal-connect (ARM-only) on x86"
-        docker compose pull snapserver mpd mympd shairport-sync librespot metadata
+        docker compose pull --ignore-buildable snapserver mpd mympd shairport-sync librespot
     fi
     ok "Images pulled"
+
+    # Build images that aren't available on registry (metadata)
+    step "Building local images"
+    docker compose build metadata
+    ok "Local images built"
 }
 
 start_services() {
