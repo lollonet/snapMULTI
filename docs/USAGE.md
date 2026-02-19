@@ -479,7 +479,7 @@ docker compose up -d
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| **Build & Push** | Tag push (`v*`) | Build 5 multi-arch images (amd64 + arm64), push to Docker Hub, trigger deploy |
+| **Build & Push** | Tag push (`v*`) | Build 5 images (4 multi-arch + 1 ARM-only), push to Docker Hub, trigger deploy |
 | **Deploy** | Called by Build & Push | Pull images and restart 7 core containers on server via SSH |
 | **Validate** | Push to any branch, pull requests | Check docker-compose syntax, shellcheck scripts/, and environment template |
 | **Build Test** | Pull requests | Validate Docker images build correctly (no push) |

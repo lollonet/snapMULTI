@@ -772,11 +772,12 @@ class MetadataService:
 
         try:
             url_hash = hashlib.md5(url.encode()).hexdigest()
-            filename = f"artwork_{url_hash}.jpg"
-            local_path = self.artwork_dir / filename
 
-            if local_path.exists() and local_path.stat().st_size > 0:
-                return filename
+            # Check if already downloaded with any extension
+            for ext in (".jpg", ".png", ".gif", ".webp"):
+                existing = self.artwork_dir / f"artwork_{url_hash}{ext}"
+                if existing.exists() and existing.stat().st_size > 0:
+                    return existing.name
 
             # Use resolved IP to prevent DNS rebinding (TOCTOU).
             # Only for HTTP — HTTPS certificate checks protect against rebinding.
@@ -807,6 +808,9 @@ class MetadataService:
                     return ""
 
                 if len(data) > 0:
+                    ext = self._image_extension(data)
+                    filename = f"artwork_{url_hash}{ext}"
+                    local_path = self.artwork_dir / filename
                     tmp_path = local_path.parent / (local_path.name + ".tmp")
                     with open(tmp_path, "wb") as f:
                         f.write(data)
@@ -821,9 +825,8 @@ class MetadataService:
             logger.error(f"Failed to download artwork: {e}")
             self._mark_failed(url)
             try:
-                tmp = local_path.parent / (local_path.name + ".tmp")
-                tmp.unlink(missing_ok=True)
-                local_path.unlink(missing_ok=True)
+                for tmp in self.artwork_dir.glob(f"artwork_{url_hash}*"):
+                    tmp.unlink(missing_ok=True)
             except Exception:
                 pass
             return ""
@@ -1320,13 +1323,14 @@ async def handle_health(request: web.Request) -> web.Response:
 async def main() -> None:
     global _service
 
-    # Clean stale metadata from previous session
-    for f in ARTWORK_DIR.glob("metadata_*.json"):
-        try:
-            f.unlink()
-            logger.info(f"Cleared stale {f.name}")
-        except OSError:
-            pass
+    # Clean stale metadata and orphaned tmp files from previous session
+    for pattern in ("metadata_*.json", "*.tmp"):
+        for f in ARTWORK_DIR.glob(pattern):
+            try:
+                f.unlink()
+                logger.info(f"Cleared stale {f.name}")
+            except OSError:
+                pass
 
     _service = MetadataService()
 
