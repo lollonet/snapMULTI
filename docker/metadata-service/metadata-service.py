@@ -748,11 +748,13 @@ class MetadataService:
             return ""
 
         # Block private/loopback IPs (SSRF protection)
-        # Exception: allow Snapserver host (internal, trusted)
+        # Exception: allow Snapserver host and EXTERNAL_HOST (internal, trusted)
+        # Snapserver serves album art; shairport-sync serves AirPlay cover art
+        # on EXTERNAL_HOST — both are local services we trust.
         # Resolve once and connect to the resolved IP to prevent DNS rebinding
         resolved_ip = None
         try:
-            is_snapserver = parsed.hostname == self.snapserver_host
+            is_trusted_host = parsed.hostname in (self.snapserver_host, EXTERNAL_HOST)
             blocked_addr = None
             for _family, _, _, _, sockaddr in socket.getaddrinfo(
                 parsed.hostname or "", None, socket.AF_UNSPEC
@@ -760,8 +762,8 @@ class MetadataService:
                 addr = sockaddr[0]
                 ip = ipaddress.ip_address(addr)
                 if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
-                    if is_snapserver:
-                        logger.debug(f"Allowing artwork from Snapserver: {addr}")
+                    if is_trusted_host:
+                        logger.debug(f"Allowing artwork from trusted host: {addr}")
                         resolved_ip = addr
                     else:
                         blocked_addr = addr
