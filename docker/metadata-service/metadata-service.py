@@ -1074,10 +1074,18 @@ class MetadataService:
                 # Rebuild client → stream mapping
                 self._client_stream_map = self._build_client_stream_map(server)
 
-                # Update subscribed clients' stream_id
+                # Update subscribed clients' stream_id, track switches
+                stream_switched_clients: list[SubscribedClient] = []
                 for sc in ws_clients.copy():
                     resolved = self._resolve_client_stream(sc.client_id)
-                    if resolved:
+                    if resolved and resolved != sc.stream_id:
+                        logger.info(
+                            f"Client '{sc.client_id}' switched: "
+                            f"{sc.stream_id} -> {resolved}"
+                        )
+                        sc.stream_id = resolved
+                        stream_switched_clients.append(sc)
+                    elif resolved:
                         sc.stream_id = resolved
 
                 # Process each stream
@@ -1142,6 +1150,21 @@ class MetadataService:
 
                         # Broadcast to subscribed clients
                         await self._broadcast_to_stream(stream_id, metadata, server)
+
+                # Send current metadata to clients that just switched streams
+                for sc in stream_switched_clients:
+                    sm = self.streams.get(sc.stream_id)
+                    if sm and sm.current:
+                        volume_info = self._find_client_volume(server, sc.client_id)
+                        output = {
+                            **self._output_metadata(sm.current),
+                            "volume": volume_info.get("percent", 100),
+                            "muted": volume_info.get("muted", False),
+                        }
+                        try:
+                            await sc.websocket.send(json.dumps(output))
+                        except Exception:
+                            ws_clients.discard(sc)
 
             except Exception as e:
                 logger.error(f"Error in poll loop: {e}")
