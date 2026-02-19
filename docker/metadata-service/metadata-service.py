@@ -43,6 +43,10 @@ MPD_PORT = int(os.environ.get("MPD_PORT", "6600"))
 ARTWORK_DIR = Path(os.environ.get("ARTWORK_DIR", "/app/artwork"))
 DEFAULTS_DIR = Path(os.environ.get("DEFAULTS_DIR", "/app/defaults"))
 
+# go-librespot API for accurate Spotify track position
+GO_LIBRESPOT_HOST = os.environ.get("GO_LIBRESPOT_HOST", "127.0.0.1")
+GO_LIBRESPOT_PORT = int(os.environ.get("GO_LIBRESPOT_PORT", "24879"))
+
 # External hostname for artwork URLs sent to remote clients.
 # SNAPSERVER_HOST may be 127.0.0.1 (for local socket connections),
 # but artwork URLs must use a host reachable by clients on the network.
@@ -130,6 +134,10 @@ class MetadataService:
 
         # Client → stream mapping cache (refreshed each poll cycle)
         self._client_stream_map: dict[str, str] = {}
+
+        # Track elapsed timers for sources without native position reporting
+        # {stream_id: {"key": "title|artist", "start": monotonic, "accumulated": float}}
+        self._track_timers: dict[str, dict[str, Any]] = {}
 
     @staticmethod
     def _cache_set(cache: collections.OrderedDict, key: str, value: str,
@@ -933,6 +941,60 @@ class MetadataService:
             return False
 
     # ──────────────────────────────────────────────
+    # Source-specific position enrichment
+    # ──────────────────────────────────────────────
+
+    def get_spotify_position(self) -> tuple[int, int] | None:
+        """Query go-librespot API for current track position and duration (seconds).
+
+        Returns (elapsed, duration) or None if unavailable/paused/stopped.
+        """
+        try:
+            url = f"http://{GO_LIBRESPOT_HOST}:{GO_LIBRESPOT_PORT}/status"
+            req = urllib.request.Request(url, headers={"User-Agent": self.user_agent})
+            with urllib.request.urlopen(req, timeout=2) as response:
+                data = json.loads(response.read().decode())
+            if data.get("stopped") or data.get("paused"):
+                return None
+            track = data.get("track", {})
+            position_ms = track.get("position", 0)
+            duration_ms = track.get("duration", 0)
+            return (int(position_ms / 1000), int(duration_ms / 1000))
+        except Exception as e:
+            logger.debug(f"go-librespot API unavailable: {e}")
+            return None
+
+    def _estimate_elapsed(self, stream_id: str, track_key: str,
+                          is_playing: bool) -> int:
+        """Estimate elapsed seconds for sources without native position reporting.
+
+        Tracks play/pause transitions per stream. Resets when track_key changes.
+        """
+        now = time.monotonic()
+        timer = self._track_timers.get(stream_id)
+
+        if timer is None or timer["key"] != track_key:
+            # New track — reset timer
+            self._track_timers[stream_id] = {
+                "key": track_key,
+                "start": now if is_playing else 0.0,
+                "accumulated": 0.0,
+            }
+            return 0
+
+        if is_playing:
+            if timer["start"] == 0.0:
+                # Resumed from pause
+                timer["start"] = now
+            return int(timer["accumulated"] + (now - timer["start"]))
+        else:
+            if timer["start"] > 0.0:
+                # Just paused — accumulate elapsed
+                timer["accumulated"] += now - timer["start"]
+                timer["start"] = 0.0
+            return int(timer["accumulated"])
+
+    # ──────────────────────────────────────────────
     # Metadata change detection
     # ──────────────────────────────────────────────
 
@@ -974,8 +1036,14 @@ class MetadataService:
         snap_fmt = uri_query.get("sampleformat", "")
         sample_rate, bit_depth = self._parse_audio_format(snap_fmt)
 
-        position = props.get("position", 0)
-        duration = meta.get("duration", 0)
+        try:
+            position = float(props.get("position") or 0)
+        except (ValueError, TypeError):
+            position = 0.0
+        try:
+            duration = float(meta.get("duration") or 0)
+        except (ValueError, TypeError):
+            duration = 0.0
 
         return {
             "playing": stream.get("status") == "playing",
@@ -1109,6 +1177,33 @@ class MetadataService:
                             if not mpd_meta.get("title") and mpd_meta.get("station_name"):
                                 mpd_meta["title"] = mpd_meta["station_name"]
                             metadata = mpd_meta
+
+                    # Enrich non-MPD streams with position data
+                    if metadata.get("source") != "MPD":
+                        track_key = (
+                            f"{metadata.get('title', '')}|"
+                            f"{metadata.get('artist', '')}"
+                        )
+                        is_playing = (
+                            metadata.get("playing", False)
+                            and track_key != "|"
+                        )
+
+                        if stream_id == "Spotify" and is_playing:
+                            # Accurate position from go-librespot API
+                            spotify_pos = await loop.run_in_executor(
+                                None, self.get_spotify_position
+                            )
+                            if spotify_pos is not None:
+                                metadata["elapsed"] = spotify_pos[0]
+                                metadata["duration"] = spotify_pos[1]
+
+                        # AirPlay, Tidal, etc.: estimate from local clock
+                        estimated = self._estimate_elapsed(
+                            stream_id, track_key, is_playing
+                        )
+                        if is_playing and metadata.get("elapsed", 0) <= 0:
+                            metadata["elapsed"] = estimated
 
                     # Enrich with artwork
                     await loop.run_in_executor(None, self.enrich_artwork, metadata)
