@@ -18,7 +18,7 @@ import os
 import select
 import sys
 import time
-from threading import Thread
+from threading import Lock, Thread
 
 import websocket
 
@@ -28,6 +28,11 @@ RECONNECT_DELAY = 5
 MAX_RECONNECT_DELAY = 60
 
 debug_mode = "--debug" in sys.argv
+
+# Lock guards metadata/playback_status reads+writes and all stdout sends,
+# preventing partial-update reads and interleaved JSON-RPC output between
+# the main thread (stdin handler) and the WebSocket background thread.
+_lock = Lock()
 
 metadata: dict[str, str | list[str] | float] = {
     "title": "",
@@ -41,7 +46,7 @@ playback_status = "unknown"
 
 
 def send(msg: dict) -> None:
-    """Send JSON-RPC message to snapserver via stdout."""
+    """Send JSON-RPC message to snapserver via stdout (must hold _lock)."""
     try:
         print(json.dumps(msg), flush=True)
     except BrokenPipeError:
@@ -52,12 +57,16 @@ def log(level: str, msg: str) -> None:
     """Log to stderr and send to snapserver."""
     sys.stderr.write(f"[{level.upper()}] meta_tidal: {msg}\n")
     sys.stderr.flush()
-    send({"jsonrpc": "2.0", "method": "Plugin.Stream.Log",
-          "params": {"severity": level, "message": f"meta_tidal: {msg}"}})
+    with _lock:
+        send({"jsonrpc": "2.0", "method": "Plugin.Stream.Log",
+              "params": {"severity": level, "message": f"meta_tidal: {msg}"}})
 
 
 def send_properties() -> None:
-    """Send current metadata and playback status to snapserver."""
+    """Send current metadata and playback status to snapserver.
+
+    Must be called with _lock held.
+    """
     props: dict = {}
     if metadata["title"]:
         props["title"] = metadata["title"]
@@ -79,7 +88,8 @@ def send_properties() -> None:
     if params:
         artist = props.get("artist", ["?"])
         artist_str = artist[0] if isinstance(artist, list) and artist else "?"
-        log("info", f"{playback_status}: {artist_str} - {props.get('title', '?')}")
+        sys.stderr.write(f"[INFO] meta_tidal: {playback_status}: {artist_str} - {props.get('title', '?')}\n")
+        sys.stderr.flush()
         send({"jsonrpc": "2.0", "method": "Plugin.Stream.Player.Properties",
               "params": params})
 
@@ -93,7 +103,9 @@ def parse_tidal_message(data: dict) -> bool:
     changed = False
 
     if debug_mode:
-        log("debug", f"Raw WS message: {json.dumps(data)[:500]}")
+        # Log to stderr only (not via log() which acquires _lock — caller holds it)
+        sys.stderr.write(f"[DEBUG] meta_tidal: Raw WS message: {json.dumps(data)[:500]}\n")
+        sys.stderr.flush()
 
     # Try multiple known message formats from tidal-connect
 
@@ -174,8 +186,9 @@ def ws_thread() -> None:
                     break
                 try:
                     data = json.loads(raw)
-                    if parse_tidal_message(data):
-                        send_properties()
+                    with _lock:
+                        if parse_tidal_message(data):
+                            send_properties()
                 except json.JSONDecodeError:
                     if debug_mode:
                         log("debug", f"Non-JSON message: {raw[:200]}")
@@ -196,6 +209,11 @@ def ws_thread() -> None:
         delay = min(delay * 2, MAX_RECONNECT_DELAY)
 
 
+def _filtered_metadata() -> dict:
+    """Return metadata dict with empty/zero values removed."""
+    return {k: v for k, v in metadata.items() if v}
+
+
 def handle_stdin_line(line: str) -> None:
     """Process a JSON-RPC request from snapserver."""
     try:
@@ -203,24 +221,25 @@ def handle_stdin_line(line: str) -> None:
         rid = req.get("id")
         method = req.get("method", "")
 
-        if method == "Plugin.Stream.GetMetadata":
-            send({"jsonrpc": "2.0", "id": rid, "result": metadata})
-        elif method == "Plugin.Stream.GetProperties":
-            send({"jsonrpc": "2.0", "id": rid, "result": {
-                "playbackStatus": playback_status,
-                "canControl": False,
-                "canGoNext": False,
-                "canGoPrevious": False,
-                "canPause": False,
-                "canPlay": False,
-                "canSeek": False,
-            }})
-        elif method == "Plugin.Stream.Player.Control":
-            send({"jsonrpc": "2.0", "id": rid, "error": {
-                "code": -32601,
-                "message": "Tidal Connect does not support remote control"}})
-        else:
-            send({"jsonrpc": "2.0", "id": rid, "result": "ok"})
+        with _lock:
+            if method == "Plugin.Stream.GetMetadata":
+                send({"jsonrpc": "2.0", "id": rid, "result": _filtered_metadata()})
+            elif method == "Plugin.Stream.GetProperties":
+                send({"jsonrpc": "2.0", "id": rid, "result": {
+                    "playbackStatus": playback_status,
+                    "canControl": False,
+                    "canGoNext": False,
+                    "canGoPrevious": False,
+                    "canPause": False,
+                    "canPlay": False,
+                    "canSeek": False,
+                }})
+            elif method == "Plugin.Stream.Player.Control":
+                send({"jsonrpc": "2.0", "id": rid, "error": {
+                    "code": -32601,
+                    "message": "Tidal Connect does not support remote control"}})
+            else:
+                send({"jsonrpc": "2.0", "id": rid, "result": "ok"})
     except json.JSONDecodeError:
         pass
     except Exception as e:
@@ -234,7 +253,8 @@ def main() -> None:
         log("info", "Debug mode enabled — logging raw WebSocket messages")
 
     # Signal ready to snapserver
-    send({"jsonrpc": "2.0", "method": "Plugin.Stream.Ready"})
+    with _lock:
+        send({"jsonrpc": "2.0", "method": "Plugin.Stream.Ready"})
 
     # Start WebSocket reader in background
     thread = Thread(target=ws_thread, daemon=True)

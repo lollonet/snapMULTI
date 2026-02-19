@@ -161,7 +161,7 @@ Audio streaming requires consistent, low-latency networking. Host mode eliminate
 
 ### Implications
 
-1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 6600, 8082, 8083, 8180)
+1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 5858, 6600, 8082, 8083, 8180, 8888, 24879)
 2. **Firewall rules**: Must allow traffic on service ports (see [HARDWARE.md](HARDWARE.md))
 3. **Single instance**: Cannot run multiple snapMULTI stacks on the same host
 
@@ -214,6 +214,26 @@ Host mode is recommended for single-server deployments.
 - Cover art chain: MPD embedded → iTunes → MusicBrainz → Radio-Browser
 - Clients subscribe via WebSocket with `{"subscribe": "CLIENT_ID"}` to receive their stream's metadata
 - Artwork served at `http://<server>:8083/artwork/<filename>`
+
+### AirPlay (shairport-sync)
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 5858 | HTTP | Cover art server (used by `meta_shairport.py` controlscript) |
+
+### Spotify Connect (go-librespot)
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 24879 | HTTP/WS | WebSocket API (used by `meta_go-librespot.py` controlscript) |
+
+### Tidal Connect
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 8888 | WebSocket | Playback events API (used by `meta_tidal.py` controlscript) |
+
+> **Note:** Ports 5858, 8888, and 24879 are internal (localhost only) — used for metadata exchange between containers. No firewall rules needed.
 
 ### MPD
 
