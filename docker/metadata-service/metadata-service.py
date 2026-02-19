@@ -256,6 +256,7 @@ class MetadataService:
         # Snapserver has "snapvideo")
         for identifier, stream_id in self._client_stream_map.items():
             if client_id in identifier or identifier in client_id:
+                logger.debug(f"Fuzzy match: client '{client_id}' matched identifier '{identifier}'")
                 return stream_id
         return None
 
@@ -740,6 +741,8 @@ class MetadataService:
 
         # Block private/loopback IPs (SSRF protection)
         # Exception: allow Snapserver host (internal, trusted)
+        # Resolve once and connect to the resolved IP to prevent DNS rebinding
+        resolved_ip = None
         try:
             is_snapserver = parsed.hostname == self.snapserver_host
             blocked_addr = None
@@ -751,9 +754,13 @@ class MetadataService:
                 if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
                     if is_snapserver:
                         logger.debug(f"Allowing artwork from Snapserver: {addr}")
+                        resolved_ip = addr
                     else:
                         blocked_addr = addr
                         break
+                else:
+                    resolved_ip = addr
+                    break
             if blocked_addr:
                 logger.warning(f"Blocked artwork download to restricted IP: {blocked_addr}")
                 self._mark_failed(url)
@@ -771,7 +778,16 @@ class MetadataService:
             if local_path.exists() and local_path.stat().st_size > 0:
                 return filename
 
-            req = urllib.request.Request(url, headers={"User-Agent": self.user_agent})
+            # Use resolved IP to prevent DNS rebinding (TOCTOU).
+            # Only for HTTP — HTTPS certificate checks protect against rebinding.
+            if resolved_ip and parsed.hostname and parsed.scheme == "http":
+                ip_for_url = f"[{resolved_ip}]" if ":" in resolved_ip else resolved_ip
+                fetch_url = url.replace(parsed.hostname, ip_for_url, 1)
+                req = urllib.request.Request(
+                    fetch_url, headers={"User-Agent": self.user_agent, "Host": parsed.hostname}
+                )
+            else:
+                req = urllib.request.Request(url, headers={"User-Agent": self.user_agent})
             with urllib.request.urlopen(req, timeout=5) as response:
                 data = b""
                 dl_start = time.monotonic()
@@ -1317,6 +1333,12 @@ async def main() -> None:
     logger.info("Starting snapMULTI Metadata Service")
     logger.info(f"  Snapserver: {SNAPSERVER_HOST}:{SNAPSERVER_RPC_PORT}")
     logger.info(f"  External host: {EXTERNAL_HOST}")
+    try:
+        if ipaddress.ip_address(socket.gethostbyname(EXTERNAL_HOST)).is_loopback:
+            logger.warning("EXTERNAL_HOST resolves to loopback — "
+                           "set EXTERNAL_HOST explicitly if artwork fails on clients")
+    except (socket.gaierror, ValueError):
+        pass
     logger.info(f"  MPD: {MPD_HOST}:{MPD_PORT}")
     logger.info(f"  WebSocket port: {WS_PORT}")
     logger.info(f"  HTTP port: {HTTP_PORT}")
