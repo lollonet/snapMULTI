@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Controlscript buffer overflow protection** ([#68](https://github.com/lollonet/snapMULTI/pull/68)) — Added safety caps to stdin and pipe buffers in `meta_tidal.py` (64 KB) and `meta_shairport.py` (64 KB stdin + 1 MB pipe) to prevent unbounded memory growth from malformed or excessive input
+
+### Maintenance
+- **Client submodule update** — Updated `client/` submodule to 6d2f251
+
 ## [0.2.0] — 2026-02-19
 
 ### Added
