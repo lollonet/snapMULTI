@@ -283,6 +283,7 @@ def main() -> None:
     fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
     stdin_buffer = ""
+    MAX_BUFFER = 65536  # 64 KB safety cap — snapserver sends small JSON-RPC messages
 
     while True:
         try:
@@ -303,6 +304,9 @@ def main() -> None:
                     while True:
                         time.sleep(60)
                 stdin_buffer += chunk
+                if len(stdin_buffer) > MAX_BUFFER:
+                    log("warning", "stdin buffer overflow, discarding")
+                    stdin_buffer = ""
                 while "\n" in stdin_buffer:
                     line, stdin_buffer = stdin_buffer.split("\n", 1)
                     if line.strip():
