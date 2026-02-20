@@ -26,7 +26,11 @@ RUN git clone --branch develop https://github.com/lollonet/santcasp.git . && \
     make -j$(nproc) && \
     make install
 
-FROM node:22-alpine AS snapweb-builder
+# Snapweb build: npm ci fails on arm64-musl due to npm/cli#4828 (optional native
+# bindings for rollup + swc not installed cross-platform). Removing the lockfile
+# and using npm install is the documented workaround. Version pinning comes from
+# the fixed v0.9.3 tag instead.
+FROM node:22.14-alpine3.21 AS snapweb-builder
 WORKDIR /build
 RUN apk add --no-cache git && \
     git clone --depth 1 --branch v0.9.3 https://github.com/snapcast/snapweb.git . && \
