@@ -23,6 +23,17 @@ snapMULTI runs on a home server and streams audio to speakers throughout your ne
 
 More source types available — see [Audio Sources Reference](docs/SOURCES.md).
 
+### Switching Sources
+
+Open **http://&lt;server-ip&gt;:1780** in any browser to manage your speakers. From the web interface you can:
+- Switch which source each room plays
+- Adjust volume per speaker
+- Group/ungroup speakers
+
+You can also use the Snapcast mobile apps:
+[Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) |
+[iOS (SnapForge)](https://apps.apple.com/app/snapforge/id6670397895)
+
 ## Quick Start
 
 ### Beginners: Plug-and-Play (Raspberry Pi)

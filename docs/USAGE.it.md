@@ -98,7 +98,7 @@ Snapserver supporta più codec (configurabili in `config/snapserver.conf`):
 |-------|------------|-------|
 | 1704 | TCP | Streaming audio verso i client |
 | 1705 | TCP | Controllo JSON-RPC |
-| 1780 | HTTP | Interfaccia web Snapweb (non installata) |
+| 1780 | HTTP | Interfaccia web Snapweb + API JSON-RPC |
 
 **Configurazione**: `config/snapserver.conf`
 - Client massimi: 0 (illimitati, modificabile nel file di configurazione)

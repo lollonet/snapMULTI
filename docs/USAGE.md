@@ -183,7 +183,7 @@ Host mode is recommended for single-server deployments.
 |------|----------|---------|
 | 1704 | TCP | Audio streaming to clients |
 | 1705 | TCP | JSON-RPC control |
-| 1780 | HTTP | Snapweb UI (not installed) |
+| 1780 | HTTP | Snapweb UI + JSON-RPC API |
 
 **Configuration**: `config/snapserver.conf`
 - Max clients: 0 (unlimited, adjust in config as needed)

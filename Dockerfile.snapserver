@@ -26,6 +26,13 @@ RUN git clone --branch develop https://github.com/lollonet/santcasp.git . && \
     make -j$(nproc) && \
     make install
 
+FROM node:22-alpine AS snapweb-builder
+WORKDIR /build
+RUN apk add --no-cache git && \
+    git clone --depth 1 --branch v0.9.3 https://github.com/snapcast/snapweb.git . && \
+    rm -f package-lock.json && \
+    npm install && npm run build
+
 FROM alpine:3.23
 
 RUN apk add --no-cache \
@@ -57,6 +64,7 @@ RUN pip install --no-cache-dir \
 
 COPY --from=builder /usr/bin/snapserver /usr/bin/snapserver
 COPY --from=builder /usr/share/snapserver /usr/share/snapserver
+COPY --from=snapweb-builder /build/dist /usr/share/snapserver/snapweb
 
 # Patch meta_mpd.py to fix JSON serialization bug (upstream issue)
 COPY patches/meta_mpd.py /usr/share/snapserver/plug-ins/meta_mpd.py
