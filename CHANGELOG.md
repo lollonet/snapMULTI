@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Snapweb UI** — Web interface at `http://<server>:1780` for managing speakers, switching sources, and adjusting volume. Built from [snapcast/snapweb](https://github.com/snapcast/snapweb) v0.9.3 and bundled into the snapserver container
 
 ### Fixed
+- **Client-only install screen bouncing** — When `firstboot.sh` called `setup.sh`, both scripts rendered competing progress displays to `/dev/tty1`. Now `firstboot.sh` sets `PROGRESS_MANAGED=1` so `setup.sh` defers to the parent's display
+- **setup.sh Unicode on framebuffer** — Replaced Unicode box-drawing chars, Braille spinners, and emoji with ASCII-safe equivalents (`#/-`, `[x]/[>]/[ ]`, `|/-\`) for Linux console PSF fonts
 - **Controlscript buffer overflow protection** ([#68](https://github.com/lollonet/snapMULTI/pull/68)) — Added safety caps to stdin and pipe buffers in `meta_tidal.py` (64 KB) and `meta_shairport.py` (64 KB stdin + 1 MB pipe) to prevent unbounded memory growth from malformed or excessive input
 
 ### Maintenance

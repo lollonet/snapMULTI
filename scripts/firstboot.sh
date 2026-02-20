@@ -614,6 +614,10 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
         exit 1
     fi
     cd "$CLIENT_DIR"
+    # Tell setup.sh that firstboot.sh owns the progress display — it should
+    # not render its own TUI, and should log to our progress log instead.
+    export PROGRESS_MANAGED=1
+    export PROGRESS_LOG
     if [[ -n "$CONFIG_FILE" ]]; then
         if ! bash scripts/setup.sh --auto "$CONFIG_FILE" >> "$LOG" 2>&1; then
             log_and_tty "ERROR: client setup.sh failed."
@@ -625,6 +629,7 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
             exit 1
         fi
     fi
+    unset PROGRESS_MANAGED
     log_progress "Client setup complete" 2>/dev/null || true
 
     next_step "Verifying client..."
