@@ -246,9 +246,11 @@ def main() -> None:
     cover_thread.start()
     log("info", f"Cover server started on port {COVER_ART_PORT}")
 
-    # Buffers
+    # Buffers with safety caps to prevent unbounded growth
     stdin_buffer = ""
     pipe_buffer = b""
+    MAX_STDIN_BUFFER = 65536    # 64 KB — snapserver sends small JSON-RPC messages
+    MAX_PIPE_BUFFER = 1048576   # 1 MB — cover art PICT items can be large
     pipe_fd: int | None = None
     last_pipe_check = 0.0
 
@@ -296,6 +298,9 @@ def main() -> None:
                             pass
                         continue
                     stdin_buffer += chunk
+                    if len(stdin_buffer) > MAX_STDIN_BUFFER:
+                        log("warning", "stdin buffer overflow, discarding")
+                        stdin_buffer = ""
                     while "\n" in stdin_buffer:
                         line, stdin_buffer = stdin_buffer.split("\n", 1)
                         if line.strip():
@@ -316,6 +321,9 @@ def main() -> None:
                         continue
 
                     pipe_buffer += chunk
+                    if len(pipe_buffer) > MAX_PIPE_BUFFER:
+                        log("warning", "pipe buffer overflow, discarding")
+                        pipe_buffer = b""
 
                     # Process complete <item>...</item> tags
                     while b"<item>" in pipe_buffer and b"</item>" in pipe_buffer:
