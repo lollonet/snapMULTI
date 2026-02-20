@@ -120,7 +120,7 @@ snapMULTI/
     metadata-service/
       metadata-service.py    # Server-side metadata + cover art service (WS:8082, HTTP:8083)
   install.conf.template      # Template for install type marker
-  Dockerfile.snapserver      # Snapserver (from lollonet/santcasp, multi-stage)
+  Dockerfile.snapserver      # Snapserver + Snapweb (from lollonet/santcasp, multi-stage)
   Dockerfile.shairport-sync  # AirPlay receiver (pipe output)
   Dockerfile.mpd             # MPD + ffmpeg (Alpine)
   Dockerfile.metadata        # Metadata service (Python 3.13, aiohttp + websockets)

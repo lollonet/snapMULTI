@@ -23,6 +23,17 @@ snapMULTI gira su un server domestico e trasmette l'audio agli altoparlanti in t
 
 Altre sorgenti disponibili — vedi il [Riferimento Sorgenti Audio](docs/SOURCES.it.md).
 
+### Cambio Sorgente
+
+Apri **http://&lt;ip-del-server&gt;:1780** in un browser per gestire gli altoparlanti. Dall'interfaccia web puoi:
+- Cambiare la sorgente audio di ogni stanza
+- Regolare il volume per ogni altoparlante
+- Raggruppare/separare gli altoparlanti
+
+Puoi anche usare le app Snapcast per smartphone:
+[Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) |
+[iOS (SnapForge)](https://apps.apple.com/app/snapforge/id6670397895)
+
 ## Avvio Rapido
 
 ### Principianti: Plug-and-Play (Raspberry Pi)

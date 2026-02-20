@@ -147,7 +147,7 @@ Formato audio: 44100 Hz, 16-bit, stereo (codec FLAC predefinito).
 |-------|------------|-----------|-------|
 | 1704 | TCP | Server → Client | Streaming audio |
 | 1705 | TCP | Bidirezionale | Controllo JSON-RPC |
-| 1780 | HTTP | Bidirezionale | API HTTP |
+| 1780 | HTTP | Bidirezionale | Interfaccia Snapweb + API HTTP |
 | 6600 | TCP | Bidirezionale | Protocollo MPD (controllo client) |
 | 8000 | HTTP | Bidirezionale | Stream audio HTTP MPD |
 | 8082 | WebSocket | Server → Client | Servizio metadata (push info tracce) |
