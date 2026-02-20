@@ -3,7 +3,9 @@
 # Used with edgecrush3r/tidal-connect image
 set -euo pipefail
 
-ASOUND_CONF_FILE=/etc/asound.conf
+# Write ALSA config to tmpfs so the container can be read-only.
+# ALSA_CONFIG_PATH is set in docker-compose.yml to point here.
+ASOUND_CONF_FILE=/tmp/asound.conf
 USER_CONFIG_DIR=/userconfig
 
 KEY_PLAYBACK_DEVICE=playback_device
