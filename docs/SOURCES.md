@@ -115,7 +115,7 @@ The shairport-sync container receives AirPlay audio from Apple devices and write
 
 **Config:**
 ```ini
-source = pipe:////audio/airplay_fifo?name=AirPlay
+source = pipe:////audio/airplay_fifo?name=AirPlay&controlscript=meta_shairport.py
 ```
 
 **Parameters:**
@@ -123,6 +123,7 @@ source = pipe:////audio/airplay_fifo?name=AirPlay
 | Parameter | Value | Description |
 |-----------|-------|-------------|
 | `name` | `AirPlay` | Stream ID |
+| `controlscript` | `meta_shairport.py` | Reads metadata from shairport-sync metadata pipe, serves cover art on port 5858 |
 
 **shairport-sync configuration** (`config/shairport-sync.conf`):
 

@@ -161,7 +161,7 @@ Audio streaming requires consistent, low-latency networking. Host mode eliminate
 
 ### Implications
 
-1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 5858, 6600, 8082, 8083, 8180, 8888, 24879)
+1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 5858, 6600, 8000, 8082, 8083, 8180, 8888, 24879)
 2. **Firewall rules**: Must allow traffic on service ports (see [HARDWARE.md](HARDWARE.md))
 3. **Single instance**: Cannot run multiple snapMULTI stacks on the same host
 
@@ -414,7 +414,7 @@ ss -tlnp | grep -E "1704|1705|1780"
 Pushing a version tag (e.g. `git tag v1.1.0 && git push origin v1.1.0`) triggers the full CI/CD pipeline:
 
 1. **Build** — Docker images built on self-hosted runner (amd64 native + arm64 via QEMU cross-compilation)
-2. **Manifest** — Per-arch images combined into multi-arch `:latest` tags on ghcr.io
+2. **Manifest** — Per-arch images combined into multi-arch `:latest` tags on Docker Hub
 3. **Deploy** — Images pulled and all containers (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`, `metadata`, `tidal-connect`) restarted on the home server via SSH
 
 ```

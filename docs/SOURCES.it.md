@@ -115,7 +115,7 @@ Il container shairport-sync riceve audio AirPlay dai dispositivi Apple e scrive 
 
 **Configurazione:**
 ```ini
-source = pipe:////audio/airplay_fifo?name=AirPlay
+source = pipe:////audio/airplay_fifo?name=AirPlay&controlscript=meta_shairport.py
 ```
 
 **Parametri:**
@@ -123,20 +123,26 @@ source = pipe:////audio/airplay_fifo?name=AirPlay
 | Parametro | Valore | Descrizione |
 |-----------|--------|-------------|
 | `name` | `AirPlay` | ID dello stream |
+| `controlscript` | `meta_shairport.py` | Legge i metadati dalla pipe di shairport-sync, serve le copertine sulla porta 5858 |
 
 **Configurazione shairport-sync** (`config/shairport-sync.conf`):
 
 | Impostazione | Valore | Descrizione |
 |--------------|--------|-------------|
-| `general.name` | `snapMULTI` | Nome mostrato sui dispositivi Apple |
+| `general.name` | `%H AirPlay` | Nome mostrato sui dispositivi Apple (%H = hostname) |
 | `pipe.name` | `/audio/airplay_fifo` | Percorso della named pipe per l'output audio |
+
+**Nome personalizzato:** Imposta `AIRPLAY_NAME` in `.env` per sovrascrivere il nome basato su hostname:
+```bash
+AIRPLAY_NAME="AirPlay Salotto"
+```
 
 **Formato campionamento:** 44100:16:2 (fisso, impostato da shairport-sync)
 
 **Connessione da iOS/macOS:**
 1. Apri il **Centro di Controllo**
 2. Tocca l'icona **AirPlay**
-3. Seleziona **"snapMULTI"**
+3. Seleziona **"<hostname> AirPlay"** (es. "raspberrypi AirPlay")
 
 **Verifica visibilità:**
 ```bash

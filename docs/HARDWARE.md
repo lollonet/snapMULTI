@@ -6,7 +6,7 @@ Hardware requirements, recommended setups, and network considerations for snapMU
 
 ## Server Requirements
 
-The server runs all audio services: Snapcast, MPD, shairport-sync (AirPlay), and librespot (Spotify Connect) inside Docker containers.
+The server runs all audio services: Snapcast, MPD, shairport-sync (AirPlay), and go-librespot (Spotify Connect) inside Docker containers.
 
 ### Minimum Server Hardware
 
@@ -150,6 +150,8 @@ Audio format: 44100 Hz, 16-bit, stereo (default FLAC codec).
 | 1780 | HTTP | Bidirectional | HTTP API |
 | 6600 | TCP | Bidirectional | MPD protocol (client control) |
 | 8000 | HTTP | Bidirectional | MPD HTTP audio stream |
+| 8082 | WebSocket | Server → Clients | Metadata service (track info push) |
+| 8083 | HTTP | Server → Clients | Metadata service (cover art, health) |
 | 8180 | HTTP | Bidirectional | myMPD web UI |
 | 5353 | UDP | Multicast | mDNS autodiscovery |
 
@@ -167,6 +169,8 @@ sudo ufw allow 1705/tcp   # JSON-RPC control
 sudo ufw allow 1780/tcp   # HTTP API
 sudo ufw allow 6600/tcp   # MPD protocol
 sudo ufw allow 8000/tcp   # MPD HTTP stream
+sudo ufw allow 8082/tcp   # Metadata service (WebSocket)
+sudo ufw allow 8083/tcp   # Metadata service (cover art)
 sudo ufw allow 8180/tcp   # myMPD web UI
 sudo ufw allow 5353/udp   # mDNS discovery
 ```
@@ -181,6 +185,8 @@ sudo ufw allow 5353/udp   # mDNS discovery
 | `lollonet/snapmulti-airplay:latest` | ~30–50 MB |
 | `ghcr.io/devgianlu/go-librespot:v0.7.0` | ~30–50 MB |
 | `lollonet/snapmulti-mpd:latest` | ~50–80 MB |
+| `lollonet/snapmulti-metadata:latest` | ~60–80 MB |
+| `lollonet/snapmulti-tidal:latest` | ~200–300 MB |
 
 ### Music Library
 

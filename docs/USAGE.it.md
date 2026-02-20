@@ -51,6 +51,45 @@ Per i tipi di sorgente audio e l'API JSON-RPC, vedi [SOURCES.it.md](SOURCES.it.m
                           └────────┘ └────────┘ └────────┘
 ```
 
+## Formato Audio (Frequenza di Campionamento)
+
+Tutte le sorgenti audio usano un formato di campionamento unificato per garantire la sincronizzazione bit-perfect tra i client:
+
+| Parametro | Valore | Descrizione |
+|-----------|--------|-------------|
+| Frequenza di campionamento | 44100 Hz | Audio qualità CD (44.1 kHz) |
+| Profondità di bit | 16-bit | Risoluzione PCM standard |
+| Canali | 2 | Stereo |
+
+**Stringa formato**: `44100:16:2` (usata nella configurazione Snapcast)
+
+### Perché 44.1 kHz?
+
+- **Standard CD**: La maggior parte della musica è masterizzata a 44.1 kHz
+- **Compatibilità universale**: Tutte le sorgenti audio (MPD, Spotify, AirPlay) emettono a questa frequenza
+- **Nessun ricampionamento**: Evita la perdita di qualità dalla conversione della frequenza di campionamento
+- **Bassa latenza**: Buffer più piccoli rispetto a 48 kHz per la stessa durata dei chunk
+
+### Catena Audio
+
+```
+Sorgente → Pipe FIFO → Snapserver → Rete → Snapclient → Scheda Audio
+            (PCM raw)   (codec FLAC)  (1704/tcp)  (decode)    (PCM out)
+```
+
+Tutte le sorgenti devono emettere PCM raw S16LE a 44100:16:2 verso le pipe FIFO. Snapserver codifica in FLAC per la trasmissione di rete (lossless), e i client decodificano nuovamente in PCM.
+
+### Opzioni Codec
+
+Snapserver supporta più codec (configurabili in `config/snapserver.conf`):
+
+| Codec | Compressione | Latenza | Caso d'Uso |
+|-------|-------------|---------|------------|
+| **flac** (default) | Lossless | Bassa | Migliore qualità, consigliato |
+| opus | Lossy | Molto bassa | Banda limitata |
+| ogg | Lossy | Bassa | Client legacy |
+| pcm | Nessuna | Minima | Solo LAN, alta banda |
+
 ## Servizi e Porte
 
 ### Snapserver
@@ -171,6 +210,42 @@ Riavvia MPD per aggiornare la libreria:
 ```bash
 cd /opt/snapmulti && docker compose restart mpd
 ```
+
+## Modalità di Rete
+
+Tutti i container snapMULTI usano la **modalità rete host** (`network_mode: host`). Questo è necessario per:
+
+### mDNS / Autodiscovery
+
+Avahi pubblica i servizi (AirPlay, Spotify Connect, Snapcast) tramite DNS multicast sulla porta 5353. La rete bridge isola i container dalla rete dell'host, interrompendo i broadcast mDNS. La modalità host permette ai container di:
+
+- Condividere il namespace di rete dell'host
+- Usare il demone Avahi dell'host via D-Bus
+- Trasmettere servizi mDNS su tutte le interfacce
+
+### Audio a Bassa Latenza
+
+Lo streaming audio richiede una rete consistente e a bassa latenza. La modalità host elimina:
+
+- L'overhead della traduzione NAT di Docker
+- I ritardi del mapping delle porte
+- Il potenziale buffer bloat dai bridge virtuali
+
+### Implicazioni
+
+1. **Conflitti di porte**: I servizi si collegano direttamente alle porte dell'host (1704, 1705, 1780, 5858, 6600, 8000, 8082, 8083, 8180, 8888, 24879)
+2. **Regole firewall**: È necessario consentire il traffico sulle porte dei servizi (vedi [HARDWARE.it.md](HARDWARE.it.md))
+3. **Istanza singola**: Non è possibile eseguire più stack snapMULTI sullo stesso host
+
+### Alternativa: macvlan (Avanzato)
+
+Per deployment multi-istanza, la rete macvlan assegna a ogni container un indirizzo IP univoco sulla rete fisica. Questo richiede:
+
+- Prenotazioni DHCP nel router
+- Configurazione mDNS manuale
+- Setup più complesso
+
+La modalità host è consigliata per deployment con un singolo server.
 
 ## Controllare MPD
 
@@ -339,7 +414,7 @@ ss -tlnp | grep -E "1704|1705|1780"
 Il push di un tag di versione (es. `git tag v1.1.0 && git push origin v1.1.0`) avvia l'intera pipeline CI/CD:
 
 1. **Build** — Immagini Docker compilate su runner self-hosted (amd64 nativo + arm64 via cross-compilazione QEMU)
-2. **Manifest** — Le immagini per architettura vengono unite in tag multi-arch `:latest` su ghcr.io
+2. **Manifest** — Le immagini per architettura vengono unite in tag multi-arch `:latest` su Docker Hub
 3. **Deploy** — Le immagini vengono scaricate e tutti i container (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`, `metadata`, `tidal-connect`) riavviati sul server domestico via SSH
 
 ```
@@ -375,9 +450,19 @@ git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
 .\snapMULTI\scripts\prepare-sd.ps1
 ```
 
-Il primo avvio installa tutto automaticamente (~5-10 min). L'HDMI mostra una schermata di progresso. Il Pi si riavvia quando ha finito.
+**Cosa succede al primo avvio:**
+- Legge `install.conf` per determinare il tipo di installazione (client/server/entrambi)
+- Attende la rete (con fix del dominio regolatorio WiFi per i canali DFS a 5 GHz)
+- Copia i file del progetto dalla partizione boot a `/opt/snapmulti` e/o `/opt/snapclient`
+- Installa git, Docker e le dipendenze di sistema via APT
+- Server: esegue `deploy.sh` (rilevamento hardware, scansione libreria musicale, deploy container)
+- Client: esegue `setup.sh --auto` (configurazione HAT audio, rilevamento headless, deploy container)
+- Mostra TUI di progresso a schermo intero sull'HDMI (checklist passaggi, barra di progresso, output log)
+- Verifica i container sani, poi riavvia
 
 Log di installazione salvato in `/var/log/snapmulti-install.log`.
+
+**Versioni OS supportate:** Raspberry Pi OS Bookworm (consigliato) e Bullseye. Lo script rileva automaticamente la versione e usa i percorsi boot corretti (`/boot/firmware` vs `/boot`).
 
 #### Modalita "Server + Player" (Entrambi)
 
@@ -416,7 +501,7 @@ docker compose up -d
 |----------|---------|-------|
 | **Build & Push** | Push tag (`v*`) | Compila 5 immagini (4 multi-arch + 1 solo ARM), push su Docker Hub, avvia deploy |
 | **Deploy** | Chiamato da Build & Push | Scarica immagini e riavvia 7 container principali sul server via SSH |
-| **Validate** | Push su qualsiasi branch, pull request | Verifica sintassi docker-compose e template environment |
+| **Validate** | Push su qualsiasi branch, pull request | Verifica sintassi docker-compose, shellcheck scripts/ e template environment |
 | **Build Test** | Pull request | Valida che le immagini Docker si compilino correttamente (senza push) |
 
 ### Container Registry
@@ -562,4 +647,93 @@ docker run -d --name snapclient \
 **Browser come client** (solo stream HTTP di MPD):
 ```
 http://<ip-del-server>:8000
+```
+
+## Log e Diagnostica
+
+### Visualizzare i Log
+
+```bash
+# Tutti i servizi
+docker compose logs -f
+
+# Servizio specifico
+docker compose logs -f snapserver
+docker compose logs -f shairport-sync
+docker compose logs -f librespot
+docker compose logs -f mpd
+
+# Ultime 100 righe
+docker compose logs --tail 100 snapserver
+```
+
+### Messaggi di Log Comuni
+
+| Servizio | Messaggio | Significato |
+|----------|-----------|-------------|
+| snapserver | `Avahi daemon not running` | avahi-daemon dell'host non avviato |
+| shairport-sync | `Connection refused on dbus` | Mount del socket D-Bus mancante |
+| librespot | `zeroconf: failed to register` | Demone Avahi non in esecuzione sull'host |
+| mpd | `Failed to open FIFO` | Pipe FIFO non creata |
+
+### Controlli di Stato
+
+```bash
+# Stato dei servizi
+docker compose ps
+
+# Stato dettagliato
+docker inspect --format='{{.State.Health.Status}}' snapserver
+
+# Utilizzo risorse
+docker stats --no-stream
+```
+
+### Log di Installazione (Zero-Touch)
+
+Per le installazioni da SD card, controlla:
+```bash
+cat /var/log/snapmulti-install.log
+```
+
+Le installazioni fallite creano un marker in `/var/lib/snapmulti-installer/.install-failed`. Rimuovilo per riprovare:
+```bash
+sudo rm /var/lib/snapmulti-installer/.install-failed
+# Bookworm+ (partizione boot in /boot/firmware):
+sudo bash /boot/firmware/snapmulti/firstboot.sh
+# Bullseye (partizione boot in /boot):
+# sudo bash /boot/snapmulti/firstboot.sh
+```
+
+## Aggiornamento
+
+### Aggiornamento Standard
+
+```bash
+cd /opt/snapmulti  # o dove installato
+git pull
+docker compose pull
+docker compose up -d
+```
+
+### Aggiornamento con Backup
+
+```bash
+cd /opt/snapmulti
+cp -r config config.backup
+git pull
+docker compose pull
+docker compose up -d
+```
+
+### Rollback
+
+Se un aggiornamento causa problemi:
+```bash
+# Ripristina la configurazione
+cp -r config.backup/* config/
+
+# Oppure usa una versione specifica dell'immagine
+docker pull lollonet/snapmulti-server:v1.0.0
+docker compose up -d
 ```

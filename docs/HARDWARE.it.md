@@ -6,7 +6,7 @@ Requisiti hardware, configurazioni consigliate e considerazioni sulla rete per s
 
 ## Requisiti del Server
 
-Il server esegue tutti i servizi audio: Snapcast, MPD, shairport-sync (AirPlay) e librespot (Spotify Connect) all'interno di container Docker.
+Il server esegue tutti i servizi audio: Snapcast, MPD, shairport-sync (AirPlay) e go-librespot (Spotify Connect) all'interno di container Docker.
 
 ### Hardware Minimo del Server
 
@@ -150,6 +150,8 @@ Formato audio: 44100 Hz, 16-bit, stereo (codec FLAC predefinito).
 | 1780 | HTTP | Bidirezionale | API HTTP |
 | 6600 | TCP | Bidirezionale | Protocollo MPD (controllo client) |
 | 8000 | HTTP | Bidirezionale | Stream audio HTTP MPD |
+| 8082 | WebSocket | Server → Client | Servizio metadata (push info tracce) |
+| 8083 | HTTP | Server → Client | Servizio metadata (copertine, health) |
 | 8180 | HTTP | Bidirezionale | Interfaccia web myMPD |
 | 5353 | UDP | Multicast | Autodiscovery mDNS |
 
@@ -167,6 +169,8 @@ sudo ufw allow 1705/tcp   # Controllo JSON-RPC
 sudo ufw allow 1780/tcp   # API HTTP
 sudo ufw allow 6600/tcp   # Protocollo MPD
 sudo ufw allow 8000/tcp   # Stream HTTP MPD
+sudo ufw allow 8082/tcp   # Servizio metadata (WebSocket)
+sudo ufw allow 8083/tcp   # Servizio metadata (copertine)
 sudo ufw allow 8180/tcp   # Interfaccia web myMPD
 sudo ufw allow 5353/udp   # Discovery mDNS
 ```
@@ -181,6 +185,8 @@ sudo ufw allow 5353/udp   # Discovery mDNS
 | `lollonet/snapmulti-airplay:latest` | ~30–50 MB |
 | `ghcr.io/devgianlu/go-librespot:v0.7.0` | ~30–50 MB |
 | `lollonet/snapmulti-mpd:latest` | ~50–80 MB |
+| `lollonet/snapmulti-metadata:latest` | ~60–80 MB |
+| `lollonet/snapmulti-tidal:latest` | ~200–300 MB |
 
 ### Libreria Musicale
 

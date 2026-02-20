@@ -16,7 +16,7 @@ snapMULTI runs on a home server and streams audio to speakers throughout your ne
 |--------|------------|
 | **Spotify** | Open Spotify app → Connect to a device → "<hostname> Spotify" (Premium required) |
 | **Tidal** | Open Tidal app → Cast → "<hostname> Tidal" (ARM/Pi only) |
-| **AirPlay** | iPhone/iPad/Mac → AirPlay → "snapMULTI" |
+| **AirPlay** | iPhone/iPad/Mac → AirPlay → "<hostname> AirPlay" |
 | **Music library** | Use [myMPD](http://server-ip:8180) web UI, or an MPD app ([Cantata](https://github.com/CDrummond/cantata), [MPDroid](https://play.google.com/store/apps/details?id=com.namelessdev.mpdroid)) → connect to your server |
 | **Any app** | Add TCP source to config, stream via ffmpeg (see [Sources](docs/SOURCES.md)) |
 | **Android** | See [streaming guide](docs/SOURCES.md#streaming-from-android) |
