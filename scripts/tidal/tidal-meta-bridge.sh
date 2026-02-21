@@ -66,15 +66,17 @@ while true; do
         DURATION_SEC=0
     fi
 
-    # Only write on change
-    STATUS_HASH="${STATE}|${ARTIST}|${TITLE}|${ALBUM}|${POSITION}"
+    # Only write on track/state change (position excluded — it increments
+    # every second during playback and meta_tidal.py doesn't forward it)
+    STATUS_HASH="${STATE}|${ARTIST}|${TITLE}|${ALBUM}"
     if [ "$STATUS_HASH" != "$PREV_HASH" ]; then
         TIMESTAMP=$(date +%s)
 
-        # Escape backslashes first, then double quotes for valid JSON
-        ARTIST_JSON=$(printf '%s' "$ARTIST" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
-        TITLE_JSON=$(printf '%s' "$TITLE" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
-        ALBUM_JSON=$(printf '%s' "$ALBUM" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+        # Escape for valid JSON: backslashes, double quotes, then strip
+        # control characters (U+0000–U+001F) that would break JSON parsing
+        ARTIST_JSON=$(printf '%s' "$ARTIST" | tr -d '\000-\037' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+        TITLE_JSON=$(printf '%s' "$TITLE" | tr -d '\000-\037' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+        ALBUM_JSON=$(printf '%s' "$ALBUM" | tr -d '\000-\037' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
 
         # Atomic write via temp file
         cat > "${METADATA_FILE}.tmp" <<EOF
