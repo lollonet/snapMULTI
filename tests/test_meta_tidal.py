@@ -297,3 +297,26 @@ class TestFileWatchThread:
         # Only the log message, no properties sent
         props_msgs = [m for m in capture_stdout if m.get("method") == "Plugin.Stream.Player.Properties"]
         assert len(props_msgs) == 0
+
+    @pytest.mark.parametrize("content", ["null", "[]", '"string"', "42"])
+    def test_non_dict_json_continues(self, tmp_path, capture_stdout, monkeypatch, content):
+        """Non-object JSON (null, array, string, number) must not crash the thread."""
+        meta_file = tmp_path / "tidal-metadata.json"
+        meta_file.write_text(content)
+
+        monkeypatch.setattr(meta_tidal, "METADATA_FILE", str(meta_file))
+
+        call_count = 0
+
+        def _sleep_then_stop(seconds):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise SystemExit("stop")
+
+        monkeypatch.setattr(time, "sleep", _sleep_then_stop)
+
+        with pytest.raises(SystemExit, match="stop"):
+            meta_tidal.file_watch_thread()
+
+        assert meta_tidal.metadata["title"] == ""
