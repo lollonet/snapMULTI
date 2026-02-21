@@ -296,6 +296,7 @@ services:
     container_name: tidal-connect
     network_mode: host
     restart: unless-stopped
+    read_only: true
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -308,12 +309,14 @@ services:
     volumes:
       - ./audio:/audio
       - ./config/tidal-asound.conf:/userconfig/asound.conf:ro
+      - ./scripts/tidal/common.sh:/common.sh:ro    # Override baked-in script for ALSA tmpfs path
       - /var/run/dbus:/var/run/dbus
       - /etc/hostname:/etc/hostname:ro
     environment:
       - TZ=${TZ:-Europe/Berlin}
       - FRIENDLY_NAME=${TIDAL_NAME:-}
       - FORCE_PLAYBACK_DEVICE=default
+      - ALSA_CONFIG_PATH=/tmp/asound.conf
     depends_on:
       snapserver:
         condition: service_healthy

@@ -3,7 +3,9 @@
 # Used with edgecrush3r/tidal-connect image
 set -euo pipefail
 
-ASOUND_CONF_FILE=/etc/asound.conf
+# Write ALSA config to tmpfs so the container can be read-only.
+# ALSA_CONFIG_PATH is set in docker-compose.yml to point here.
+ASOUND_CONF_FILE=/tmp/asound.conf
 USER_CONFIG_DIR=/userconfig
 
 KEY_PLAYBACK_DEVICE=playback_device
@@ -37,13 +39,25 @@ set_defaults() {
 }
 
 check_provided_asound() {
+    # ALSA_CONFIG_PATH replaces the entire config search, so we must
+    # include the system config first for plugin definitions (null, file, plug).
+    # Missing includes (like /etc/asound.conf) are silently skipped by ALSA.
     if [ -f "$USER_CONFIG_DIR/asound.conf" ]; then
         echo "Copying $USER_CONFIG_DIR/asound.conf to $ASOUND_CONF_FILE"
-        if ! cp "$USER_CONFIG_DIR/asound.conf" "$ASOUND_CONF_FILE"; then
-            echo "ERROR: Failed to copy audio configuration" >&2
+        {
+            echo '</usr/share/alsa/alsa.conf>'
+            cat "$USER_CONFIG_DIR/asound.conf"
+        } > "$ASOUND_CONF_FILE" || {
+            echo "ERROR: Failed to write audio configuration" >&2
             exit 1
-        fi
+        }
         [ -z "$(load_key_value "$KEY_FORCE_PLAYBACK_DEVICE")" ] && save_key_value "$KEY_FORCE_PLAYBACK_DEVICE" default || true
+    else
+        # Ensure ALSA_CONFIG_PATH always points to a valid file
+        echo '</usr/share/alsa/alsa.conf>' > "$ASOUND_CONF_FILE" || {
+            echo "ERROR: Failed to write fallback ALSA configuration" >&2
+            exit 1
+        }
     fi
 }
 
