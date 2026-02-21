@@ -39,11 +39,11 @@ set_defaults() {
 }
 
 check_provided_asound() {
+    # ALSA_CONFIG_PATH replaces the entire config search, so we must
+    # include the system config first for plugin definitions (null, file, plug).
+    # Missing includes (like /etc/asound.conf) are silently skipped by ALSA.
     if [ -f "$USER_CONFIG_DIR/asound.conf" ]; then
         echo "Copying $USER_CONFIG_DIR/asound.conf to $ASOUND_CONF_FILE"
-        # ALSA_CONFIG_PATH replaces the entire config search, so we must
-        # include the system config first for plugin definitions (null, file, plug).
-        # Missing includes (like /etc/asound.conf) are silently skipped by ALSA.
         {
             echo '</usr/share/alsa/alsa.conf>'
             cat "$USER_CONFIG_DIR/asound.conf"
@@ -52,6 +52,9 @@ check_provided_asound() {
             exit 1
         }
         [ -z "$(load_key_value "$KEY_FORCE_PLAYBACK_DEVICE")" ] && save_key_value "$KEY_FORCE_PLAYBACK_DEVICE" default || true
+    else
+        # Ensure ALSA_CONFIG_PATH always points to a valid file
+        echo '</usr/share/alsa/alsa.conf>' > "$ASOUND_CONF_FILE"
     fi
 }
 

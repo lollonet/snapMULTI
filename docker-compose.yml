@@ -309,7 +309,7 @@ services:
     volumes:
       - ./audio:/audio
       - ./config/tidal-asound.conf:/userconfig/asound.conf:ro
-      - ./scripts/tidal/common.sh:/common.sh:ro
+      - ./scripts/tidal/common.sh:/common.sh:ro    # Override baked-in script for ALSA tmpfs path
       - /var/run/dbus:/var/run/dbus
       - /etc/hostname:/etc/hostname:ro
     environment:
