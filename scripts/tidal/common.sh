@@ -41,10 +41,16 @@ set_defaults() {
 check_provided_asound() {
     if [ -f "$USER_CONFIG_DIR/asound.conf" ]; then
         echo "Copying $USER_CONFIG_DIR/asound.conf to $ASOUND_CONF_FILE"
-        if ! cp "$USER_CONFIG_DIR/asound.conf" "$ASOUND_CONF_FILE"; then
-            echo "ERROR: Failed to copy audio configuration" >&2
+        # ALSA_CONFIG_PATH replaces the entire config search, so we must
+        # include the system config first for plugin definitions (null, file, plug).
+        # Missing includes (like /etc/asound.conf) are silently skipped by ALSA.
+        {
+            echo '</usr/share/alsa/alsa.conf>'
+            cat "$USER_CONFIG_DIR/asound.conf"
+        } > "$ASOUND_CONF_FILE" || {
+            echo "ERROR: Failed to write audio configuration" >&2
             exit 1
-        fi
+        }
         [ -z "$(load_key_value "$KEY_FORCE_PLAYBACK_DEVICE")" ] && save_key_value "$KEY_FORCE_PLAYBACK_DEVICE" default || true
     fi
 }
