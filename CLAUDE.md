@@ -99,8 +99,9 @@ snapMULTI/
       logging.sh             # Colored output functions (info, warn, error)
       sanitize.sh            # Input sanitization helpers
     tidal/                   # Tidal Connect entrypoint scripts
-      entrypoint.sh          # Container entrypoint (ALSA config, FRIENDLY_NAME sanitization)
+      entrypoint.sh          # Container entrypoint (ALSA config, speaker controller, metadata bridge)
       common.sh              # Configuration helpers (adapted from GioF71's wrapper)
+      tidal-meta-bridge.sh   # Metadata scraper (tmux TUI → JSON file)
   docs/
     HARDWARE.md              # Hardware & network guide
     USAGE.md                 # Technical operations guide
@@ -145,13 +146,14 @@ Uses `ghcr.io/devgianlu/go-librespot` (Go reimplementation of Spotify Connect).
 
 ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian Stretch).
 
-- **Dockerfile.tidal**: Extends base image with `libasound2-plugins` from Debian Stretch archive (needed for ALSA FIFO routing). Base image is EOL Raspbian Stretch — packages come from `archive.raspbian.org`
+- **Dockerfile.tidal**: Extends base image with `libasound2-plugins` (ALSA FIFO routing), `ca-certificates` (TLS), and `tmux` (metadata scraping) from Debian Stretch archive. Base image is EOL Raspbian Stretch — packages come from `archive.debian.org`
 - **Audio routing**: Tidal app → ALSA default device → `config/tidal-asound.conf` (rate converter + FIFO plugin) → `/audio/tidal_fifo` named pipe → snapserver
 - **config/tidal-asound.conf**: speex rate converter (44100 Hz) → FIFO output. Validated by `deploy.sh` on ARM systems
 - **Device naming**: Uses hostname by default (e.g., "snapvideo Tidal"). Override with `TIDAL_NAME` env var
-- **scripts/tidal/entrypoint.sh**: Sanitizes `FRIENDLY_NAME`, disables `speaker_controller_application` (prevents duplicate mDNS entries), configures ALSA
+- **scripts/tidal/entrypoint.sh**: Sanitizes `FRIENDLY_NAME`, starts `speaker_controller_application` in tmux (for metadata), launches `tidal-meta-bridge.sh`, configures ALSA
 - **scripts/tidal/common.sh**: Bind-mounted at `/common.sh` to override the image's baked-in copy. Writes ALSA config to `/tmp/asound.conf` (via `ALSA_CONFIG_PATH`) with system config include for read-only container support
-- **Metadata**: Not functional yet ([#78](https://github.com/lollonet/snapMULTI/issues/78)). `meta_tidal.py` controlscript (COPY'd into snapserver image at `/usr/share/snapserver/plug-ins/`) tries to connect to tidal-connect's WebSocket API (port 8888) but the binary doesn't respond to WebSocket handshakes. Audio works; metadata does not
+- **scripts/tidal/tidal-meta-bridge.sh**: Runs inside tidal-connect container, scrapes tmux output from `speaker_controller_application` TUI, writes JSON to `/audio/tidal-metadata.json`
+- **Metadata**: `speaker_controller_application` (ifi companion binary) displays track info in a curses TUI. `tidal-meta-bridge.sh` scrapes this via tmux → writes `/audio/tidal-metadata.json` → `meta_tidal.py` (in snapserver at `/usr/share/snapserver/plug-ins/`) polls the file and forwards to snapserver via JSON-RPC. No album art (TUI doesn't expose artwork URLs). May cause duplicate mDNS entry in Tidal app
 - **Security**: Runs as root (proprietary binary), `read_only: true` with tmpfs at `/tmp` and `/config`, `cap_drop: ALL` + `DAC_OVERRIDE` (writes FIFOs owned by PUID)
 - **Constraints**: ARM only (Pi 3/4/5), no x86_64 support. No OAuth — users cast from the Tidal mobile/desktop app
 

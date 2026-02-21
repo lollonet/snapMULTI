@@ -64,6 +64,7 @@ services:
       - ./config:/config:ro
       - ./data:/data
       - ./audio:/audio
+      - ./scripts/meta_tidal.py:/usr/share/snapserver/plug-ins/meta_tidal.py:ro  # Overrides image copy for hot-update without rebuild
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
@@ -309,7 +310,8 @@ services:
     volumes:
       - ./audio:/audio
       - ./config/tidal-asound.conf:/userconfig/asound.conf:ro
-      - ./scripts/tidal/common.sh:/common.sh:ro    # Override baked-in script for ALSA tmpfs path
+      - ./scripts/tidal/common.sh:/common.sh:ro              # Override baked-in script for ALSA tmpfs path
+      - ./scripts/tidal/tidal-meta-bridge.sh:/tidal-meta-bridge.sh:ro  # Metadata scraper
       - /var/run/dbus:/var/run/dbus
       - /etc/hostname:/etc/hostname:ro
     environment:

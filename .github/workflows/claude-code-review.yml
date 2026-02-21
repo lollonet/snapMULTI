@@ -3,21 +3,9 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -29,60 +17,119 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
-          # Use OAuth token (not API key) for authentication
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # GitHub token for repo operations
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            You are reviewing PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            The PR branch is checked out in the working directory.
 
-            Review this pull request for the snapMULTI project — a Docker-based multiroom
-            audio system (Snapcast + MPD + AirPlay + Spotify Connect on Alpine Linux).
+            ## Project Context
 
-            The PR branch is already checked out in the current working directory.
-            Read CLAUDE.md first for project conventions and documentation rules.
+            snapMULTI is a Docker-based multiroom audio system for Raspberry Pi and x86_64.
+            Services: Snapcast server, MPD, AirPlay (shairport-sync), Spotify Connect
+            (go-librespot), Tidal Connect (ARM-only, Raspbian Stretch base image).
 
-            ## Review Checklist
+            Read CLAUDE.md first — it defines all project conventions, SSOT rules, and structure.
 
-            ### CLAUDE.md Compliance
-            - [ ] Documentation SSOT rules followed (see CLAUDE.md table)
-            - [ ] Source parameter changes update docs/SOURCES.md
-            - [ ] Service/port/deployment changes update docs/USAGE.md
-            - [ ] Hardware/network changes update docs/HARDWARE.md
-            - [ ] New source types update config/snapserver.conf + README.md source table
-            - [ ] CHANGELOG.md updated under [Unreleased]
+            ## Review Process
 
-            ### Docker & Infrastructure
-            - [ ] Dockerfiles use pinned versions for pip/apk dependencies
-            - [ ] No secrets or credentials in Dockerfiles or config files
-            - [ ] Audio format consistency (44100:16:2 across all sources)
-            - [ ] Named pipe paths match between containers
-            - [ ] Host networking preserved for mDNS/Avahi discovery
+            ### Step 1: Check previous reviews
 
-            ### CI/CD
-            - [ ] Workflow changes don't break the build-push-deploy pipeline
-            - [ ] No direct pushes to main (PR workflow respected)
+            Run: `gh pr view ${{ github.event.pull_request.number }} --json comments --jq '.comments[] | select(.author.login == "github-actions") | .body'`
 
-            ### Code Quality
-            - [ ] Minimal changes — no unnecessary refactoring or feature creep
-            - [ ] No dead code or commented-out blocks left behind
-            - [ ] Config file comments are accurate and helpful
+            Read ALL previous review comments. Do NOT re-report issues that were already
+            flagged in a prior round — even if they are still present. Only report:
+            - New issues introduced since the last review
+            - Issues from prior rounds that were incorrectly fixed (regression)
 
-            ### Security
-            - [ ] No hardcoded credentials or API keys
-            - [ ] No --break-system-packages without pinned versions
-            - [ ] Workflow files don't use untrusted input in run: commands
+            If all prior findings have been addressed and no new issues exist, say so
+            and keep the comment short.
 
-            Post a single summary comment on the PR with findings.
-            Only flag issues that actually need attention — skip items that don't apply.
-            Rate each finding as: CRITICAL, HIGH, MEDIUM, or LOW.
+            ### Step 2: Review the diff
+
+            Run: `gh pr diff ${{ github.event.pull_request.number }}`
+
+            Focus your review on the diff — not the entire codebase. Only flag issues
+            in code that this PR adds or modifies.
+
+            ### Step 3: Apply checklist to changed files
+
+            Only check items relevant to the files changed in this PR:
+
+            **Documentation SSOT** (see CLAUDE.md table for topic ownership):
+            - Source changes → docs/SOURCES.md updated
+            - Service/port changes → docs/USAGE.md updated
+            - Italian translations (*.it.md) kept in sync
+            - CHANGELOG.md updated under [Unreleased]
+
+            **Docker & Infrastructure:**
+            - Pinned versions for pip/apk dependencies
+            - No secrets or credentials in any file
+            - Audio format consistency (44100:16:2 across all sources)
+            - Named pipe paths consistent between containers
+            - Host networking preserved for mDNS/Avahi
+
+            **Shell Scripts:**
+            - `set -euo pipefail` at top
+            - All variables quoted
+            - Error paths handled (not silently swallowed)
+            - ASCII-only output for /dev/tty1 (PSF fonts lack Unicode)
+
+            **Python Code:**
+            - Thread safety (shared state guarded by locks)
+            - Exception handling (no bare except, no silent swallowing)
+            - Type hints on function signatures
+
+            **Tests:**
+            - New code has corresponding tests
+            - Tests cover edge cases and error paths
+            - No flaky patterns (time.sleep in tests, uncontrolled I/O)
+
+            **CI/CD Workflows:**
+            - No untrusted input in run: commands (use env: instead)
+            - Action versions pinned to SHA or tag
+            - No direct pushes to main
+
+            **Security:**
+            - No hardcoded credentials or API keys
+            - No --break-system-packages without pinned versions
+            - Container security (cap_drop, read_only) preserved
+
+            ## Output Format
+
+            Post a single comment with this structure:
+
+            ### Header
+            One-line summary: is this ready to merge, or are there blockers?
+
+            ### Findings (only if issues exist)
+            Group by severity. Each finding must include:
+            - **Severity** and one-line title
+            - **File:line** reference
+            - **What's wrong** (1-2 sentences)
+            - **Suggested fix** (code snippet if applicable)
+
+            Severity definitions:
+            - **CRITICAL**: Breaks functionality, security vulnerability, data loss risk. Blocks merge.
+            - **HIGH**: Significant bug or design flaw. Should fix before merge.
+            - **MEDIUM**: Correctness or robustness issue. Safe to auto-fix.
+            - **LOW**: Style, documentation, minor improvement. Non-blocking.
+
+            ### Checklist
+            Show only items you actually verified (relevant to changed files).
+            Use ✅ for pass, ❌ for fail, ➖ for not applicable.
+
+            ### Rules
+            - Maximum 5 findings per review. Prioritize by severity.
+            - Do NOT report pre-existing issues in unchanged code.
+            - Do NOT suggest refactors or "nice to have" improvements.
+            - Do NOT re-report findings from previous review rounds.
+            - If the PR is clean, say "No issues found" — don't invent findings.
           claude_args: |
             --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep"
-

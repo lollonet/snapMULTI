@@ -161,7 +161,7 @@ Audio streaming requires consistent, low-latency networking. Host mode eliminate
 
 ### Implications
 
-1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 5858, 6600, 8000, 8082, 8083, 8180, 8888, 24879)
+1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 5858, 6600, 8000, 8082, 8083, 8180, 24879)
 2. **Firewall rules**: Must allow traffic on service ports (see [HARDWARE.md](HARDWARE.md))
 3. **Single instance**: Cannot run multiple snapMULTI stacks on the same host
 
@@ -229,11 +229,9 @@ Host mode is recommended for single-server deployments.
 
 ### Tidal Connect
 
-| Port | Protocol | Purpose |
-|------|----------|---------|
-| 8888 | WebSocket | Playback events API (used by `meta_tidal.py` controlscript) |
+No network ports used for metadata. The `tidal-meta-bridge.sh` script scrapes metadata from `speaker_controller_application`'s tmux TUI and writes JSON to `/audio/tidal-metadata.json` (shared Docker volume). The `meta_tidal.py` controlscript in snapserver polls this file.
 
-> **Note:** Ports 5858, 8888, and 24879 are used for metadata exchange between co-located containers. Port 5858 must be LAN-reachable (Snapcast clients fetch cover art from it). Ports 8888 and 24879 are consumed locally by controlscripts but bind to all interfaces — no intentional external access is needed.
+> **Note:** Ports 5858 and 24879 are used for metadata exchange between co-located containers. Port 5858 must be LAN-reachable (Snapcast clients fetch cover art from it). Port 24879 is consumed locally by controlscripts but binds to all interfaces — no intentional external access is needed.
 
 ### MPD
 

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Snapweb UI** — Web interface at `http://<server>:1780` for managing speakers, switching sources, and adjusting volume. Built from [snapcast/snapweb](https://github.com/snapcast/snapweb) v0.9.3 and bundled into the snapserver container
 
 ### Fixed
+- **Tidal Connect metadata** ([#78](https://github.com/lollonet/snapMULTI/issues/78)) — Replaced non-functional WebSocket approach with file-based metadata. `speaker_controller_application` (ifi companion binary) now runs in tmux, `tidal-meta-bridge.sh` scrapes its TUI output and writes JSON to `/audio/tidal-metadata.json`, which `meta_tidal.py` polls and forwards to snapserver. Removes `websocket-client` dependency from snapserver image
 - **Controlscript buffer overflow protection** ([#68](https://github.com/lollonet/snapMULTI/pull/68)) — Added safety caps to stdin and pipe buffers in `meta_tidal.py` (64 KB) and `meta_shairport.py` (64 KB stdin + 1 MB pipe) to prevent unbounded memory growth from malformed or excessive input
 - **MPD database corruption on first run** — `deploy.sh` was pre-creating an empty `mpd.db` with `touch`; MPD interprets a 0-byte file as corrupt and refuses to scan. Now removes stale files so MPD creates a valid database on first start
 - **Client metadata discovery** — Updated client submodule with METADATA_HOST mDNS auto-discovery so clients find the server's metadata service without manual IP configuration
