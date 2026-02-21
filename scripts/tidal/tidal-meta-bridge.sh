@@ -56,7 +56,7 @@ while true; do
     DURATION=$(echo "$OUTPUT" | grep '^xduration:' | sed 's/^xduration: //' | sed 's/xx.*$//' | sed 's/[[:space:]]*$//') || true
 
     # Parse position (e.g., "38 / 227")
-    POSITION=$(echo "$OUTPUT" | grep -E '^ *[0-9]+ */ *[0-9]+$' | tr -d ' ' | cut -d'/' -f1) || true
+    POSITION=$(echo "$OUTPUT" | grep -E '^ *[0-9]+ */ *[0-9]+$' | head -1 | tr -d ' ' | cut -d'/' -f1) || true
     [ -z "$POSITION" ] && POSITION=0
 
     # Convert duration from milliseconds to seconds

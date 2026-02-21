@@ -64,7 +64,7 @@ services:
       - ./config:/config:ro
       - ./data:/data
       - ./audio:/audio
-      - ./scripts/meta_tidal.py:/usr/share/snapserver/plug-ins/meta_tidal.py:ro
+      - ./scripts/meta_tidal.py:/usr/share/snapserver/plug-ins/meta_tidal.py:ro  # Overrides image copy for hot-update without rebuild
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
