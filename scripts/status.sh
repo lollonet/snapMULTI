@@ -15,6 +15,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common/logging.sh
 source "${SCRIPT_DIR}/common/logging.sh"
 
+# logging.sh gates colors on stderr (-t 2); re-gate on stdout for show_container/section
+[[ -t 1 ]] || { GREEN=''; RED=''; YELLOW=''; CYAN=''; BOLD=''; NC=''; }
+
 # ---------------------------------------------------------------------------
 # Install detection
 # ---------------------------------------------------------------------------
@@ -28,7 +31,7 @@ for path in /opt/snapmulti "${SCRIPT_DIR}/.."; do
     fi
 done
 
-for path in /opt/snapclient/common "${SCRIPT_DIR}/../client/common"; do
+for path in /opt/snapclient "${SCRIPT_DIR}/../client/common"; do
     if [[ -d "$path" && -f "${path}/docker-compose.yml" ]]; then
         CLIENT_DIR="$(cd "$path" && pwd)"
         break
@@ -37,7 +40,7 @@ done
 
 if [[ -z "$SERVER_DIR" && -z "$CLIENT_DIR" ]]; then
     error "No snapMULTI installation found"
-    error "Expected docker-compose.yml in /opt/snapmulti or /opt/snapclient/common"
+    error "Expected docker-compose.yml in /opt/snapmulti or /opt/snapclient"
     exit 1
 fi
 
