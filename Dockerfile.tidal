@@ -8,7 +8,7 @@
 
 FROM edgecrush3r/tidal-connect:latest
 
-# Install ALSA plugins from archived Debian Stretch repos
+# Install ALSA plugins, TLS certs, and tmux from archived Debian Stretch repos
 # The base image uses Raspbian Stretch (EOL) - replace broken repos
 # hadolint ignore=DL3008,DL3015
 RUN rm -f /etc/apt/sources.list.d/*.list \

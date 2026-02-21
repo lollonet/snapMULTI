@@ -99,8 +99,9 @@ snapMULTI/
       logging.sh             # Colored output functions (info, warn, error)
       sanitize.sh            # Input sanitization helpers
     tidal/                   # Tidal Connect entrypoint scripts
-      entrypoint.sh          # Container entrypoint (ALSA config, FRIENDLY_NAME sanitization)
+      entrypoint.sh          # Container entrypoint (ALSA config, speaker controller, metadata bridge)
       common.sh              # Configuration helpers (adapted from GioF71's wrapper)
+      tidal-meta-bridge.sh   # Metadata scraper (tmux TUI → JSON file)
   docs/
     HARDWARE.md              # Hardware & network guide
     USAGE.md                 # Technical operations guide
@@ -145,7 +146,7 @@ Uses `ghcr.io/devgianlu/go-librespot` (Go reimplementation of Spotify Connect).
 
 ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian Stretch).
 
-- **Dockerfile.tidal**: Extends base image with `libasound2-plugins` from Debian Stretch archive (needed for ALSA FIFO routing). Base image is EOL Raspbian Stretch — packages come from `archive.raspbian.org`
+- **Dockerfile.tidal**: Extends base image with `libasound2-plugins` (ALSA FIFO routing), `ca-certificates` (TLS), and `tmux` (metadata scraping) from Debian Stretch archive. Base image is EOL Raspbian Stretch — packages come from `archive.debian.org`
 - **Audio routing**: Tidal app → ALSA default device → `config/tidal-asound.conf` (rate converter + FIFO plugin) → `/audio/tidal_fifo` named pipe → snapserver
 - **config/tidal-asound.conf**: speex rate converter (44100 Hz) → FIFO output. Validated by `deploy.sh` on ARM systems
 - **Device naming**: Uses hostname by default (e.g., "snapvideo Tidal"). Override with `TIDAL_NAME` env var

@@ -144,11 +144,9 @@ Snapserver supporta più codec (configurabili in `config/snapserver.conf`):
 
 ### Tidal Connect
 
-| Porta | Protocollo | Scopo |
-|-------|------------|-------|
-| 8888 | WebSocket | API eventi riproduzione (usata dal controlscript `meta_tidal.py`) |
+Nessuna porta di rete usata per i metadati. Lo script `tidal-meta-bridge.sh` estrae i metadati dalla TUI tmux di `speaker_controller_application` e scrive JSON in `/audio/tidal-metadata.json` (volume Docker condiviso). Il controlscript `meta_tidal.py` in snapserver legge questo file.
 
-> **Nota:** Le porte 5858, 8888 e 24879 sono usate per lo scambio di metadati tra container co-locati. La porta 5858 deve essere raggiungibile dalla LAN (i client Snapcast scaricano le copertine da essa). Le porte 8888 e 24879 sono consumate localmente dai controlscript ma si collegano a tutte le interfacce — non è necessario accesso esterno intenzionale.
+> **Nota:** Le porte 5858 e 24879 sono usate per lo scambio di metadati tra container co-locati. La porta 5858 deve essere raggiungibile dalla LAN (i client Snapcast scaricano le copertine da essa). La porta 24879 è consumata localmente dai controlscript ma si collega a tutte le interfacce — non è necessario accesso esterno intenzionale.
 
 ### MPD
 
@@ -233,7 +231,7 @@ Lo streaming audio richiede una rete consistente e a bassa latenza. La modalità
 
 ### Implicazioni
 
-1. **Conflitti di porte**: I servizi si collegano direttamente alle porte dell'host (1704, 1705, 1780, 5858, 6600, 8000, 8082, 8083, 8180, 8888, 24879)
+1. **Conflitti di porte**: I servizi si collegano direttamente alle porte dell'host (1704, 1705, 1780, 5858, 6600, 8000, 8082, 8083, 8180, 24879)
 2. **Regole firewall**: È necessario consentire il traffico sulle porte dei servizi (vedi [HARDWARE.it.md](HARDWARE.it.md))
 3. **Istanza singola**: Non è possibile eseguire più stack snapMULTI sullo stesso host
 
