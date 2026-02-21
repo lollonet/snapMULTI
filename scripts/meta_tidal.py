@@ -109,6 +109,9 @@ def apply_metadata(data: dict) -> bool:
         metadata["title"] = title
         changed = True
 
+    # Artist clears to [] when empty (unlike title/album which preserve previous
+    # values). This is intentional: the bridge's STATUS_HASH includes ARTIST, so
+    # an empty artist only arrives on a genuine state transition, not mid-render.
     artist = data.get("artist", "")
     artist_list = [artist] if isinstance(artist, str) and artist else []
     if artist_list != metadata["artist"]:

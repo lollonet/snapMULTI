@@ -28,10 +28,10 @@ if [ -f /usr/bin/tmux ] && [ -f /app/ifi-tidal-release/bin/speaker_controller_ap
     fi
     sleep "${SLEEP_TIME_SEC:-3}"
 
-    # Start metadata bridge (scrapes speaker controller TUI → JSON file)
+    # Start metadata bridge with auto-restart (scrapes speaker controller TUI → JSON file)
     if [ -f /tidal-meta-bridge.sh ]; then
         echo "Starting metadata bridge..."
-        /tidal-meta-bridge.sh &
+        (while true; do /tidal-meta-bridge.sh; echo "tidal-meta-bridge: restarting in 5s" >&2; sleep 5; done) &
     fi
 fi
 
