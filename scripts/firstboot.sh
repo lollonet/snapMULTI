@@ -270,6 +270,7 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         cp "$SNAP_BOOT/server/.env.example" "$SERVER_DIR/" 2>/dev/null || true
         cp -r "$SNAP_BOOT/server/config" "$SERVER_DIR/"
         cp "$SNAP_BOOT/server/deploy.sh" "$SERVER_DIR/scripts/"
+        cp "$SNAP_BOOT/server/status.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
     fi
     cp -r "$SNAP_BOOT/common" "$SERVER_DIR/scripts/" 2>/dev/null || true
     log_progress "Server files copied to $SERVER_DIR" 2>/dev/null || true

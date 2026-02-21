@@ -238,6 +238,10 @@ function Copy-ServerFiles {
     New-Item -ItemType Directory -Path $serverDest -Force | Out-Null
 
     Copy-Item (Join-Path $ScriptDir 'deploy.sh') -Destination $serverDest
+    $statusSh = Join-Path $ScriptDir 'status.sh'
+    if (Test-Path $statusSh) {
+        Copy-Item $statusSh -Destination $serverDest
+    }
     Copy-Item (Join-Path $ProjectDir 'config') -Destination $serverDest -Recurse
     Copy-Item (Join-Path $ProjectDir 'docker-compose.yml') -Destination $serverDest
 
