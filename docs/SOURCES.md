@@ -93,7 +93,7 @@ TIDAL_NAME="Living Room Tidal"
 
 **Sample format:** 44100:16:2 (fixed by tidal-connect)
 
-**Metadata:** Track name, artist, album, artwork URL, and duration are forwarded to Snapcast clients. Playback control is not supported (Tidal controls playback from the app only).
+**Metadata:** Not yet functional ([#78](https://github.com/lollonet/snapMULTI/issues/78)). The `meta_tidal.py` controlscript is implemented and connects to port 8888, but the tidal-connect binary's WebSocket API does not respond to handshakes. Audio streaming works; metadata (title, artist, artwork) does not.
 
 **Connect from Tidal:**
 1. Open **Tidal** on your phone/tablet
@@ -104,6 +104,7 @@ TIDAL_NAME="Living Room Tidal"
 **Limitations:**
 - **ARM only** — The tidal-connect binary only runs on ARM (Pi 3/4/5)
 - **No playback control** — Play/pause/next must be controlled from the Tidal app
+- **No metadata** — Track info and cover art not available (see [#78](https://github.com/lollonet/snapMULTY/issues/78))
 
 **Docker requirements:** Host network mode for mDNS. Shared `/audio` volume with snapserver.
 

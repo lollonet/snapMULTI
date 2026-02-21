@@ -93,7 +93,7 @@ TIDAL_NAME="Tidal Salotto"
 
 **Formato campionamento:** 44100:16:2 (fisso da tidal-connect)
 
-**Metadati:** Nome del brano, artista, album, URL copertina e durata vengono inoltrati ai client Snapcast. Il controllo della riproduzione non è supportato (Tidal controlla la riproduzione solo dall'app).
+**Metadati:** Non ancora funzionanti ([#78](https://github.com/lollonet/snapMULTI/issues/78)). Il controlscript `meta_tidal.py` è implementato e si connette alla porta 8888, ma l'API WebSocket del binario tidal-connect non risponde all'handshake. Lo streaming audio funziona; i metadati (titolo, artista, copertina) no.
 
 **Connessione da Tidal:**
 1. Apri **Tidal** sul tuo telefono/tablet
@@ -104,6 +104,7 @@ TIDAL_NAME="Tidal Salotto"
 **Limitazioni:**
 - **Solo ARM** — Il binario tidal-connect funziona solo su ARM (Pi 3/4/5)
 - **Nessun controllo riproduzione** — Play/pausa/successivo devono essere controllati dall'app Tidal
+- **Nessun metadato** — Info brano e copertina non disponibili (vedi [#78](https://github.com/lollonet/snapMULTI/issues/78))
 
 **Requisiti Docker:** Modalità host network per mDNS. Volume `/audio` condiviso con snapserver.
 
