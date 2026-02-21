@@ -63,7 +63,7 @@ mpc status                  # Controlla stato
 
 ### 2. Tidal Connect (pipe da tidal-connect)
 
-Trasmetti direttamente dall'app Tidal a snapMULTI, come Spotify Connect. Il container tidal-connect riceve l'audio Tidal e lo instrada tramite ALSA verso una named pipe. I metadati (titolo, artista, album, copertina, durata) vengono letti dall'API WebSocket di tidal-connect tramite il controlscript `meta_tidal.py`.
+Trasmetti direttamente dall'app Tidal a snapMULTI, come Spotify Connect. Il container tidal-connect riceve l'audio Tidal e lo instrada tramite ALSA verso una named pipe. I metadati (titolo, artista, album, durata) vengono estratti da `tidal-meta-bridge.sh` dalla TUI di `speaker_controller_application` e inoltrati a snapserver tramite il controlscript `meta_tidal.py`.
 
 > **Nota:** Solo ARM (Raspberry Pi 3/4/5). Non funziona su x86_64.
 
@@ -77,7 +77,7 @@ source = pipe:////audio/tidal_fifo?name=Tidal&controlscript=meta_tidal.py
 | Parametro | Valore | Descrizione |
 |-----------|--------|-------------|
 | `name` | `Tidal` | ID dello stream |
-| `controlscript` | `meta_tidal.py` | Legge i metadati dall'API WebSocket di tidal-connect (porta 8888) |
+| `controlscript` | `meta_tidal.py` | Legge i metadati da `/audio/tidal-metadata.json` (scritto da tidal-meta-bridge.sh) |
 
 **Impostazioni container tidal-connect** (docker-compose.yml):
 
@@ -93,7 +93,7 @@ TIDAL_NAME="Tidal Salotto"
 
 **Formato campionamento:** 44100:16:2 (fisso da tidal-connect)
 
-**Metadati:** Non ancora funzionanti ([#78](https://github.com/lollonet/snapMULTI/issues/78)). Il controlscript `meta_tidal.py` è implementato e si connette alla porta 8888, ma l'API WebSocket del binario tidal-connect non risponde all'handshake. Lo streaming audio funziona; i metadati (titolo, artista, copertina) no.
+**Metadati:** Titolo, artista, album, durata e stato di riproduzione. Estratti da `tidal-meta-bridge.sh` in esecuzione nel container tidal-connect, che analizza l'output della TUI di `speaker_controller_application` tramite tmux. Il bridge scrive JSON in `/audio/tidal-metadata.json`, che `meta_tidal.py` (nel container snapserver) legge e inoltra a snapserver via JSON-RPC. La copertina dell'album non è disponibile (il speaker controller non espone URL delle copertine).
 
 **Connessione da Tidal:**
 1. Apri **Tidal** sul tuo telefono/tablet
@@ -104,7 +104,7 @@ TIDAL_NAME="Tidal Salotto"
 **Limitazioni:**
 - **Solo ARM** — Il binario tidal-connect funziona solo su ARM (Pi 3/4/5)
 - **Nessun controllo riproduzione** — Play/pausa/successivo devono essere controllati dall'app Tidal
-- **Nessun metadato** — Info brano e copertina non disponibili (vedi [#78](https://github.com/lollonet/snapMULTI/issues/78))
+- **Nessuna copertina album** — La TUI del speaker controller non espone URL delle copertine
 
 **Requisiti Docker:** Modalità host network per mDNS. Volume `/audio` condiviso con snapserver.
 

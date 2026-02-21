@@ -63,7 +63,7 @@ mpc status                  # Check status
 
 ### 2. Tidal Connect (pipe from tidal-connect)
 
-Cast directly from the Tidal app to snapMULTI, like Spotify Connect. The tidal-connect container receives Tidal audio and routes it through ALSA to a named pipe. Metadata (track title, artist, album, artwork, duration) is read from tidal-connect's WebSocket API by the `meta_tidal.py` controlscript.
+Cast directly from the Tidal app to snapMULTI, like Spotify Connect. The tidal-connect container receives Tidal audio and routes it through ALSA to a named pipe. Metadata (track title, artist, album, duration) is extracted by `tidal-meta-bridge.sh` from the `speaker_controller_application` TUI and forwarded to snapserver via the `meta_tidal.py` controlscript.
 
 > **Note:** ARM only (Raspberry Pi 3/4/5). Does not work on x86_64.
 
@@ -77,7 +77,7 @@ source = pipe:////audio/tidal_fifo?name=Tidal&controlscript=meta_tidal.py
 | Parameter | Value | Description |
 |-----------|-------|-------------|
 | `name` | `Tidal` | Stream ID |
-| `controlscript` | `meta_tidal.py` | Reads metadata from tidal-connect WebSocket API (port 8888) |
+| `controlscript` | `meta_tidal.py` | Reads metadata from `/audio/tidal-metadata.json` (written by tidal-meta-bridge.sh) |
 
 **tidal-connect container settings** (docker-compose.yml):
 
@@ -93,7 +93,7 @@ TIDAL_NAME="Living Room Tidal"
 
 **Sample format:** 44100:16:2 (fixed by tidal-connect)
 
-**Metadata:** Not yet functional ([#78](https://github.com/lollonet/snapMULTI/issues/78)). The `meta_tidal.py` controlscript is implemented and connects to port 8888, but the tidal-connect binary's WebSocket API does not respond to handshakes. Audio streaming works; metadata (title, artist, artwork) does not.
+**Metadata:** Track title, artist, album, duration, and playback state. Extracted by `tidal-meta-bridge.sh` running inside the tidal-connect container, which scrapes the `speaker_controller_application` TUI output via tmux. The bridge writes JSON to `/audio/tidal-metadata.json`, which `meta_tidal.py` (running inside snapserver) polls and forwards to snapserver via JSON-RPC. Album art is not available (the speaker controller does not expose artwork URLs).
 
 **Connect from Tidal:**
 1. Open **Tidal** on your phone/tablet
@@ -104,7 +104,7 @@ TIDAL_NAME="Living Room Tidal"
 **Limitations:**
 - **ARM only** — The tidal-connect binary only runs on ARM (Pi 3/4/5)
 - **No playback control** — Play/pause/next must be controlled from the Tidal app
-- **No metadata** — Track info and cover art not available (see [#78](https://github.com/lollonet/snapMULTY/issues/78))
+- **No album art** — The speaker controller TUI does not expose artwork URLs
 
 **Docker requirements:** Host network mode for mDNS. Shared `/audio` volume with snapserver.
 

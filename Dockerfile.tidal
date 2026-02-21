@@ -15,16 +15,17 @@ RUN rm -f /etc/apt/sources.list.d/*.list \
     && echo "deb [trusted=yes] http://archive.debian.org/debian stretch main" > /etc/apt/sources.list \
     && echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until \
     && apt-get update \
-    && apt-get install -y --no-install-recommends libasound2-plugins \
+    && apt-get install -y --no-install-recommends libasound2-plugins ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy entrypoint scripts
+# Copy entrypoint and metadata bridge scripts
 COPY scripts/tidal/entrypoint.sh /entrypoint.sh
 COPY scripts/tidal/common.sh /common.sh
+COPY scripts/tidal/tidal-meta-bridge.sh /tidal-meta-bridge.sh
 COPY scripts/common/sanitize.sh /common/sanitize.sh
 
 # Make scripts executable
-RUN chmod +x /entrypoint.sh /common.sh /common/sanitize.sh
+RUN chmod +x /entrypoint.sh /common.sh /tidal-meta-bridge.sh /common/sanitize.sh
 
 ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]

@@ -2,14 +2,12 @@
 """
 Tidal Connect metadata reader for Snapcast.
 
-Connects to tidal-connect's WebSocket API and forwards track metadata
+Watches a JSON file written by tidal-meta-bridge.sh (which scrapes metadata
+from speaker_controller_application's tmux TUI) and forwards track metadata
 to snapserver via JSON-RPC over stdin/stdout.
 
-Uses websocket-client (synchronous) in a background thread + select() on stdin.
-
 Environment variables:
-    TIDAL_WS_HOST   WebSocket host (default: 127.0.0.1)
-    TIDAL_WS_PORT   WebSocket port (default: 8888)
+    TIDAL_METADATA_FILE  Path to metadata JSON file (default: /audio/tidal-metadata.json)
 """
 
 import fcntl
@@ -20,18 +18,14 @@ import sys
 import time
 from threading import Lock, Thread
 
-import websocket
-
-WS_HOST = os.environ.get("TIDAL_WS_HOST", "127.0.0.1")
-WS_PORT = int(os.environ.get("TIDAL_WS_PORT", "8888"))
-RECONNECT_DELAY = 5
-MAX_RECONNECT_DELAY = 60
+METADATA_FILE = os.environ.get("TIDAL_METADATA_FILE", "/audio/tidal-metadata.json")
+POLL_INTERVAL = 1.0
 
 debug_mode = "--debug" in sys.argv
 
 # Lock guards metadata/playback_status reads+writes and all stdout sends,
 # preventing partial-update reads and interleaved JSON-RPC output between
-# the main thread (stdin handler) and the WebSocket background thread.
+# the main thread (stdin handler) and the file-watcher background thread.
 _lock = Lock()
 
 metadata: dict[str, str | list[str] | float] = {
@@ -94,136 +88,104 @@ def send_properties() -> None:
               "params": params})
 
 
-def parse_tidal_message(data: dict) -> bool:
-    """Parse a WebSocket message from tidal-connect.
+def apply_metadata(data: dict) -> bool:
+    """Apply metadata from the bridge JSON file.
 
-    Returns True if metadata was updated and should be sent.
+    Expected format (written by tidal-meta-bridge.sh):
+        {"state":"PLAYING","artist":"Name","title":"Track","album":"Album",
+         "duration":227,"position":38,"timestamp":1234567890}
+
+    Returns True if metadata changed and should be sent to snapserver.
     """
     global playback_status
     changed = False
 
     if debug_mode:
-        # Log to stderr only (not via log() which acquires _lock — caller holds it)
-        sys.stderr.write(f"[DEBUG] meta_tidal: Raw WS message: {json.dumps(data)[:500]}\n")
+        sys.stderr.write(f"[DEBUG] meta_tidal: File data: {json.dumps(data)[:500]}\n")
         sys.stderr.flush()
 
-    # Try multiple known message formats from tidal-connect
-
-    # Format 1: Direct fields (title, artist, album, etc.)
-    if "title" in data:
-        metadata["title"] = str(data.get("title", ""))
-        changed = True
-    if "artist" in data:
-        artist = data["artist"]
-        metadata["artist"] = [artist] if isinstance(artist, str) else list(artist)
-        changed = True
-    if "album" in data:
-        metadata["album"] = str(data.get("album", ""))
-        changed = True
-    if "duration" in data:
-        dur = data["duration"]
-        # Heuristic: values > 10000 are likely milliseconds (longest common
-        # track ~30 min = 1800s). Misclassifies tracks > 2.7 hours as ms,
-        # but Tidal streaming content is virtually always under that.
-        metadata["duration"] = float(dur) / 1000.0 if float(dur) > 10000 else float(dur)
+    title = str(data.get("title", ""))
+    if title and title != metadata["title"]:
+        metadata["title"] = title
         changed = True
 
-    # Artwork URL — try several field names
-    for art_key in ("artUrl", "artwork", "cover", "imageUrl", "image"):
-        if art_key in data and data[art_key]:
-            metadata["artUrl"] = str(data[art_key])
+    artist = data.get("artist", "")
+    artist_list = [artist] if isinstance(artist, str) and artist else []
+    if artist_list != metadata["artist"]:
+        metadata["artist"] = artist_list
+        changed = True
+
+    album = str(data.get("album", ""))
+    if album and album != metadata["album"]:
+        metadata["album"] = album
+        changed = True
+
+    duration = data.get("duration", 0)
+    if duration:
+        dur_f = float(duration)
+        if dur_f != metadata["duration"]:
+            metadata["duration"] = dur_f
             changed = True
-            break
 
-    # Playback state
-    state = None
-    if "playing" in data:
-        state = "playing" if data["playing"] else "paused"
-    elif "state" in data:
-        state_val = str(data["state"]).lower()
-        if state_val in ("playing", "play"):
-            state = "playing"
-        elif state_val in ("paused", "pause"):
-            state = "paused"
-        elif state_val in ("stopped", "stop", "idle"):
-            state = "stopped"
-    elif "status" in data:
-        status_val = str(data["status"]).lower()
-        if "play" in status_val:
-            state = "playing"
-        elif "pause" in status_val:
-            state = "paused"
-        elif "stop" in status_val or "idle" in status_val:
-            state = "stopped"
-
+    # Map speaker_controller states to Snapcast states
+    state_raw = str(data.get("state", "")).upper()
+    state_map = {
+        "PLAYING": "playing",
+        "PAUSED": "paused",
+        "IDLE": "stopped",
+        "STOPPED": "stopped",
+        "BUFFERING": "playing",
+    }
+    state = state_map.get(state_raw)
     if state and state != playback_status:
         playback_status = state
         changed = True
 
-    # Format 2: Nested in "data" or "payload"
-    if not changed:
-        for wrapper_key in ("data", "payload", "track"):
-            if wrapper_key in data and isinstance(data[wrapper_key], dict):
-                return parse_tidal_message(data[wrapper_key])
-
     return changed
 
 
-def ws_thread() -> None:
-    """Background thread: connect to tidal-connect WebSocket and parse messages.
+def file_watch_thread() -> None:
+    """Background thread: poll metadata JSON file for changes.
 
-    On x86_64 deployments (no tidal-connect), this backs off to 5-minute
-    retries after the first failure to avoid log noise.
+    On x86_64 deployments (no tidal-connect), the file never appears.
+    Backs off to 5-minute retries to avoid log noise.
     """
-    delay = RECONNECT_DELAY
-    ever_connected = False
+    last_mtime = 0.0
+    delay = POLL_INTERVAL
+    ever_found = False
 
     while True:
-        url = f"ws://{WS_HOST}:{WS_PORT}"
-        ws = None
         try:
-            if not ever_connected and delay > RECONNECT_DELAY:
-                # Quiet mode: tidal-connect likely absent (x86_64)
-                sys.stderr.write(f"[INFO] meta_tidal: Retrying {url} in {delay}s (tidal-connect not detected)\n")
+            stat = os.stat(METADATA_FILE)
+        except FileNotFoundError:
+            if not ever_found and delay < 300:
+                delay = min(delay * 2, 300)
+            time.sleep(delay)
+            continue
+
+        if not ever_found:
+            log("info", f"Metadata file found: {METADATA_FILE}")
+            ever_found = True
+            delay = POLL_INTERVAL
+
+        if stat.st_mtime <= last_mtime:
+            time.sleep(POLL_INTERVAL)
+            continue
+
+        last_mtime = stat.st_mtime
+
+        try:
+            with open(METADATA_FILE) as f:
+                data = json.load(f)
+            with _lock:
+                if apply_metadata(data):
+                    send_properties()
+        except (json.JSONDecodeError, OSError) as e:
+            if debug_mode:
+                sys.stderr.write(f"[DEBUG] meta_tidal: File read error: {e}\n")
                 sys.stderr.flush()
-            else:
-                log("info", f"Connecting to {url}")
-            ws = websocket.WebSocket()
-            ws.connect(url, timeout=10)
-            log("info", "Connected to tidal-connect WebSocket")
-            delay = RECONNECT_DELAY  # Reset backoff on success
-            ever_connected = True
 
-            while True:
-                raw = ws.recv()
-                if not raw:
-                    break
-                try:
-                    data = json.loads(raw)
-                    with _lock:
-                        if parse_tidal_message(data):
-                            send_properties()
-                except json.JSONDecodeError:
-                    if debug_mode:
-                        log("debug", f"Non-JSON message: {raw[:200]}")
-        except (ConnectionRefusedError, OSError) as e:
-            if ever_connected:
-                log("warning", f"Connection failed: {e}")
-        except websocket.WebSocketException as e:
-            log("warning", f"WebSocket error: {e}")
-        except Exception as e:
-            log("error", f"Unexpected error: {e}")
-        finally:
-            if ws is not None:
-                try:
-                    ws.close()
-                except Exception:
-                    pass
-
-        time.sleep(delay)
-        # Back off to 5 minutes max if never connected (likely no tidal-connect)
-        max_delay = MAX_RECONNECT_DELAY if ever_connected else 300
-        delay = min(delay * 2, max_delay)
+        time.sleep(POLL_INTERVAL)
 
 
 def _filtered_metadata() -> dict:
@@ -264,19 +226,19 @@ def handle_stdin_line(line: str) -> None:
 
 
 def main() -> None:
-    """Main event loop: select() on stdin + WebSocket in background thread."""
+    """Main event loop: select() on stdin + file watcher in background thread."""
     log("info", "Starting meta_tidal...")
+    log("info", f"Watching metadata file: {METADATA_FILE}")
     if debug_mode:
-        log("info", "Debug mode enabled — logging raw WebSocket messages")
+        log("info", "Debug mode enabled")
 
     # Signal ready to snapserver
     with _lock:
         send({"jsonrpc": "2.0", "method": "Plugin.Stream.Ready"})
 
-    # Start WebSocket reader in background
-    thread = Thread(target=ws_thread, daemon=True)
+    # Start file watcher in background
+    thread = Thread(target=file_watch_thread, daemon=True)
     thread.start()
-    log("info", f"WebSocket thread started (target: {WS_HOST}:{WS_PORT})")
 
     # Make stdin non-blocking
     flags = fcntl.fcntl(sys.stdin.fileno(), fcntl.F_GETFL)
@@ -300,7 +262,7 @@ def main() -> None:
                         sys.stdin.close()
                     except Exception:
                         pass
-                    # Keep running for WebSocket thread
+                    # Keep running for file watcher thread
                     while True:
                         time.sleep(60)
                 stdin_buffer += chunk
