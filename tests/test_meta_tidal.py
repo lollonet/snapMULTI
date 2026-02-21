@@ -1,7 +1,6 @@
 """Tests for scripts/meta_tidal.py — Tidal Connect metadata reader."""
 
 import json
-import os
 import time
 
 import pytest

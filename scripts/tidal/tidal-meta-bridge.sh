@@ -51,10 +51,10 @@ while true; do
     #   xartists: Artist Name   xx
     #   xtitle: Track Title     xx
     # The 'xx' at the end is where two adjacent panels meet.
-    ARTIST=$(echo "$OUTPUT" | grep '^xartists:' | sed 's/^xartists: //' | sed 's/xx.*$//' | sed 's/ *x*$//' | sed 's/[[:space:]]*$//') || true
-    TITLE=$(echo "$OUTPUT" | grep '^xtitle:' | sed 's/^xtitle: //' | sed 's/xx.*$//' | sed 's/ *x*$//' | sed 's/[[:space:]]*$//') || true
-    ALBUM=$(echo "$OUTPUT" | grep '^xalbum name:' | sed 's/^xalbum name: //' | sed 's/xx.*$//' | sed 's/ *x*$//' | sed 's/[[:space:]]*$//') || true
-    DURATION=$(echo "$OUTPUT" | grep '^xduration:' | sed 's/^xduration: //' | sed 's/xx.*$//' | sed 's/[[:space:]]*$//') || true
+    ARTIST=$(echo "$OUTPUT" | grep '^xartists:' | head -1 | sed 's/^xartists: //' | sed 's/xx.*$//' | sed 's/ *x*$//' | sed 's/[[:space:]]*$//') || true
+    TITLE=$(echo "$OUTPUT" | grep '^xtitle:' | head -1 | sed 's/^xtitle: //' | sed 's/xx.*$//' | sed 's/ *x*$//' | sed 's/[[:space:]]*$//') || true
+    ALBUM=$(echo "$OUTPUT" | grep '^xalbum name:' | head -1 | sed 's/^xalbum name: //' | sed 's/xx.*$//' | sed 's/ *x*$//' | sed 's/[[:space:]]*$//') || true
+    DURATION=$(echo "$OUTPUT" | grep '^xduration:' | head -1 | sed 's/^xduration: //' | sed 's/xx.*$//' | sed 's/[[:space:]]*$//') || true
 
     # Parse position (e.g., "38 / 227")
     POSITION=$(echo "$OUTPUT" | grep -E '^ *[0-9]+ */ *[0-9]+$' | head -1 | tr -d ' ' | cut -d'/' -f1) || true
