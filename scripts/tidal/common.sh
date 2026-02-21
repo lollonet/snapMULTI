@@ -54,7 +54,10 @@ check_provided_asound() {
         [ -z "$(load_key_value "$KEY_FORCE_PLAYBACK_DEVICE")" ] && save_key_value "$KEY_FORCE_PLAYBACK_DEVICE" default || true
     else
         # Ensure ALSA_CONFIG_PATH always points to a valid file
-        echo '</usr/share/alsa/alsa.conf>' > "$ASOUND_CONF_FILE"
+        echo '</usr/share/alsa/alsa.conf>' > "$ASOUND_CONF_FILE" || {
+            echo "ERROR: Failed to write fallback ALSA configuration" >&2
+            exit 1
+        }
     fi
 }
 
