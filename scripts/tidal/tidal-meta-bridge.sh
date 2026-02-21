@@ -71,10 +71,10 @@ while true; do
     if [ "$STATUS_HASH" != "$PREV_HASH" ]; then
         TIMESTAMP=$(date +%s)
 
-        # Escape double quotes for JSON
-        ARTIST_JSON=$(printf '%s' "$ARTIST" | sed 's/"/\\"/g')
-        TITLE_JSON=$(printf '%s' "$TITLE" | sed 's/"/\\"/g')
-        ALBUM_JSON=$(printf '%s' "$ALBUM" | sed 's/"/\\"/g')
+        # Escape backslashes first, then double quotes for valid JSON
+        ARTIST_JSON=$(printf '%s' "$ARTIST" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+        TITLE_JSON=$(printf '%s' "$TITLE" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+        ALBUM_JSON=$(printf '%s' "$ALBUM" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
 
         # Atomic write via temp file
         cat > "${METADATA_FILE}.tmp" <<EOF
