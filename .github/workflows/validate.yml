@@ -65,6 +65,16 @@ jobs:
           fi
           echo "✓ All scripts pass shellcheck"
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run Python tests
+        run: |
+          pip install pytest
+          pytest tests/ -v --tb=short
+
       - name: Check environment template
         run: |
           source .env.example

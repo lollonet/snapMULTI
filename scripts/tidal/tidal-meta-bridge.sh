@@ -5,6 +5,7 @@
 #
 # Adapted from TonyTromp/tidal-connect-docker volume-bridge.sh.
 set -euo pipefail
+trap 'echo "tidal-meta-bridge: exiting (code $?)" >&2' EXIT
 
 METADATA_FILE="${TIDAL_METADATA_FILE:-/audio/tidal-metadata.json}"
 TMUX_SESSION="speaker"

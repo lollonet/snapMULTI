@@ -181,6 +181,7 @@ def file_watch_thread() -> None:
                 if apply_metadata(data):
                     send_properties()
         except (json.JSONDecodeError, OSError) as e:
+            last_mtime = 0.0  # retry next poll
             if debug_mode:
                 sys.stderr.write(f"[DEBUG] meta_tidal: File read error: {e}\n")
                 sys.stderr.flush()

@@ -19,7 +19,9 @@ RUN rm -f /etc/apt/sources.list.d/*.list \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy entrypoint and metadata bridge scripts
+# Copy entrypoint and metadata bridge scripts.
+# These are also bind-mounted in docker-compose.yml for hot-update without
+# rebuild. The COPY ensures the image works standalone (without compose).
 COPY scripts/tidal/entrypoint.sh /entrypoint.sh
 COPY scripts/tidal/common.sh /common.sh
 COPY scripts/tidal/tidal-meta-bridge.sh /tidal-meta-bridge.sh
