@@ -114,7 +114,7 @@ detect_music_library() {
     done
 
     # Restore nullglob
-    $old_nullglob
+    eval "$old_nullglob"
 
     if [[ -n "$best_path" ]]; then
         echo "$best_path"
