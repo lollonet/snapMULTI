@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Status script** ([#27](https://github.com/lollonet/snapMULTI/issues/27)) — `scripts/status.sh` provides a one-command health overview: container health with memory usage, stream status, and connected clients with volume levels. Auto-detects install type (server, client, or both)
 - **Snapweb UI** — Web interface at `http://<server>:1780` for managing speakers, switching sources, and adjusting volume. Built from [snapcast/snapweb](https://github.com/snapcast/snapweb) v0.9.3 and bundled into the snapserver container
+- **Hardware mixer for volume-independent spectrum** ([#48](https://github.com/lollonet/snapMULTI/issues/48)) — New `MIXER` env var lets snapclient use the DAC's hardware mixer (`hardware:Digital`) so the ALSA loopback receives full-scale PCM regardless of volume. Spectrum bars stay consistent at any volume level. Defaults to `software` for compatibility; set `MIXER=hardware:<element>` to enable (run `amixer scontrols` to find your element name)
 
 ### Fixed
 - **Tidal Connect metadata** ([#78](https://github.com/lollonet/snapMULTI/issues/78)) — Replaced non-functional WebSocket approach with file-based metadata. `speaker_controller_application` (ifi companion binary) now runs in tmux, `tidal-meta-bridge.sh` scrapes its TUI output and writes JSON to `/audio/tidal-metadata.json`, which `meta_tidal.py` polls and forwards to snapserver. Removes `websocket-client` dependency from snapserver image
