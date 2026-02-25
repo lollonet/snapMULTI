@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Client metadata discovery** — Updated client submodule with METADATA_HOST mDNS auto-discovery so clients find the server's metadata service without manual IP configuration
 - **Client-only install screen bouncing** — When `firstboot.sh` called `setup.sh`, both scripts rendered competing progress displays to `/dev/tty1`. Now `firstboot.sh` sets `PROGRESS_MANAGED=1` so `setup.sh` defers to the parent's display
 - **setup.sh Unicode on framebuffer** — Replaced Unicode box-drawing chars, Braille spinners, and emoji with ASCII-safe equivalents (`#/-`, `[x]/[>]/[ ]`, `|/-\`) for Linux console PSF fonts
+- **Source numbering in snapserver.conf** — Commented-out example sources were numbered 6–9 instead of 5–8, mismatching `docs/SOURCES.md`
+- **Shell option restoration in deploy.sh** — `$old_nullglob` changed to `eval "$old_nullglob"` for proper `shopt` state restoration in `detect_music_library()`
 
 ### Security
 - **Read-only containers** — All 10 containers now run with `read_only: true` and tmpfs for writable paths. Tidal Connect required ALSA system config include (`</usr/share/alsa/alsa.conf>`) since `ALSA_CONFIG_PATH` replaces the entire config search
@@ -93,6 +95,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Maintenance
 - **CI: actions/checkout v4 → v6** ([#61](https://github.com/lollonet/snapMULTI/pull/61)) — Node.js 24 runtime, improved credential persistence
 - **CI: appleboy/ssh-action 1.0.0 → 1.2.5** ([#60](https://github.com/lollonet/snapMULTI/pull/60)) — Bug fixes and improved error handling
+- **CI: actions/setup-python 5.6.0 → 6.2.0** ([#81](https://github.com/lollonet/snapMULTI/pull/81)) — Node.js 22 runtime, improved caching
+- **Snapweb builder: Node 22 → Node 24 LTS** ([#85](https://github.com/lollonet/snapMULTY/pull/85)) — Active LTS (Oct 2025–Apr 2028), same Alpine base
 
 ## [0.1.5] — 2026-02-17
 
