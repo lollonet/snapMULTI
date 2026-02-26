@@ -1,0 +1,66 @@
+name: Container Security Scan
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Images"]
+    types: [completed]
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly Monday 6am UTC
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: snapcast-runner
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    permissions:
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - lollonet/snapmulti-server
+          - lollonet/snapmulti-airplay
+          - lollonet/snapmulti-mpd
+          - lollonet/snapmulti-metadata
+          # go-librespot: upstream image scanned separately below
+          # tidal: ARM-only image, cannot pull on amd64 runner
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.34.1
+        with:
+          image-ref: '${{ matrix.image }}:latest'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: '${{ matrix.image }}'
+
+  scan-upstream:
+    runs-on: snapcast-runner
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Scan go-librespot (Spotify Connect)
+        uses: aquasecurity/trivy-action@0.34.1
+        with:
+          image-ref: 'ghcr.io/devgianlu/go-librespot:v0.7.0'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'go-librespot'
