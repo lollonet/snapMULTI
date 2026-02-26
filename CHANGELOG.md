@@ -23,8 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Shell option restoration in deploy.sh** — `$old_nullglob` changed to `eval "$old_nullglob"` for proper `shopt` state restoration in `detect_music_library()`
 
 ### Security
+- **Container vulnerability scanning** ([#36](https://github.com/lollonet/snapMULTI/issues/36)) — [Trivy](https://trivy.dev/) scans all Docker images for CRITICAL and HIGH CVEs. Results uploaded to GitHub Security tab (SARIF). Runs after every image build, weekly on Monday, and on manual dispatch
 - **Read-only containers** — All 10 containers now run with `read_only: true` and tmpfs for writable paths. Tidal Connect required ALSA system config include (`</usr/share/alsa/alsa.conf>`) since `ALSA_CONFIG_PATH` replaces the entire config search
 - **Non-root containers** — 9 of 10 containers now run as uid 1000 with `cap_drop: ALL` and selective `cap_add`. Device access via `group_add` (audio=29, video=44). Only tidal-connect remains root (proprietary binary)
+
+### Maintenance
+- **CI: all workflows on self-hosted runner** — Claude Code Review and Claude Code helper workflows moved from `ubuntu-latest` to `snapcast-runner` for consistent CI environment
+- **CI: actions/setup-python 5.6.0 → 6.2.0** ([#81](https://github.com/lollonet/snapMULTY/pull/81)) — Node.js 22 runtime, improved caching
+- **Snapweb builder: Node 22 → Node 24 LTS** ([#85](https://github.com/lollonet/snapMULTY/pull/85)) — Active LTS (Oct 2025–Apr 2028), same Alpine base
 
 ## [0.2.0] — 2026-02-19
 
