@@ -171,6 +171,7 @@ sudo ufw allow 6600/tcp   # MPD protocol
 sudo ufw allow 8000/tcp   # MPD HTTP stream
 sudo ufw allow 8082/tcp   # Metadata service (WebSocket)
 sudo ufw allow 8083/tcp   # Metadata service (cover art)
+sudo ufw allow 5858/tcp   # AirPlay cover art (meta_shairport.py)
 sudo ufw allow 8180/tcp   # myMPD web UI
 sudo ufw allow 5353/udp   # mDNS discovery
 ```
