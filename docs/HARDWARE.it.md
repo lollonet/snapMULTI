@@ -163,17 +163,30 @@ Formato audio: 44100 Hz, 16-bit, stereo (codec FLAC predefinito).
 ### Regole Firewall
 
 ```bash
-# Consenti il traffico Snapcast
+# Snapcast core
 sudo ufw allow 1704/tcp   # Streaming audio
 sudo ufw allow 1705/tcp   # Controllo JSON-RPC
-sudo ufw allow 1780/tcp   # API HTTP
+sudo ufw allow 1780/tcp   # API HTTP + Snapweb UI
+
+# Sorgenti audio — necessarie per trasmettere da telefono/app
+sudo ufw allow 5000/tcp   # AirPlay (shairport-sync RTSP)
+sudo ufw allow 5858/tcp   # Copertine AirPlay (meta_shairport.py)
+sudo ufw allow 2019/tcp   # Tidal Connect discovery (solo ARM)
+# Spotify Connect usa una porta TCP casuale per il discovery zeroconf;
+# se ufw è abilitato, consentire il range effimero o usare connection tracking:
+# sudo ufw allow proto tcp from 192.168.0.0/16 to any port 30000:65535
+
+# Libreria musicale
 sudo ufw allow 6600/tcp   # Protocollo MPD
 sudo ufw allow 8000/tcp   # Stream HTTP MPD
-sudo ufw allow 8082/tcp   # Servizio metadata (WebSocket)
-sudo ufw allow 8083/tcp   # Servizio metadata (copertine)
-sudo ufw allow 5858/tcp   # Copertine AirPlay (meta_shairport.py)
 sudo ufw allow 8180/tcp   # Interfaccia web myMPD
-sudo ufw allow 5353/udp   # Discovery mDNS
+
+# Metadata
+sudo ufw allow 8082/tcp   # Servizio metadata (WebSocket)
+sudo ufw allow 8083/tcp   # Servizio metadata (HTTP/copertine)
+
+# Discovery
+sudo ufw allow 5353/udp   # mDNS (Avahi/Bonjour)
 ```
 
 ## Storage

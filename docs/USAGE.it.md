@@ -134,19 +134,25 @@ Snapserver supporta più codec (configurabili in `config/snapserver.conf`):
 
 | Porta | Protocollo | Scopo |
 |-------|------------|-------|
+| 5000 | TCP | RTSP (setup sessione AirPlay — deve essere raggiungibile dalla LAN) |
 | 5858 | HTTP | Server copertine (usato dal controlscript `meta_shairport.py`) |
 
 ### Spotify Connect (go-librespot)
 
 | Porta | Protocollo | Scopo |
 |-------|------------|-------|
-| 24879 | HTTP/WS | API WebSocket (usata dal controlscript `meta_go-librespot.py`) |
+| 24879 | HTTP/WS | API WebSocket (usata da `meta_go-librespot.py`, solo localhost) |
+| Casuale | TCP | Discovery zeroconf (porta effimera, deve essere raggiungibile dalla LAN) |
 
 ### Tidal Connect
 
-Nessuna porta di rete usata per i metadati. Lo script `tidal-meta-bridge.sh` estrae i metadati dalla TUI tmux di `speaker_controller_application` e scrive JSON in `/audio/tidal-metadata.json` (volume Docker condiviso). Il controlscript `meta_tidal.py` in snapserver legge questo file.
+| Porta | Protocollo | Scopo |
+|-------|------------|-------|
+| 2019 | TCP | Discovery Tidal Connect (solo ARM, deve essere raggiungibile dalla LAN) |
 
-> **Nota:** Le porte 5858 e 24879 sono usate per lo scambio di metadati tra container co-locati. La porta 5858 deve essere raggiungibile dalla LAN (i client Snapcast scaricano le copertine da essa). La porta 24879 è consumata localmente dai controlscript ma si collega a tutte le interfacce — non è necessario accesso esterno intenzionale.
+Metadati: `tidal-meta-bridge.sh` estrae i metadati dalla TUI tmux di `speaker_controller_application` e scrive JSON in `/audio/tidal-metadata.json` (volume Docker condiviso). Il controlscript `meta_tidal.py` in snapserver legge questo file.
+
+> **Nota:** Le porte 5000, 5858 e la porta zeroconf di Spotify devono essere raggiungibili dalla LAN per il casting. La porta 24879 è in ascolto solo su localhost. Se ufw è abilitato, vedi [Regole Firewall](HARDWARE.it.md#regole-firewall) per la lista completa.
 
 ### MPD
 
@@ -231,7 +237,7 @@ Lo streaming audio richiede una rete consistente e a bassa latenza. La modalità
 
 ### Implicazioni
 
-1. **Conflitti di porte**: I servizi si collegano direttamente alle porte dell'host (1704, 1705, 1780, 5858, 6600, 8000, 8082, 8083, 8180, 24879)
+1. **Conflitti di porte**: I servizi si collegano direttamente alle porte dell'host (1704, 1705, 1780, 2019, 5000, 5858, 6600, 8000, 8082, 8083, 8180)
 2. **Regole firewall**: È necessario consentire il traffico sulle porte dei servizi (vedi [HARDWARE.it.md](HARDWARE.it.md))
 3. **Istanza singola**: Non è possibile eseguire più stack snapMULTI sullo stesso host
 

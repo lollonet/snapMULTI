@@ -161,7 +161,7 @@ Audio streaming requires consistent, low-latency networking. Host mode eliminate
 
 ### Implications
 
-1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 5858, 6600, 8000, 8082, 8083, 8180, 24879)
+1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 2019, 5000, 5858, 6600, 8000, 8082, 8083, 8180)
 2. **Firewall rules**: Must allow traffic on service ports (see [HARDWARE.md](HARDWARE.md))
 3. **Single instance**: Cannot run multiple snapMULTI stacks on the same host
 
@@ -219,19 +219,25 @@ Host mode is recommended for single-server deployments.
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
+| 5000 | TCP | RTSP (AirPlay session setup — must be LAN-reachable) |
 | 5858 | HTTP | Cover art server (used by `meta_shairport.py` controlscript) |
 
 ### Spotify Connect (go-librespot)
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| 24879 | HTTP/WS | WebSocket API (used by `meta_go-librespot.py` controlscript) |
+| 24879 | HTTP/WS | WebSocket API (used by `meta_go-librespot.py`, localhost only) |
+| Random | TCP | Zeroconf discovery (ephemeral port, must be LAN-reachable) |
 
 ### Tidal Connect
 
-No network ports used for metadata. The `tidal-meta-bridge.sh` script scrapes metadata from `speaker_controller_application`'s tmux TUI and writes JSON to `/audio/tidal-metadata.json` (shared Docker volume). The `meta_tidal.py` controlscript in snapserver polls this file.
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 2019 | TCP | Tidal Connect discovery (ARM only, must be LAN-reachable) |
 
-> **Note:** Ports 5858 and 24879 are used for metadata exchange between co-located containers. Port 5858 must be LAN-reachable (Snapcast clients fetch cover art from it). Port 24879 is consumed locally by controlscripts but binds to all interfaces — no intentional external access is needed.
+Metadata: `tidal-meta-bridge.sh` scrapes `speaker_controller_application`'s tmux TUI and writes JSON to `/audio/tidal-metadata.json` (shared Docker volume). The `meta_tidal.py` controlscript in snapserver polls this file.
+
+> **Note:** Ports 5000, 5858, and the Spotify zeroconf port must be LAN-reachable for casting to work. Port 24879 binds to localhost only. If ufw is enabled, see [Firewall Rules](HARDWARE.md#firewall-rules) for the full list.
 
 ### MPD
 
