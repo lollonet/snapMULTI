@@ -52,7 +52,6 @@ GO_LIBRESPOT_PORT = int(os.environ.get("GO_LIBRESPOT_PORT", "24879"))
 # SNAPSERVER_HOST may be 127.0.0.1 (for local socket connections),
 # but artwork URLs must use a host reachable by clients on the network.
 EXTERNAL_HOST = os.environ.get("EXTERNAL_HOST", "") or socket.getfqdn() or SNAPSERVER_HOST
-_POLL_LOOP_MAX_ERRORS = 30
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("metadata-service")
@@ -162,7 +161,6 @@ class MetadataService:
 
     def _create_socket(self, host: str, port: int, timeout: int = 5,
                        log_errors: bool = True) -> socket.socket | None:
-        sock = None
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(timeout)
@@ -171,11 +169,6 @@ class MetadataService:
         except Exception as e:
             if log_errors:
                 logger.error(f"Failed to connect to {host}:{port}: {e}")
-            if sock is not None:
-                try:
-                    sock.close()
-                except Exception:
-                    pass
             return None
 
     def _get_snap_socket(self) -> socket.socket | None:
@@ -1155,7 +1148,6 @@ class MetadataService:
     async def poll_loop(self) -> None:
         """Main loop: poll Snapserver, enrich metadata, broadcast to clients."""
         loop = asyncio.get_running_loop()
-        consecutive_errors = 0
 
         while True:
             try:
@@ -1286,18 +1278,8 @@ class MetadataService:
                         except Exception:
                             ws_clients.discard(sc)
 
-                consecutive_errors = 0
-
             except Exception as e:
-                consecutive_errors += 1
-                if consecutive_errors >= _POLL_LOOP_MAX_ERRORS:
-                    logger.critical(
-                        f"Poll loop: {consecutive_errors} consecutive errors, exiting"
-                    )
-                    raise SystemExit(1)
-                logger.error(
-                    f"Poll loop error ({consecutive_errors}/{_POLL_LOOP_MAX_ERRORS}): {e}"
-                )
+                logger.error(f"Error in poll loop: {e}")
 
             await asyncio.sleep(2)
 
