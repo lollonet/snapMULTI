@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] — 2026-03-01
 
 ### Added
 - **Status script** ([#27](https://github.com/lollonet/snapMULTI/issues/27)) — `scripts/status.sh` provides a one-command health overview: container health with memory usage, stream status, and connected clients with volume levels. Auto-detects install type (server, client, or both)
@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **setup.sh Unicode on framebuffer** — Replaced Unicode box-drawing chars, Braille spinners, and emoji with ASCII-safe equivalents (`#/-`, `[x]/[>]/[ ]`, `|/-\`) for Linux console PSF fonts
 - **Source numbering in snapserver.conf** — Commented-out example sources were numbered 6–9 instead of 5–8, mismatching `docs/SOURCES.md`
 - **Shell option restoration in deploy.sh** — `$old_nullglob` changed to `eval "$old_nullglob"` for proper `shopt` state restoration in `detect_music_library()`
+- **Metadata-service socket leak** ([#87](https://github.com/lollonet/snapMULTI/pull/87)) — Fixed file descriptor leak in `_create_socket()` when `connect()` fails; socket is now closed in the error path
+- **Metadata-service poll loop resilience** ([#87](https://github.com/lollonet/snapMULTY/pull/87)) — Added consecutive error counter (30 threshold) to `poll_loop()` so the service exits instead of spinning forever on persistent failures; Docker's restart policy then recovers it
 
 ### Security
 - **Container vulnerability scanning** ([#36](https://github.com/lollonet/snapMULTI/issues/36)) — [Trivy](https://trivy.dev/) scans all Docker images for CRITICAL and HIGH CVEs. Results uploaded to GitHub Security tab (SARIF). Runs after every image build, weekly on Monday, and on manual dispatch
@@ -101,8 +103,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Maintenance
 - **CI: actions/checkout v4 → v6** ([#61](https://github.com/lollonet/snapMULTI/pull/61)) — Node.js 24 runtime, improved credential persistence
 - **CI: appleboy/ssh-action 1.0.0 → 1.2.5** ([#60](https://github.com/lollonet/snapMULTI/pull/60)) — Bug fixes and improved error handling
-- **CI: actions/setup-python 5.6.0 → 6.2.0** ([#81](https://github.com/lollonet/snapMULTI/pull/81)) — Node.js 22 runtime, improved caching
-- **Snapweb builder: Node 22 → Node 24 LTS** ([#85](https://github.com/lollonet/snapMULTY/pull/85)) — Active LTS (Oct 2025–Apr 2028), same Alpine base
 
 ## [0.1.5] — 2026-02-17
 
