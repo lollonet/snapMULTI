@@ -698,7 +698,7 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
             exit 1
         fi
     fi
-    unset PROGRESS_MANAGED PROGRESS_LOG
+    unset PROGRESS_MANAGED
     log_progress "Client setup complete" 2>/dev/null || true
 
     next_step "Verifying client..."
