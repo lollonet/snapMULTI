@@ -131,6 +131,10 @@ class MetadataService:
         self._snap_stale_threshold: float = 30.0
 
         self._mpd_was_connected = False
+        self._mpd_last_fail: float = 0.0
+        self._mpd_retry_interval: float = 10.0  # seconds between reconnection attempts
+        self._mpd_last_retry_log: float = 0.0
+        self._mpd_retry_log_interval: float = 30.0  # log retry attempts every 30s
         self.user_agent = "snapMULTI-MetadataService/1.0"
 
         # Client → stream mapping cache (refreshed each poll cycle)
@@ -384,17 +388,29 @@ class MetadataService:
         return title, artist, album
 
     def get_mpd_metadata(self) -> dict[str, Any]:
-        sock = self._create_socket(self.mpd_host, self.mpd_port, log_errors=False)
+        # Cooldown: don't hammer MPD if it's unresponsive (e.g. NFS scan on startup)
+        now = time.monotonic()
+        if not self._mpd_was_connected and self._mpd_last_fail > 0:
+            if now - self._mpd_last_fail < self._mpd_retry_interval:
+                return {"playing": False, "source": "MPD"}
+
+        sock = self._create_socket(self.mpd_host, self.mpd_port, timeout=2,
+                                   log_errors=False)
         if not sock:
+            self._mpd_last_fail = now
             if self._mpd_was_connected:
                 logger.warning(f"MPD connection lost ({self.mpd_host}:{self.mpd_port})")
                 self._mpd_was_connected = False
+            elif now - self._mpd_last_retry_log > self._mpd_retry_log_interval:
+                logger.info(f"MPD still unreachable ({self.mpd_host}:{self.mpd_port}), retrying...")
+                self._mpd_last_retry_log = now
             return {"playing": False, "source": "MPD"}
 
         try:
             if not self._mpd_was_connected:
                 logger.info(f"MPD connected ({self.mpd_host}:{self.mpd_port})")
                 self._mpd_was_connected = True
+                self._mpd_last_fail = 0.0
 
             if not self._read_mpd_greeting(sock):
                 return {"playing": False, "source": "MPD"}
@@ -476,7 +492,13 @@ class MetadataService:
             if cached.exists() and cached.stat().st_size > 0:
                 return f"artwork_{art_hash}{ext}"
 
-        sock = self._create_socket(self.mpd_host, self.mpd_port, log_errors=False)
+        # Skip artwork fetch if MPD is known to be down
+        if not self._mpd_was_connected and self._mpd_last_fail > 0:
+            if time.monotonic() - self._mpd_last_fail < self._mpd_retry_interval:
+                return ""
+
+        sock = self._create_socket(self.mpd_host, self.mpd_port, timeout=2,
+                                   log_errors=False)
         if not sock:
             return ""
 
