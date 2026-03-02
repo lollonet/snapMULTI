@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] — 2026-03-02
+
+### Fixed
+- **Metadata-service MPD connection resilience** ([#88](https://github.com/lollonet/snapMULTI/pull/88)) — When MPD is unresponsive (e.g. during NFS database scan on startup), the 5s connect timeout blocked the executor thread every poll cycle, slowing all metadata streams. Added 10s cooldown between reconnection attempts, reduced timeout to 2s, and periodic "still unreachable" logging every 30s
+
 ## [0.3.0] — 2026-03-01
 
 ### Added
