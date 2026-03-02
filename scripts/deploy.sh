@@ -734,7 +734,10 @@ pull_images() {
     info "Pulling metadata ($count/$total)"
     if ! docker compose pull metadata > /dev/null 2>&1; then
         info "Building metadata locally (not yet on registry)"
-        docker compose build metadata > /dev/null 2>&1
+        if ! docker compose build metadata; then
+            error "Failed to build metadata image"
+            exit 1
+        fi
     fi
 
     ok "All $total images ready"
