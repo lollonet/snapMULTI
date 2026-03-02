@@ -235,11 +235,14 @@ log_net_state() {
 }
 
 # Staged network recovery — escalates with each threshold
+# Usage: try_recover_network <iteration> [dns-only]
+#   dns-only: skip destructive stages (1,2,4) when IP already works
 try_recover_network() {
     local i=$1
+    local mode=${2:-full}
 
     # Stage 1 (30s, 40s): Kick WiFi connection
-    if (( i == 15 )) || (( i == 20 )); then
+    if [[ "$mode" != "dns-only" ]] && { (( i == 15 )) || (( i == 20 )); }; then
         if command -v nmcli &>/dev/null; then
             local wifi_conn
             wifi_conn=$(nmcli -t -f NAME,TYPE connection show 2>/dev/null \
@@ -252,7 +255,7 @@ try_recover_network() {
     fi
 
     # Stage 2 (60s): Restart NetworkManager, re-activate all connections
-    if (( i == 30 )); then
+    if [[ "$mode" != "dns-only" ]] && (( i == 30 )); then
         log_progress "Restarting NetworkManager..." 2>/dev/null || true
         log_net_state
         systemctl restart NetworkManager 2>/dev/null || true
@@ -278,7 +281,7 @@ try_recover_network() {
     fi
 
     # Stage 4 (120s): Bounce interfaces to force re-negotiation
-    if (( i == 60 )); then
+    if [[ "$mode" != "dns-only" ]] && (( i == 60 )); then
         log_progress "Bouncing network interfaces..." 2>/dev/null || true
         for iface in wlan0 eth0; do
             if ip link show "$iface" &>/dev/null; then
@@ -303,8 +306,8 @@ for i in $(seq 1 90); do
             NETWORK_READY=true
             break
         fi
-        # IP works but DNS fails — run recovery (Stage 3 adds fallback DNS)
-        try_recover_network "$i"
+        # IP works but DNS fails — only Stage 3 (fallback DNS), skip destructive stages
+        try_recover_network "$i" dns-only
         [[ $((i % 10)) -eq 0 ]] && log_progress "  DNS not ready ($i/90)..." 2>/dev/null || true
     else
         try_recover_network "$i"
