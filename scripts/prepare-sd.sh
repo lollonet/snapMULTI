@@ -415,6 +415,130 @@ else
     echo ""
 fi
 
+# ── Verify SD card contents ───────────────────────────────────────
+echo ""
+echo "=== Verifying SD card ==="
+VERIFY_ERRORS=0
+
+# -- snapMULTI files --
+echo ""
+echo "--- snapMULTI files ---"
+for f in install.conf firstboot.sh common/progress.sh common/logging.sh common/sanitize.sh; do
+    if [[ -f "$DEST/$f" ]]; then
+        echo "  [OK] snapmulti/$f"
+    else
+        echo "  [MISSING] snapmulti/$f"
+        VERIFY_ERRORS=$(( VERIFY_ERRORS + 1 ))
+    fi
+done
+
+case "$INSTALL_TYPE" in
+    server|both)
+        for f in server/docker-compose.yml server/deploy.sh server/config/snapserver.conf server/config/mpd.conf; do
+            if [[ -f "$DEST/$f" ]]; then
+                echo "  [OK] snapmulti/$f"
+            else
+                echo "  [MISSING] snapmulti/$f"
+                VERIFY_ERRORS=$(( VERIFY_ERRORS + 1 ))
+            fi
+        done
+        ;;
+esac
+
+case "$INSTALL_TYPE" in
+    client|both)
+        for f in client/docker-compose.yml client/scripts/setup.sh; do
+            if [[ -f "$DEST/$f" ]]; then
+                echo "  [OK] snapmulti/$f"
+            else
+                echo "  [MISSING] snapmulti/$f"
+                VERIFY_ERRORS=$(( VERIFY_ERRORS + 1 ))
+            fi
+        done
+        ;;
+esac
+
+echo "  install.conf -> INSTALL_TYPE=$(grep '^INSTALL_TYPE=' "$DEST/install.conf" | cut -d= -f2)"
+
+# -- OS configuration --
+echo ""
+echo "--- OS configuration ---"
+
+# cmdline.txt: check video= parameter
+if [[ -f "$BOOT/cmdline.txt" ]]; then
+    if grep -qF "video=HDMI-A-1:" "$BOOT/cmdline.txt"; then
+        echo "  [OK] cmdline.txt: video=HDMI-A-1 set"
+    else
+        echo "  [WARN] cmdline.txt: no video= parameter (display may use native resolution)"
+    fi
+fi
+
+# cloud-init / firstrun hook
+if [[ -f "$BOOT/user-data" ]]; then
+    if grep -qF "snapmulti/firstboot.sh" "$BOOT/user-data"; then
+        echo "  [OK] user-data: runcmd hook present"
+    else
+        echo "  [MISSING] user-data: runcmd hook for firstboot.sh"
+        VERIFY_ERRORS=$(( VERIFY_ERRORS + 1 ))
+    fi
+elif [[ -f "$BOOT/firstrun.sh" ]]; then
+    if grep -qF "snapmulti/firstboot.sh" "$BOOT/firstrun.sh"; then
+        echo "  [OK] firstrun.sh: hook present"
+    else
+        echo "  [MISSING] firstrun.sh: hook for firstboot.sh"
+        VERIFY_ERRORS=$(( VERIFY_ERRORS + 1 ))
+    fi
+else
+    echo "  [WARN] No firstrun.sh or user-data found (manual boot required)"
+fi
+
+# -- Network configuration --
+echo ""
+echo "--- Network ---"
+if [[ -f "$BOOT/network-config" ]]; then
+    echo "  [OK] network-config exists (cloud-init)"
+    if grep -q 'wlan\|wifi\|ssid' "$BOOT/network-config" 2>/dev/null; then
+        echo "  WiFi: configured in network-config"
+    else
+        echo "  [INFO] No WiFi in network-config (Ethernet only)"
+    fi
+fi
+
+# Pi Imager stores WiFi in user-data on Bookworm+
+if [[ -f "$BOOT/user-data" ]] && grep -qE 'wpa_passphrase|ssid|wifi' "$BOOT/user-data" 2>/dev/null; then
+    echo "  [OK] WiFi configured in user-data"
+fi
+
+# -- User configuration --
+echo ""
+echo "--- User ---"
+if [[ -f "$BOOT/user-data" ]]; then
+    USERNAME=$(sed -n 's/^.*name: *\([a-z][a-z0-9_-]*\).*/\1/p' "$BOOT/user-data" 2>/dev/null | head -1)
+    if [[ -n "$USERNAME" ]]; then
+        echo "  [OK] User: $USERNAME"
+    else
+        echo "  [INFO] No username found in user-data (default: pi)"
+    fi
+    if grep -q 'ssh_authorized_keys\|ssh_import_id\|ssh-' "$BOOT/user-data" 2>/dev/null; then
+        echo "  [OK] SSH keys configured"
+    fi
+    if grep -q 'lock_passwd.*false\|passwd' "$BOOT/user-data" 2>/dev/null; then
+        echo "  [OK] Password configured"
+    fi
+    HOSTNAME_SET=$(sed -n 's/^hostname: *\(.*\)/\1/p' "$BOOT/user-data" 2>/dev/null | head -1)
+    if [[ -n "$HOSTNAME_SET" ]]; then
+        echo "  [OK] Hostname: $HOSTNAME_SET"
+    fi
+fi
+
+# -- Summary --
+echo ""
+if (( VERIFY_ERRORS > 0 )); then
+    echo "WARNING: $VERIFY_ERRORS issue(s) found -- review above before booting."
+else
+    echo "All checks passed."
+fi
+
 # ── Unmount SD card ───────────────────────────────────────────────
 echo ""
 echo "Unmounting SD card..."
