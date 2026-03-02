@@ -216,41 +216,109 @@ if [[ "$REG_DOMAIN" =~ ^[A-Z]{2}$ ]] && command -v iw &>/dev/null; then
     log_progress "Set regulatory domain: $REG_DOMAIN" 2>/dev/null || true
 fi
 
+# Diagnostic: log interface states for troubleshooting
+log_net_state() {
+    log_progress "--- Network diagnostics ---" 2>/dev/null || true
+    ip -brief link 2>/dev/null | while read -r line; do
+        log_progress "  Link: $line" 2>/dev/null || true
+    done
+    ip -brief addr 2>/dev/null | while read -r line; do
+        log_progress "  Addr: $line" 2>/dev/null || true
+    done
+    log_progress "  Route: $(ip route show default 2>/dev/null || echo 'none')" 2>/dev/null || true
+    if command -v nmcli &>/dev/null; then
+        log_progress "  NM: $(nmcli -t general status 2>/dev/null || echo 'unavailable')" 2>/dev/null || true
+        nmcli -t -f NAME,TYPE,STATE connection show 2>/dev/null | while read -r line; do
+            log_progress "  Conn: $line" 2>/dev/null || true
+        done
+    fi
+}
+
+# Staged network recovery — escalates with each threshold
+# Usage: try_recover_network <iteration> [dns-only]
+#   dns-only: skip destructive stages (1,2,4) when IP already works
+try_recover_network() {
+    local i=$1
+    local mode=${2:-full}
+
+    # Stage 1 (30s, 40s): Kick WiFi connection
+    if [[ "$mode" != "dns-only" ]] && { (( i == 15 )) || (( i == 20 )); }; then
+        if command -v nmcli &>/dev/null; then
+            local wifi_conn
+            wifi_conn=$(nmcli -t -f NAME,TYPE connection show 2>/dev/null \
+                | awk -F: '/wifi/ {print $1; exit}')
+            if [[ -n "$wifi_conn" ]]; then
+                log_progress "Activating WiFi: $wifi_conn" 2>/dev/null || true
+                nmcli connection up "$wifi_conn" 2>/dev/null || true
+            fi
+        fi
+    fi
+
+    # Stage 2 (60s): Restart NetworkManager, re-activate all connections
+    if [[ "$mode" != "dns-only" ]] && (( i == 30 )); then
+        log_progress "Restarting NetworkManager..." 2>/dev/null || true
+        log_net_state
+        systemctl restart NetworkManager 2>/dev/null || true
+        sleep 3
+        if command -v nmcli &>/dev/null; then
+            nmcli -t -f NAME,TYPE connection show 2>/dev/null | while IFS=: read -r name _type; do
+                log_progress "Activating: $name" 2>/dev/null || true
+                nmcli connection up "$name" 2>/dev/null || true
+            done
+        fi
+    fi
+
+    # Stage 3 (90s): Add fallback DNS if ping works but resolution fails
+    if (( i == 45 )); then
+        if ping -c1 -W2 1.1.1.1 &>/dev/null && ! getent hosts deb.debian.org &>/dev/null; then
+            log_progress "Adding fallback DNS (1.1.1.1)..." 2>/dev/null || true
+            if [[ -f /etc/resolv.conf ]]; then
+                sed -i '1i nameserver 1.1.1.1' /etc/resolv.conf 2>/dev/null || true
+            else
+                echo "nameserver 1.1.1.1" > /etc/resolv.conf
+            fi
+        fi
+    fi
+
+    # Stage 4 (120s): Bounce interfaces to force re-negotiation
+    if [[ "$mode" != "dns-only" ]] && (( i == 60 )); then
+        log_progress "Bouncing network interfaces..." 2>/dev/null || true
+        for iface in wlan0 eth0; do
+            if ip link show "$iface" &>/dev/null; then
+                ip link set "$iface" down 2>/dev/null || true
+                sleep 1
+                ip link set "$iface" up 2>/dev/null || true
+            fi
+        done
+    fi
+}
+
 NETWORK_READY=false
-WIFI_KICKED=false
+log_net_state
 for i in $(seq 1 90); do
     GATEWAY=$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')
     if { [[ -n "$GATEWAY" ]] && ping -c1 -W2 "$GATEWAY" &>/dev/null; } || \
        ping -c1 -W2 1.1.1.1 &>/dev/null || \
        ping -c1 -W2 8.8.8.8 &>/dev/null; then
-        # Ping works but DNS may lag behind — verify name resolution
         if getent hosts deb.debian.org &>/dev/null; then
             log_and_tty "Network ready."
             log_progress "Network ready" 2>/dev/null || true
             NETWORK_READY=true
             break
         fi
-        [[ $((i % 10)) -eq 0 ]] && log_progress "  DNS not ready yet ($i/90)..." 2>/dev/null || true
+        # IP works but DNS fails — only Stage 3 (fallback DNS), skip destructive stages
+        try_recover_network "$i" dns-only
+        [[ $((i % 10)) -eq 0 ]] && log_progress "  DNS not ready ($i/90)..." 2>/dev/null || true
     else
-        # After 30s without network, try to kick WiFi
-        if [[ "$WIFI_KICKED" == "false" ]] && (( i >= 15 )); then
-            if command -v nmcli &>/dev/null; then
-                WIFI_CONN=$(nmcli -t -f NAME,TYPE connection show 2>/dev/null \
-                    | awk -F: '/wifi/ {print $1; exit}')
-                if [[ -n "$WIFI_CONN" ]]; then
-                    log_progress "Activating WiFi: $WIFI_CONN" 2>/dev/null || true
-                    nmcli connection up "$WIFI_CONN" 2>/dev/null || true
-                    WIFI_KICKED=true
-                fi
-            fi
-        fi
-        [[ $((i % 10)) -eq 0 ]] && log_progress "  Still waiting... ($i/90)" 2>/dev/null || true
+        try_recover_network "$i"
+        [[ $((i % 10)) -eq 0 ]] && log_progress "  No connectivity ($i/90)..." 2>/dev/null || true
     fi
     sleep 2
 done
 
 if [[ "$NETWORK_READY" == "false" ]]; then
     log_and_tty "ERROR: Network not available after 3 minutes."
+    log_net_state
     log_and_tty "Check WiFi credentials or Ethernet connection."
     exit 1
 fi
