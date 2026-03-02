@@ -174,7 +174,8 @@ progress() {
             weight_sum=$(( weight_sum + STEP_WEIGHTS[i] ))
         fi
     done
-    local pct=$(( weight_sum * 100 / total_weight ))
+    local pct=0
+    (( total_weight > 0 )) && pct=$(( weight_sum * 100 / total_weight ))
 
     # Plain-text summary to stdout (goes to log file)
     echo "=== Step $step/$total: $msg ($((elapsed/60))m$((elapsed%60))s) ==="
