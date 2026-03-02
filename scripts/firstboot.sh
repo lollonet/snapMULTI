@@ -594,8 +594,30 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         exit 1
     fi
     cd "$SERVER_DIR"
-    if ! bash scripts/deploy.sh >> "$LOG" 2>&1; then
-        log_and_tty "ERROR: deploy.sh failed."
+
+    # Run deploy.sh with progress forwarded to TUI.
+    # logging.sh outputs plain text when piped (no ANSI codes since stderr
+    # is not a TTY), so we match on [INFO]/[OK]/==> prefixes directly.
+    set +eo pipefail
+    bash scripts/deploy.sh 2>&1 | while IFS= read -r line; do
+        printf '%s\n' "$line" >> "$LOG"
+        case "$line" in
+            *"[INFO] Pulling "*|*"[OK] All "*"images ready"*|\
+            *"[INFO] Building metadata"*|\
+            *"==> Starting services"*|*"[OK] Services started"*|\
+            *"[INFO] Using profile:"*|*"[OK] Configuration valid"*)
+                # Strip [INFO]/[OK] prefix or ==> prefix for clean display
+                msg="${line#*] }"
+                msg="${msg#==> }"
+                log_progress "  $msg" 2>/dev/null || true
+                ;;
+        esac
+    done
+    deploy_rc=${PIPESTATUS[0]}
+    set -eo pipefail
+
+    if [[ "$deploy_rc" -ne 0 ]]; then
+        log_and_tty "ERROR: deploy.sh failed. Check $LOG"
         exit 1
     fi
     log_progress "Server deploy complete" 2>/dev/null || true
