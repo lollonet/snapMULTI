@@ -708,23 +708,36 @@ pull_images() {
     step "Pulling Docker images"
     cd "$PROJECT_ROOT"
 
+    local images=("snapserver" "shairport-sync" "librespot" "mpd" "mympd")
     if [[ "$IS_ARM" == "true" ]]; then
-        docker compose pull --ignore-buildable
+        images+=("tidal-connect")
     else
-        # Skip tidal-connect on x86 (ARM-only image)
         info "Skipping tidal-connect (ARM-only) on x86"
-        docker compose pull --ignore-buildable snapserver mpd mympd shairport-sync librespot
     fi
-    ok "Images pulled"
+
+    local total=$(( ${#images[@]} + 1 ))  # +1 for metadata
+    local count=0
+
+    for svc in "${images[@]}"; do
+        count=$((count + 1))
+        info "Pulling $svc ($count/$total)"
+        if ! docker compose pull "$svc" > /dev/null 2>&1; then
+            error "Failed to pull $svc"
+            exit 1
+        fi
+    done
 
     # metadata has a build: directive in docker-compose.yml. Pull from Hub if
     # available (CI pushes after merge); fall back to local build on first
     # bootstrap before the image is published.
-    if ! docker compose pull metadata; then
-        step "Building metadata image (not yet on registry)"
-        docker compose build metadata
-        ok "Local metadata image built"
+    count=$((count + 1))
+    info "Pulling metadata ($count/$total)"
+    if ! docker compose pull metadata > /dev/null 2>&1; then
+        info "Building metadata locally (not yet on registry)"
+        docker compose build metadata > /dev/null 2>&1
     fi
+
+    ok "All $total images ready"
 }
 
 start_services() {
@@ -732,6 +745,7 @@ start_services() {
     cd "$PROJECT_ROOT"
 
     if [[ "$IS_ARM" == "true" ]]; then
+        info "Starting all containers..."
         if ! docker compose up -d; then
             error "Failed to start services"
             exit 1
@@ -739,11 +753,12 @@ start_services() {
         ok "Services started (including Tidal Connect)"
     else
         # Skip tidal-connect on x86 (ARM-only image)
+        info "Starting containers (Tidal Connect skipped — ARM only)..."
         if ! docker compose up -d snapserver mpd mympd shairport-sync librespot metadata; then
             error "Failed to start services"
             exit 1
         fi
-        ok "Services started (Tidal Connect skipped — ARM only)"
+        ok "Services started"
     fi
 }
 
