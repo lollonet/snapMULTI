@@ -303,6 +303,8 @@ for i in $(seq 1 90); do
             NETWORK_READY=true
             break
         fi
+        # IP works but DNS fails — run recovery (Stage 3 adds fallback DNS)
+        try_recover_network "$i"
         [[ $((i % 10)) -eq 0 ]] && log_progress "  DNS not ready ($i/90)..." 2>/dev/null || true
     else
         try_recover_network "$i"
