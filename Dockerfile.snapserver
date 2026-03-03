@@ -30,7 +30,7 @@ RUN git clone --branch develop https://github.com/lollonet/santcasp.git . && \
 # bindings for rollup + swc not installed cross-platform). Removing the lockfile
 # and using npm install is the documented workaround. Version pinning comes from
 # the fixed v0.9.3 tag instead.
-FROM node:24-alpine3.21@sha256:b8f7c9056af700568c1ce76173f1c93743fb64ca1343e18cdf3a6ded8985ad3d AS snapweb-builder
+FROM node:25-alpine3.21@sha256:32509199057d74a987fdd88cde00fdfd48ef52469adbd6bd11969fc701477761 AS snapweb-builder
 WORKDIR /build
 RUN apk add --no-cache git && \
     git clone --depth 1 --branch v0.9.3 https://github.com/snapcast/snapweb.git . && \
