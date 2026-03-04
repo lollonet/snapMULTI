@@ -203,6 +203,7 @@ class MPDWrapper(object):
         self._errors = 0
         self._poll_id = None
         self._watch_id = None
+        self._stdin_watch_id = None
         self._idling = False
 
         self._status = {}
@@ -281,11 +282,12 @@ class MPDWrapper(object):
                                                        GLib.IO_IN | GLib.IO_HUP,
                                                        self.socket_callback)
 
-            flags = fcntl.fcntl(sys.stdin.fileno(), fcntl.F_GETFL)
-            flags |= os.O_NONBLOCK
-            fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, flags)
-            GLib.io_add_watch(sys.stdin, GLib.IO_IN |
-                              GLib.IO_HUP, self.io_callback)
+            if not self._stdin_watch_id:
+                flags = fcntl.fcntl(sys.stdin.fileno(), fcntl.F_GETFL)
+                flags |= os.O_NONBLOCK
+                fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, flags)
+                self._stdin_watch_id = GLib.io_add_watch(
+                    sys.stdin, GLib.IO_IN | GLib.IO_HUP, self.io_callback)
 
             # Reset error counter
             self._errors = 0
@@ -317,6 +319,15 @@ class MPDWrapper(object):
         self.run()
 
     def disconnect(self):
+        # Clean up GLib watchers to prevent stale sources
+        if self._poll_id:
+            GLib.source_remove(self._poll_id)
+            self._poll_id = None
+        if self._watch_id:
+            GLib.source_remove(self._watch_id)
+            self._watch_id = None
+        # stdin watcher is intentionally NOT removed — it's process-scoped
+        # and must survive MPD reconnections (snapserver pipe stays open)
         self.client.disconnect()
 
     def init_state(self):
@@ -449,13 +460,15 @@ class MPDWrapper(object):
 
     def io_callback(self, fd, event):
         try:
-            logger.error(
+            logger.debug(
                 f'IO event "{event}" on fd "{fd}" (type: "{type(fd)}"')
             if event & GLib.IO_HUP:
                 logger.debug("IO_HUP")
                 return True
             elif event & GLib.IO_IN:
                 chunk = fd.read()
+                if chunk is None:
+                    return True
                 for char in chunk:
                     if char == '\n':
                         logger.info(f'Received: {self._buffer}')
