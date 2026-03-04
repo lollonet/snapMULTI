@@ -54,6 +54,22 @@ GO_LIBRESPOT_PORT = int(os.environ.get("GO_LIBRESPOT_PORT", "24879"))
 EXTERNAL_HOST = os.environ.get("EXTERNAL_HOST", "") or socket.getfqdn() or SNAPSERVER_HOST
 _POLL_LOOP_MAX_ERRORS = 30
 
+# MusicBrainz rate limiter (1 request per 1.1 seconds, shared across threads)
+_mb_last_request: float = 0.0
+_mb_lock = threading.Lock()
+
+
+def _mb_rate_limit() -> None:
+    """Enforce MusicBrainz 1 req/s rate limit, sleeping only the remaining time."""
+    global _mb_last_request
+    with _mb_lock:
+        now = time.monotonic()
+        wait = 1.1 - (now - _mb_last_request)
+        if wait > 0:
+            time.sleep(wait)
+        _mb_last_request = time.monotonic()
+
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("metadata-service")
 
@@ -215,7 +231,7 @@ class MetadataService:
         }
         try:
             sock.sendall((json.dumps(request) + "\r\n").encode())
-        except (OSError, socket.error) as e:
+        except OSError as e:
             logger.warning(f"Failed to send RPC request: {e}")
             return None
 
@@ -237,10 +253,10 @@ class MetadataService:
                 if not chunk:
                     return None
                 self._snap_buffer += chunk
-            except socket.timeout:
+            except TimeoutError:
                 logger.warning("Snapserver socket timeout")
                 return None
-            except (OSError, socket.error) as e:
+            except OSError as e:
                 logger.warning(f"Snapserver socket error: {e}")
                 return None
 
@@ -343,7 +359,7 @@ class MetadataService:
             if validate and not greeting.startswith(b"OK MPD"):
                 return False
             return True
-        except (socket.error, socket.timeout):
+        except OSError:
             return False
 
     @staticmethod
@@ -589,7 +605,7 @@ class MetadataService:
                 return filename
 
             return ""
-        except (socket.error, socket.timeout, OSError) as e:
+        except OSError as e:
             logger.warning(f"MPD readpicture failed: {e}")
             return ""
         except Exception as e:
@@ -663,7 +679,7 @@ class MetadataService:
         return best_url
 
     def fetch_musicbrainz_artwork(self, artist: str, album: str) -> str:
-        time.sleep(1.1)  # MusicBrainz rate limit: 1 req/s
+        _mb_rate_limit()
         query = urllib.parse.quote(f'artist:"{artist}" AND release:"{album}"')
         url = f"https://musicbrainz.org/ws/2/release/?query={query}&fmt=json&limit=1"
         data = self._make_api_request(url)
@@ -710,7 +726,7 @@ class MetadataService:
             self._cache_set(self.artist_image_cache, artist, "")
             return ""
 
-        time.sleep(1.1)  # MusicBrainz rate limit
+        _mb_rate_limit()
 
         url = f"https://musicbrainz.org/ws/2/artist/{artist_mbid}?inc=url-rels&fmt=json"
         data = self._make_api_request(url)
@@ -723,7 +739,7 @@ class MetadataService:
             self._cache_set(self.artist_image_cache, artist, "")
             return ""
 
-        time.sleep(1.1)
+        _mb_rate_limit()
 
         url = f"https://www.wikidata.org/wiki/Special:EntityData/{wikidata_id}.json"
         data = self._make_api_request(url)
@@ -1186,8 +1202,10 @@ class MetadataService:
                     await asyncio.sleep(5)
                     continue
 
-                # Rebuild client → stream mapping
-                self._client_stream_map = self._build_client_stream_map(server)
+                # Rebuild client → stream mapping (only if changed)
+                new_map = self._build_client_stream_map(server)
+                if new_map != self._client_stream_map:
+                    self._client_stream_map = new_map
 
                 # Update subscribed clients' stream_id, track switches
                 stream_switched_clients: list[SubscribedClient] = []
@@ -1321,7 +1339,7 @@ class MetadataService:
                     f"Poll loop error ({consecutive_errors}/{_POLL_LOOP_MAX_ERRORS}): {e}"
                 )
 
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
 
     async def _broadcast_to_stream(self, stream_id: str, metadata: dict,
                                    server: dict) -> None:

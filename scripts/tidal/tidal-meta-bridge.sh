@@ -26,6 +26,35 @@ wait_for_tmux() {
     done
 }
 
+# Extract a metadata field from TUI output using bash builtins.
+# speaker_controller_application renders a curses TUI where the vertical
+# bar character appears as 'x' in tmux captures. Fields appear as:
+#   xartists: Artist Name   xx
+#   xtitle: Track Title     xx
+# The 'xx' at the end is where two adjacent panels meet.
+extract_field() {
+    local prefix="$1" output="$2" line value
+    while IFS= read -r line; do
+        if [[ "$line" == "${prefix}"* ]]; then
+            value="${line#"$prefix"}"   # strip prefix
+            value="${value%%xx*}"       # strip from first 'xx' onward
+            value="${value%% x}"        # strip trailing ' x'
+            value="${value%"${value##*[! ]}"}"  # rtrim whitespace
+            printf '%s' "$value"
+            return
+        fi
+    done <<< "$output"
+}
+
+# Escape a string for safe JSON embedding.
+# Bash handles backslash/quote escaping; tr strips control chars (U+0000-U+001F).
+json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    printf '%s' "$s" | tr -d '\000-\037'
+}
+
 wait_for_tmux
 
 while true; do
@@ -36,32 +65,42 @@ while true; do
         continue
     }
 
-    if [ -z "$OUTPUT" ]; then
+    if [[ -z "$OUTPUT" ]]; then
         sleep "$POLL_INTERVAL"
         continue
     fi
 
     # Parse playback state (PLAYING, PAUSED, IDLE, BUFFERING)
-    STATE=$(echo "$OUTPUT" | grep -o 'PlaybackState::[A-Z]*' | head -1 | cut -d: -f3) || true
-    [ -z "$STATE" ] && STATE="IDLE"
+    STATE="IDLE"
+    while IFS= read -r line; do
+        if [[ "$line" == *PlaybackState::* ]]; then
+            # Extract state name after last '::'
+            STATE="${line##*PlaybackState::}"
+            # Take only uppercase letters (trim trailing junk)
+            STATE="${STATE%%[^A-Z]*}"
+            break
+        fi
+    done <<< "$OUTPUT"
 
-    # Parse metadata from TUI panel text.
-    # speaker_controller_application renders a curses TUI where the vertical
-    # bar character appears as 'x' in tmux captures. Fields appear as:
-    #   xartists: Artist Name   xx
-    #   xtitle: Track Title     xx
-    # The 'xx' at the end is where two adjacent panels meet.
-    ARTIST=$(echo "$OUTPUT" | grep '^xartists:' | head -1 | sed 's/^xartists: //' | sed 's/xx.*$//' | sed 's/ *x*$//' | sed 's/[[:space:]]*$//') || true
-    TITLE=$(echo "$OUTPUT" | grep '^xtitle:' | head -1 | sed 's/^xtitle: //' | sed 's/xx.*$//' | sed 's/ *x*$//' | sed 's/[[:space:]]*$//') || true
-    ALBUM=$(echo "$OUTPUT" | grep '^xalbum name:' | head -1 | sed 's/^xalbum name: //' | sed 's/xx.*$//' | sed 's/ *x*$//' | sed 's/[[:space:]]*$//') || true
-    DURATION=$(echo "$OUTPUT" | grep '^xduration:' | head -1 | sed 's/^xduration: //' | sed 's/xx.*$//' | sed 's/[[:space:]]*$//') || true
+    # Parse metadata fields
+    ARTIST=$(extract_field "xartists: " "$OUTPUT") || true
+    TITLE=$(extract_field "xtitle: " "$OUTPUT") || true
+    ALBUM=$(extract_field "xalbum name: " "$OUTPUT") || true
+    DURATION=$(extract_field "xduration: " "$OUTPUT") || true
 
-    # Parse position (e.g., "38 / 227")
-    POSITION=$(echo "$OUTPUT" | grep -E '^ *[0-9]+ */ *[0-9]+$' | head -1 | tr -d ' ' | cut -d'/' -f1) || true
-    [ -z "$POSITION" ] && POSITION=0
+    # Parse position (e.g., "38 / 227") — bash only
+    POSITION=0
+    while IFS= read -r line; do
+        # Match lines like "  38 / 227"
+        line="${line#"${line%%[! ]*}"}"  # ltrim spaces
+        if [[ "$line" =~ ^[0-9]+' '*/' '*[0-9]+$ ]]; then
+            POSITION="${line%%[/ ]*}"
+            break
+        fi
+    done <<< "$OUTPUT"
 
     # Convert duration from milliseconds to seconds
-    if [ -n "$DURATION" ] && [ "$DURATION" -gt 0 ] 2>/dev/null; then
+    if [[ -n "$DURATION" ]] && [[ "$DURATION" -gt 0 ]] 2>/dev/null; then
         DURATION_SEC=$((DURATION / 1000))
     else
         DURATION_SEC=0
@@ -70,14 +109,12 @@ while true; do
     # Only write on track/state change (position excluded — it increments
     # every second during playback and meta_tidal.py doesn't forward it)
     STATUS_HASH="${STATE}|${ARTIST}|${TITLE}|${ALBUM}"
-    if [ "$STATUS_HASH" != "$PREV_HASH" ]; then
-        TIMESTAMP=$(date +%s)
+    if [[ "$STATUS_HASH" != "$PREV_HASH" ]]; then
+        TIMESTAMP=$(printf '%(%s)T' -1)
 
-        # Escape for valid JSON: backslashes, double quotes, then strip
-        # control characters (U+0000–U+001F) that would break JSON parsing
-        ARTIST_JSON=$(printf '%s' "$ARTIST" | tr -d '\000-\037' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
-        TITLE_JSON=$(printf '%s' "$TITLE" | tr -d '\000-\037' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
-        ALBUM_JSON=$(printf '%s' "$ALBUM" | tr -d '\000-\037' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+        ARTIST_JSON=$(json_escape "$ARTIST")
+        TITLE_JSON=$(json_escape "$TITLE")
+        ALBUM_JSON=$(json_escape "$ALBUM")
 
         # Atomic write via temp file
         cat > "${METADATA_FILE}.tmp" <<EOF
@@ -85,7 +122,7 @@ while true; do
 EOF
         mv "${METADATA_FILE}.tmp" "$METADATA_FILE"
 
-        if [ -n "$TITLE" ]; then
+        if [[ -n "$TITLE" ]]; then
             echo "tidal-meta-bridge: $STATE — $ARTIST — $TITLE"
         fi
         PREV_HASH="$STATUS_HASH"
