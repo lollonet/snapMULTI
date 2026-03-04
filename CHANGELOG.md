@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] — 2026-03-04
+
+### Added
+- **Per-image pull progress** ([#91](https://github.com/lollonet/snapMULTI/pull/91)) — First-boot deploy now pulls Docker images one at a time with `Pulling <service> (N/M)` progress on HDMI. `firstboot.sh` pipes deploy output through a filter that forwards key milestones to the TUI while logging everything
+
+### Fixed
+- **Fresh deploy bind-mount failures** ([#89](https://github.com/lollonet/snapMULTI/pull/89)) — Removed 3 dev-only bind mounts (`meta_tidal.py`, `common.sh`, `tidal-meta-bridge.sh`) from `docker-compose.yml` that referenced host scripts not present on fresh SD card deploys. Files are already baked into Docker images via COPY in Dockerfiles
+- **First-boot network recovery** ([#90](https://github.com/lollonet/snapMULTI/pull/90)) — Replaced single WiFi kick with 4-stage escalating recovery: WiFi activation at 30s, NetworkManager restart at 60s, fallback DNS at 90s, interface bounce at 120s. Added diagnostic logging so network failures produce actionable output in the install log
+- **firstboot.sh crash under `set -u`** — Unset `PROGRESS_LOG` variable caused immediate crash when firstboot.sh sourced `progress.sh` under strict mode
+- **Tidal resource limits missing from hardware profiles** — `deploy.sh` was not generating CPU/memory limits for the tidal-connect container, leaving it unconstrained on resource-limited Pi hardware
+- **Tidal CPU limit quoting** — Unquoted CPU limit value caused inconsistent YAML parsing in `docker-compose.yml` across different Docker Compose versions
+- **Division by zero in progress.sh** — Weight calculation crashed when all weights summed to zero (edge case during early initialization)
+- **meta_mpd duplicate stdin watchers** ([#94](https://github.com/lollonet/snapMULTI/pull/94)) — `my_connect()` added a new `GLib.io_add_watch` on stdin for every MPD reconnect without a guard. After N reconnects, `io_callback` fired N times per stdin event, causing `"can't concat NoneType to bytes"` errors. Fixed by tracking watcher via `_stdin_watch_id`, cleaning up GLib sources on disconnect, and guarding non-blocking read
+
+### Maintenance
+- **Client submodule v0.1.9** — Updated `client/` submodule
+
 ## [0.3.1] — 2026-03-02
 
 ### Fixed
