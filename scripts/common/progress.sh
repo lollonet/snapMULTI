@@ -68,9 +68,9 @@ render_progress() {
     local bar_width=50
     local filled=$(( pct * bar_width / 100 ))
     local empty=$(( bar_width - filled ))
-    local bar=""
-    for ((i=0; i<filled; i++)); do bar+="#"; done
-    for ((i=0; i<empty; i++)); do bar+="-"; done
+    local bar pad
+    printf -v bar '%*s' "$filled" ''; bar="${bar// /#}"
+    printf -v pad '%*s' "$empty" ''; bar+="${pad// /-}"
 
     # Get last 8 lines of log for output area
     local log_lines=""
@@ -193,8 +193,8 @@ progress_complete() {
 
     [[ -c /dev/tty1 ]] || return
 
-    local bar=""
-    for ((i=0; i<50; i++)); do bar+="#"; done
+    local bar
+    printf -v bar '%*s' 50 ''; bar="${bar// /#}"
 
     {
         printf '\033[2J\033[H'
