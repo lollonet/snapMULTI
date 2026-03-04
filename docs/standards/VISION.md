@@ -25,7 +25,7 @@ Deliver synchronized multiroom audio to any room in your home using commodity ha
 - Zero-touch installation: Flash SD, plug in, play music within 10 minutes
 - Sync accuracy: <10ms audio drift across all connected clients
 - Five audio sources working out of the box (MPD, Spotify, AirPlay, TCP, Tidal)
-- Container health: All 5 services healthy within 5 minutes of boot
+- Container health: All 7 services healthy within 5 minutes of boot
 - mDNS discovery: Clients auto-discover server without manual IP configuration
 
 ## Non-Goals

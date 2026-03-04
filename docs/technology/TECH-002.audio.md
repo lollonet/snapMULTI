@@ -23,11 +23,12 @@ All audio streams use a consistent format:
 
 | Component | Version | Source |
 |-----------|---------|--------|
-| Snapcast | 0.34.1 | lollonet/santcasp fork |
-| MPD | 0.24.x | Alpine packages |
-| Librespot | latest | Built from source |
-| Shairport-sync | 4.x | Built from source |
-| myMPD | latest | Official image |
+| Snapcast | 0.34.1 | lollonet/santcasp fork (Dockerfile.snapserver) |
+| MPD | 0.24.x | Alpine packages (Dockerfile.mpd) |
+| go-librespot | v0.7.0 | Upstream image (ghcr.io/devgianlu/go-librespot) |
+| Shairport-sync | 4.x | Built from source (Dockerfile.shairport-sync) |
+| myMPD | latest | Official image (ghcr.io/jcorporation/mympd) |
+| Tidal Connect | latest | ARM-only (edgecrush3r base + Dockerfile.tidal) |
 
 ## Snapcast Configuration
 
@@ -49,12 +50,14 @@ audio_output {
 }
 ```
 
-## Librespot Features
+## go-librespot Features
 
-- Spotify Connect protocol
-- 320kbps audio quality
-- Volume normalization support
-- D-Bus integration for metadata
+- Spotify Connect protocol (Go reimplementation)
+- 320kbps audio quality (OGG Vorbis)
+- Pipe backend output to `/audio/spotify_fifo`
+- WebSocket API on port 24879 for metadata
+- Zeroconf device discovery (no stored credentials)
+- Bidirectional playback control via Snapcast
 
 ## Shairport-sync Features
 
@@ -62,3 +65,11 @@ audio_output {
 - Pipe backend for Snapcast integration
 - mDNS advertisement via Avahi
 - Metadata support (cover art, track info)
+
+## Tidal Connect Features
+
+- Cast from Tidal app (mobile/desktop)
+- ARM-only (Pi 3/4/5) — proprietary binary
+- ALSA → speex rate converter → FIFO output
+- Metadata via tmux TUI scraping (tidal-meta-bridge.sh)
+- No album art (TUI limitation)

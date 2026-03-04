@@ -24,29 +24,32 @@ related: [ARC-003]
 ```mermaid
 flowchart LR
     tag[Tag Push v*] --> build[Build Images]
-    build --> arm64[ARM64 Build]
-    build --> amd64[AMD64 Build]
+    build --> arm64[ARM64 Build<br/>self-hosted runner]
+    build --> amd64[AMD64 Build<br/>self-hosted runner]
     arm64 --> manifest[Create Manifest]
     amd64 --> manifest
-    manifest --> push[Push to ghcr.io]
-    push --> deploy[Deploy to Servers]
+    manifest --> push[Push to Docker Hub]
+    push --> deploy[SSH Deploy to Servers]
 ```
 
 ## Container Registry
 
-- **Registry**: ghcr.io (GitHub Container Registry)
-- **Namespace**: lollonet/snapmulti-*
-- **Tags**: latest, v0.1.0, v0.1.1, etc.
+- **Registry**: Docker Hub
+- **Namespace**: `lollonet/snapmulti-*`
+- **Tags**: `latest`, `v0.1.0`, `v0.3.3`, etc.
+- **Upstream images**: go-librespot (ghcr.io), myMPD (ghcr.io)
 
 ### Images
 
-| Image | Dockerfile | Size |
-|-------|------------|------|
-| snapmulti-server | Dockerfile.snapserver | ~150MB |
-| snapmulti-airplay | Dockerfile.shairport-sync | ~80MB |
-| snapmulti-spotify | Dockerfile.librespot | ~100MB |
-| snapmulti-mpd | Dockerfile.mpd | ~120MB |
-| snapmulti-tidal | Dockerfile.tidal | ~80MB |
+| Image | Dockerfile | Arch | Size (arm64) |
+|-------|------------|------|-------------|
+| lollonet/snapmulti-server | Dockerfile.snapserver | amd64+arm64 | ~126MB |
+| lollonet/snapmulti-airplay | Dockerfile.shairport-sync | amd64+arm64 | ~66MB |
+| lollonet/snapmulti-mpd | Dockerfile.mpd | amd64+arm64 | ~191MB |
+| lollonet/snapmulti-metadata | Dockerfile.metadata | amd64+arm64 | ~185MB |
+| lollonet/snapmulti-tidal | Dockerfile.tidal | arm64 only | ~561MB |
+| ghcr.io/devgianlu/go-librespot | (upstream) | amd64+arm64 | ~49MB |
+| ghcr.io/jcorporation/mympd/mympd | (upstream) | amd64+arm64 | ~22MB |
 
 ## Deployment Methods
 
@@ -70,9 +73,18 @@ cd snapMULTI
 # Or manually via GitHub Actions
 ```
 
+## Self-Hosted Runners
+
+Native builds on self-hosted runners (no QEMU emulation):
+
+| Runner | Architecture | Host |
+|--------|-------------|------|
+| snapmulti-runner | arm64 | Raspberry Pi (raspy) |
+| snapmulti-runner-2 | arm64 | Raspberry Pi (raspy) |
+
 ## Quality Gates
 
-- Shellcheck on all scripts (warning level)
-- Docker Compose syntax validation
-- Multi-arch build verification
-- Health check validation
+- Shellcheck on all `scripts/**/*.sh` (warning level)
+- Docker Compose syntax validation (`docker compose config --quiet`)
+- Multi-arch Docker build verification on PRs (build-test.yml)
+- Automated Claude code review on PRs (claude-code-review.yml)
