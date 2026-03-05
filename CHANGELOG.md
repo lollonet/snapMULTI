@@ -7,11 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] — 2026-03-05
+
 ### Documentation
 - **Complete project documentation suite** ([#96](https://github.com/lollonet/snapMULTI/pull/96)) — 11 requirement documents, 2 architecture documents (deployment, security), 4 Architecture Decision Records (host networking, FIFO routing, read-only containers, metadata service), CONTROL.yaml and .bass-ready marker. Fixed stale TECH and WBS docs
 
 ### Maintenance
-- **Client submodule v0.2.0** — Metadata host now derives from snapserver host instead of being hardcoded
+- **Client submodule v0.2.1** — Metadata host derives from snapserver host; mDNS discovery on boot; big-endian framebuffer support
 
 ## [0.3.3] — 2026-03-04
 
