@@ -1,0 +1,42 @@
+project:
+  name: snapMULTI
+  language: bash
+  secondary_languages: [python]
+  ci_platform: github
+
+quality:
+  paths: ["scripts", "docker"]
+
+  coverage:
+    enforce: false
+    line: 0
+    branch: 0
+
+  complexity:
+    enforce: false
+    mccabe:
+      warn: 10
+      fail: 15
+    func_loc:
+      warn: 40
+      fail: 60
+
+  linting:
+    bash:
+      tool: shellcheck
+      severity: warning
+      paths: ["scripts/**/*.sh"]
+    python:
+      tool: ruff
+      paths: ["docker/metadata-service/"]
+    docker:
+      tool: hadolint
+      paths: ["Dockerfile.*"]
+
+  validation:
+    - name: docker-compose-syntax
+      command: "docker compose config --quiet"
+    - name: shellcheck
+      command: "shellcheck -S warning scripts/**/*.sh"
+    - name: python-compile
+      command: "python3 -m py_compile docker/metadata-service/metadata-service.py"

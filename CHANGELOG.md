@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+- **Complete project documentation suite** ([#96](https://github.com/lollonet/snapMULTI/pull/96)) — 11 requirement documents, 2 architecture documents (deployment, security), 4 Architecture Decision Records (host networking, FIFO routing, read-only containers, metadata service), CONTROL.yaml and .bass-ready marker. Fixed stale TECH and WBS docs
+
+### Maintenance
+- **Client submodule v0.2.0** — Metadata host now derives from snapserver host instead of being hardcoded
+
+## [0.3.3] — 2026-03-04
+
 ### Performance
-- **Metadata-service CPU reduction** ([#95](https://github.com/lollonet/snapMULTI/pull/95)) — Smart MusicBrainz rate limiter (sleeps only remaining time instead of unconditional 1.1s), poll interval increased from 2s to 3s, client-stream map rebuild skipped when unchanged, redundant `socket.error`/`socket.timeout` exception handlers cleaned up
-- **Tidal metadata bridge optimization** ([#95](https://github.com/lollonet/snapMULTI/pull/95)) — Rewrote main loop to use bash builtins instead of grep/sed/tr pipelines, reducing ~37 subprocess forks/sec to ~4
+- **Metadata-service CPU reduction (-79%)** ([#95](https://github.com/lollonet/snapMULTI/pull/95)) — Smart MusicBrainz rate limiter (sleeps only remaining time instead of unconditional 1.1s), poll interval increased from 2s to 3s, client-stream map rebuild skipped when unchanged, redundant `socket.error`/`socket.timeout` exception handlers cleaned up
+- **Tidal metadata bridge optimization (-73% CPU)** ([#95](https://github.com/lollonet/snapMULTI/pull/95)) — Rewrote main loop to use bash builtins instead of grep/sed/tr pipelines, reducing ~37 subprocess forks/sec to ~4
 - **Healthcheck intervals** ([#95](https://github.com/lollonet/snapMULTI/pull/95)) — Increased from 30s to 60s across all 7 services, halving process spawns from healthchecks
 - **Progress bar rendering** ([#95](https://github.com/lollonet/snapMULTI/pull/95)) — Replaced character-by-character loop with `printf -v` (eliminates 100 iterations per render)
 

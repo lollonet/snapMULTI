@@ -1,6 +1,8 @@
 vision:       docs/standards/VISION.md
+wbs:          docs/standards/WBS.md
 requirements: docs/requirements/REQ-INDEX.md
 architecture: docs/architecture/ARC-INDEX.md
 technology:   docs/technology/TECH-INDEX.md
-adr:          docs/adr/
+adr:          docs/adr/ADR-INDEX.md
 standards:    CLAUDE.md
+control:      CONTROL.yaml

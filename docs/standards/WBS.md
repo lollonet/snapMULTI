@@ -22,11 +22,12 @@ source_of_truth: true
 - [x] 1.2.4 Configure health checks with variable start_period
 - [x] 1.2.5 Integrate myMPD web interface
 
-### 1.3 Spotify Connect
-- [x] 1.3.1 Build Dockerfile.librespot
-- [x] 1.3.2 Configure FIFO output
-- [x] 1.3.3 Implement mDNS registration
+### 1.3 Spotify Connect (go-librespot)
+- [x] 1.3.1 Integrate upstream go-librespot image
+- [x] 1.3.2 Configure pipe backend FIFO output
+- [x] 1.3.3 Implement zeroconf device discovery
 - [x] 1.3.4 Add DEVICE_NAME sanitization
+- [x] 1.3.5 WebSocket API metadata integration (port 24879)
 
 ### 1.4 AirPlay Receiver
 - [x] 1.4.1 Build Dockerfile.shairport-sync
@@ -34,18 +35,30 @@ source_of_truth: true
 - [x] 1.4.3 Implement mDNS registration
 - [x] 1.4.4 Add DEVICE_NAME sanitization
 
-### 1.5 Tidal Bridge (Optional)
-- [x] 1.5.1 Build Dockerfile.tidal
-- [x] 1.5.2 Implement tidal-bridge.py
-- [x] 1.5.3 Configure as optional profile
+### 1.5 Tidal Connect (ARM Only)
+- [x] 1.5.1 Build Dockerfile.tidal (extends edgecrush3r base)
+- [x] 1.5.2 Implement tidal-meta-bridge.sh (tmux TUI scraping)
+- [x] 1.5.3 Configure ALSA routing (speex + FIFO)
+- [x] 1.5.4 Add meta_tidal.py snapserver plugin
+
+### 1.6 Metadata Service
+- [x] 1.6.1 Build Dockerfile.metadata (Python 3.13, aiohttp)
+- [x] 1.6.2 Implement multi-stream metadata polling
+- [x] 1.6.3 Cover art chain (MPD → iTunes → MusicBrainz → Radio-Browser)
+- [x] 1.6.4 WebSocket push to clients (port 8082)
+- [x] 1.6.5 HTTP artwork server (port 8083)
+- [x] 1.6.6 MusicBrainz rate limiter optimization
 
 ## 2. Deployment
 
 ### 2.1 Zero-Touch Installation
-- [x] 2.1.1 Create prepare-sd.sh for SD card setup
+- [x] 2.1.1 Create prepare-sd.sh / prepare-sd.ps1 for SD card setup
 - [x] 2.1.2 Create firstboot.sh for Pi initialization
-- [x] 2.1.3 Implement network wait logic
+- [x] 2.1.3 Implement network wait with 4-stage WiFi recovery
 - [x] 2.1.4 Implement health check verification loop
+- [x] 2.1.5 TUI progress display on HDMI console
+- [x] 2.1.6 Unified installer (client/server/both menu)
+- [x] 2.1.7 Headless client detection (HDMI vs no-display)
 
 ### 2.2 Manual Deployment
 - [x] 2.2.1 Create deploy.sh unified script
@@ -56,10 +69,13 @@ source_of_truth: true
 - [x] 2.2.6 Implement NFS detection for MPD_START_PERIOD
 
 ### 2.3 CI/CD Pipeline
-- [x] 2.3.1 Set up build-push.yml for multi-arch builds
-- [x] 2.3.2 Set up validate.yml for shellcheck
+- [x] 2.3.1 Set up build-push.yml for multi-arch builds (5 images)
+- [x] 2.3.2 Set up validate.yml for shellcheck + compose syntax
 - [x] 2.3.3 Set up deploy.yml for SSH deployment
-- [x] 2.3.4 Configure self-hosted runners (arm64, amd64)
+- [x] 2.3.4 Configure self-hosted ARM runners on Pi
+- [x] 2.3.5 Set up build-test.yml for PR build validation
+- [x] 2.3.6 Set up claude-code-review.yml for automated PR review
+- [x] 2.3.7 Trivy container vulnerability scanning
 
 ## 3. Security
 
@@ -99,24 +115,32 @@ source_of_truth: true
 - [ ] 5.1.1 Prometheus metrics (#35)
 - [ ] 5.1.2 Failure notifications (#32)
 - [ ] 5.1.3 Hardware watchdog (#29)
-- [ ] 5.1.4 status.sh script (#27)
+- [x] 5.1.4 status.sh script (#27) — v0.3.0
 
 ### 5.2 Integrations
 - [ ] 5.2.1 Home Assistant integration (#31)
-- [ ] 5.2.2 Snapweb interface (#30)
+- [x] 5.2.2 Snapweb interface (#30) — v0.3.0
 - [ ] 5.2.3 Now-playing display support (#38)
 
 ### 5.3 Operations
 - [ ] 5.3.1 Backup/restore scripts (#28)
-- [ ] 5.3.2 Container vulnerability scanning (#36)
+- [x] 5.3.2 Container vulnerability scanning (#36) — v0.3.0 (Trivy)
 - [ ] 5.3.3 Pin package versions (#37)
 - [ ] 5.3.4 Client setup guides (#34)
+
+### 5.4 Audio Quality
+- [ ] 5.4.1 Configurable sample rates (#77) — 48/96kHz support
 
 ## Milestones
 
 | Version | Milestone | Status |
 |---------|-----------|--------|
-| v0.1.0 | Initial release | Done |
+| v0.1.0 | Initial release — core audio sources | Done |
 | v0.1.1 | Deployment fixes, cover art | Done |
-| v0.2.0 | Monitoring & Home Assistant | Planned |
-| v1.0.0 | Production ready | Planned |
+| v0.2.0 | Centralized metadata service, Tidal metadata | Done |
+| v0.3.0 | Security hardening, Snapweb, status script, Trivy | Done |
+| v0.3.1 | MPD connection resilience | Done |
+| v0.3.2 | First-boot reliability, per-image pull progress | Done |
+| v0.3.3 | Performance optimizations (CPU -73% tidal, -79% metadata) | Done |
+| v0.4.0 | Monitoring & observability (Prometheus, notifications) | Planned |
+| v1.0.0 | Production ready, community launch | Planned |
