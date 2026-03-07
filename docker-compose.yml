@@ -294,6 +294,8 @@ services:
   tidal-connect:
     image: lollonet/snapmulti-tidal:latest
     container_name: tidal-connect
+    profiles:
+      - tidal
     network_mode: host
     restart: unless-stopped
     read_only: true
