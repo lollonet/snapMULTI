@@ -4,6 +4,8 @@
 # snapMULTI runtime data
 data/
 audio/
+artwork/
+mympd/
 
 # MPD runtime data (but not config)
 mpd/data/

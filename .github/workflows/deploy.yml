@@ -37,7 +37,7 @@ jobs:
           script: |
             set -euo pipefail
 
-            cd /home/claudio/Code/snapMULTI || { echo "ERROR: Directory not found"; exit 1; }
+            cd /opt/snapmulti || { echo "ERROR: Directory not found"; exit 1; }
 
             CURRENT_COMMIT=$(git rev-parse HEAD)
             echo "Current commit: $CURRENT_COMMIT"
