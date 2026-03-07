@@ -259,11 +259,9 @@ main() {
     # Download, extract, apply
     local tmp_dir
     tmp_dir=$(download_and_extract "$latest")
+    trap 'rm -rf "$tmp_dir"' EXIT
 
     apply_update "$tmp_dir"
-
-    # Clean up temp dir
-    rm -rf "$tmp_dir"
 
     # Pull images and restart
     pull_and_restart
