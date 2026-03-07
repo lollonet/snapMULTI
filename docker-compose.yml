@@ -306,6 +306,8 @@ services:
   tidal-connect:
     image: lollonet/snapmulti-tidal:latest
     container_name: tidal-connect
+    profiles:
+      - tidal
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     network_mode: host
