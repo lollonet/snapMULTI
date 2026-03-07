@@ -57,9 +57,15 @@ jobs:
             fi
             echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin || { echo "ERROR: Docker Hub login failed"; exit 1; }
 
+            # Detect architecture for ARM-only services (tidal-connect)
+            SERVICES="snapserver shairport-sync librespot mpd mympd metadata"
+            if [ "$(uname -m)" = "aarch64" ]; then
+              SERVICES="$SERVICES tidal-connect"
+              echo "ARM64 detected — including tidal-connect"
+            fi
+
             echo "Pulling latest images..."
-            # Note: tidal-connect uses third-party image (ARM only), pulled automatically on start
-            docker compose pull snapserver shairport-sync librespot mpd mympd metadata || { echo "ERROR: docker compose pull failed"; exit 1; }
+            docker compose pull $SERVICES || { echo "ERROR: docker compose pull failed"; exit 1; }
 
             echo "Creating required directories..."
             mkdir -p mympd/workdir mympd/cachedir audio artwork
@@ -68,7 +74,7 @@ jobs:
             docker compose down --remove-orphans || true
 
             echo "Starting app containers..."
-            docker compose up -d snapserver shairport-sync librespot mpd mympd metadata || { echo "ERROR: docker compose up failed"; exit 1; }
+            docker compose up -d $SERVICES || { echo "ERROR: docker compose up failed"; exit 1; }
 
             echo "Verifying deployment..."
             sleep 5
