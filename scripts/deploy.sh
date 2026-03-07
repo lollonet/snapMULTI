@@ -371,7 +371,7 @@ install_dependencies() {
     if ! command -v avahi-daemon >/dev/null 2>&1; then
         info "Installing Avahi for mDNS discovery..."
         apt-get update -qq
-        apt-get install -y -qq avahi-daemon >/dev/null
+        apt-get install -y -qq avahi-daemon avahi-utils >/dev/null
         systemctl enable --now avahi-daemon >/dev/null 2>&1
         ok "Avahi installed"
     else
@@ -379,6 +379,41 @@ install_dependencies() {
         # Ensure it's running
         if ! systemctl is-active --quiet avahi-daemon; then
             systemctl start avahi-daemon
+        fi
+    fi
+
+    # Harden avahi: pin hostname and restrict to physical interfaces.
+    # Pinning prevents silent rename after mDNS collisions (e.g. hostname-2).
+    # Restricting interfaces stops Docker bridges from polluting mDNS.
+    local avahi_conf="/etc/avahi/avahi-daemon.conf"
+    if [[ -f "$avahi_conf" ]]; then
+        local avahi_changed=false
+        local system_hostname
+        system_hostname=$(tr -d '[:space:]' < /etc/hostname)
+        # Pin host-name if not already set
+        if grep -q '^#host-name=' "$avahi_conf"; then
+            sed -i "s/^#host-name=.*/host-name=${system_hostname}/" "$avahi_conf"
+            avahi_changed=true
+        elif ! grep -q '^host-name=' "$avahi_conf"; then
+            sed -i "/^\[server\]/a host-name=${system_hostname}" "$avahi_conf"
+            avahi_changed=true
+        fi
+        # Build list of physical interfaces (exclude lo, docker*, br-*, veth*)
+        local phys_ifaces
+        phys_ifaces=$(ip -br link show | awk '$1 !~ /^(lo|docker|br-|veth)/ {print $1}' \
+            | sed 's/@.*//' | paste -sd,)
+        if [[ -n "$phys_ifaces" ]]; then
+            if grep -q '^#allow-interfaces=' "$avahi_conf"; then
+                sed -i "s/^#allow-interfaces=.*/allow-interfaces=${phys_ifaces}/" "$avahi_conf"
+                avahi_changed=true
+            elif ! grep -q '^allow-interfaces=' "$avahi_conf"; then
+                sed -i "/^\[server\]/a allow-interfaces=${phys_ifaces}" "$avahi_conf"
+                avahi_changed=true
+            fi
+        fi
+        if [[ "$avahi_changed" == "true" ]]; then
+            systemctl restart avahi-daemon
+            ok "Avahi hardened: host-name=${system_hostname}, interfaces=${phys_ifaces:-all}"
         fi
     fi
 
