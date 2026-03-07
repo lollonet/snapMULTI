@@ -413,7 +413,8 @@ install_dependencies() {
         fi
         if [[ "$avahi_changed" == "true" ]]; then
             systemctl restart avahi-daemon
-            ok "Avahi hardened: host-name=${system_hostname}, interfaces=${phys_ifaces:-all}"
+            local iface_msg="${phys_ifaces:-(none found, restriction skipped)}"
+            ok "Avahi hardened: host-name=${system_hostname}, interfaces=${iface_msg}"
         fi
     fi
 

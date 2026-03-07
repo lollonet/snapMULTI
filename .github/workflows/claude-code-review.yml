@@ -132,4 +132,4 @@ jobs:
             - Do NOT re-report findings from previous review rounds.
             - If the PR is clean, say "No issues found" — don't invent findings.
           claude_args: |
-            --allowedTools "Bash(gh pr *),Bash(gh api *),Read,Glob,Grep"
+            --allowedTools "Bash(gh pr *),Read,Glob,Grep"
