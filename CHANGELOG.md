@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] — 2026-03-07
+
+### Fixed
+- **Avahi hostname collision hardening** ([#98](https://github.com/lollonet/snapMULTI/pull/98)) — Pin `host-name` in avahi-daemon.conf and restrict `allow-interfaces` to physical NICs (exclude docker0/br-*/veth*), preventing transient devices from claiming the hostname and breaking Tidal Connect mDNS
+
+### Changed
+- **CI deploys to snapvideo** — Deploy workflow targets `/opt/snapmulti` on snapvideo instead of raspy
+
+### Maintenance
+- **Client submodule v0.2.2** — mDNS auto-discovery for server failover in fb-display, LAN IP + snapserver shown in bottom bar, avahi-utils install fix
+
 ## [0.3.4] — 2026-03-05
 
 ### Documentation
