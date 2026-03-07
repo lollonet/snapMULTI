@@ -63,7 +63,8 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN pip install --no-cache-dir \
     python-mpd2==3.1.1 \
     musicbrainzngs==0.7.1 \
-    requests==2.32.3
+    requests==2.32.3 \
+    websocket-client==1.8.0
 
 COPY --from=builder /usr/bin/snapserver /usr/bin/snapserver
 COPY --from=builder /usr/share/snapserver /usr/share/snapserver
