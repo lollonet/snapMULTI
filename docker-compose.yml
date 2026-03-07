@@ -52,6 +52,8 @@ services:
     container_name: snapserver
     hostname: snapmulti
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     network_mode: host
     <<: *default-security
     read_only: true
@@ -87,6 +89,8 @@ services:
     image: lollonet/snapmulti-airplay:latest
     container_name: shairport-sync
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     network_mode: host
     <<: *default-security
     read_only: true
@@ -126,6 +130,8 @@ services:
     image: ghcr.io/devgianlu/go-librespot:v0.7.0
     container_name: librespot
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
     network_mode: host
     <<: *default-security
     read_only: true
@@ -173,6 +179,8 @@ services:
     image: ghcr.io/jcorporation/mympd/mympd:latest
     container_name: mympd
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
     network_mode: host
     security_opt:
       - no-new-privileges:true
@@ -213,6 +221,8 @@ services:
     image: lollonet/snapmulti-mpd:latest
     container_name: mpd
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     network_mode: host
     security_opt:
       - no-new-privileges:true
@@ -252,6 +262,8 @@ services:
   metadata:
     image: lollonet/snapmulti-metadata:latest
     container_name: metadata
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     build:
       context: .
       dockerfile: Dockerfile.metadata
@@ -294,6 +306,8 @@ services:
   tidal-connect:
     image: lollonet/snapmulti-tidal:latest
     container_name: tidal-connect
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     network_mode: host
     restart: unless-stopped
     read_only: true
@@ -333,3 +347,24 @@ services:
           cpus: '${TIDAL_CPU_LIMIT:-0.5}'
         reservations:
           memory: ${TIDAL_MEM_RESERVE:-64M}
+
+  # Automatic image updates (opt-in: set AUTO_UPDATE=true in .env)
+  # Monitors lollonet/snapmulti-* containers for new :latest images
+  # and restarts them with zero-downtime rolling updates.
+  # Pinned images (librespot, mympd) are excluded via watchtower.enable=false label.
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    profiles:
+      - auto-update
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+      - WATCHTOWER_SCHEDULE=${UPDATE_SCHEDULE:-0 0 3 * * *}
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_NOTIFICATIONS=${UPDATE_NOTIFY:-}
+      - WATCHTOWER_NOTIFICATION_URL=${UPDATE_NOTIFY_URL:-}
+    logging: *default-logging
