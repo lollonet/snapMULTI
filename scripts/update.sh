@@ -159,6 +159,10 @@ verify_services() {
     local attempts=0
     local max_attempts=6
 
+    # Brief initial wait — containers need a moment after 'up -d' before
+    # health status transitions from "starting" to "healthy"/"unhealthy"
+    sleep 5
+
     while [[ $attempts -lt $max_attempts ]]; do
         local unhealthy
         unhealthy=$(docker compose ps --format json 2>/dev/null \
