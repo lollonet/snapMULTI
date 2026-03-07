@@ -714,20 +714,66 @@ sudo bash /boot/firmware/snapmulti/firstboot.sh
 
 ## Updating
 
-### Standard Update
+snapMULTI has two update mechanisms: **Watchtower** for automatic Docker image updates and **update.sh** for config/script updates.
 
+### Automatic Image Updates (Watchtower)
+
+Opt-in automatic Docker image updates. Watchtower monitors running containers and pulls new `:latest` images on a schedule.
+
+**Enable:**
 ```bash
-cd /opt/snapmulti  # or wherever installed
-git pull
-docker compose pull
-docker compose up -d
+# Add to /opt/snapmulti/.env:
+AUTO_UPDATE=true
+
+# Restart with the auto-update profile:
+COMPOSE_PROFILES=auto-update docker compose up -d
 ```
 
-### Update with Backup
+Or re-run `deploy.sh` — it detects `AUTO_UPDATE=true` and adds `auto-update` to `COMPOSE_PROFILES` automatically.
+
+**Configuration** (in `.env`):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUTO_UPDATE` | (disabled) | Set to `true` to enable Watchtower |
+| `UPDATE_SCHEDULE` | `0 0 3 * * *` | Cron schedule (default: daily 3 AM) |
+| `UPDATE_NOTIFY_URL` | (none) | Notification URL ([shoutrrr format](https://containrrr.dev/shoutrrr/)) |
+
+**What gets updated:**
+- `lollonet/snapmulti-server`, `-airplay`, `-mpd`, `-metadata`, `-tidal` (`:latest` images)
+
+**What does NOT get updated:**
+- `go-librespot` (pinned to `v0.7.0`)
+- `mympd` (third-party image, pinned)
+- Config files, scripts, docker-compose.yml (use `update.sh` for those)
+
+### Config & Script Updates (update.sh)
+
+For updating config files, scripts, and docker-compose.yml from GitHub releases. Works without git — designed for SD-card installs.
+
+```bash
+# Check for updates
+sudo /opt/snapmulti/scripts/update.sh --check
+
+# Apply update (interactive)
+sudo /opt/snapmulti/scripts/update.sh
+
+# Apply update (non-interactive, e.g. from cron)
+sudo /opt/snapmulti/scripts/update.sh --force
+```
+
+**What gets updated:** `config/`, `scripts/`, `docker-compose.yml`, `Dockerfile.*`, `.env.example`
+
+**What is NEVER touched:** `.env`, `audio/`, `artwork/`, `mpd/`, `mympd/`, `data/`
+
+**Safety:** Refuses to cross major version boundaries (e.g., v0.x to v1.x). Major upgrades require manual intervention.
+
+### Standard Update (with git)
+
+If you cloned the repo with git:
 
 ```bash
 cd /opt/snapmulti
-cp -r config config.backup
 git pull
 docker compose pull
 docker compose up -d
@@ -737,10 +783,11 @@ docker compose up -d
 
 If an update breaks things:
 ```bash
-# Restore config
-cp -r config.backup/* config/
+# Use a specific image version
+docker pull lollonet/snapmulti-server:v0.3.5
+docker compose up -d
 
-# Or use a specific image version
-docker pull lollonet/snapmulti-server:v1.0.0
+# Or restore config from backup
+cp -r config.backup/* config/
 docker compose up -d
 ```

@@ -694,6 +694,21 @@ EOF
 
         apply_resource_profile "$profile"
     fi
+
+    # Enable auto-update profile if requested
+    if grep -q '^AUTO_UPDATE=true' "$ENV_FILE" 2>/dev/null; then
+        if grep -q '^COMPOSE_PROFILES=' "$ENV_FILE"; then
+            # Append auto-update to existing profiles (if not already present)
+            if ! grep -q 'auto-update' "$ENV_FILE"; then
+                sed -i 's/^COMPOSE_PROFILES=\(.*\)/COMPOSE_PROFILES=\1,auto-update/' "$ENV_FILE"
+                info "Added auto-update to COMPOSE_PROFILES"
+            fi
+        else
+            echo "COMPOSE_PROFILES=auto-update" >> "$ENV_FILE"
+            info "Set COMPOSE_PROFILES=auto-update"
+        fi
+        ok "Watchtower auto-update enabled"
+    fi
 }
 
 #######################################
@@ -892,6 +907,33 @@ show_status() {
 }
 
 #######################################
+# Version Tracking
+#######################################
+
+write_version() {
+    local version_file="$PROJECT_ROOT/.version"
+    local version=""
+
+    # Try git tag first (advanced installs with git)
+    if command -v git >/dev/null 2>&1 && git -C "$PROJECT_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+        version=$(git -C "$PROJECT_ROOT" describe --tags --abbrev=0 2>/dev/null || true)
+        version="${version#v}"  # strip leading 'v'
+    fi
+
+    # Fall back to existing .version file
+    if [[ -z "$version" ]] && [[ -f "$version_file" ]]; then
+        version=$(cat "$version_file")
+    fi
+
+    if [[ -n "$version" ]]; then
+        echo "$version" > "$version_file"
+        info "Version: $version"
+    else
+        warn "Could not determine version (no git tag, no .version file)"
+    fi
+}
+
+#######################################
 # Main
 #######################################
 
@@ -967,6 +1009,10 @@ main() {
     pull_images
     start_services
     verify_services
+
+    # Record deployed version for update.sh
+    write_version
+
     show_status
 }
 

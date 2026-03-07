@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Automatic updates** ([#76](https://github.com/lollonet/snapMULTI/issues/76)) — Opt-in automatic Docker image updates via Watchtower (`AUTO_UPDATE=true` in `.env`). New `scripts/update.sh` for config/script updates from GitHub releases without git. Works on both SD-card installs and git-cloned setups. Major version changes blocked for safety
+
 ## [0.3.5] — 2026-03-07
 
 ### Fixed
