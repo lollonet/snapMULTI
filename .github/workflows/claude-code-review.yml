@@ -131,3 +131,4 @@ jobs:
             - Do NOT suggest refactors or "nice to have" improvements.
             - Do NOT re-report findings from previous review rounds.
             - If the PR is clean, say "No issues found" — don't invent findings.
+          claude_args: --allowedTools "Bash,Read,Glob,Grep"
