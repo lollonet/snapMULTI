@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.7] — 2026-03-09
+
 ### Added
-- **Server info broadcast** — metadata-service pushes server version, Snapcast version, connected client count, and active streams to all display clients every ~60s via WebSocket. Bottom bar on fb-display now shows server version alongside IP address. New `server_info` WS message type; `/health` now reports `server_info` capability
+- **Server info broadcast** ([#102](https://github.com/lollonet/snapMULTI/pull/102)) — metadata-service pushes server version, Snapcast version, connected client count, and active streams to all display clients every ~60s via WebSocket. Bottom bar on fb-display now shows server version alongside IP address. New `server_info` WS message type; `/health` now reports `server_info` capability
+- **Client submodule v0.2.4** — fb-display shows server version in status bar, falls back to `APP_VERSION` env var
 
 ## [0.3.6] — 2026-03-09
 
