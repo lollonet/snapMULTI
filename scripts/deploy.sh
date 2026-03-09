@@ -707,6 +707,18 @@ EOF
         apply_resource_profile "$profile"
     fi
 
+    # Migrate existing .env: add COMPOSE_PROFILES=tidal on ARM if absent
+    # (installs from before PR #99 have no COMPOSE_PROFILES key)
+    if [[ "$IS_ARM" == "true" ]]; then
+        if ! grep -q '^COMPOSE_PROFILES=' "$ENV_FILE" 2>/dev/null; then
+            printf '\n# Docker Compose profiles (tidal-connect is ARM-only)\nCOMPOSE_PROFILES=tidal\n' >> "$ENV_FILE"
+            info "Migrated .env: added COMPOSE_PROFILES=tidal for ARM"
+        elif ! grep -q 'tidal' "$ENV_FILE"; then
+            sed -i 's/^COMPOSE_PROFILES=\(.*\)/COMPOSE_PROFILES=\1,tidal/' "$ENV_FILE"
+            info "Migrated .env: added tidal to existing COMPOSE_PROFILES"
+        fi
+    fi
+
     # Enable auto-update profile if requested
     if grep -q '^AUTO_UPDATE=true' "$ENV_FILE" 2>/dev/null; then
         if grep -q '^COMPOSE_PROFILES=' "$ENV_FILE"; then
