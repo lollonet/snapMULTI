@@ -8,6 +8,7 @@ Centralized metadata + cover art service that runs on the server alongside Snapc
 - Serves artwork via built-in HTTP server (port 8083)
 - Pushes metadata to display clients via WebSocket (port 8082)
 - Clients subscribe by sending {"subscribe": "CLIENT_ID"} to get their stream's metadata
+- Controllers subscribe by sending {"subscribe_stream": "STREAM_ID"} for raw stream metadata (no volume)
 
 Replaces per-client metadata-service containers — N clients no longer make N redundant API calls.
 """
@@ -83,12 +84,13 @@ class StreamMetadata:
 
 
 class SubscribedClient:
-    """A WebSocket client subscribed to a specific CLIENT_ID."""
+    """A WebSocket client subscribed to a CLIENT_ID or directly to a stream name."""
 
-    def __init__(self, websocket: Any, client_id: str) -> None:
+    def __init__(self, websocket: Any, client_id: str = "", stream_id_direct: str = "") -> None:
         self.websocket = websocket
         self.client_id = client_id
-        self.stream_id: str | None = None  # Resolved from Snapserver
+        self.stream_id: str | None = stream_id_direct if stream_id_direct else None
+        self.is_stream_subscriber = bool(stream_id_direct)
 
 
 # Global state
@@ -1210,6 +1212,8 @@ class MetadataService:
                 # Update subscribed clients' stream_id, track switches
                 stream_switched_clients: list[SubscribedClient] = []
                 for sc in ws_clients.copy():
+                    if sc.is_stream_subscriber:
+                        continue  # Fixed stream_id; _resolve_client_stream("") must not be called
                     resolved = self._resolve_client_stream(sc.client_id)
                     if resolved and resolved != sc.stream_id:
                         logger.info(
@@ -1350,13 +1354,16 @@ class MetadataService:
             if sc.stream_id != stream_id:
                 continue
 
-            # Add per-client volume info (client expects "volume" and "muted" keys)
-            volume_info = self._find_client_volume(server, sc.client_id)
-            client_output = {
-                **output,
-                "volume": volume_info.get("percent", 100),
-                "muted": volume_info.get("muted", False),
-            }
+            # Stream subscribers get raw metadata; regular clients get per-client volume
+            if sc.is_stream_subscriber:
+                client_output = output
+            else:
+                volume_info = self._find_client_volume(server, sc.client_id)
+                client_output = {
+                    **output,
+                    "volume": volume_info.get("percent", 100),
+                    "muted": volume_info.get("muted", False),
+                }
 
             try:
                 await sc.websocket.send(json.dumps(client_output))
@@ -1443,8 +1450,26 @@ async def ws_handler(websocket: Any) -> None:
                             await websocket.send(json.dumps(output))
                 continue
 
-            # Control commands (must be subscribed)
-            if sc and _service and "cmd" in data:
+            # Stream subscription (controller clients — no client-ID resolution, no volume)
+            if "subscribe_stream" in data:
+                stream_name = str(data["subscribe_stream"])[:256]
+                if sc:
+                    ws_clients.discard(sc)
+                sc = SubscribedClient(websocket, stream_id_direct=stream_name)
+                ws_clients.add(sc)
+                logger.info(f"Client {client_addr} subscribed to stream '{stream_name}'")
+                if _service:
+                    sm = _service.streams.get(stream_name)
+                    if sm is None:
+                        logger.warning(
+                            f"Client {client_addr} subscribed to unknown stream '{stream_name}'"
+                        )
+                    elif sm.current:
+                        await websocket.send(json.dumps(_service._output_metadata(sm.current)))
+                continue
+
+            # Control commands (must be subscribed as a client, not a stream subscriber)
+            if sc and not sc.is_stream_subscriber and _service and "cmd" in data:
                 await _service.handle_control_command(sc.client_id, message)
 
     except websockets.exceptions.ConnectionClosed:
@@ -1542,7 +1567,10 @@ async def handle_metadata(request: web.Request) -> web.Response:
 
 async def handle_health(request: web.Request) -> web.Response:
     """Health check endpoint."""
-    return web.Response(text="OK")
+    return web.json_response(
+        {"status": "ok", "capabilities": ["subscribe_stream"]},
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
 
 
 # ──────────────────────────────────────────────
