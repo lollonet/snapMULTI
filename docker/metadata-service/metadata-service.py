@@ -8,6 +8,7 @@ Centralized metadata + cover art service that runs on the server alongside Snapc
 - Serves artwork via built-in HTTP server (port 8083)
 - Pushes metadata to display clients via WebSocket (port 8082)
 - Clients subscribe by sending {"subscribe": "CLIENT_ID"} to get their stream's metadata
+- Controllers subscribe by sending {"subscribe_stream": "STREAM_ID"} for raw stream metadata (no volume)
 
 Replaces per-client metadata-service containers — N clients no longer make N redundant API calls.
 """
@@ -1459,12 +1460,16 @@ async def ws_handler(websocket: Any) -> None:
                 logger.info(f"Client {client_addr} subscribed to stream '{stream_name}'")
                 if _service:
                     sm = _service.streams.get(stream_name)
-                    if sm and sm.current:
+                    if sm is None:
+                        logger.warning(
+                            f"Client {client_addr} subscribed to unknown stream '{stream_name}'"
+                        )
+                    elif sm.current:
                         await websocket.send(json.dumps(_service._output_metadata(sm.current)))
                 continue
 
-            # Control commands (must be subscribed)
-            if sc and _service and "cmd" in data:
+            # Control commands (must be subscribed as a client, not a stream subscriber)
+            if sc and not sc.is_stream_subscriber and _service and "cmd" in data:
                 await _service.handle_control_command(sc.client_id, message)
 
     except websockets.exceptions.ConnectionClosed:
