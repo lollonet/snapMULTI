@@ -333,7 +333,8 @@ class MetadataService:
         for sc in ws_clients.copy():
             try:
                 await sc.websocket.send(msg)
-            except Exception:
+            except Exception as exc:
+                logger.debug("server_info send failed, dropping client: %s", exc)
                 ws_clients.discard(sc)
 
     def _resolve_client_stream(self, client_id: str) -> str | None:
