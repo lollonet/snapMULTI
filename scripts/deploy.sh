@@ -783,12 +783,15 @@ pull_images() {
     # COMPOSE_PROFILES in .env controls which services are active (e.g. tidal
     # profile on ARM). docker compose pull respects profiles automatically.
     local services
-    services=$(docker compose config --services 2>/dev/null)
-    local total
-    total=$(echo "$services" | wc -l)
+    mapfile -t services < <(docker compose config --services)
+    if [[ ${#services[@]} -eq 0 ]]; then
+        error "No services returned from docker compose config — check compose file"
+        exit 1
+    fi
+    local total=${#services[@]}
     local count=0
 
-    for svc in $services; do
+    for svc in "${services[@]}"; do
         count=$((count + 1))
         info "Pulling $svc ($count/$total)"
         # metadata has a build: directive — pull from Hub if available,
@@ -829,7 +832,11 @@ verify_services() {
 
     # Derive expected services from active compose config (respects profiles)
     local expected_services
-    mapfile -t expected_services < <(docker compose config --services 2>/dev/null)
+    mapfile -t expected_services < <(docker compose config --services)
+    if [[ ${#expected_services[@]} -eq 0 ]]; then
+        error "No services returned from docker compose config — check compose file"
+        exit 1
+    fi
     local max_attempts=6
     local wait_seconds=10
     local attempt=1
