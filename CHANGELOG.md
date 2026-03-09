@@ -7,12 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] — 2026-03-09
+
 ### Added
 - **WebSocket stream subscription** — Controller clients (e.g. snapCTRL) can now subscribe by stream name with `{"subscribe_stream": "Spotify"}` and receive metadata without per-client volume injection. `/health` now returns `{"status":"ok","capabilities":["subscribe_stream"]}`
 - **Automatic updates** ([#76](https://github.com/lollonet/snapMULTI/issues/76)) — Opt-in automatic Docker image updates via Watchtower (`AUTO_UPDATE=true` in `.env`). New `scripts/update.sh` for config/script updates from GitHub releases without git. Works on both SD-card installs and git-cloned setups. Major version changes blocked for safety
 
 ### Changed
 - **Tidal Connect deploy via COMPOSE_PROFILES** ([#99](https://github.com/lollonet/snapMULTI/pull/99)) — ARM detection now writes `COMPOSE_PROFILES=tidal` to `.env`; `deploy.sh` and CI no longer need architecture-specific service lists. `pull_images()` and `verify_services()` derive active services from compose config dynamically
+- **Client submodule v0.2.3** — ALSA & network tuning with WiFi/Ethernet auto-detection, Docker image pull fix, discover-server install guard
 
 ### Fixed
 - **Service health check timing** — Added 5-second initial wait in `verify_services` after `docker compose up -d`, preventing false-healthy results while containers are still in the "starting" state
