@@ -59,10 +59,10 @@ jobs:
 
             echo "Ensuring COMPOSE_PROFILES=tidal on ARM (migration from pre-v0.3.5 .env)..."
             if [ "$(uname -m)" = "aarch64" ]; then
-              if \! grep -q "^COMPOSE_PROFILES=" .env 2>/dev/null; then
+              if ! grep -q "^COMPOSE_PROFILES=" .env 2>/dev/null; then
                 echo "COMPOSE_PROFILES=tidal" >> .env
                 echo "Migrated .env: added COMPOSE_PROFILES=tidal"
-              elif \! grep -q "^COMPOSE_PROFILES=.*tidal" .env; then
+              elif ! grep -q "^COMPOSE_PROFILES=.*tidal" .env; then
                 sed -i "s/^COMPOSE_PROFILES=/COMPOSE_PROFILES=tidal,/" .env
                 echo "Migrated .env: added tidal to existing COMPOSE_PROFILES"
               fi
