@@ -24,30 +24,43 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Copy updated docker-compose.yml
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          key: ${{ secrets.SSH_KEY }}
+          source: docker-compose.yml
+          target: /tmp/snapmulti-deploy/
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.5
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DEPLOY_VERSION: ${{ github.ref_name }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
           key: ${{ secrets.SSH_KEY }}
-          envs: DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
+          envs: DOCKERHUB_USERNAME,DOCKERHUB_TOKEN,DEPLOY_VERSION
           script: |
             set -euo pipefail
 
             cd /opt/snapmulti || { echo "ERROR: Directory not found"; exit 1; }
 
-            CURRENT_COMMIT=$(git rev-parse HEAD)
-            echo "Current commit: $CURRENT_COMMIT"
+            echo "Deploying version: ${DEPLOY_VERSION}"
 
-            echo "Fetching latest changes..."
-            git fetch origin main || { echo "ERROR: git fetch failed"; exit 1; }
-            git reset --hard origin/main || { echo "ERROR: git reset failed"; exit 1; }
+            echo "Updating docker-compose.yml..."
+            sudo cp /tmp/snapmulti-deploy/docker-compose.yml /opt/snapmulti/docker-compose.yml
+            rm -rf /tmp/snapmulti-deploy
 
-            NEW_COMMIT=$(git rev-parse HEAD)
-            echo "New commit: $NEW_COMMIT"
+            echo "Updating SNAPMULTI_VERSION in .env..."
+            if grep -q '^SNAPMULTI_VERSION=' .env 2>/dev/null; then
+              sudo sed -i "s|^SNAPMULTI_VERSION=.*|SNAPMULTI_VERSION=${DEPLOY_VERSION}|" .env
+            else
+              echo "SNAPMULTI_VERSION=${DEPLOY_VERSION}" | sudo tee -a .env > /dev/null
+            fi
 
             echo "Logging in to Docker Hub..."
             if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
@@ -85,4 +98,4 @@ jobs:
             sleep 5
             docker ps --format "table {{.Names}}\t{{.Status}}"
 
-            echo "Deployment complete ($CURRENT_COMMIT -> $NEW_COMMIT)"
+            echo "Deployment complete (version: ${DEPLOY_VERSION})"
