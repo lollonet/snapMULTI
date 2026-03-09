@@ -713,7 +713,7 @@ EOF
         if ! grep -q '^COMPOSE_PROFILES=' "$ENV_FILE" 2>/dev/null; then
             printf '\n# Docker Compose profiles (tidal-connect is ARM-only)\nCOMPOSE_PROFILES=tidal\n' >> "$ENV_FILE"
             info "Migrated .env: added COMPOSE_PROFILES=tidal for ARM"
-        elif ! grep -q 'tidal' "$ENV_FILE"; then
+        elif ! grep -q '^COMPOSE_PROFILES=.*tidal' "$ENV_FILE"; then
             sed -i 's/^COMPOSE_PROFILES=\(.*\)/COMPOSE_PROFILES=\1,tidal/' "$ENV_FILE"
             info "Migrated .env: added tidal to existing COMPOSE_PROFILES"
         fi
