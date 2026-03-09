@@ -685,14 +685,38 @@ PGID=$real_gid
 MPD_START_PERIOD=$mpd_start_period
 EOF
 
+        # Enable Tidal Connect profile on ARM (ARM-only image)
+        if [[ "$IS_ARM" == "true" ]]; then
+            cat >> "$ENV_FILE" <<EOF
+
+# Docker Compose profiles (tidal-connect is ARM-only)
+COMPOSE_PROFILES=tidal
+EOF
+        fi
+
         chown "$real_uid:$real_gid" "$ENV_FILE"
         info "Generated .env:"
         info "  MUSIC_PATH=$music_path"
         info "  TZ=$tz_detected"
         info "  PUID=$real_uid  PGID=$real_gid"
         info "  MPD_START_PERIOD=$mpd_start_period"
+        if [[ "$IS_ARM" == "true" ]]; then
+            info "  COMPOSE_PROFILES=tidal"
+        fi
 
         apply_resource_profile "$profile"
+    fi
+
+    # Migrate existing .env: add COMPOSE_PROFILES=tidal on ARM if absent
+    # (installs from before PR #99 have no COMPOSE_PROFILES key)
+    if [[ "$IS_ARM" == "true" ]]; then
+        if ! grep -q '^COMPOSE_PROFILES=' "$ENV_FILE" 2>/dev/null; then
+            printf '\n# Docker Compose profiles (tidal-connect is ARM-only)\nCOMPOSE_PROFILES=tidal\n' >> "$ENV_FILE"
+            info "Migrated .env: added COMPOSE_PROFILES=tidal for ARM"
+        elif ! grep -q '^COMPOSE_PROFILES=.*tidal' "$ENV_FILE"; then
+            sed -i 's/^COMPOSE_PROFILES=\(.*\)/COMPOSE_PROFILES=\1,tidal/' "$ENV_FILE"
+            info "Migrated .env: added tidal to existing COMPOSE_PROFILES"
+        fi
     fi
 
     # Enable auto-update profile if requested
@@ -768,37 +792,35 @@ pull_images() {
     step "Pulling Docker images"
     cd "$PROJECT_ROOT"
 
-    local images=("snapserver" "shairport-sync" "librespot" "mpd" "mympd")
-    if [[ "$IS_ARM" == "true" ]]; then
-        images+=("tidal-connect")
-    else
-        info "Skipping tidal-connect (ARM-only) on x86"
+    # COMPOSE_PROFILES in .env controls which services are active (e.g. tidal
+    # profile on ARM). docker compose pull respects profiles automatically.
+    local services
+    mapfile -t services < <(docker compose config --services)
+    if [[ ${#services[@]} -eq 0 ]]; then
+        error "No services returned from docker compose config — check compose file"
+        exit 1
     fi
-
-    local total=$(( ${#images[@]} + 1 ))  # +1 for metadata
+    local total=${#services[@]}
     local count=0
 
-    for svc in "${images[@]}"; do
+    for svc in "${services[@]}"; do
         count=$((count + 1))
         info "Pulling $svc ($count/$total)"
+        # metadata has a build: directive — pull from Hub if available,
+        # fall back to local build on first bootstrap.
         if ! docker compose pull "$svc" > /dev/null 2>&1; then
-            error "Failed to pull $svc"
-            exit 1
+            if [[ "$svc" == "metadata" ]]; then
+                info "Building metadata locally (not yet on registry)"
+                if ! docker compose build metadata; then
+                    error "Failed to build metadata image"
+                    exit 1
+                fi
+            else
+                error "Failed to pull $svc"
+                exit 1
+            fi
         fi
     done
-
-    # metadata has a build: directive in docker-compose.yml. Pull from Hub if
-    # available (CI pushes after merge); fall back to local build on first
-    # bootstrap before the image is published.
-    count=$((count + 1))
-    info "Pulling metadata ($count/$total)"
-    if ! docker compose pull metadata > /dev/null 2>&1; then
-        info "Building metadata locally (not yet on registry)"
-        if ! docker compose build metadata; then
-            error "Failed to build metadata image"
-            exit 1
-        fi
-    fi
 
     ok "All $total images ready"
 }
@@ -807,31 +829,25 @@ start_services() {
     step "Starting services"
     cd "$PROJECT_ROOT"
 
-    if [[ "$IS_ARM" == "true" ]]; then
-        info "Starting all containers..."
-        if ! docker compose up -d; then
-            error "Failed to start services"
-            exit 1
-        fi
-        ok "Services started (including Tidal Connect)"
-    else
-        # Skip tidal-connect on x86 (ARM-only image)
-        info "Starting containers (Tidal Connect skipped — ARM only)..."
-        if ! docker compose up -d snapserver mpd mympd shairport-sync librespot metadata; then
-            error "Failed to start services"
-            exit 1
-        fi
-        ok "Services started"
+    # COMPOSE_PROFILES in .env controls which services are active.
+    # docker compose up -d starts all services matching active profiles.
+    info "Starting containers..."
+    if ! docker compose up -d; then
+        error "Failed to start services"
+        exit 1
     fi
+    ok "Services started"
 }
 
 verify_services() {
     step "Verifying services"
 
-    local expected_services=("snapserver" "shairport-sync" "librespot" "mpd" "mympd" "metadata")
-    # Include tidal-connect only on ARM
-    if [[ "$IS_ARM" == "true" ]]; then
-        expected_services+=("tidal-connect")
+    # Derive expected services from active compose config (respects profiles)
+    local expected_services
+    mapfile -t expected_services < <(docker compose config --services)
+    if [[ ${#expected_services[@]} -eq 0 ]]; then
+        error "No services returned from docker compose config — check compose file"
+        exit 1
     fi
     local max_attempts=6
     local wait_seconds=10
