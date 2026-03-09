@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Server info broadcast** — metadata-service pushes server version, Snapcast version, connected client count, and active streams to all display clients every ~60s via WebSocket. Bottom bar on fb-display now shows server version alongside IP address. New `server_info` WS message type; `/health` now reports `server_info` capability
+
 ## [0.3.6] — 2026-03-09
 
 ### Added
