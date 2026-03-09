@@ -947,6 +947,15 @@ write_version() {
     else
         warn "Could not determine version (no git tag, no .version file)"
     fi
+
+    # Propagate version to .env so metadata container can expose it
+    if [[ -n "$version" ]] && [[ -f "$ENV_FILE" ]]; then
+        if grep -q '^SNAPMULTI_VERSION=' "$ENV_FILE" 2>/dev/null; then
+            sed -i "s|^SNAPMULTI_VERSION=.*|SNAPMULTI_VERSION=$version|" "$ENV_FILE"
+        else
+            echo "SNAPMULTI_VERSION=$version" >> "$ENV_FILE"
+        fi
+    fi
 }
 
 #######################################

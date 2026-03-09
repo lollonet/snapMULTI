@@ -154,6 +154,7 @@ class MetadataService:
         self._mpd_last_retry_log: float = 0.0
         self._mpd_retry_log_interval: float = 30.0  # log retry attempts every 30s
         self.user_agent = "snapMULTI-MetadataService/1.0"
+        self._server_version = os.environ.get("SNAPMULTI_VERSION", "unknown")
 
         # Client → stream mapping cache (refreshed each poll cycle)
         self._client_stream_map: dict[str, str] = {}
@@ -305,6 +306,36 @@ class MetadataService:
                     if identifier:
                         mapping[identifier] = stream_id
         return mapping
+
+    def _build_server_info(self, server: dict) -> dict:
+        """Build server_info payload from current server status."""
+        snap_info = server.get("snapserver", {})
+        clients = sum(
+            len(g.get("clients", []))
+            for g in server.get("groups", [])
+        )
+        active = [
+            s["id"] for s in server.get("streams", [])
+            if s.get("status") == "playing"
+        ]
+        return {
+            "type": "server_info",
+            "server_version": self._server_version,
+            "snapcast_version": snap_info.get("version", ""),
+            "connected_clients": clients,
+            "active_streams": active,
+        }
+
+    async def _broadcast_server_info(self, server: dict) -> None:
+        """Broadcast server_info to all connected WebSocket clients."""
+        info = self._build_server_info(server)
+        msg = json.dumps(info)
+        for sc in ws_clients.copy():
+            try:
+                await sc.websocket.send(msg)
+            except Exception as exc:
+                logger.debug("server_info send failed, dropping client: %s", exc)
+                ws_clients.discard(sc)
 
     def _resolve_client_stream(self, client_id: str) -> str | None:
         """Resolve a CLIENT_ID to its stream_id using cached mapping."""
@@ -1196,6 +1227,7 @@ class MetadataService:
         """Main loop: poll Snapserver, enrich metadata, broadcast to clients."""
         loop = asyncio.get_running_loop()
         consecutive_errors = 0
+        server_info_counter = 0
 
         while True:
             try:
@@ -1330,6 +1362,11 @@ class MetadataService:
                         except Exception:
                             ws_clients.discard(sc)
 
+                server_info_counter += 1
+                if server_info_counter >= 20:  # ~60s at 3s poll interval
+                    server_info_counter = 0
+                    await self._broadcast_server_info(server)
+
                 consecutive_errors = 0
 
             except Exception as e:
@@ -1433,14 +1470,12 @@ async def ws_handler(websocket: Any) -> None:
                 # Resolve stream and send current metadata immediately
                 if _service:
                     stream_id = _service._resolve_client_stream(client_id)
+                    loop = asyncio.get_running_loop()
+                    server = await loop.run_in_executor(None, _service.get_server_status)
                     if stream_id:
                         sc.stream_id = stream_id
                         sm = _service.streams.get(stream_id)
                         if sm and sm.current:
-                            loop = asyncio.get_running_loop()
-                            server = await loop.run_in_executor(
-                                None, _service.get_server_status
-                            )
                             volume = _service._find_client_volume(server, client_id) if server else {}
                             output = {
                                 **_service._output_metadata(sm.current),
@@ -1448,6 +1483,8 @@ async def ws_handler(websocket: Any) -> None:
                                 "muted": volume.get("muted", False),
                             }
                             await websocket.send(json.dumps(output))
+                    if server:
+                        await websocket.send(json.dumps(_service._build_server_info(server)))
                 continue
 
             # Stream subscription (controller clients — no client-ID resolution, no volume)
@@ -1466,6 +1503,10 @@ async def ws_handler(websocket: Any) -> None:
                         )
                     elif sm.current:
                         await websocket.send(json.dumps(_service._output_metadata(sm.current)))
+                    loop = asyncio.get_running_loop()
+                    server = await loop.run_in_executor(None, _service.get_server_status)
+                    if server:
+                        await websocket.send(json.dumps(_service._build_server_info(server)))
                 continue
 
             # Control commands (must be subscribed as a client, not a stream subscriber)
@@ -1568,7 +1609,11 @@ async def handle_metadata(request: web.Request) -> web.Response:
 async def handle_health(request: web.Request) -> web.Response:
     """Health check endpoint."""
     return web.json_response(
-        {"status": "ok", "capabilities": ["subscribe_stream"]},
+        {
+            "status": "ok",
+            "version": os.environ.get("SNAPMULTI_VERSION", "unknown"),
+            "capabilities": ["subscribe_stream", "server_info"],
+        },
         headers={"Access-Control-Allow-Origin": "*"},
     )
 

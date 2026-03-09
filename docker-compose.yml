@@ -280,6 +280,7 @@ services:
     environment:
       - TZ=${TZ:-Europe/Berlin}
       - EXTERNAL_HOST=${EXTERNAL_HOST:-}
+      - SNAPMULTI_VERSION=${SNAPMULTI_VERSION:-unknown}
     volumes:
       - ./artwork:/app/artwork
     healthcheck:
