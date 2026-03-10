@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.34.2
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: '${{ matrix.image }}:latest'
           format: 'sarif'
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Scan go-librespot (Spotify Connect)
-        uses: aquasecurity/trivy-action@0.34.2
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: 'ghcr.io/devgianlu/go-librespot:v0.7.0'
           format: 'sarif'
