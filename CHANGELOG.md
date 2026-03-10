@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **TCP audio input** — Source 5 accepts raw PCM streams from any device on the LAN (port 4953). Re-enables ffmpeg and Android streaming (BubbleUPnP, Termux) into the multi-room system
+
 ## [0.3.7] — 2026-03-09
 
 ### Added

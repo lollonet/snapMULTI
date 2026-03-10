@@ -148,6 +148,7 @@ Formato audio: 44100 Hz, 16-bit, stereo (codec FLAC predefinito).
 | 1704 | TCP | Server → Client | Streaming audio |
 | 1705 | TCP | Bidirezionale | Controllo JSON-RPC |
 | 1780 | HTTP | Bidirezionale | Interfaccia Snapweb + API HTTP |
+| 4953 | TCP | In entrata | Ingresso audio TCP (streaming ffmpeg/Android) |
 | 6600 | TCP | Bidirezionale | Protocollo MPD (controllo client) |
 | 8000 | HTTP | Bidirezionale | Stream audio HTTP MPD |
 | 8082 | WebSocket | Server → Client | Servizio metadata (push info tracce) |
@@ -169,6 +170,7 @@ sudo ufw allow 1705/tcp   # Controllo JSON-RPC
 sudo ufw allow 1780/tcp   # API HTTP + Snapweb UI
 
 # Sorgenti audio — necessarie per trasmettere da telefono/app
+sudo ufw allow 4953/tcp   # Ingresso audio TCP (streaming ffmpeg/Android)
 sudo ufw allow 5000/tcp   # AirPlay (shairport-sync RTSP)
 sudo ufw allow 5858/tcp   # Copertine AirPlay (meta_shairport.py)
 sudo ufw allow 2019/tcp   # Tidal Connect discovery (solo ARM)

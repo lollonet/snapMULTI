@@ -13,10 +13,11 @@ Designed for remote management applications and advanced configuration.
 | 2 | Tidal Connect | `pipe` | `Tidal` | Active | `tidal-connect` (separate container, ARM only) |
 | 3 | AirPlay | `pipe` | `AirPlay` | Active | `shairport-sync` (separate container) |
 | 4 | Spotify Connect | `pipe` | `Spotify` | Active | `go-librespot` (separate container) |
-| 5 | ALSA Capture | `alsa` | `LineIn` | Available | ALSA device |
-| 6 | Meta Stream | `meta` | `AutoSwitch` | Available | — (built-in) |
-| 7 | File Playback | `file` | `Alert` | Available | — (built-in) |
-| 8 | TCP Client | `tcp` (client) | `Remote` | Available | — (built-in) |
+| 5 | TCP Input | `tcp` (server) | `TCP-Input` | Active | — (built-in) |
+| 6 | ALSA Capture | `alsa` | `LineIn` | Available | ALSA device |
+| 7 | Meta Stream | `meta` | `AutoSwitch` | Available | — (built-in) |
+| 8 | File Playback | `file` | `Alert` | Available | — (built-in) |
+| 9 | TCP Client | `tcp` (client) | `Remote` | Available | — (built-in) |
 
 **Status legend:**
 - **Active** — Enabled in `config/snapserver.conf`, running in production
@@ -208,11 +209,56 @@ SPOTIFY_NAME="Living Room Spotify"
 
 ---
 
+### 5. TCP Input (tcp server)
+
+Listens on port 4953 for inbound raw PCM audio streams. Any device on the LAN can push audio using `ffmpeg` or compatible tools.
+
+**Config:**
+```ini
+source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
+```
+
+**Parameters:**
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `name` | `TCP-Input` | Stream ID |
+| `mode` | `server` | Snapserver listens for incoming connections |
+| Bind address | `0.0.0.0` | Listen on all interfaces |
+| Port | `4953` | Inbound port (must be LAN-reachable) |
+
+**Sample format:** Raw PCM must match `sampleformat = 44100:16:2`. Encode with ffmpeg before sending.
+
+**Push audio from any machine:**
+```bash
+# Stream a file
+ffmpeg -i music.mp3 -f s16le -ar 44100 -ac 2 tcp://<server-ip>:4953
+
+# Stream system audio (macOS via BlackHole or Soundflower)
+ffmpeg -f avfoundation -i ":BlackHole 2ch" -f s16le -ar 44100 -ac 2 tcp://<server-ip>:4953
+
+# Stream system audio (Linux PulseAudio)
+ffmpeg -f pulse -i default -f s16le -ar 44100 -ac 2 tcp://<server-ip>:4953
+
+# Stream a radio/internet URL
+ffmpeg -i https://stream.url/radio -f s16le -ar 44100 -ac 2 tcp://<server-ip>:4953
+```
+
+**Use cases:**
+- Android streaming (BubbleUPnP, Termux ffmpeg) — see [Streaming from Android](#streaming-from-android)
+- System audio capture from any PC or Mac on the LAN
+- Custom radio or podcast scripts pushing audio on demand
+- Home automation (Node-RED, Home Assistant) triggering audio playback
+
+**Docker requirements:** None — `network_mode: host` exposes port 4953 automatically.
+
+---
+
 ## Available Sources
 
 These sources are included as commented-out examples in `config/snapserver.conf`. Uncomment to enable.
 
-### 5. ALSA Capture (alsa)
+### 6. ALSA Capture (alsa)
 
 Captures audio from an ALSA hardware device. Use for line-in inputs, microphones, or ALSA loopback devices.
 
@@ -250,7 +296,7 @@ docker exec snapserver cat /proc/asound/cards
 
 ---
 
-### 6. Meta Stream (meta)
+### 7. Meta Stream (meta)
 
 Reads and mixes audio from other stream sources with priority-based switching. Plays audio from the highest-priority active source.
 
@@ -281,7 +327,7 @@ source = meta:///MPD/Spotify/AirPlay?name=AutoSwitch
 
 ---
 
-### 7. File Playback (file)
+### 8. File Playback (file)
 
 Reads raw PCM audio from a file. Useful for alerts, doorbell sounds, or TTS announcements.
 
@@ -315,7 +361,7 @@ ffmpeg -i doorbell.mp3 \
 
 ---
 
-### 8. TCP Client (tcp client)
+### 9. TCP Client (tcp client)
 
 Connects to a remote TCP server to receive audio. The inverse of TCP server mode — Snapserver pulls audio from a remote source.
 
@@ -348,11 +394,7 @@ Android doesn't have a built-in equivalent of Apple's AirPlay for audio casting 
 
 > **Note:** For Tidal on ARM (Pi), use the [Tidal Connect](#2-tidal-connect-pipe-from-tidal-connect) source instead — cast directly from the Tidal app like Spotify Connect.
 
-> **Note:** TCP streaming methods below require adding a TCP source to your config first:
-> ```ini
-> # Add to config/snapserver.conf:
-> source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
-> ```
+> **Note:** TCP Input (Source 5) is enabled by default on port 4953 — no config changes needed.
 
 ### Method 1: TCP Input via BubbleUPnP
 
