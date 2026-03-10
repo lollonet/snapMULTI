@@ -219,27 +219,35 @@ sudo ufw allow 5353/udp   # mDNS (Avahi/Bonjour)
 
 ## Configurazioni Consigliate
 
-### Configurazione Economica (~50€)
+Prezzi indicativi (marzo 2026), mercato IT. Fonti: [Amazon IT](https://www.amazon.it), [hifiberry.com](https://www.hifiberry.com) (prezzi in EUR, spedizione dall'estero), [inno-maker.com](https://www.inno-maker.com).
+
+### Configurazione HiFiBerry (~€200)
 
 | Ruolo | Hardware | Costo |
 |-------|----------|-------|
-| Server | Raspberry Pi 3B+ (usato) | ~25€ |
-| Client (1 stanza) | Raspberry Pi Zero 2 W + DAC USB | ~25€ |
+| Server + Client (Pi 4 4 GB + HiFiBerry DAC2 Pro) | Raspberry Pi 4 4 GB + HiFiBerry DAC2 Pro + accessori | ~€135 |
+| Client (Pi Zero 2 W + HiFiBerry DAC+ Zero) | Pi Zero 2 W + DAC+ Zero + accessori | ~€65 |
 
-### Configurazione Media (~150€)
+> Schede HiFiBerry ordinate direttamente da [hifiberry.com](https://www.hifiberry.com) (spedizione da Svizzera, 3–5 gg lavorativi in Italia).
 
-| Ruolo | Hardware | Costo |
-|-------|----------|-------|
-| Server | Raspberry Pi 4 (4 GB) | ~55€ |
-| Client (3 stanze) | 3× Raspberry Pi Zero 2 W + HiFiBerry DAC+ Zero | ~105€ |
+### Alternativa Budget — InnoMaker PCM5122 (~€175)
 
-### Configurazione Entusiasta (~300€+)
+Tutti i componenti disponibili su [Amazon IT](https://www.amazon.it) — nessun ordine internazionale necessario.
 
 | Ruolo | Hardware | Costo |
 |-------|----------|-------|
-| Server | Intel NUC o mini PC | ~150€+ |
-| Client (5 stanze) | Mix di Pi Zero 2 W con HAT HiFiBerry | ~175€ |
-| Rete | Switch gestito + Ethernet al server | ~30€ |
+| Server + Client (Pi 4 2 GB + InnoMaker HiFi DAC HAT) | Raspberry Pi 4 2 GB + [InnoMaker HiFi DAC HAT](https://www.amazon.it/s?k=innomaker+hifi+dac+hat+pcm5122) (PCM5122) + accessori | ~€100 |
+| Client (Pi 3B+ + InnoMaker DAC Mini HAT) | Raspberry Pi 3B+ + [InnoMaker DAC Mini HAT](https://www.amazon.it/s?k=innomaker+dac+mini+hat+pcm5122) (PCM5122) + accessori | ~€75 |
+
+> **Nota sul Pi 4 2 GB come server:** tutti e sette i servizi usano ~720 MiB RAM al minimo. Il Pi 4 2 GB lascia ~1,3 GB di margine per il sistema operativo — sufficiente, ma più stretto rispetto al modello 4 GB. Per streaming simultaneo da tutte le sorgenti, preferire il modello 4 GB.
+
+### Configurazione Entusiasta (~€385+)
+
+| Ruolo | Hardware | Costo |
+|-------|----------|-------|
+| Server | Intel NUC o mini PC | ~€150+ |
+| Client (5 stanze) | Mix di Pi Zero 2 W con HAT HiFiBerry (DAC+ Zero ~€20 cad.) | ~€200 |
+| Rete | Switch gestito ([TP-Link TL-SG105E](https://www.amazon.it/s?k=tp-link+tl-sg105e)) + Ethernet al server | ~€25 |
 
 ## Limitazioni Note
 
