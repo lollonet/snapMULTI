@@ -13,10 +13,11 @@ Progettato per applicazioni di gestione remota e configurazione avanzata.
 | 2 | Tidal Connect | `pipe` | `Tidal` | Attiva | `tidal-connect` (container separato, solo ARM) |
 | 3 | AirPlay | `pipe` | `AirPlay` | Attiva | `shairport-sync` (container separato) |
 | 4 | Spotify Connect | `pipe` | `Spotify` | Attiva | `go-librespot` (container separato) |
-| 5 | Cattura ALSA | `alsa` | `LineIn` | Disponibile | Dispositivo ALSA |
-| 6 | Meta Stream | `meta` | `AutoSwitch` | Disponibile | — (integrato) |
-| 7 | Riproduzione File | `file` | `Alert` | Disponibile | — (integrato) |
-| 8 | Client TCP | `tcp` (client) | `Remote` | Disponibile | — (integrato) |
+| 5 | Ingresso TCP | `tcp` (server) | `TCP-Input` | Attiva | — (integrato) |
+| 6 | Cattura ALSA | `alsa` | `LineIn` | Disponibile | Dispositivo ALSA |
+| 7 | Meta Stream | `meta` | `AutoSwitch` | Disponibile | — (integrato) |
+| 8 | Riproduzione File | `file` | `Alert` | Disponibile | — (integrato) |
+| 9 | Client TCP | `tcp` (client) | `Remote` | Disponibile | — (integrato) |
 
 **Legenda stati:**
 - **Attiva** — Abilitata in `config/snapserver.conf`, in esecuzione in produzione
@@ -208,11 +209,56 @@ SPOTIFY_NAME="Spotify Salotto"
 
 ---
 
+### 5. Ingresso TCP (tcp server)
+
+Rimane in ascolto sulla porta 4953 per stream audio PCM in entrata. Qualsiasi dispositivo sulla LAN può inviare audio usando `ffmpeg` o strumenti compatibili.
+
+**Configurazione:**
+```ini
+source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
+```
+
+**Parametri:**
+
+| Parametro | Valore | Descrizione |
+|-----------|--------|-------------|
+| `name` | `TCP-Input` | ID stream |
+| `mode` | `server` | Snapserver attende connessioni in entrata |
+| Indirizzo bind | `0.0.0.0` | In ascolto su tutte le interfacce |
+| Porta | `4953` | Porta in entrata (deve essere raggiungibile dalla LAN) |
+
+**Formato campionamento:** PCM raw deve corrispondere a `sampleformat = 44100:16:2`. Codificare con ffmpeg prima dell'invio.
+
+**Invia audio da qualsiasi macchina:**
+```bash
+# Trasmetti un file
+ffmpeg -i musica.mp3 -f s16le -ar 44100 -ac 2 tcp://<server-ip>:4953
+
+# Trasmetti audio di sistema (macOS via BlackHole)
+ffmpeg -f avfoundation -i ":BlackHole 2ch" -f s16le -ar 44100 -ac 2 tcp://<server-ip>:4953
+
+# Trasmetti audio di sistema (Linux PulseAudio)
+ffmpeg -f pulse -i default -f s16le -ar 44100 -ac 2 tcp://<server-ip>:4953
+
+# Trasmetti un URL radio/internet
+ffmpeg -i https://stream.url/radio -f s16le -ar 44100 -ac 2 tcp://<server-ip>:4953
+```
+
+**Casi d'uso:**
+- Streaming da Android (BubbleUPnP, Termux ffmpeg) — vedi [Streaming da Android](#streaming-da-android)
+- Cattura audio di sistema da qualsiasi PC o Mac sulla LAN
+- Script radio o podcast personalizzati che inviano audio su richiesta
+- Automazione domestica (Node-RED, Home Assistant) che attiva la riproduzione audio
+
+**Requisiti Docker:** Nessuno — `network_mode: host` espone automaticamente la porta 4953.
+
+---
+
 ## Sorgenti Disponibili
 
 Queste sorgenti sono incluse come esempi commentati in `config/snapserver.conf`. Decommentare per abilitarle.
 
-### 5. Cattura ALSA (alsa)
+### 6. Cattura ALSA (alsa)
 
 Cattura audio da un dispositivo hardware ALSA. Usare per ingressi line-in, microfoni o dispositivi ALSA loopback.
 
@@ -250,7 +296,7 @@ docker exec snapserver cat /proc/asound/cards
 
 ---
 
-### 6. Meta Stream (meta)
+### 7. Meta Stream (meta)
 
 Legge e mixa audio da altre sorgenti stream con commutazione basata su priorità. Riproduce l'audio dalla sorgente attiva con priorità più alta.
 
@@ -281,7 +327,7 @@ source = meta:///MPD/Spotify/AirPlay?name=AutoSwitch
 
 ---
 
-### 7. Riproduzione File (file)
+### 8. Riproduzione File (file)
 
 Legge audio PCM grezzo da un file. Utile per avvisi, suoni campanello o annunci TTS.
 
@@ -315,7 +361,7 @@ ffmpeg -i campanello.mp3 \
 
 ---
 
-### 8. Client TCP (tcp client)
+### 9. Client TCP (tcp client)
 
 Si connette a un server TCP remoto per ricevere audio. L'inverso della modalità server TCP — Snapserver preleva audio da una sorgente remota.
 
@@ -348,11 +394,7 @@ Android non ha un equivalente integrato di AirPlay di Apple per la trasmissione 
 
 > **Nota:** Per Tidal su ARM (Pi), usa la sorgente [Tidal Connect](#2-tidal-connect-pipe-da-tidal-connect) — trasmetti direttamente dall'app Tidal come Spotify Connect.
 
-> **Nota:** I metodi di streaming TCP seguenti richiedono l'aggiunta di una sorgente TCP alla configurazione:
-> ```ini
-> # Aggiungi a config/snapserver.conf:
-> source = tcp://0.0.0.0:4953?name=TCP-Input&mode=server
-> ```
+> **Nota:** Ingresso TCP (Sorgente 5) è abilitato per impostazione predefinita sulla porta 4953 — nessuna modifica alla configurazione necessaria.
 
 ### Metodo 1: Ingresso TCP tramite BubbleUPnP
 
