@@ -25,13 +25,17 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Copy updated docker-compose.yml
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USER }}
-          key: ${{ secrets.SSH_KEY }}
-          source: docker-compose.yml
-          target: /tmp/snapmulti-deploy/
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          HOST: ${{ secrets.HOST }}
+          DEPLOY_USER: ${{ secrets.USER }}
+        run: |
+          KEY_FILE=$(mktemp)
+          echo "$SSH_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no "${DEPLOY_USER}@${HOST}" "mkdir -p /tmp/snapmulti-deploy"
+          scp -i "$KEY_FILE" -o StrictHostKeyChecking=no docker-compose.yml "${DEPLOY_USER}@${HOST}:/tmp/snapmulti-deploy/docker-compose.yml"
+          rm -f "$KEY_FILE"
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.5
