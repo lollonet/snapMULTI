@@ -153,6 +153,7 @@ Audio format: 44100 Hz, 16-bit, stereo (default FLAC codec).
 | 1704 | TCP | Server → Clients | Audio streaming |
 | 1705 | TCP | Bidirectional | Snapcast JSON-RPC control |
 | 1780 | HTTP | Bidirectional | Snapweb UI + HTTP API |
+| 4953 | TCP | Inbound | TCP audio input (ffmpeg/Android streaming) |
 | 5000 | TCP | Inbound | AirPlay (shairport-sync RTSP) |
 | 5858 | TCP | Inbound | AirPlay cover art (meta_shairport.py) |
 | 2019 | TCP | Inbound | Tidal Connect discovery (ARM only) |
@@ -177,6 +178,7 @@ sudo ufw allow 1705/tcp   # JSON-RPC control
 sudo ufw allow 1780/tcp   # HTTP API + Snapweb UI
 
 # Audio sources — required for casting from phone/app
+sudo ufw allow 4953/tcp   # TCP audio input (ffmpeg/Android streaming)
 sudo ufw allow 5000/tcp   # AirPlay (shairport-sync RTSP)
 sudo ufw allow 5858/tcp   # AirPlay cover art (meta_shairport.py)
 sudo ufw allow 2019/tcp   # Tidal Connect discovery (ARM only)
