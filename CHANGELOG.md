@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **CI deploy: persist through overlayroot** — `deploy.yml` now bakes config, Docker image index, and new image layers to the SD card lower layer (`/media/root-ro`) between `docker compose down` and `up`. Uses bind-mount technique (safe with active overlayfs) so deployments survive Pi reboots. Verified by checking `SNAPMULTI_VERSION` in baked `.env` before starting containers.
+
 ### Documentation
 - **Hardware Buying Guide — US/UK pricing** — Replaced Italian market EUR prices with Amazon US (USD) and The Pi Hut UK (GBP). Added **Budget Alternative — InnoMaker PCM5122 (~$195)**: Pi 4 2GB + InnoMaker HiFi DAC HAT (~$110) and Pi 3B+ + InnoMaker DAC Mini HAT (~$81). All prices verified March 2026 from pishop.us, thepihut.com, and inno-maker.com. Italian translation updated with Amazon IT equivalent (~€175).
 
