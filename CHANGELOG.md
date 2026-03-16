@@ -7,13 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.9] — 2026-03-16
+
 ### Fixed
-- **MPD healthcheck timeout on large NFS/SMB libraries** — increase `MPD_START_PERIOD` default from 60s to 300s; switch mympd dependency to `service_started` (mympd retries MPD connection internally)
-- **MPD: Avahi mDNS errors** — bind-mount `/run/avahi-daemon/socket` into MPD container; eliminates `Failed to create Avahi client: Daemon not running` log spam
-- **MPD: macOS dotfiles indexed** — add `database { filter "~.*" }` to `mpd.conf`; excludes `._filename` resource fork files from the database (~48% noise reduction on NFS shares from macOS)
+- **MPD healthcheck timeout on large NFS/SMB libraries** ([#112](https://github.com/lollonet/snapMULTI/pull/112)) — increase `MPD_START_PERIOD` default from 60s to 300s; switch mympd dependency to `service_started` (mympd retries MPD connection internally)
+- **MPD: Avahi mDNS errors** ([#111](https://github.com/lollonet/snapMULTI/pull/111)) — bind-mount `/run/avahi-daemon/socket` into MPD container; eliminates `Failed to create Avahi client: Daemon not running` log spam
+- **MPD: macOS dotfiles indexed** ([#111](https://github.com/lollonet/snapMULTI/pull/111)) — add `database { filter "~.*" }` to `mpd.conf`; excludes `._filename` resource fork files from the database (~48% noise reduction on NFS shares from macOS)
+- **Tidal metadata garbage characters** ([#113](https://github.com/lollonet/snapMULTI/pull/113)) — `speaker_controller_application` runs in 8-bit terminal mode; tmux encoded C1 control chars (U+0080–U+009F) as `~@~X` in captures (e.g. `~@~S` in artist names like `CCCP – Fedeli Alla Linea`). Add `strip_escapes()` to sanitize capture-pane output before parsing
 
 ### Changed
-- **CI deploy: persist through overlayroot** — `deploy.yml` now bakes config, MPD database, myMPD state, Docker image index, and new image layers to the SD card lower layer (`/media/root-ro`) between `docker compose down` and `up`. Uses bind-mount technique (safe with active overlayfs) so deployments survive Pi reboots. MPD db bake avoids full NFS/SMB rescan on reboot (incremental update only). Verified by checking `SNAPMULTI_VERSION` in baked `.env` before starting containers.
+- **CI deploy: persist through overlayroot** ([#110](https://github.com/lollonet/snapMULTI/pull/110)) — `deploy.yml` now bakes config, MPD database, myMPD state, Docker image index, and new image layers to the SD card lower layer (`/media/root-ro`) between `docker compose down` and `up`. Uses bind-mount technique (safe with active overlayfs) so deployments survive Pi reboots. MPD db bake avoids full NFS/SMB rescan on reboot (incremental update only). Verified by checking `SNAPMULTI_VERSION` in baked `.env` before starting containers.
 
 ### Documentation
 - **Hardware Buying Guide — US/UK pricing** — Replaced Italian market EUR prices with Amazon US (USD) and The Pi Hut UK (GBP). Added **Budget Alternative — InnoMaker PCM5122 (~$195)**: Pi 4 2GB + InnoMaker HiFi DAC HAT (~$110) and Pi 3B+ + InnoMaker DAC Mini HAT (~$81). All prices verified March 2026 from pishop.us, thepihut.com, and inno-maker.com. Italian translation updated with Amazon IT equivalent (~€175).
