@@ -206,8 +206,9 @@ jobs:
   deploy:
     needs: manifest
     uses: ./.github/workflows/deploy.yml
+    with:
+      environment_name: snapvideo
     secrets:
-      HOST: ${{ secrets.HOST }}
       USER: ${{ secrets.USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
