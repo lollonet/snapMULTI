@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **MPD healthcheck timeout on large NFS/SMB libraries** — increase `MPD_START_PERIOD` default from 60s to 300s; switch mympd dependency to `service_started` (mympd retries MPD connection internally)
 - **MPD: Avahi mDNS errors** — bind-mount `/run/avahi-daemon/socket` into MPD container; eliminates `Failed to create Avahi client: Daemon not running` log spam
 - **MPD: macOS dotfiles indexed** — add `database { filter "~.*" }` to `mpd.conf`; excludes `._filename` resource fork files from the database (~48% noise reduction on NFS shares from macOS)
 
