@@ -239,6 +239,7 @@ services:
       - ./config/mpd.conf:/etc/mpd.conf:ro
       - ./mpd/playlists:/playlists
       - ./mpd/data:/data
+      - /run/avahi-daemon/socket:/run/avahi-daemon/socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
     logging: *default-logging

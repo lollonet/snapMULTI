@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **MPD: Avahi mDNS errors** — bind-mount `/run/avahi-daemon/socket` into MPD container; eliminates `Failed to create Avahi client: Daemon not running` log spam
+- **MPD: macOS dotfiles indexed** — add `database { filter "~.*" }` to `mpd.conf`; excludes `._filename` resource fork files from the database (~48% noise reduction on NFS shares from macOS)
+
 ### Changed
 - **CI deploy: persist through overlayroot** — `deploy.yml` now bakes config, MPD database, myMPD state, Docker image index, and new image layers to the SD card lower layer (`/media/root-ro`) between `docker compose down` and `up`. Uses bind-mount technique (safe with active overlayfs) so deployments survive Pi reboots. MPD db bake avoids full NFS/SMB rescan on reboot (incremental update only). Verified by checking `SNAPMULTI_VERSION` in baked `.env` before starting containers.
 
