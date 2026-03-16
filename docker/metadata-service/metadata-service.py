@@ -137,8 +137,8 @@ class MetadataService:
             )
             for ip_str in result.stdout.split():
                 self._trusted_ips.add(ip_str.strip())
-        except Exception:
-            pass
+        except (subprocess.SubprocessError, OSError) as e:
+            logger.warning("Could not get hostname IPs for trusted list: %s", e)
         logger.info(f"Trusted IPs for artwork: {self._trusted_ips}")
 
         # Snapserver persistent socket

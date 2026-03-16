@@ -312,8 +312,9 @@ class MPDWrapper(object):
         # Clean mpd client state
         try:
             self.disconnect()
-        except:
-            self.disconnect()
+        except (ConnectionError, BrokenPipeError, OSError) as e:
+            # mpd.ConnectionError inherits from OSError; safe to ignore here
+            logger.debug("disconnect() during reconnect raised %s (ignored)", e)
 
         # Try to reconnect
         self.run()
@@ -443,10 +444,24 @@ class MPDWrapper(object):
                     # return send({"jsonrpc": "2.0", "error": {"code": -32601,
                     #                                          "message": "TODO: GetProperties not yet implemented"}, "id": id})
                 elif cmd == 'GetMetadata':
-                    send({"jsonrpc": "2.0", "method": "Plugin.Stream.Log", "params": {
-                         "severity": "Info", "message": "Logmessage"}})
-                    return send({"jsonrpc": "2.0", "error": {"code": -32601,
-                                                             "message": "TODO: GetMetadata not yet implemented"}, "id": id})
+                    try:
+                        song = self.currentsong()
+                        metadata = {}
+                        if song:
+                            for mpd_key, meta_key in [
+                                ('title', 'title'), ('artist', 'artist'),
+                                ('album', 'album'), ('file', 'url'),
+                            ]:
+                                if mpd_key in song:
+                                    val = song[mpd_key]
+                                    metadata[meta_key] = [val] if meta_key == 'artist' else val
+                            if 'duration' in song:
+                                metadata['duration'] = float(song['duration'])
+                        return send({"jsonrpc": "2.0", "id": id, "result": metadata})
+                    except Exception as e:
+                        logger.error("GetMetadata failed: %s", e)
+                        return send({"jsonrpc": "2.0", "error": {
+                            "code": -32603, "message": f"GetMetadata error: {e}"}, "id": id})
                 else:
                     return send({"jsonrpc": "2.0", "error": {"code": -32601,
                                                              "message": "Method not found"}, "id": id})
