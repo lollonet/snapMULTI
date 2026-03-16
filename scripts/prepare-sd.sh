@@ -345,8 +345,12 @@ case "$INSTALL_TYPE" in
         ;;
 esac
 
-# Write client version so setup.sh can set APP_VERSION without a git repo on device
+# Bake version files so scripts can set version vars without a git repo on device
+SERVER_VERSION=$(git -C "$PROJECT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
 CLIENT_VERSION=$(git -C "$CLIENT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
+if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+    echo "${SERVER_VERSION#v}" > "$DEST/server/.version"
+fi
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     echo "$CLIENT_VERSION" > "$DEST/client/VERSION"
 fi
