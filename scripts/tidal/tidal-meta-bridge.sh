@@ -46,8 +46,19 @@ extract_field() {
     done <<< "$output"
 }
 
+# Strip ANSI/VT100 escape sequences and tmux 8-bit C1 representations.
+# speaker_controller_application sets the terminal to 8-bit mode; tmux encodes
+# C1 control chars (U+0080–U+009F) as ~@~X in 7-bit captures, e.g. SS3 → ~@~S.
+strip_escapes() {
+    sed \
+        -e 's/\x1b\[[0-9;]*[A-Za-z]//g' \
+        -e 's/\x1b[()][AB01]//g' \
+        -e 's/\x1b.//g' \
+        -e 's/~@~[A-Za-z@\[\\^_]//g'
+}
+
 # Escape a string for safe JSON embedding.
-# Bash handles backslash/quote escaping; tr strips control chars (U+0000-U+001F).
+# Bash handles backslash/quote escaping; tr strips C0 control chars (U+0000-U+001F).
 json_escape() {
     local s="$1"
     s="${s//\\/\\\\}"
@@ -59,7 +70,7 @@ wait_for_tmux
 
 while true; do
     # Capture last 50 lines from speaker controller TUI
-    OUTPUT=$(tmux capture-pane -t "$TMUX_SESSION" -pS -50 2>/dev/null) || {
+    OUTPUT=$(tmux capture-pane -t "$TMUX_SESSION" -pS -50 2>/dev/null | strip_escapes) || {
         echo "tidal-meta-bridge: tmux capture failed, waiting for session..."
         wait_for_tmux
         continue
