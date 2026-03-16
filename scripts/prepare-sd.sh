@@ -345,13 +345,16 @@ case "$INSTALL_TYPE" in
         ;;
 esac
 
-# Bake version files so scripts can set version vars without a git repo on device
-SERVER_VERSION=$(git -C "$PROJECT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
-CLIENT_VERSION=$(git -C "$CLIENT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
+# Bake version files so installer scripts can set version vars without a git repo on device.
+# Format difference is intentional: server strips "v" (deploy.sh + metadata-service expect
+# bare semver, displayed as "srv 0.3.x"), client keeps "v" (APP_VERSION shown as "v0.2.x"
+# in fb-display status bar — see fb_display.py comment on APP_VERSION).
 if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+    SERVER_VERSION=$(git -C "$PROJECT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
     echo "${SERVER_VERSION#v}" > "$DEST/server/.version"
 fi
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+    CLIENT_VERSION=$(git -C "$CLIENT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
     echo "$CLIENT_VERSION" > "$DEST/client/VERSION"
 fi
 
