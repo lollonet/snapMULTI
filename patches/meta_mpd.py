@@ -458,7 +458,7 @@ class MPDWrapper(object):
                             if 'duration' in song:
                                 metadata['duration'] = float(song['duration'])
                         return send({"jsonrpc": "2.0", "id": id, "result": metadata})
-                    except Exception as e:
+                    except (socket.error, mpd.MPDError, socket.timeout) as e:
                         logger.error("GetMetadata failed: %s", e)
                         return send({"jsonrpc": "2.0", "error": {
                             "code": -32603, "message": f"GetMetadata error: {e}"}, "id": id})
