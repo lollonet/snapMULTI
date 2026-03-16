@@ -2,13 +2,18 @@ name: Deploy to Home Server
 
 on:
   workflow_dispatch:
-    # Manual dispatch uses repository secrets directly (no inputs needed).
-    # Requires DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, HOST, USER, SSH_KEY
-    # to be configured as repository secrets.
+    # Manual dispatch: HOST comes from the snapvideo environment secret.
+    inputs:
+      environment_name:
+        description: 'Target environment'
+        required: false
+        default: 'snapvideo'
   workflow_call:
-    secrets:
-      HOST:
+    inputs:
+      environment_name:
+        type: string
         required: true
+    secrets:
       USER:
         required: true
       SSH_KEY:
@@ -21,6 +26,10 @@ on:
 jobs:
   deploy:
     runs-on: snapcast-runner
+    environment: ${{ inputs.environment_name }}
+    concurrency:
+      group: deploy-${{ inputs.environment_name }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v6
 
