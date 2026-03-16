@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.10] — 2026-03-16
+
+### Added
+- **Complete Installation Guide** ([#117](https://github.com/lollonet/snapMULTI/pull/117)) — `docs/INSTALL.md` covers all platforms (macOS/Linux/Windows): Raspberry Pi Imager steps, SD card remount procedure, Git prerequisites, `prepare-sd.sh`/`prepare-sd.ps1` usage with menu screenshots, first-boot expectations, verification commands, adding speaker Pis, troubleshooting table, and network port reference
+
+### Fixed
+- **Silent failures in plugin and metadata service** ([#118](https://github.com/lollonet/snapMULTI/pull/118)) — replaced bare `except:` / `except Exception: pass` with specific exception types and logging in `meta_mpd.py` (reconnect, GetMetadata) and `metadata-service.py` (hostname resolution); implemented `GetMetadata` command in `meta_mpd.py` (was returning an error stub)
+
+### Security
+- **Container hardening** ([#116](https://github.com/lollonet/snapMULTI/pull/116)) — removed unnecessary `SETUID`/`SETGID` capabilities from default security profile; added `no-new-privileges`, `cap_drop: ALL`, `read_only`, and tmpfs to `watchtower`; added `USER 1000` to `Dockerfile.metadata` (defense-in-depth when compose `user:` is not specified)
+
+### CI/CD
+- **GitHub Environments for deploy** ([#115](https://github.com/lollonet/snapMULTI/pull/115)) — `HOST` secret moved from repo-level to environment-scoped (`snapvideo`); `deploy.yml` declares `environment:` so GitHub resolves the secret automatically; added concurrency group (`cancel-in-progress: false`) to queue rather than cancel in-progress deploys
+
+### Maintenance
+- **Client submodule v0.2.10** — see [rpi-snapclient-usb CHANGELOG](https://github.com/lollonet/rpi-snapclient-usb/blob/main/CHANGELOG.md)
+
 ## [0.3.9] — 2026-03-16
 
 ### Fixed
