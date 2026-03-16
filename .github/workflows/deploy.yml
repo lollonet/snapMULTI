@@ -95,6 +95,57 @@ jobs:
             echo "Stopping old containers..."
             docker compose down --remove-orphans || true
 
+            if mountpoint -q /media/root-ro 2>/dev/null; then
+                echo "Baking deployment to SD card lower layer..."
+                BAKE_DIR=$(mktemp -d /tmp/snapmulti-bake-XXXXX)
+                cleanup() {
+                    sudo umount "$BAKE_DIR" 2>/dev/null || true
+                    rmdir "$BAKE_DIR" 2>/dev/null || true
+                    sudo sync
+                }
+                trap cleanup EXIT
+
+                sudo mount --bind /media/root-ro "$BAKE_DIR"
+                sudo mount -o remount,rw "$BAKE_DIR"
+
+                # Persist config
+                sudo rsync -a \
+                    /opt/snapmulti/.env \
+                    /opt/snapmulti/docker-compose.yml \
+                    "$BAKE_DIR/opt/snapmulti/"
+
+                # Persist myMPD user state (UI customizations, playlists)
+                sudo rsync -a /opt/snapmulti/mympd/workdir/ \
+                    "$BAKE_DIR/opt/snapmulti/mympd/workdir/"
+
+                # Persist MPD database (avoids full NFS/SMB rescan on reboot; incremental update only)
+                if [ -f /opt/snapmulti/mpd/data/mpd.db ]; then
+                    sudo mkdir -p "$BAKE_DIR/opt/snapmulti/mpd/data"
+                    sudo rsync -a /opt/snapmulti/mpd/data/mpd.db \
+                        "$BAKE_DIR/opt/snapmulti/mpd/data/"
+                fi
+
+                # Persist Docker image index (always sync, tiny)
+                sudo rsync -a /var/lib/docker/image/ \
+                    "$BAKE_DIR/var/lib/docker/image/"
+
+                # Persist new image layers only (fuse-overlayfs uses user.overlay.* xattrs)
+                sudo rsync -aX --ignore-existing /var/lib/docker/fuse-overlayfs/ \
+                    "$BAKE_DIR/var/lib/docker/fuse-overlayfs/"
+
+                # Verify version was actually written
+                BAKED=$(grep '^SNAPMULTI_VERSION=' "$BAKE_DIR/opt/snapmulti/.env" 2>/dev/null | cut -d= -f2)
+                if [[ "$BAKED" != "${DEPLOY_VERSION}" ]]; then
+                    echo "ERROR: Bake verification failed -- expected ${DEPLOY_VERSION}, got ${BAKED}"
+                    exit 1
+                fi
+
+                sudo sync
+                echo "Bake complete (${DEPLOY_VERSION}) -- changes will survive reboot."
+            else
+                echo "WARNING: /media/root-ro not mounted -- skipping bake (non-overlayroot target)"
+            fi
+
             echo "Starting app containers..."
             docker compose up -d || { echo "ERROR: docker compose up failed"; exit 1; }
 
