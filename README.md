@@ -48,14 +48,14 @@ No terminal skills required. Flash an SD card, answer one question, insert it, p
 **On your computer (macOS/Linux):**
 ```bash
 # 1. Flash SD card with Raspberry Pi Imager
-#    - Choose: Raspberry Pi OS Lite (64-bit)
-#    - Configure: hostname, user/password, WiFi, SSH
+#    - Choose OS: Raspberry Pi OS Lite (64-bit)
+#    - Click Next → Edit Settings → set hostname, user/password, WiFi, enable SSH
 
-# 2. Keep SD mounted, run:
+# 2. Re-insert SD card, then run:
 git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
 ./snapMULTI/scripts/prepare-sd.sh
 
-# 3. Choose what to install:
+# 3. Choose what to install when prompted:
 #    1) Audio Player   — play music from your server on speakers
 #    2) Music Server   — central hub for Spotify, AirPlay, etc.
 #    3) Server+Player  — both on the same Pi
@@ -65,11 +65,15 @@ git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
 
 **On Windows (PowerShell):**
 ```powershell
+# Requires Git for Windows: https://git-scm.com/download/win
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
 .\snapMULTI\scripts\prepare-sd.ps1
 ```
 
-First boot installs everything automatically (~5-10 min). HDMI shows a progress screen. The Pi reboots when done.
+First boot installs everything automatically (~5–10 min). HDMI shows a progress screen. The Pi reboots when done.
+
+> **Complete step-by-step instructions** (Imager screenshots, SD card mount points, all three OS): **[docs/INSTALL.md](docs/INSTALL.md)**
 
 #### Connect Your Music
 
@@ -218,6 +222,7 @@ For major version upgrades, check [CHANGELOG.md](CHANGELOG.md) for breaking chan
 
 | Guide | What's inside |
 |-------|---------------|
+| [**Installation**](docs/INSTALL.md) | Complete step-by-step: Raspberry Pi Imager, SD card prep, first boot, verification — macOS/Linux/Windows |
 | [Hardware & Network](docs/HARDWARE.md) | Server/client requirements, Raspberry Pi setups, network bandwidth, recommended configs |
 | [Usage & Operations](docs/USAGE.md) | Architecture, services, MPD control, mDNS setup, deployment, CI/CD |
 | [Audio Sources](docs/SOURCES.md) | All source types, parameters, JSON-RPC API, Android/Tidal streaming |
