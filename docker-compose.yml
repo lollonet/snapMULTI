@@ -14,9 +14,7 @@ x-security: &default-security
   cap_drop:
     - ALL
   cap_add:
-    - DAC_OVERRIDE      # File access as non-root
-    - SETUID
-    - SETGID
+    - DAC_OVERRIDE      # File access as non-root (FIFOs in /audio may be root-owned)
 
 # Resource profiles (set HARDWARE_PROFILE in .env)
 x-resources-minimal: &resources-minimal
@@ -362,6 +360,13 @@ services:
     restart: unless-stopped
     profiles:
       - auto-update
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=16M
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
