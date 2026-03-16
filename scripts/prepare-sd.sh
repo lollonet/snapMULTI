@@ -345,6 +345,12 @@ case "$INSTALL_TYPE" in
         ;;
 esac
 
+# Write client version so setup.sh can set APP_VERSION without a git repo on device
+CLIENT_VERSION=$(git -C "$CLIENT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
+if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+    echo "$CLIENT_VERSION" > "$DEST/client/VERSION"
+fi
+
 echo "  Copied $(du -sh "$DEST" | cut -f1) to boot partition."
 
 # ── Set temporary 800x600 resolution for setup TUI ────────────────
