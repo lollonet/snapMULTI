@@ -209,7 +209,8 @@ jobs:
     with:
       environment_name: snapvideo
     secrets:
-      USER: ${{ secrets.USER }}
-      SSH_KEY: ${{ secrets.SSH_KEY }}
+      HOST:               ${{ secrets.HOST_SNAPVIDEO }}
+      USER:               ${{ secrets.USER }}
+      SSH_KEY:            ${{ secrets.SSH_KEY }}
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      DOCKERHUB_TOKEN:    ${{ secrets.DOCKERHUB_TOKEN }}

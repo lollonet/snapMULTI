@@ -2,7 +2,7 @@ name: Deploy to Home Server
 
 on:
   workflow_dispatch:
-    # Manual dispatch: HOST comes from the snapvideo environment secret.
+    # Manual dispatch: HOST comes from the HOST_SNAPVIDEO repo-level secret (environment: still applies for protection rules).
     inputs:
       environment_name:
         description: 'Target environment'
@@ -14,6 +14,8 @@ on:
         type: string
         required: true
     secrets:
+      HOST:
+        required: true
       USER:
         required: true
       SSH_KEY:
