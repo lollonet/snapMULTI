@@ -16,7 +16,7 @@ RUN apk add --no-cache \
     soxr-dev
 
 WORKDIR /build
-# SNAPCAST_SHA allows pinning a specific commit for reproducible builds
+# SNAPCAST_SHA busts the Docker cache when upstream has new commits
 ARG SNAPCAST_SHA=latest
 RUN git clone --branch develop https://github.com/badaix/snapcast.git . && \
     mkdir build && cd build && \
