@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hardware Buying Guide — US/UK pricing** — Replaced Italian market EUR prices with Amazon US (USD) and The Pi Hut UK (GBP). Added **Budget Alternative — InnoMaker PCM5122 (~$195)**: Pi 4 2GB + InnoMaker HiFi DAC HAT (~$110) and Pi 3B+ + InnoMaker DAC Mini HAT (~$81). All prices verified March 2026 from pishop.us, thepihut.com, and inno-maker.com. Italian translation updated with Amazon IT equivalent (~€175).
 
 ### Maintenance
-- **Client submodule v0.2.7** — snapclient built from santcasp fork
+- **Client submodule v0.2.7** — snapclient built from badaix/snapcast upstream
 - **Client submodule v0.2.6** — 15 audio HATs now fully supported with EEPROM + ALSA auto-detection (new: HiFiBerry AMP2, HiFiBerry DAC+ ADC Pro, Innomaker DAC PRO ES9038Q2M, Waveshare WM8960); status bar shows both client and server versions simultaneously (e.g. `v0.2.6 / srv 0.3.8`)
 
 ## [0.3.8] — 2026-03-10
