@@ -357,6 +357,13 @@ preflight_checks() {
 install_dependencies() {
     step "System dependencies"
 
+    # Set system locale to C.UTF-8 — always available on Debian, no locale-gen needed.
+    # Prevents apt warnings and locale errors in subprocesses.
+    export DEBIAN_FRONTEND=noninteractive
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+    update-locale LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null || true
+
     # Git for updates (git pull)
     if ! command -v git >/dev/null 2>&1; then
         info "Installing git..."

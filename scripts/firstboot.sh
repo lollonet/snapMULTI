@@ -41,6 +41,8 @@ fi
 SNAP_BOOT="$BOOT/snapmulti"
 LOG="/var/log/snapmulti-install.log"
 export DEBIAN_FRONTEND=noninteractive
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
 
 # Verify source files exist
 if [[ ! -d "$SNAP_BOOT" ]]; then
@@ -376,7 +378,7 @@ log_progress "apt-get update" 2>/dev/null || true
 apt-get update -qq
 
 # Core dependencies (always needed)
-PKGS=(curl ca-certificates gnupg)
+PKGS=(curl ca-certificates)
 
 # Git for updates
 if ! command -v git &>/dev/null; then
