@@ -518,7 +518,7 @@ Docker images are hosted on Docker Hub:
 
 | Image | Description |
 |-------|-------------|
-| `lollonet/snapmulti-server:latest` | Snapcast server (built from [santcasp](https://github.com/lollonet/santcasp)) |
+| `lollonet/snapmulti-server:latest` | Snapcast server (built from [badaix/snapcast](https://github.com/badaix/snapcast)) |
 | `lollonet/snapmulti-airplay:latest` | AirPlay receiver (shairport-sync) |
 | `ghcr.io/devgianlu/go-librespot:v0.7.0` | Spotify Connect (upstream, no custom build) |
 | `lollonet/snapmulti-mpd:latest` | Music Player Daemon |

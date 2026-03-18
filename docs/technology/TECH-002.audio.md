@@ -23,7 +23,7 @@ All audio streams use a consistent format:
 
 | Component | Version | Source |
 |-----------|---------|--------|
-| Snapcast | 0.34.1 | lollonet/santcasp fork (Dockerfile.snapserver) |
+| Snapcast | 0.35.0 | badaix/snapcast upstream (Dockerfile.snapserver) |
 | MPD | 0.24.x | Alpine packages (Dockerfile.mpd) |
 | go-librespot | v0.7.0 | Upstream image (ghcr.io/devgianlu/go-librespot) |
 | Shairport-sync | 4.x | Built from source (Dockerfile.shairport-sync) |
