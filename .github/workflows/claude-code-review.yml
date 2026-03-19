@@ -6,7 +6,7 @@ on:
 
 jobs:
   claude-review:
-    runs-on: snapcast-runner
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write

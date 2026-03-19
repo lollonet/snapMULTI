@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: snapcast-runner
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
