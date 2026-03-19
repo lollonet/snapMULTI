@@ -160,12 +160,15 @@ log_and_tty "========================================="
 # ── Headless detection (for client modes) ─────────────────────────
 has_display() {
     [[ -c /dev/fb0 ]] || return 1
+    local found_status=false
     for card in /sys/class/drm/card*-HDMI-*/status; do
-        [[ -f "$card" ]] && grep -q "^connected" "$card" && return 0
+        [[ -f "$card" ]] || continue
+        found_status=true
+        grep -q "^connected" "$card" && return 0
     done
-    # fb0 exists but no HDMI status files found (some Pi firmware versions
-    # don't expose DRM status). Default to "display present" — worst case,
-    # visual containers start but fail gracefully at runtime.
+    # DRM status files exist but none say "connected" → headless
+    $found_status && return 1
+    # No DRM status files at all (very old firmware) → assume display if fb0 exists
     return 0
 }
 
