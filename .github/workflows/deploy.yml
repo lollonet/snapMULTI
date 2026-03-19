@@ -96,15 +96,18 @@ jobs:
               fi
             fi
 
-            echo "Pulling latest images..."
-            # COMPOSE_PROFILES in .env controls ARM-only services (tidal-connect)
-            docker compose pull || { echo "ERROR: docker compose pull failed"; exit 1; }
-
             echo "Creating required directories..."
             mkdir -p mympd/workdir mympd/cachedir audio artwork
 
             echo "Stopping old containers..."
             docker compose down --remove-orphans || true
+
+            echo "Pruning unused images to free tmpfs..."
+            docker image prune -af || true
+
+            echo "Pulling latest images..."
+            # COMPOSE_PROFILES in .env controls ARM-only services (tidal-connect)
+            docker compose pull || { echo "ERROR: docker compose pull failed"; exit 1; }
 
             if mountpoint -q /media/root-ro 2>/dev/null; then
                 echo "Baking deployment to SD card lower layer..."
