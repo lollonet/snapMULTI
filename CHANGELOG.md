@@ -7,8 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.12] — 2026-03-19
+
 ### Fixed
 - **Headless Pi detection with vc4-kms-v3d** ([#122](https://github.com/lollonet/snapMULTI/pull/122)) — `has_display()` in `firstboot.sh` now correctly detects headless Pi 4 when HDMI is unplugged. Previously returned "display present" when DRM status files existed but all said "disconnected" (vc4-kms-v3d creates `/dev/fb0` even without HDMI). New `found_status` flag distinguishes "no DRM files" (old firmware, assume display) from "all disconnected" (headless)
+- **DAC+ clock race on EEPROM-less boards** ([rpi-snapclient-usb#97](https://github.com/lollonet/rpi-snapclient-usb/pull/97)) — clone/EEPROM-less PCM5122 boards were misdetected as DAC+ Pro (floating GPIO3), causing master clock race with no audio. ALSA and I2C fallback detection now uses `hifiberry-dacplus-std` overlay (Pi as clock master). Adds `dtparam=i2c_arm=on` for I2C-based HATs. New manual menu option for Standard/clone boards
+
+### Added
+- **Boot-time display detection** ([rpi-snapclient-usb#97](https://github.com/lollonet/rpi-snapclient-usb/pull/97)) — new systemd oneshot service checks HDMI on every boot and reconciles Docker Compose profiles. Headless Pis now run only `snapclient` (saves ~300 MB RAM). `audio-visualizer` gated under `framebuffer` profile alongside `fb-display`
+
+### Maintenance
+- **Client submodule update** — DAC clock race fix + boot-time display detection (see [rpi-snapclient-usb#97](https://github.com/lollonet/rpi-snapclient-usb/pull/97))
 
 ## [0.3.11] — 2026-03-18
 
