@@ -140,10 +140,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${SPOTIFY_MEM_LIMIT:-128M}
+          memory: ${SPOTIFY_MEM_LIMIT:-192M}
           cpus: '${SPOTIFY_CPU_LIMIT:-0.5}'
         reservations:
-          memory: ${SPOTIFY_MEM_RESERVE:-64M}
+          memory: ${SPOTIFY_MEM_RESERVE:-96M}
 
   mympd:
     image: ghcr.io/jcorporation/mympd/mympd:latest

@@ -301,7 +301,7 @@ All components available on Amazon US — no international orders needed.
 | 1 | Micro-USB power supply 5V 2.5A | amazon.com | ~$8 |
 | | **Subtotal** | | **~$81 (~£73)** |
 
-> **Note on Pi 4 2 GB as server:** All seven server services use ~309 MiB RAM at idle (928M limits in standard profile). The Pi 4 2 GB leaves ~920 MB headroom after limits — comfortable for server-only. For server + client with display (1,376M combined limits), headroom drops to ~470 MB — workable but the 4 GB model is preferred.
+> **Note on Pi 4 2 GB as server:** All seven server services use ~309 MiB RAM at idle (992M limits in standard profile). The Pi 4 2 GB leaves ~856 MB headroom after limits — comfortable for server-only. For server + client with display (1,440M combined limits), headroom drops to ~408 MB — workable but the 4 GB model is preferred.
 
 **Total system: ~$191 (~£176)**
 
@@ -359,12 +359,12 @@ If a node connects to an AV receiver or home theatre system via optical cable, u
 |---------|----------|---------|----------|-------------|
 | snapserver | 87 MiB | 128M | 192M | 256M |
 | shairport-sync | 18 MiB | 48M | 64M | 96M |
-| librespot | 22 MiB | 96M | 128M | 192M |
+| librespot | 22 MiB | 96M | 192M | 256M |
 | mpd | 90 MiB | 128M | 256M | 384M |
 | mympd | 8 MiB | 32M | 64M | 128M |
 | metadata | 52 MiB | 96M | 128M | 128M |
 | tidal-connect | 32 MiB | 64M | 96M | 128M |
-| **Total** | **~309 MiB** | **592M** | **928M** | **1,312M** |
+| **Total** | **~309 MiB** | **592M** | **992M** | **1,376M** |
 
 > Measured values are idle baselines from snapvideo (Pi 4 8 GB) with all services running and 2 clients connected. Actual usage rises during active playback (librespot can reach ~180 MiB during Spotify streaming) and MPD library scans (proportional to library size — 90 MiB idle with 6,418 songs).
 
@@ -389,9 +389,9 @@ Assumes ~200 MB OS + Docker overhead. "Avail" = RAM remaining after container li
 |----------|-----|---------|--------|-------|--------|
 | Pi Zero 2W | 512M | minimal | 592M | 190% | **Not supported** |
 | Pi 3 1GB | 1024M | minimal | 592M | 72% | Tight — works, no headroom for spikes |
-| Pi 4 2GB | 2048M | standard | 928M | 50% | OK |
-| Pi 4 4GB+ | 4096M | performance | 1,312M | 34% | OK |
-| Pi 5 | 4–8 GB | performance | 1,312M | 16–34% | OK |
+| Pi 4 2GB | 2048M | standard | 992M | 54% | OK |
+| Pi 4 4GB+ | 4096M | performance | 1,376M | 35% | OK |
+| Pi 5 | 4–8 GB | performance | 1,376M | 17–35% | OK |
 
 **Client with display:**
 
@@ -416,8 +416,8 @@ Assumes ~200 MB OS + Docker overhead. "Avail" = RAM remaining after container li
 |----------|-----|---------|--------|--------|-------|-------|--------|
 | Pi Zero 2W | 512M | minimal | 592M | 352M | 944M | 303% | **Not supported** |
 | Pi 3 1GB | 1024M | minimal | 592M | 352M | 944M | 115% | **Not supported** |
-| Pi 4 2GB | 2048M | standard | 928M | 448M | 1,376M | 74% | OK |
-| Pi 4 4GB+ | 4096M | performance | 1,312M | 672M | 1,984M | 51% | OK |
+| Pi 4 2GB | 2048M | standard | 992M | 448M | 1,440M | 78% | OK |
+| Pi 4 4GB+ | 4096M | performance | 1,376M | 672M | 2,048M | 53% | OK |
 
 **Both mode** (server + client headless on same Pi):
 
@@ -425,8 +425,8 @@ Assumes ~200 MB OS + Docker overhead. "Avail" = RAM remaining after container li
 |----------|-----|---------|--------|--------|-------|-------|--------|
 | Pi Zero 2W | 512M | minimal | 592M | 64M | 656M | 210% | **Not supported** |
 | Pi 3 1GB | 1024M | minimal | 592M | 64M | 656M | 80% | Tight — works, limited headroom |
-| Pi 4 2GB | 2048M | standard | 928M | 64M | 992M | 54% | OK |
-| Pi 4 4GB+ | 4096M | performance | 1,312M | 96M | 1,408M | 36% | OK |
+| Pi 4 2GB | 2048M | standard | 992M | 64M | 1,056M | 57% | OK |
+| Pi 4 4GB+ | 4096M | performance | 1,376M | 96M | 1,472M | 38% | OK |
 
 > **Important:** These percentages represent *limits* (ceilings), not actual usage. Measured total usage across all 10 services is ~468 MiB idle. Services rarely hit their limits simultaneously — the limits exist to prevent runaway processes from starving the system. A 74% limit-to-RAM ratio on Pi 4 2 GB is safe in practice.
 
