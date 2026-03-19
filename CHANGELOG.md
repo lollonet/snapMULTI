@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Headless Pi detection with vc4-kms-v3d** ([#122](https://github.com/lollonet/snapMULTI/pull/122)) — `has_display()` in `firstboot.sh` now correctly detects headless Pi 4 when HDMI is unplugged. Previously returned "display present" when DRM status files existed but all said "disconnected" (vc4-kms-v3d creates `/dev/fb0` even without HDMI). New `found_status` flag distinguishes "no DRM files" (old firmware, assume display) from "all disconnected" (headless)
+
+## [0.3.11] — 2026-03-18
+
+### Added
+- **Snapcast upstream migration** ([#121](https://github.com/lollonet/snapMULTI/pull/121)) — migrated snapserver from santcasp fork to official badaix/snapcast upstream (v0.35.0). Multi-stage Dockerfile builds from source with Snapweb bundled. Removes fork dependency
+
+### Fixed
+- **Locale errors during install** ([#120](https://github.com/lollonet/snapMULTI/pull/120)) — set `C.UTF-8` as default locale in `firstboot.sh`; removes unused `gnupg` package install that was failing on minimal images
+- **CI deploy secret resolution** — pass `HOST` as explicit `workflow_call` secret in `deploy.yml` (fixes environment-scoped secret not propagating to reusable workflows)
+
+### Maintenance
+- **Client submodule update** ([#119](https://github.com/lollonet/snapMULTI/pull/119)) — latest main
+
 ## [0.3.10] — 2026-03-16
 
 ### Added
