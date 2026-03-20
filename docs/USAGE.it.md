@@ -524,7 +524,6 @@ Le immagini Docker sono ospitate su Docker Hub:
 | `lollonet/snapmulti-metadata:latest` | Servizio Metadata (copertine + info tracce) |
 | `ghcr.io/jcorporation/mympd/mympd:latest` | Interfaccia Web (immagine di terze parti) |
 | `lollonet/snapmulti-tidal:latest` | Tidal Connect (solo ARM) |
-| `lollonet/snapmulti-tidal:latest` | Tidal Connect (solo ARM) |
 
 Le immagini supportano `linux/amd64` e `linux/arm64` tranne Tidal Connect (solo ARM).
 
