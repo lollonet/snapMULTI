@@ -71,6 +71,8 @@ git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
 
 Il primo avvio installa tutto automaticamente (~5-10 min). L'HDMI mostra una schermata di progresso. Il Pi si riavvia quando ha finito.
 
+> **Istruzioni passo-passo complete** (screenshot di Imager, punti di montaggio SD, tutti e tre i SO): **[docs/INSTALL.md](docs/INSTALL.md)**
+
 #### Collega la Tua Musica
 
 Quando scegli Music Server o Server+Player, l'installer chiede dove si trova la tua musica:
@@ -143,7 +145,7 @@ Verifica:
 docker ps
 ```
 
-Dovresti vedere sei container in esecuzione: `snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd` e `metadata`. Su ARM (Raspberry Pi), vedrai anche `tidal-connect`.
+Dovresti vedere sei container in esecuzione: `snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd` e `metadata`. Su ARM (Raspberry Pi), vedrai anche `tidal-connect` (sette in totale).
 
 ---
 
@@ -218,6 +220,7 @@ Per aggiornamenti di versioni maggiori, controlla [CHANGELOG.md](CHANGELOG.md) p
 
 | Guida | Contenuto |
 |-------|-----------|
+| [**Installazione**](docs/INSTALL.md) | Passo-passo completo: Raspberry Pi Imager, preparazione SD, primo avvio, verifica — macOS/Linux/Windows |
 | [Hardware e Rete](docs/HARDWARE.it.md) | Requisiti server/client, configurazioni Raspberry Pi, banda di rete, setup consigliati |
 | [Uso e Operazioni](docs/USAGE.it.md) | Architettura, servizi, controllo MPD, configurazione mDNS, deployment, CI/CD |
 | [Sorgenti Audio](docs/SOURCES.it.md) | Tutti i tipi di sorgente, parametri, API JSON-RPC, streaming da Android/Tidal |

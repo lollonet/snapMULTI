@@ -83,7 +83,7 @@ Full-screen TUI on `/dev/tty1` (HDMI console), no-op when run via SSH.
 snapMULTI/
   client/                    # Git submodule: rpi-snapclient-usb (audio player)
   config/
-    snapserver.conf          # Snapcast server config (4 active + 4 commented sources)
+    snapserver.conf          # Snapcast server config (5 active + 4 commented sources)
     mpd.conf                 # MPD config (FIFO + HTTP outputs)
     shairport-sync.conf      # shairport-sync pipe backend config
     tidal-asound.conf        # ALSA config for Tidal Connect FIFO output (ARM only)
@@ -126,7 +126,7 @@ snapMULTI/
   Dockerfile.mpd             # MPD + ffmpeg (Alpine)
   Dockerfile.metadata        # Metadata service (Python 3.13, aiohttp + websockets)
   Dockerfile.tidal           # Tidal Connect (extends edgecrush3r base with ALSA plugins)
-  docker-compose.yml         # 7 services, host networking
+  docker-compose.yml         # 8 service definitions (6 core + tidal [ARM] + watchtower [opt-in]), host networking
   .env.example               # Environment template
 ```
 
