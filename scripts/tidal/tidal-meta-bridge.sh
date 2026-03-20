@@ -48,13 +48,14 @@ extract_field() {
 
 # Strip ANSI/VT100 escape sequences and tmux 8-bit C1 representations.
 # speaker_controller_application sets the terminal to 8-bit mode; tmux encodes
-# C1 control chars (U+0080–U+009F) as ~@~X in 7-bit captures, e.g. SS3 → ~@~S.
+# C1 control chars (U+0080–U+009F) as ~@~X in 7-bit captures where X = char - 0x40,
+# so the X character ranges from @ (0x40) to _ (0x5F), matched by [@-_].
 strip_escapes() {
     sed \
         -e 's/\x1b\[[0-9;]*[A-Za-z]//g' \
         -e 's/\x1b[()][AB01]//g' \
         -e 's/\x1b.//g' \
-        -e 's/~@~[A-Za-z@\[\\^_]//g'
+        -e 's/~@~[@-_]//g'
 }
 
 # Escape a string for safe JSON embedding.
