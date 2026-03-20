@@ -15,8 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hardware compatibility matrix** ([#124](https://github.com/lollonet/snapMULTI/pull/124)) — `docs/HARDWARE.md` now includes tables for all Pi model × role combinations (server, client, both mode) with memory limit totals and compatibility status
 - **Watchtower resource limits** — watchtower container now has 64M memory / 0.25 CPU limits (was unlimited)
 
+### Fixed
+- **Metadata build block removed** — removed stale `build:` block from metadata service in `docker-compose.yml` (leftover from development; production uses pre-built image)
+- **README container count** — clarified total container count (seven on ARM including tidal-connect)
+
 ### Removed
 - **Dead YAML anchors** — removed unused `x-resources-minimal`, `x-resources-standard`, `x-resources-performance` from `docker-compose.yml` (defined but never referenced by any service)
+
+### CI/CD
+- **PR workflows switched to GitHub-hosted runners** — `validate.yml`, `build-test.yml`, and `claude-code-review.yml` now run on `ubuntu-latest` instead of offline `snapcast-runner`
 
 ## [0.3.12] — 2026-03-19
 
