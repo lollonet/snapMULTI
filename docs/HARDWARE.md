@@ -18,28 +18,29 @@ The server runs all audio services: Snapcast, MPD, shairport-sync (AirPlay), and
 | Network | 100 Mbps Ethernet or WiFi 5 GHz | Gigabit Ethernet |
 | Architecture | `linux/amd64` or `linux/arm64` | Either |
 
-> **Why 2 GB minimum?** All containers combined use ~720 MB RAM when streaming (no display). Add OS overhead (~500 MB) and you need >1.2 GB free — a 1 GB board has no headroom. See [measured data](#reference-builds-and-performance-measurements) below.
+> **Why 2 GB recommended?** All server containers combined use ~309 MiB RAM at idle. Add OS overhead (~200 MB) and Docker daemon, and a 1 GB Pi 3 works but has limited headroom for spikes (MPD library scans, concurrent streaming). A Pi 4 2 GB gives comfortable margin. See [resource profiles](#resource-profiles) and [measured data](#reference-builds-and-performance-measurements) below.
 
 ### What Drives Server Requirements
 
-- **shairport-sync** is CPU-light at idle: measured at **0.01% CPU, 18 MiB RAM** on Pi 4 (streaming idle) — requires a Pi 2 or better ([source](https://github.com/mikebrady/shairport-sync))
-- **librespot** (Spotify Connect): measured at **7.4% CPU, 177 MiB RAM** on Pi 4 8 GB; earlier reports of ~20% CPU on Pi 3 with the ALSA backend ([source](https://github.com/librespot-org/librespot/issues/343))
-- **MPD** with streaming-only (no local library): measured at **0.6% CPU, 181 MiB RAM** — heavier on first startup with NFS-mounted library (full scan)
-- **Snapserver** with 2 active clients: measured at **8.1% CPU, 102 MiB RAM** on Pi 4; scales linearly per client ([source](https://github.com/badaix/snapcast/issues/1336))
-- **metadata-service**: measured at **1.3% CPU, 80 MiB RAM** (after PR #95 optimisation)
+- **shairport-sync** is CPU-light: measured at **0.0% CPU, 18 MiB RAM** on Pi 4 (streaming idle) — requires a Pi 2 or better ([source](https://github.com/mikebrady/shairport-sync))
+- **librespot** (Spotify Connect): measured at **0.0% CPU, 22 MiB RAM** idle; can reach ~180 MiB during active Spotify streaming ([source](https://github.com/librespot-org/librespot/issues/343))
+- **MPD**: measured at **6.4% CPU, 90 MiB RAM** (6,418 song library) — heavier on first startup with NFS-mounted library (full scan)
+- **Snapserver** with 2 active clients: measured at **6.0% CPU, 87 MiB RAM** on Pi 4; scales linearly per client ([source](https://github.com/badaix/snapcast/issues/1336))
+- **metadata-service**: measured at **0.6% CPU, 52 MiB RAM** (after PR #95 optimisation)
 
 ### Server Examples
 
 | Hardware | Suitability | Notes |
 |----------|-------------|-------|
-| Raspberry Pi 4 (4 GB) | ✅ Good | Handles all 4 sources + 10 clients comfortably |
-| Raspberry Pi 4 (2 GB) | ✅ Minimum | Sufficient for streaming-only (no local MPD library) |
-| Raspberry Pi 3B+ | ⚠️ RAM-limited | 1 GB RAM — below the 2 GB minimum; full stack may OOM |
+| Raspberry Pi 4 (4 GB+) | ✅ Recommended | Handles all sources + 10 clients + display comfortably |
+| Raspberry Pi 4 (2 GB) | ✅ Good | Server-only or server + headless client; tight with display |
+| Raspberry Pi 3B+ | ⚠️ Tight | 1 GB RAM — works server-only but no headroom for spikes |
+| Raspberry Pi Zero 2 W | ❌ Not supported | 512 MB RAM — cannot fit server containers |
 | Intel NUC / mini PC | ✅ Excellent | Ideal for large deployments or music libraries |
 | Old laptop / desktop | ✅ Excellent | Any x86_64 machine with 2+ GB RAM works well |
 | NAS with Docker | ✅ Good | If it supports Docker and has 2+ cores and 2+ GB RAM |
 
-> **Note:** Pi 3B+ has only **1 GB RAM** — below the 2 GB minimum for running all containers. It may work with reduced container memory limits but is not recommended. Use Pi 4 2 GB or better. Pi 2 is too slow for simultaneous AirPlay + Spotify; avoid for server use.
+> **Note:** Pi 3B+ has only **1 GB RAM**. Server-only works (measured ~309 MiB actual usage) but leaves limited headroom. Not recommended for "both" mode (server + client with display). Pi 2 is too slow for simultaneous AirPlay + Spotify; avoid for server use.
 
 > **Beginners:** If this is your first time, use a Raspberry Pi 4 (4GB) with the [zero-touch SD setup](../README.md#beginners-plug-and-play-raspberry-pi). It handles everything automatically — no terminal required.
 
@@ -300,7 +301,7 @@ All components available on Amazon US — no international orders needed.
 | 1 | Micro-USB power supply 5V 2.5A | amazon.com | ~$8 |
 | | **Subtotal** | | **~$81 (~£73)** |
 
-> **Note on Pi 4 2 GB as server:** All seven services together use ~720 MiB RAM minimum. The Pi 4 2 GB leaves ~1.3 GB headroom for the OS and filesystem cache — workable, but tighter than the 4 GB variant. If running all four audio sources simultaneously, the 4 GB model is preferred.
+> **Note on Pi 4 2 GB as server:** All seven server services use ~309 MiB RAM at idle (1,056M limits in standard profile). The Pi 4 2 GB leaves ~792 MB headroom after limits — comfortable for server-only. For server + client with display (1,504M combined limits), headroom drops to ~344 MB — tight, the 4 GB model is preferred.
 
 **Total system: ~$191 (~£176)**
 
@@ -329,13 +330,105 @@ If a node connects to an AV receiver or home theatre system via optical cable, u
 
 | Limitation | Details |
 |------------|---------|
+| **Pi Zero 2 W as server** | 512 MB RAM cannot fit server containers (592M limits in minimal profile). Use as headless client only |
+| **Pi Zero 2 W with display** | 512 MB RAM is too tight for fb-display + visualizer (352M limits). Use Pi 3+ for display clients |
+| **Pi 3 1 GB — both mode with display** | Server (592M) + client display (352M) = 944M limits on 1 GB — not supported. Use server-only or client-only, not both |
 | **Pi Zero W (v1) as server** | Too slow for shairport-sync + librespot simultaneously |
 | **librespot on ARMv6** | Not officially supported on Pi Zero v1 / Pi 1 ([details](https://github.com/librespot-org/librespot/pull/1457)). Cross-compilation possible but unsupported |
 | **3.5mm audio on Pi** | Noticeable noise floor; use DAC HAT or USB DAC for quality |
 | **2.4 GHz WiFi** | Works but susceptible to interference; 5 GHz preferred for >10 clients |
 | **Docker on 32-bit Pi OS** | Being deprecated; use 64-bit Pi OS for Docker deployments |
-| **Pi Zero 2 W with display** | 512 MB RAM is too tight if running fb-display (cover art) — use Pi 4 2GB+ for display clients |
-| **Pi 4 1 GB as server** | Insufficient: all containers use ~720 MB RAM minimum; no headroom for OS |
+
+---
+
+## Resource Profiles
+
+`deploy.sh` (server) and `setup.sh` (client) auto-detect hardware and apply one of three profiles: **minimal**, **standard**, or **performance**. Limits can be overridden in `.env`.
+
+### Profile Selection
+
+| Hardware | RAM | Profile |
+|----------|-----|---------|
+| Pi Zero 2 W, Pi 3 | < 2 GB | minimal |
+| Pi 4 2 GB | 2–4 GB | standard |
+| Pi 4 4 GB+, Pi 5, x86_64 | 4 GB+ | performance |
+
+### Server Memory Limits by Profile
+
+| Service | Measured | minimal | standard | performance |
+|---------|----------|---------|----------|-------------|
+| snapserver | 87 MiB | 128M | 192M | 256M |
+| shairport-sync | 18 MiB | 48M | 64M | 96M |
+| librespot | 22 MiB | 96M | 256M | 256M |
+| mpd | 90 MiB | 128M | 256M | 384M |
+| mympd | 8 MiB | 32M | 64M | 128M |
+| metadata | 52 MiB | 96M | 128M | 128M |
+| tidal-connect | 32 MiB | 64M | 96M | 128M |
+| **Total** | **~309 MiB** | **592M** | **1,056M** | **1,376M** |
+
+> Measured values are idle baselines from snapvideo (Pi 4 8 GB) with all services running and 2 clients connected. Actual usage rises during active playback (librespot can reach ~180 MiB during Spotify streaming) and MPD library scans (proportional to library size — 90 MiB idle with 6,418 songs).
+
+### Client Memory Limits by Profile
+
+| Service | Measured | minimal | standard | performance |
+|---------|----------|---------|----------|-------------|
+| snapclient | 18 MiB | 64M | 64M | 96M |
+| audio-visualizer | 36–51 MiB | 96M | 128M | 192M |
+| fb-display | 89–114 MiB | 192M | 256M | 384M |
+| **Total** | **~168 MiB** | **352M** | **448M** | **672M** |
+
+> fb-display memory scales with resolution: ~89 MiB at 1080p, ~114 MiB at 4K (3840x2160). CPU usage also scales: ~12% at 1080p, ~66% at 4K. Headless clients (no display) run only snapclient (~18 MiB, ~2% CPU).
+
+### Hardware Compatibility Matrix
+
+Assumes ~200 MB OS + Docker overhead. "Avail" = RAM remaining after container limits.
+
+**Server-only** (all services including Tidal on ARM):
+
+| Hardware | RAM | Profile | Limits | % RAM | Status |
+|----------|-----|---------|--------|-------|--------|
+| Pi Zero 2W | 512M | minimal | 592M | 190% | **Not supported** |
+| Pi 3 1GB | 1024M | minimal | 592M | 72% | Tight — works, no headroom for spikes |
+| Pi 4 2GB | 2048M | standard | 1,056M | 57% | OK |
+| Pi 4 4GB+ | 4096M | performance | 1,376M | 35% | OK |
+| Pi 5 | 4–8 GB | performance | 1,376M | 17–35% | OK |
+
+**Client with display:**
+
+| Hardware | RAM | Profile | Limits | % RAM | Status |
+|----------|-----|---------|--------|-------|--------|
+| Pi Zero 2W | 512M | minimal | 352M | 113% | **Not supported** |
+| Pi 3 1GB | 1024M | minimal | 352M | 43% | OK |
+| Pi 4 2GB | 2048M | standard | 448M | 24% | OK |
+| Pi 4 4GB+ | 4096M | performance | 672M | 17% | OK |
+
+**Client headless** (snapclient only — no display):
+
+| Hardware | RAM | Profile | Limits | Status |
+|----------|-----|---------|--------|--------|
+| Pi Zero 2W | 512M | minimal | 64M | OK |
+| Pi 3 1GB | 1024M | minimal | 64M | OK |
+| Any 2GB+ | 2GB+ | standard+ | 64–96M | OK |
+
+**Both mode** (server + client with display on same Pi):
+
+| Hardware | RAM | Profile | Server | Client | Total | % RAM | Status |
+|----------|-----|---------|--------|--------|-------|-------|--------|
+| Pi Zero 2W | 512M | minimal | 592M | 352M | 944M | 303% | **Not supported** |
+| Pi 3 1GB | 1024M | minimal | 592M | 352M | 944M | 115% | **Not supported** |
+| Pi 4 2GB | 2048M | standard | 1,056M | 448M | 1,504M | 81% | Tight — works, limited headroom |
+| Pi 4 4GB+ | 4096M | performance | 1,376M | 672M | 2,048M | 53% | OK |
+
+**Both mode** (server + client headless on same Pi):
+
+| Hardware | RAM | Profile | Server | Client | Total | % RAM | Status |
+|----------|-----|---------|--------|--------|-------|-------|--------|
+| Pi Zero 2W | 512M | minimal | 592M | 64M | 656M | 210% | **Not supported** |
+| Pi 3 1GB | 1024M | minimal | 592M | 64M | 656M | 80% | Tight — works, limited headroom |
+| Pi 4 2GB | 2048M | standard | 1,056M | 64M | 1,120M | 61% | OK |
+| Pi 4 4GB+ | 4096M | performance | 1,376M | 96M | 1,472M | 38% | OK |
+
+> **Important:** These percentages represent *limits* (ceilings), not actual usage. Measured total usage across all 10 services is ~468 MiB idle. Services rarely hit their limits simultaneously — the limits exist to prevent runaway processes from starving the system. A 74% limit-to-RAM ratio on Pi 4 2 GB is safe in practice.
 
 ---
 
@@ -352,57 +445,52 @@ Two production systems measured in March 2026. Both on 5 GHz WiFi, 64-bit Pi OS,
 | Board | Raspberry Pi 4 Model B Rev 1.4 — **8 GB RAM** |
 | Audio | [HiFiBerry DAC+](https://www.hifiberry.com/shop/boards/hifiberry-dacplus/) (`snd_rpi_hifiberry_dacplus`, pcm512x) — RCA analog out |
 | Network | 5 GHz WiFi |
-| Temperature | **59.9°C** — no throttling (`throttled=0x0`) |
-| System load | 0.43 / 0.53 / 0.57 (4-core → **~13% effective**) |
-| Uptime | 5 days continuous |
+| Profile | performance (server + client) |
 
 **Docker container load** (all services active, streaming idle, 2 clients connected):
 
 | Container | CPU % | RAM used | RAM limit |
 |-----------|-------|----------|-----------|
-| snapserver | 8.05% | 102 MiB | 512 MiB |
-| fb-display | 11.49% | 140 MiB | 384 MiB |
-| audio-visualizer | 8.00% | 31 MiB | 384 MiB |
-| librespot (Spotify) | 7.37% | 177 MiB | 256 MiB |
-| mpd | 0.61% | 181 MiB | 512 MiB |
-| mympd | 0.00% | 108 MiB | 256 MiB |
-| metadata | 1.25% | 80 MiB | 192 MiB |
-| shairport-sync (AirPlay) | 0.01% | 18 MiB | 256 MiB |
-| tidal-connect | 3.23% | 43 MiB | 192 MiB |
-| snapclient | 2.69% | 19 MiB | 192 MiB |
-| **Total** | **~42%** | **~899 MiB** | |
+| snapserver | 6.0% | 87 MiB | 512 MiB |
+| fb-display | 11.7% | 89 MiB | 384 MiB |
+| audio-visualizer | 7.8% | 51 MiB | 384 MiB |
+| librespot (Spotify) | 0.0% | 22 MiB | 256 MiB |
+| mpd | 6.4% | 90 MiB | 512 MiB |
+| mympd | 0.0% | 8 MiB | 256 MiB |
+| metadata | 0.6% | 52 MiB | 192 MiB |
+| shairport-sync (AirPlay) | 0.0% | 18 MiB | 256 MiB |
+| tidal-connect | 4.7% | 32 MiB | 192 MiB |
+| snapclient | 1.2% | 18 MiB | 192 MiB |
+| **Total** | **~38%** | **~468 MiB** | |
 
-**System RAM:** 2520 MiB used / 7645 MiB total (1534 MiB shared/cache — Docker layer cache)
+**System RAM:** 787 MiB used / 7645 MiB total (6.7 GiB available)
 
-> Services without display (fb-display + audio-visualizer) would reduce CPU to ~22% and RAM to ~728 MiB — a Pi 4 2 GB is then viable.
+> Services without display (fb-display + audio-visualizer) would reduce CPU to ~19% and RAM to ~327 MiB — a Pi 4 2 GB is then viable as server.
 
 ---
 
-### snapdigi — Client Only
+### snapdigi — Client Only (4K Display)
 
 | Attribute | Value |
 |-----------|-------|
 | Board | Raspberry Pi 4 Model B Rev 1.1 — **2 GB RAM** |
 | Audio | [HiFiBerry Digi+](https://www.hifiberry.com/shop/boards/hifiberry-digi/) (`snd_rpi_hifiberry_digi`, WM8804) — **S/PDIF optical/coaxial out** |
+| Display | 3840x2160 (4K) |
 | Network | 5 GHz WiFi |
-| Temperature | **65.7°C** — no throttling (`throttled=0x0`) |
-| System load | 0.68 / 0.73 / 0.77 (4-core → **~19% effective**) |
-| Uptime | 2 days continuous |
+| Profile | custom (tuned for 4K display) |
 
-**Docker container load** (client with cover art display active):
+**Docker container load** (client with 4K cover art display active):
 
 | Container | CPU % | RAM used | RAM limit |
 |-----------|-------|----------|-----------|
-| fb-display | **50.65%** | 120 MiB | 128 MiB ⚠ |
-| audio-visualizer | 8.70% | 56 MiB | 128 MiB |
-| snapclient | 1.49% | 18 MiB | 96 MiB |
-| **Total** | **~61%** | **~194 MiB** | |
+| fb-display | **66.1%** | 114 MiB | 384 MiB |
+| audio-visualizer | 8.6% | 36 MiB | 128 MiB |
+| snapclient | 1.8% | 18 MiB | 96 MiB |
+| **Total** | **~77%** | **~168 MiB** | |
 
-**System RAM:** 409 MiB used / 1669 MiB total (605 MiB buff/cache)
+**System RAM:** 1.1 GiB used / 1.6 GiB total (547 MiB available)
 
-> ⚠ **fb-display** is at 93% of its 128 MiB RAM limit on this node. If you see OOM kills, increase the limit in your `.env` or `docker-compose.override.yml`.
-
-> The higher temperature vs snapvideo (65.7°C vs 59.9°C) is due to the higher sustained CPU load from fb-display rendering. Still well below the 80°C throttle threshold.
+> fb-display at 4K resolution uses significantly more CPU (~66%) and RAM (~114 MiB) than at 1080p (~12% CPU, ~89 MiB). The 384 MiB limit provides safe headroom. For 4K displays, Pi 4 2 GB is the minimum; Pi 4 4 GB+ is recommended.
 
 ---
 
@@ -410,10 +498,11 @@ Two production systems measured in March 2026. Both on 5 GHz WiFi, 64-bit Pi OS,
 
 | Use Case | Minimum Board | RAM | Reason |
 |----------|---------------|-----|--------|
-| Server only (no display) | Pi 4 **2 GB** | 2 GB | ~720 MiB containers + ~500 MB OS = ~1.2 GB total |
-| Server + Client (no display) | Pi 4 **2 GB** | 2 GB | snapclient adds only 19 MiB |
-| Server + Client (with display) | Pi 4 **4 GB** | 4 GB | fb-display + audio-visualizer add ~170 MiB; recommended headroom |
-| Client only, no display | **Pi Zero 2 W** | 512 MB | snapclient: ~1.5% CPU, 18 MiB RAM |
-| Client only, with display | Pi 4 **2 GB** | 2 GB | fb-display alone needs ~120 MiB; Pi Zero 2 W is too tight |
+| Server only | Pi 3 **1 GB** | 1 GB | ~309 MiB actual usage; tight but works. Pi 4 2 GB recommended |
+| Server + Client headless | Pi 3 **1 GB** | 1 GB | snapclient adds only 18 MiB |
+| Server + Client with display | Pi 4 **2 GB** | 2 GB | fb-display + visualizer add ~140 MiB |
+| Client only, headless | **Pi Zero 2 W** | 512 MB | snapclient: ~2% CPU, 18 MiB RAM |
+| Client only, with display (1080p) | Pi 3 **1 GB** | 1 GB | fb-display + visualizer: ~140 MiB |
+| Client only, with display (4K) | Pi 4 **2 GB** | 2 GB | fb-display at 4K: ~114 MiB, ~66% CPU |
 
 **Thermal:** Both Pi 4 boards ran continuously for days at 58–65°C without thermal throttling (snapvideo 57.9°C, snapdigi 64.7°C). Passive cooling (heatsink case) is sufficient; active cooling (fan) is not required for typical home use.

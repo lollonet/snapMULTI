@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Resource profiles optimized from production measurements** ([#124](https://github.com/lollonet/snapMULTI/pull/124)) — re-baselined all Docker CPU and memory limits using live `docker stats` from snapvideo (Pi 4 8GB) and snapdigi (Pi 4 2GB). Key changes: shairport-sync 128M→64M (measured: 18M), mympd 128M→64M (measured: 8M), snapserver 256M→192M (measured: 87M). Spotify kept at 256M (measured active: ~180M). Reduces standard profile total from 1,280M to 1,056M
+- **Client profile names harmonized** — renamed `low/medium/high` to `minimal/standard/performance` to match server naming convention
+
+### Added
+- **Hardware compatibility matrix** ([#124](https://github.com/lollonet/snapMULTI/pull/124)) — `docs/HARDWARE.md` now includes tables for all Pi model × role combinations (server, client, both mode) with memory limit totals and compatibility status
+- **Watchtower resource limits** — watchtower container now has 64M memory / 0.25 CPU limits (was unlimited)
+
+### Removed
+- **Dead YAML anchors** — removed unused `x-resources-minimal`, `x-resources-standard`, `x-resources-performance` from `docker-compose.yml` (defined but never referenced by any service)
+
 ## [0.3.12] — 2026-03-19
 
 ### Fixed

@@ -16,34 +16,6 @@ x-security: &default-security
   cap_add:
     - DAC_OVERRIDE      # File access as non-root (FIFOs in /audio may be root-owned)
 
-# Resource profiles (set HARDWARE_PROFILE in .env)
-x-resources-minimal: &resources-minimal
-  deploy:
-    resources:
-      limits:
-        memory: 128M
-        cpus: '0.5'
-      reservations:
-        memory: 64M
-
-x-resources-standard: &resources-standard
-  deploy:
-    resources:
-      limits:
-        memory: 256M
-        cpus: '1.0'
-      reservations:
-        memory: 128M
-
-x-resources-performance: &resources-performance
-  deploy:
-    resources:
-      limits:
-        memory: 512M
-        cpus: '2.0'
-      reservations:
-        memory: 256M
-
 services:
   snapserver:
     image: lollonet/snapmulti-server:latest
@@ -78,10 +50,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${SNAPSERVER_MEM_LIMIT:-256M}
+          memory: ${SNAPSERVER_MEM_LIMIT:-192M}
           cpus: '${SNAPSERVER_CPU_LIMIT:-1.0}'
         reservations:
-          memory: ${SNAPSERVER_MEM_RESERVE:-128M}
+          memory: ${SNAPSERVER_MEM_RESERVE:-96M}
 
   shairport-sync:
     image: lollonet/snapmulti-airplay:latest
@@ -116,10 +88,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${AIRPLAY_MEM_LIMIT:-128M}
+          memory: ${AIRPLAY_MEM_LIMIT:-64M}
           cpus: '${AIRPLAY_CPU_LIMIT:-0.5}'
         reservations:
-          memory: ${AIRPLAY_MEM_RESERVE:-64M}
+          memory: ${AIRPLAY_MEM_RESERVE:-32M}
 
   # Spotify Connect — go-librespot with metadata via WebSocket API
   # Open Spotify app → Connect to a device → Select "<hostname> Spotify"
@@ -168,10 +140,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${SPOTIFY_MEM_LIMIT:-128M}
+          memory: ${SPOTIFY_MEM_LIMIT:-256M}
           cpus: '${SPOTIFY_CPU_LIMIT:-0.5}'
         reservations:
-          memory: ${SPOTIFY_MEM_RESERVE:-64M}
+          memory: ${SPOTIFY_MEM_RESERVE:-128M}
 
   mympd:
     image: ghcr.io/jcorporation/mympd/mympd:latest
@@ -210,10 +182,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${MYMPD_MEM_LIMIT:-128M}
+          memory: ${MYMPD_MEM_LIMIT:-64M}
           cpus: '${MYMPD_CPU_LIMIT:-0.5}'
         reservations:
-          memory: ${MYMPD_MEM_RESERVE:-64M}
+          memory: ${MYMPD_MEM_RESERVE:-32M}
 
   mpd:
     image: lollonet/snapmulti-mpd:latest
@@ -345,10 +317,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${TIDAL_MEM_LIMIT:-128M}
+          memory: ${TIDAL_MEM_LIMIT:-96M}
           cpus: '${TIDAL_CPU_LIMIT:-0.5}'
         reservations:
-          memory: ${TIDAL_MEM_RESERVE:-64M}
+          memory: ${TIDAL_MEM_RESERVE:-48M}
 
   # Automatic image updates (opt-in: set AUTO_UPDATE=true in .env)
   # Monitors lollonet/snapmulti-* containers for new :latest images
@@ -376,3 +348,10 @@ services:
       - WATCHTOWER_LABEL_ENABLE=true
       - WATCHTOWER_NOTIFICATION_URL=${UPDATE_NOTIFY_URL:-}
     logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.25'
+        reservations:
+          memory: 32M
