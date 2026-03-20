@@ -15,6 +15,6 @@ done
 mpc -p 6600 update --wait 2>/dev/null || true
 
 # Forward SIGTERM/SIGINT to MPD, then wait for it to exit
-trap "kill -TERM $MPD_PID" TERM INT
+trap 'kill -TERM "$MPD_PID"' TERM INT
 wait $MPD_PID
 exit $?

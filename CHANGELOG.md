@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Watchtower resource limits** — watchtower container now has 64M memory / 0.25 CPU limits (was unlimited)
 
 ### Fixed
+- **MPD incomplete library scan** ([#128](https://github.com/lollonet/snapMULTI/pull/128)) — three root causes addressed: (1) `filter "~.*"` → `"._*"` in `mpd.conf` to correctly target only macOS resource forks via standard fnmatch instead of an undocumented/over-aggressive pattern; (2) `log_level "notice"` → `"info"` so file-skip and decode errors become visible; (3) new `mpd-entrypoint.sh` runs `mpc update --wait` after startup so the container is only healthy after the full library scan completes. Default `MPD_MEM_LIMIT` raised 256M → 512M to prevent OOM mid-scan on large FLAC libraries
 - **Metadata build block removed** — removed stale `build:` block from metadata service in `docker-compose.yml` (leftover from development; production uses pre-built image)
 - **README container count** — clarified total container count (seven on ARM including tidal-connect)
 
