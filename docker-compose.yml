@@ -235,9 +235,6 @@ services:
     container_name: metadata
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
-    build:
-      context: .
-      dockerfile: Dockerfile.metadata
     restart: unless-stopped
     network_mode: host
     security_opt:

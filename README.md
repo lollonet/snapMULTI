@@ -147,7 +147,7 @@ Verify:
 docker ps
 ```
 
-You should see six running containers: `snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`, and `metadata`. On ARM (Raspberry Pi), you'll also see `tidal-connect`.
+You should see six running containers: `snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`, and `metadata`. On ARM (Raspberry Pi), you'll also see `tidal-connect` (seven total).
 
 ---
 

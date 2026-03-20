@@ -506,8 +506,10 @@ docker compose up -d
 |----------|---------|-------|
 | **Build & Push** | Push tag (`v*`) | Compila 5 immagini (4 multi-arch + 1 solo ARM), push su Docker Hub, avvia deploy |
 | **Deploy** | Chiamato da Build & Push | Scarica immagini e riavvia 7 container principali sul server via SSH |
+| **Security Scan** | Dopo build, settimanalmente, manuale | Trivy scansiona tutte le immagini per CVE CRITICAL/HIGH, carica SARIF nella scheda Security di GitHub |
 | **Validate** | Push su qualsiasi branch, pull request | Verifica sintassi docker-compose, shellcheck scripts/ e template environment |
 | **Build Test** | Pull request | Valida che le immagini Docker si compilino correttamente (senza push) |
+| **Claude Code Review** | Pull request | Revisione automatica del codice rispetto alle convenzioni del progetto |
 
 ### Container Registry
 
@@ -521,6 +523,7 @@ Le immagini Docker sono ospitate su Docker Hub:
 | `lollonet/snapmulti-mpd:latest` | Music Player Daemon |
 | `lollonet/snapmulti-metadata:latest` | Servizio Metadata (copertine + info tracce) |
 | `ghcr.io/jcorporation/mympd/mympd:latest` | Interfaccia Web (immagine di terze parti) |
+| `lollonet/snapmulti-tidal:latest` | Tidal Connect (solo ARM) |
 | `lollonet/snapmulti-tidal:latest` | Tidal Connect (solo ARM) |
 
 Le immagini supportano `linux/amd64` e `linux/arm64` tranne Tidal Connect (solo ARM).
@@ -712,20 +715,66 @@ sudo bash /boot/firmware/snapmulti/firstboot.sh
 
 ## Aggiornamento
 
-### Aggiornamento Standard
+snapMULTI ha due meccanismi di aggiornamento: **Watchtower** per aggiornamenti automatici delle immagini Docker e **update.sh** per aggiornamenti di configurazione e script.
 
+### Aggiornamenti Automatici delle Immagini (Watchtower)
+
+Aggiornamenti automatici opt-in delle immagini Docker. Watchtower monitora i container in esecuzione e scarica nuove immagini `:latest` secondo una pianificazione.
+
+**Abilitare:**
 ```bash
-cd /opt/snapmulti  # o dove installato
-git pull
-docker compose pull
-docker compose up -d
+# Aggiungi a /opt/snapmulti/.env:
+AUTO_UPDATE=true
+
+# Riavvia con il profilo auto-update:
+COMPOSE_PROFILES=auto-update docker compose up -d
 ```
 
-### Aggiornamento con Backup
+Oppure riesegui `deploy.sh` — rileva `AUTO_UPDATE=true` e aggiunge `auto-update` a `COMPOSE_PROFILES` automaticamente.
+
+**Configurazione** (in `.env`):
+
+| Variabile | Default | Descrizione |
+|-----------|---------|-------------|
+| `AUTO_UPDATE` | (disabilitato) | Imposta a `true` per abilitare Watchtower |
+| `UPDATE_SCHEDULE` | `0 0 3 * * *` | Pianificazione cron (default: ogni giorno alle 3:00) |
+| `UPDATE_NOTIFY_URL` | (nessuno) | URL notifiche ([formato shoutrrr](https://containrrr.dev/shoutrrr/)) |
+
+**Cosa viene aggiornato:**
+- `lollonet/snapmulti-server`, `-airplay`, `-mpd`, `-metadata`, `-tidal` (immagini `:latest`)
+
+**Cosa NON viene aggiornato:**
+- `go-librespot` (fissato a `v0.7.0`)
+- `mympd` (immagine di terze parti, fissata)
+- File di configurazione, script, docker-compose.yml (usa `update.sh` per quelli)
+
+### Aggiornamenti Config e Script (update.sh)
+
+Per aggiornare file di configurazione, script e docker-compose.yml dalle release GitHub. Funziona senza git — progettato per installazioni da SD card.
+
+```bash
+# Controlla aggiornamenti disponibili
+sudo /opt/snapmulti/scripts/update.sh --check
+
+# Applica aggiornamento (interattivo)
+sudo /opt/snapmulti/scripts/update.sh
+
+# Applica aggiornamento (non interattivo, es. da cron)
+sudo /opt/snapmulti/scripts/update.sh --force
+```
+
+**Cosa viene aggiornato:** `config/`, `scripts/`, `docker-compose.yml`, `Dockerfile.*`, `.env.example`
+
+**Cosa NON viene MAI toccato:** `.env`, `audio/`, `artwork/`, `mpd/`, `mympd/`, `data/`
+
+**Sicurezza:** Rifiuta di attraversare i confini di versione maggiore (es. v0.x → v1.x). Gli aggiornamenti maggiori richiedono intervento manuale.
+
+### Aggiornamento Standard (con git)
+
+Se hai clonato il repo con git:
 
 ```bash
 cd /opt/snapmulti
-cp -r config config.backup
 git pull
 docker compose pull
 docker compose up -d
@@ -735,10 +784,11 @@ docker compose up -d
 
 Se un aggiornamento causa problemi:
 ```bash
-# Ripristina la configurazione
-cp -r config.backup/* config/
+# Usa una versione specifica dell'immagine
+docker pull lollonet/snapmulti-server:v0.3.5
+docker compose up -d
 
-# Oppure usa una versione specifica dell'immagine
-docker pull lollonet/snapmulti-server:v1.0.0
+# Oppure ripristina la configurazione dal backup
+cp -r config.backup/* config/
 docker compose up -d
 ```
