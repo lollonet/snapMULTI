@@ -280,7 +280,7 @@ function Copy-ClientFiles {
         }
     }
 
-    # Setup script
+    # Setup scripts
     $scriptsDest = Join-Path $clientDest 'scripts'
     New-Item -ItemType Directory -Path $scriptsDest -Force | Out-Null
     Copy-Item (Join-Path $ClientDir 'common\scripts\setup.sh') -Destination $scriptsDest
@@ -288,6 +288,23 @@ function Copy-ClientFiles {
     $roMode = Join-Path $ClientDir 'common\scripts\ro-mode.sh'
     if (Test-Path $roMode) {
         Copy-Item $roMode -Destination $scriptsDest
+    }
+
+    $displaySh = Join-Path $ClientDir 'common\scripts\display.sh'
+    if (Test-Path $displaySh) {
+        Copy-Item $displaySh -Destination $scriptsDest
+    }
+
+    $displayDetect = Join-Path $ClientDir 'common\scripts\display-detect.sh'
+    if (Test-Path $displayDetect) {
+        Copy-Item $displayDetect -Destination $scriptsDest
+    }
+
+    # Systemd service files (display detection boot service)
+    $systemdSrc = Join-Path $ClientDir 'common\systemd'
+    if (Test-Path $systemdSrc) {
+        $systemdDest = Join-Path $clientDest 'systemd'
+        Copy-Item $systemdSrc -Destination $systemdDest -Recurse -Force
     }
 }
 
