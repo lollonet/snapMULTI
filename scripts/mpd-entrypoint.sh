@@ -6,6 +6,12 @@ set -e
 mpd --no-daemon /etc/mpd.conf &
 MPD_PID=$!
 
+# Register signal forwarding immediately — before any blocking calls.
+# Without this, Docker SIGTERM during the initial library scan is silently
+# ignored (default PID-1 behaviour), causing Docker to wait the full stop
+# timeout before sending SIGKILL and forcing an ungraceful MPD shutdown.
+trap 'kill -TERM "$MPD_PID"' TERM INT
+
 # Wait for MPD to accept connections
 until echo 'ping' | nc -w 1 127.0.0.1 6600 2>/dev/null | grep -q OK; do
     sleep 1
@@ -13,8 +19,5 @@ done
 
 # Trigger full library scan and wait for completion (blocks until MPD idle event)
 mpc -p 6600 update --wait 2>/dev/null || true
-
-# Forward SIGTERM/SIGINT to MPD, then wait for it to exit
-trap 'kill -TERM "$MPD_PID"' TERM INT
 wait $MPD_PID
 exit $?
