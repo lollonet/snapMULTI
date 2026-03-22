@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Resource profiles optimized from production measurements** ([#124](https://github.com/lollonet/snapMULTI/pull/124)) — re-baselined all Docker CPU and memory limits using live `docker stats` from snapvideo (Pi 4 8GB) and snapdigi (Pi 4 2GB). Key changes: shairport-sync 128M→64M (measured: 18M), mympd 128M→64M (measured: 8M), snapserver 256M→192M (measured: 87M). Spotify kept at 256M (measured active: ~180M). Reduces standard profile total from 1,280M to 1,056M
 - **Client profile names harmonized** — renamed `low/medium/high` to `minimal/standard/performance` to match server naming convention
+- **MPD config best practices** ([#130](https://github.com/lollonet/snapMULTI/pull/130), [#129](https://github.com/lollonet/snapMULTI/issues/129)) — audited `mpd.conf` against official docs: replaced legacy `db_file` with `database{}` block (`path` + `compress "yes"`), added required `encoder "lame"` to httpd output (was broken without it), removed invalid `filter` option from simple plugin, raised `max_connections` 10→30, added `connection_timeout "60"`, added `zeroconf_name`, fixed `log_level` from undocumented `"notice"` to `"default"`
 
 ### Added
 - **Hardware compatibility matrix** ([#124](https://github.com/lollonet/snapMULTI/pull/124)) — `docs/HARDWARE.md` now includes tables for all Pi model × role combinations (server, client, both mode) with memory limit totals and compatibility status
@@ -18,12 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Metadata build block removed** — removed stale `build:` block from metadata service in `docker-compose.yml` (leftover from development; production uses pre-built image)
 - **README container count** — clarified total container count (seven on ARM including tidal-connect)
+- **Tidal metadata C1 escape regex** ([#126](https://github.com/lollonet/snapMULTI/pull/126)) — `strip_escapes` in `tidal-meta-bridge.sh` was missing `]` (0x5D) from the C1 character range; fixed `[A-Za-z@\[\\^_]` → `[@-_]` to cover the complete C1 set (0x40–0x5F)
+- **CI deploy tmpfs exhaustion** ([#123](https://github.com/lollonet/snapMULTI/pull/123)) — reordered deploy steps to prevent overlayroot tmpfs from filling up during image pull + bake
 
 ### Removed
 - **Dead YAML anchors** — removed unused `x-resources-minimal`, `x-resources-standard`, `x-resources-performance` from `docker-compose.yml` (defined but never referenced by any service)
 
+### Documentation
+- **Docs coherence audit** ([#125](https://github.com/lollonet/snapMULTI/pull/125), [#127](https://github.com/lollonet/snapMULTI/pull/127)) — synced Italian translations, fixed stale references, corrected container counts across all docs
+
 ### CI/CD
 - **PR workflows switched to GitHub-hosted runners** — `validate.yml`, `build-test.yml`, and `claude-code-review.yml` now run on `ubuntu-latest` instead of offline `snapcast-runner`
+- **Docker build path filtering** ([#132](https://github.com/lollonet/snapMULTI/pull/132)) — `build-test.yml` now only triggers when Dockerfiles or their COPYed files change (skips doc-only PRs)
+- **Claude review allowedTools fix** ([#131](https://github.com/lollonet/snapMULTI/pull/131)) — broadened `Bash(gh *)` to include `printf`, `echo`, `cat` so piped commands aren't silently denied
+
+### Maintenance
+- **Client submodule update** — locale setup (`C.UTF-8`), removed unused `gnupg` and `git` packages
 
 ## [0.3.12] — 2026-03-19
 
