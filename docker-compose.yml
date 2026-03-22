@@ -169,6 +169,9 @@ services:
       - TZ=${TZ:-Europe/Berlin}
       - MYMPD_HTTP_PORT=8180
       - MYMPD_SSL=false
+    # service_started (not service_healthy): myMPD retries MPD connection
+    # internally. Using service_healthy would block on MPD's 60s healthcheck
+    # interval, adding unnecessary delay on large NFS/SMB libraries.
     depends_on:
       mpd:
         condition: service_started
