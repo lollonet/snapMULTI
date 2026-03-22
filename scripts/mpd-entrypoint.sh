@@ -17,7 +17,9 @@ until echo 'ping' | nc -w 1 127.0.0.1 6600 2>/dev/null | grep -q OK; do
     sleep 1
 done
 
-# Trigger full library scan and wait for completion (blocks until MPD idle event)
-mpc -p 6600 update --wait 2>/dev/null || true
+# Trigger full library scan and wait for completion (blocks until MPD idle event).
+# Don't exit on failure — scan errors shouldn't prevent MPD from serving
+# already-indexed music (e.g., NFS temporarily unreachable).
+mpc -p 6600 update --wait 2>/dev/null || echo "WARNING: library scan failed or incomplete"
 wait $MPD_PID
 exit $?
