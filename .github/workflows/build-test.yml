@@ -2,6 +2,21 @@ name: Test Docker Builds
 
 on:
   pull_request:
+    paths:
+      # Dockerfiles
+      - 'Dockerfile.*'
+      # Files COPYed into images
+      - 'scripts/mpd-entrypoint.sh'
+      - 'scripts/airplay-entrypoint.sh'
+      - 'scripts/meta_shairport.py'
+      - 'scripts/meta_tidal.py'
+      - 'scripts/common/sanitize.sh'
+      - 'scripts/tidal/**'
+      - 'docker/metadata-service/**'
+      - 'patches/meta_mpd.py'
+      - 'config/mpd.conf'
+      - 'config/snapserver.conf'
+      - 'config/shairport-sync.conf'
   workflow_dispatch:
 
 jobs:
