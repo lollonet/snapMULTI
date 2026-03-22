@@ -222,10 +222,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${MPD_MEM_LIMIT:-256M}
+          memory: ${MPD_MEM_LIMIT:-512M}
           cpus: '${MPD_CPU_LIMIT:-1.0}'
         reservations:
-          memory: ${MPD_MEM_RESERVE:-128M}
+          memory: ${MPD_MEM_RESERVE:-256M}
 
   # Metadata Service — centralized cover art + track info for all streams
   # WebSocket (port 8082): clients subscribe with CLIENT_ID to get their stream's metadata
