@@ -229,10 +229,17 @@ copy_client_files() {
         fi
     done
 
-    # Setup script
+    # Setup scripts
     mkdir -p "$dest/scripts"
     cp "$CLIENT_DIR/common/scripts/setup.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/scripts/"
+    [[ -f "$CLIENT_DIR/common/scripts/display.sh" ]] && cp "$CLIENT_DIR/common/scripts/display.sh" "$dest/scripts/"
+    [[ -f "$CLIENT_DIR/common/scripts/display-detect.sh" ]] && cp "$CLIENT_DIR/common/scripts/display-detect.sh" "$dest/scripts/"
+
+    # Systemd service files (display detection boot service)
+    if [[ -d "$CLIENT_DIR/common/systemd" ]]; then
+        cp -r "$CLIENT_DIR/common/systemd" "$dest/"
+    fi
 }
 
 # ── Main ──────────────────────────────────────────────────────────
