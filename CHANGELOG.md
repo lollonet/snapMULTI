@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.13] — 2026-03-23
+
 ### Changed
 - **Resource profiles optimized from production measurements** ([#124](https://github.com/lollonet/snapMULTI/pull/124)) — re-baselined all Docker CPU and memory limits using live `docker stats` from snapvideo (Pi 4 8GB) and snapdigi (Pi 4 2GB). Key changes: shairport-sync 128M→64M (measured: 18M), mympd 128M→64M (measured: 8M), snapserver 256M→192M (measured: 87M). Spotify kept at 256M (measured active: ~180M). Reduces standard profile total from 1,280M to 1,056M
 - **Client profile names harmonized** — renamed `low/medium/high` to `minimal/standard/performance` to match server naming convention
