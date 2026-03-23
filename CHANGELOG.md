@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **README container count** — clarified total container count (seven on ARM including tidal-connect)
 - **Tidal metadata C1 escape regex** ([#126](https://github.com/lollonet/snapMULTI/pull/126)) — `strip_escapes` in `tidal-meta-bridge.sh` was missing `]` (0x5D) from the C1 character range; fixed `[A-Za-z@\[\\^_]` → `[@-_]` to cover the complete C1 set (0x40–0x5F)
 - **CI deploy tmpfs exhaustion** ([#123](https://github.com/lollonet/snapMULTI/pull/123)) — reordered deploy steps to prevent overlayroot tmpfs from filling up during image pull + bake
+- **MPD scan failure silently swallowed** ([#134](https://github.com/lollonet/snapMULTI/pull/134)) — `mpd-entrypoint.sh` used `|| true` on `mpc update --wait`, hiding NFS timeouts and permission errors. Now logs `WARNING: library scan failed or incomplete` to `docker logs mpd`
+- **First-boot client setup crash** ([#136](https://github.com/lollonet/snapMULTI/pull/136)) — `prepare-sd.sh` was not copying `display.sh` and `display-detect.sh` to the boot partition; `setup.sh` failed at line 1108 with "No such file or directory" on first boot. Fixed in both bash and PowerShell (`prepare-sd.ps1`) variants
 
 ### Removed
 - **Dead YAML anchors** — removed unused `x-resources-minimal`, `x-resources-standard`, `x-resources-performance` from `docker-compose.yml` (defined but never referenced by any service)
@@ -36,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Maintenance
 - **Client submodule update** — locale setup (`C.UTF-8`), removed unused `gnupg` and `git` packages
+- **Client submodule update** ([#135](https://github.com/lollonet/snapMULTI/pull/135)) — headless profile fix: `setup.sh` respects display detection, `audio-visualizer` gated under `framebuffer` profile (saves 128-256M RAM on headless Pis)
 
 ## [0.3.12] — 2026-03-19
 
