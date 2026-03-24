@@ -42,6 +42,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.USER }}
         run: |
           KEY_FILE=$(mktemp)
+          trap 'rm -f "$KEY_FILE"' EXIT
           echo "$SSH_KEY" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
           ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no "${DEPLOY_USER}@${HOST}" "mkdir -p /tmp/snapmulti-deploy"
