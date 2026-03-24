@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **CPU governor and USB autosuspend tuning** ([#139](https://github.com/lollonet/snapMULTI/pull/139)) — `deploy.sh` sets CPU governor to `performance` and disables USB autosuspend to prevent audio glitches; settings persist via `/etc/default/cpufrequtils` and udev rule. Success messages now reflect actual write outcome
+
+### Changed
+- **Client submodule updated** ([#140](https://github.com/lollonet/snapMULTI/pull/140)) — HAT mixer auto-detection: `setup.sh` auto-configures `MIXER` based on detected audio HAT (hardware mixer for DACs, software for S/PDIF/USB), preserving full 16-bit audio resolution
+
 ## [0.3.13] — 2026-03-23
 
 ### Changed
