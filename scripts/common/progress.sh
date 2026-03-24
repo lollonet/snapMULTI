@@ -103,7 +103,7 @@ render_progress() {
             done <<< "$log_lines"
         fi
         local line_count
-        line_count=$(printf '%s' "$log_lines" | grep -c '^') || line_count=0
+        line_count=$(printf '%s' "$log_lines" | grep -c '^' || true)
         for ((i=line_count; i<8; i++)); do
             printf '  | %-68s |\n' ""
         done
