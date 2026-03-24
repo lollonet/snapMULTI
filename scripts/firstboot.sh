@@ -354,16 +354,25 @@ fi
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     mkdir -p "$CLIENT_DIR"
     if [[ -d "$SNAP_BOOT/client" ]]; then
-        # Copy all client files
-        cp -r "$SNAP_BOOT/client/"* "$CLIENT_DIR/" 2>/dev/null || true
+        # Copy all client files — fail loudly on errors
+        cp -r "$SNAP_BOOT/client/"* "$CLIENT_DIR/" || {
+            log_and_tty "ERROR: Failed to copy client files from $SNAP_BOOT/client/"
+            exit 1
+        }
         # Copy dotfiles (.env.example) — glob may match nothing, which is OK
         if ! cp -r "$SNAP_BOOT/client/".??* "$CLIENT_DIR/" 2>/dev/null; then
             echo "Note: no dotfiles found in client source (non-fatal)" >> "$LOG"
         fi
     fi
     # Verify critical client files were copied
-    if [[ ! -f "$CLIENT_DIR/docker-compose.yml" ]]; then
-        log_and_tty "ERROR: Client docker-compose.yml missing after copy."
+    missing=()
+    [[ -f "$CLIENT_DIR/docker-compose.yml" ]] || missing+=("docker-compose.yml")
+    [[ -f "$CLIENT_DIR/scripts/setup.sh" ]] || missing+=("scripts/setup.sh")
+    [[ -d "$CLIENT_DIR/audio-hats" ]] || missing+=("audio-hats/")
+    [[ -f "$CLIENT_DIR/scripts/display.sh" ]] || missing+=("scripts/display.sh")
+    [[ -f "$CLIENT_DIR/scripts/display-detect.sh" ]] || missing+=("scripts/display-detect.sh")
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        log_and_tty "ERROR: Critical client files missing after copy: ${missing[*]}"
         exit 1
     fi
     log_progress "Client files copied to $CLIENT_DIR" 2>/dev/null || true
