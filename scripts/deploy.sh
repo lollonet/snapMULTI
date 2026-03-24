@@ -450,22 +450,30 @@ install_dependencies() {
     # Audio performance tuning
     # CPU governor: 'performance' avoids ramp-up latency during audio playback
     if [[ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor ]]; then
+        local set_count=0
         for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
-            echo performance > "$gov" 2>/dev/null || true
+            echo performance > "$gov" 2>/dev/null && (( set_count++ )) || true
         done
         if [[ -d /etc/default ]]; then
             echo 'GOVERNOR="performance"' > /etc/default/cpufrequtils 2>/dev/null || true
         fi
-        ok "CPU governor set to performance"
+        if (( set_count > 0 )); then
+            ok "CPU governor set to performance ($set_count CPUs)"
+        else
+            warn "CPU governor: no cpufreq paths writable, skipped"
+        fi
     fi
 
     # USB autosuspend: disable to prevent audio device sleep
     if [[ -f /sys/module/usbcore/parameters/autosuspend ]]; then
-        echo -1 > /sys/module/usbcore/parameters/autosuspend 2>/dev/null || true
-        mkdir -p /etc/udev/rules.d
-        echo 'ACTION=="add", SUBSYSTEM=="usb", ATTR{power/autosuspend}="-1"' \
-            > /etc/udev/rules.d/50-usb-no-autosuspend.rules 2>/dev/null || true
-        ok "USB autosuspend disabled"
+        if echo -1 > /sys/module/usbcore/parameters/autosuspend 2>/dev/null; then
+            mkdir -p /etc/udev/rules.d
+            echo 'ACTION=="add", SUBSYSTEM=="usb", ATTR{power/autosuspend}="-1"' \
+                > /etc/udev/rules.d/50-usb-no-autosuspend.rules 2>/dev/null || true
+            ok "USB autosuspend disabled"
+        else
+            warn "USB autosuspend: not writable, skipped"
+        fi
     fi
 
     ok "System dependencies ready"
