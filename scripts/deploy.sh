@@ -447,34 +447,11 @@ install_dependencies() {
         ok "Monitoring tools installed"
     fi
 
-    # Audio performance tuning
-    # CPU governor: 'performance' avoids ramp-up latency during audio playback
-    if [[ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor ]]; then
-        local set_count=0
-        for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
-            echo performance > "$gov" 2>/dev/null && (( set_count++ )) || true
-        done
-        if [[ -d /etc/default ]]; then
-            echo 'GOVERNOR="performance"' > /etc/default/cpufrequtils 2>/dev/null || true
-        fi
-        if (( set_count > 0 )); then
-            ok "CPU governor set to performance ($set_count CPUs)"
-        else
-            warn "CPU governor: no cpufreq paths writable, skipped"
-        fi
-    fi
-
-    # USB autosuspend: disable to prevent audio device sleep
-    if [[ -f /sys/module/usbcore/parameters/autosuspend ]]; then
-        if echo -1 > /sys/module/usbcore/parameters/autosuspend 2>/dev/null; then
-            mkdir -p /etc/udev/rules.d
-            echo 'ACTION=="add", SUBSYSTEM=="usb", ATTR{power/autosuspend}="-1"' \
-                > /etc/udev/rules.d/50-usb-no-autosuspend.rules 2>/dev/null || true
-            ok "USB autosuspend disabled"
-        else
-            warn "USB autosuspend: not writable, skipped"
-        fi
-    fi
+    # Audio performance tuning (shared with client — scripts/common/system-tune.sh)
+    # shellcheck source=common/system-tune.sh
+    source "$SCRIPT_DIR/common/system-tune.sh"
+    tune_cpu_governor
+    tune_usb_autosuspend
 
     # Network QoS: prioritize Snapcast audio over bulk transfers
     # CAKE qdisc with diffserv4 gives DSCP EF-marked packets lowest latency
@@ -508,6 +485,13 @@ iface=$(ip route show default 2>/dev/null | awk '{print $5; exit}')
 [ -n "$iface" ] || exit 0
 modprobe sch_cake 2>/dev/null
 tc qdisc replace dev "$iface" root cake diffserv4 2>/dev/null
+# DSCP EF marking for Snapcast (streaming + control)
+if command -v iptables >/dev/null 2>&1; then
+    iptables -t mangle -C OUTPUT -p tcp --sport 1704 -j DSCP --set-dscp-class EF 2>/dev/null \
+        || iptables -t mangle -A OUTPUT -p tcp --sport 1704 -j DSCP --set-dscp-class EF
+    iptables -t mangle -C OUTPUT -p tcp --sport 1705 -j DSCP --set-dscp-class EF 2>/dev/null \
+        || iptables -t mangle -A OUTPUT -p tcp --sport 1705 -j DSCP --set-dscp-class EF
+fi
 QEOF
             chmod +x /etc/networkd-dispatcher/routable.d/50-cake-qos
         else
@@ -551,37 +535,8 @@ install_docker() {
         info "Added $real_user to docker group (re-login to take effect)"
     fi
 
-    # Configure Docker daemon (live-restore keeps containers running across
-    # daemon restarts/upgrades; log rotation prevents disk fill)
-    if [[ ! -f /etc/docker/daemon.json ]]; then
-        info "Writing /etc/docker/daemon.json (live-restore, log rotation)..."
-        mkdir -p /etc/docker
-        cat > /etc/docker/daemon.json <<'DJSON'
-{
-  "live-restore": true,
-  "log-driver": "json-file",
-  "log-opts": {
-    "max-size": "10m",
-    "max-file": "3"
-  }
-}
-DJSON
-    else
-        # Ensure live-restore is enabled in existing config
-        if ! grep -q '"live-restore"' /etc/docker/daemon.json; then
-            info "Adding live-restore to existing daemon.json..."
-            local tmp
-            tmp=$(mktemp)
-            TMPFILE="$tmp" python3 -c "
-import json, os
-with open('/etc/docker/daemon.json') as f:
-    cfg = json.load(f)
-cfg['live-restore'] = True
-with open(os.environ['TMPFILE'], 'w') as f:
-    json.dump(cfg, f, indent=2)
-" 2>/dev/null && mv "$tmp" /etc/docker/daemon.json || rm -f "$tmp"
-        fi
-    fi
+    # Docker daemon config (live-restore + log rotation)
+    tune_docker_daemon --live-restore
 
     # Enable and start Docker
     systemctl enable docker >/dev/null 2>&1 || true
@@ -639,7 +594,7 @@ create_directories() {
     done
 
     # Create FIFOs if they don't exist
-    for fifo in snapcast_fifo airplay_fifo spotify_fifo tidal_fifo; do
+    for fifo in mpd_fifo airplay_fifo spotify_fifo tidal_fifo; do
         if [[ ! -p "$PROJECT_ROOT/audio/$fifo" ]]; then
             mkfifo "$PROJECT_ROOT/audio/$fifo"
         fi
@@ -887,9 +842,17 @@ pull_images() {
     for svc in "${services[@]}"; do
         count=$((count + 1))
         info "Pulling $svc ($count/$total)"
-        # metadata has a build: directive — pull from Hub if available,
-        # fall back to local build on first bootstrap.
-        if ! docker compose pull "$svc" 2>&1 | tail -5; then
+        local pull_ok=false
+        local delays=(0 10 30)  # retry after 10s, 30s
+        for delay in "${delays[@]}"; do
+            [[ $delay -gt 0 ]] && { info "Retrying $svc in ${delay}s..."; sleep "$delay"; }
+            if docker compose pull "$svc" 2>&1 | tail -5; then
+                pull_ok=true
+                break
+            fi
+        done
+        if [[ "$pull_ok" != "true" ]]; then
+            # metadata has a build: directive — fall back to local build
             if [[ "$svc" == "metadata" ]]; then
                 info "Building metadata locally (not yet on registry)"
                 if ! docker compose build metadata; then
@@ -897,7 +860,7 @@ pull_images() {
                     exit 1
                 fi
             else
-                error "Failed to pull $svc"
+                error "Failed to pull $svc after 3 attempts"
                 exit 1
             fi
         fi
@@ -930,11 +893,16 @@ verify_services() {
         error "No services returned from docker compose config — check compose file"
         exit 1
     fi
-    local max_attempts=6
-    local wait_seconds=10
+    # Use MPD_START_PERIOD from .env (default 30s) to set verification timeout.
+    # NFS mounts may need 300s for MPD to become healthy.
+    local start_period
+    start_period=$(grep '^MPD_START_PERIOD=' "$ENV_FILE" 2>/dev/null | cut -d= -f2 | tr -d 's')
+    start_period=${start_period:-30}
+    local wait_seconds=15
+    local max_attempts=$(( (start_period / wait_seconds) + 2 ))
     local attempt=1
 
-    info "Checking services (max ${max_attempts} attempts, ${wait_seconds}s interval)..."
+    info "Checking services (up to ${start_period}s, ${wait_seconds}s interval)..."
 
     while [[ $attempt -le $max_attempts ]]; do
         local failed=0
@@ -1007,35 +975,42 @@ show_status() {
 # Version Tracking
 #######################################
 
-write_version() {
-    local version_file="$PROJECT_ROOT/.version"
+# Detect version from git tag or .version file
+_detect_version() {
     local version=""
-
-    # Try git tag first (advanced installs with git)
     if command -v git >/dev/null 2>&1 && git -C "$PROJECT_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
         version=$(git -C "$PROJECT_ROOT" describe --tags --abbrev=0 2>/dev/null || true)
-        version="${version#v}"  # strip leading 'v'
+        version="${version#v}"
     fi
-
-    # Fall back to existing .version file
-    if [[ -z "$version" ]] && [[ -f "$version_file" ]]; then
-        version=$(cat "$version_file")
+    if [[ -z "$version" ]] && [[ -f "$PROJECT_ROOT/.version" ]]; then
+        version=$(cat "$PROJECT_ROOT/.version")
     fi
+    echo "$version"
+}
 
-    if [[ -n "$version" ]]; then
-        echo "$version" > "$version_file"
-        info "Version: $version"
-    else
-        warn "Could not determine version (no git tag, no .version file)"
-    fi
-
-    # Propagate version to .env so metadata container can expose it
+# Write SNAPMULTI_VERSION to .env (called early so metadata container gets it).
+# Does NOT write .version file — that's done by write_version after verify.
+write_version_to_env() {
+    local version
+    version=$(_detect_version)
     if [[ -n "$version" ]] && [[ -f "$ENV_FILE" ]]; then
         if grep -q '^SNAPMULTI_VERSION=' "$ENV_FILE" 2>/dev/null; then
             sed -i "s|^SNAPMULTI_VERSION=.*|SNAPMULTI_VERSION=$version|" "$ENV_FILE"
         else
             echo "SNAPMULTI_VERSION=$version" >> "$ENV_FILE"
         fi
+        info "Version: $version"
+    fi
+}
+
+# Record deployed version to .version file (called after successful verify).
+write_version() {
+    local version
+    version=$(_detect_version)
+    if [[ -n "$version" ]]; then
+        echo "$version" > "$PROJECT_ROOT/.version"
+    else
+        warn "Could not determine version (no git tag, no .version file)"
     fi
 }
 
@@ -1111,12 +1086,11 @@ main() {
     info "Using profile: $profile"
 
     setup_env "$profile"
+    write_version_to_env
     validate_config
     pull_images
     start_services
     verify_services
-
-    # Record deployed version for update.sh
     write_version
 
     show_status

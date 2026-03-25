@@ -450,7 +450,7 @@ VERIFY_ERRORS=0
 # -- snapMULTI files --
 echo ""
 echo "--- snapMULTI files ---"
-for f in install.conf firstboot.sh common/progress.sh common/logging.sh common/sanitize.sh; do
+for f in install.conf firstboot.sh common/progress.sh common/logging.sh common/sanitize.sh common/system-tune.sh common/install-docker.sh; do
     if [[ -f "$DEST/$f" ]]; then
         echo "  [OK] snapmulti/$f"
     else
@@ -487,6 +487,24 @@ esac
 
 echo "  install.conf -> INSTALL_TYPE=$(grep '^INSTALL_TYPE=' "$DEST/install.conf" | cut -d= -f2)"
 
+# Version files
+case "$INSTALL_TYPE" in
+    server|both)
+        if [[ -f "$DEST/server/.version" ]]; then
+            echo "  [OK] Server version: $(cat "$DEST/server/.version")"
+        else
+            echo "  [WARN] server/.version missing (version will show as 'unknown')"
+        fi
+        ;;&
+    client|both)
+        if [[ -f "$DEST/client/VERSION" ]]; then
+            echo "  [OK] Client version: $(cat "$DEST/client/VERSION")"
+        else
+            echo "  [WARN] client/VERSION missing"
+        fi
+        ;;
+esac
+
 # -- OS configuration --
 echo ""
 echo "--- OS configuration ---"
@@ -494,9 +512,9 @@ echo "--- OS configuration ---"
 # cmdline.txt: check video= parameter
 if [[ -f "$BOOT/cmdline.txt" ]]; then
     if grep -qF "video=HDMI-A-1:" "$BOOT/cmdline.txt"; then
-        echo "  [OK] cmdline.txt: video=HDMI-A-1 set"
+        echo "  [OK] cmdline.txt: install display set to 800x600 (ignored if headless)"
     else
-        echo "  [WARN] cmdline.txt: no video= parameter (display may use native resolution)"
+        echo "  [INFO] cmdline.txt: no video= parameter (install TUI uses native resolution)"
     fi
 fi
 
@@ -525,7 +543,8 @@ echo "--- Network ---"
 if [[ -f "$BOOT/network-config" ]]; then
     echo "  [OK] network-config exists (cloud-init)"
     if grep -q 'wlan\|wifi\|ssid' "$BOOT/network-config" 2>/dev/null; then
-        echo "  WiFi: configured in network-config"
+        WIFI_SSID=$(sed -n 's/.*"\(.*\)":/\1/p' "$BOOT/network-config" 2>/dev/null | head -1)
+        echo "  [OK] WiFi SSID: ${WIFI_SSID:-unknown}"
     else
         echo "  [INFO] No WiFi in network-config (Ethernet only)"
     fi

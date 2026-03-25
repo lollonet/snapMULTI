@@ -190,6 +190,17 @@ if [[ -n "$CMDLINE_FILE" ]]; then
     fi
 fi
 
+# ── System tuning (shared with server/client — runs before overlayroot) ──
+# shellcheck source=common/system-tune.sh
+if [[ -f "$SNAP_BOOT/common/system-tune.sh" ]]; then
+    source "$SNAP_BOOT/common/system-tune.sh"
+elif [[ -f "$SCRIPT_DIR/common/system-tune.sh" ]]; then
+    source "$SCRIPT_DIR/common/system-tune.sh"
+fi
+if command -v tune_wifi_powersave &>/dev/null; then
+    tune_wifi_powersave
+fi
+
 # ── Step counter (tracks current step across install phases) ──────
 CURRENT_STEP=0
 next_step() {
@@ -367,7 +378,9 @@ fi
 
 # Copy client files
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
-    mkdir -p "$CLIENT_DIR"
+    mkdir -p "$CLIENT_DIR/scripts"
+    # Copy shared libs (system-tune.sh, logging.sh, etc.) so setup.sh can source them
+    cp -r "$SNAP_BOOT/common" "$CLIENT_DIR/scripts/" 2>/dev/null || true
     if [[ -d "$SNAP_BOOT/client" ]]; then
         # Copy all client files — fail loudly on errors
         cp -r "$SNAP_BOOT/client/"* "$CLIENT_DIR/" || {
@@ -401,8 +414,22 @@ log_progress "Files copied" 2>/dev/null || true
 next_step "Installing git and dependencies..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
+# Wait for any background apt (unattended-upgrades, cloud-init) to finish.
+# First boot often triggers apt-daily.service concurrently.
+log_progress "Waiting for apt lock..." 2>/dev/null || true
+for _apt_wait in $(seq 1 60); do
+    fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+    sleep 5
+done
+
 log_progress "apt-get update" 2>/dev/null || true
 apt-get update -qq
+
+# Upgrade all packages (security patches, bug fixes, kernel).
+# Runs before overlayroot — changes persist in the base layer.
+# The reboot at the end of firstboot activates any new kernel.
+log_progress "Upgrading system packages..." 2>/dev/null || true
+apt-get upgrade -y -qq 2>&1 | tail -3
 
 # Core dependencies (always needed)
 PKGS=(curl ca-certificates)
@@ -452,9 +479,9 @@ if ! command -v docker &>/dev/null; then
     log_progress "Installing docker-ce..." 2>/dev/null || true
     install_docker_apt
 
-    # daemon.json (live-restore, log rotation) is written by deploy.sh's
-    # install_docker() which has python3 merge logic for existing configs.
-    # Do not duplicate it here — deploy.sh owns Docker daemon configuration.
+    # Docker daemon config: live-restore only at this point.
+    # fuse-overlayfs is added AFTER the package is installed (below).
+    tune_docker_daemon --live-restore
 
     systemctl enable docker
     systemctl start docker
@@ -475,56 +502,30 @@ if ! docker info &>/dev/null; then
     exit 1
 fi
 
-# In "both" mode, client's read-only filesystem requires fuse-overlayfs storage
-# driver. Switch BEFORE any images are pulled so deploy.sh and setup.sh both
-# use the same driver — avoids a destructive wipe mid-install.
+# In "both" mode, fuse-overlayfs was configured in daemon.json above.
+# Now ensure the storage driver is active (requires Docker restart + data wipe).
 if [[ "$INSTALL_TYPE" == "both" ]]; then
     current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "none")
     if [[ "$current_driver" != "fuse-overlayfs" ]]; then
         log_progress "Switching Docker to fuse-overlayfs (read-only FS support)..." 2>/dev/null || true
-        fuse_ok=false
-        if ! apt-get install -y fuse-overlayfs >> "$LOG" 2>&1; then
-            log_and_tty "ERROR: Failed to install fuse-overlayfs — cannot switch storage driver."
-            log_and_tty "       Docker data NOT wiped. Continuing with default driver."
-        else
+        if apt-get install -y fuse-overlayfs >> "$LOG" 2>&1; then
+            tune_docker_daemon --fuse-overlayfs
             systemctl stop docker
-            mkdir -p /etc/docker
-            # Merge fuse-overlayfs into existing daemon.json (or create new)
-            if [[ -f /etc/docker/daemon.json ]]; then
-                if python3 -c "
-import json
-with open('/etc/docker/daemon.json') as f:
-    cfg = json.load(f)
-cfg['storage-driver'] = 'fuse-overlayfs'
-with open('/etc/docker/daemon.json', 'w') as f:
-    json.dump(cfg, f, indent=2)
-" 2>>"$LOG"; then
-                    fuse_ok=true
-                else
-                    log_and_tty "ERROR: Failed to merge daemon.json — aborting storage driver switch."
-                fi
-            else
-                cat > /etc/docker/daemon.json <<'DJSON'
-{
-  "storage-driver": "fuse-overlayfs",
-  "log-driver": "json-file",
-  "log-opts": {
-    "max-size": "10m",
-    "max-file": "3"
-  }
-}
-DJSON
-                fuse_ok=true
-            fi
-            if [[ "$fuse_ok" == "true" ]]; then
-                rm -rf /var/lib/docker/*
-                log_progress "Docker storage driver: fuse-overlayfs" 2>/dev/null || true
-            fi
+            rm -rf /var/lib/docker/*
             if ! systemctl start docker; then
                 log_and_tty "ERROR: Docker failed to start after storage driver switch."
-                log_and_tty "       Manual recovery required (reflash SD or fix /etc/docker/daemon.json)."
                 exit 1
             fi
+            # Verify driver actually switched
+            new_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "unknown")
+            if [[ "$new_driver" == "fuse-overlayfs" ]]; then
+                log_progress "Docker storage driver: fuse-overlayfs" 2>/dev/null || true
+            else
+                log_and_tty "WARNING: Docker started but driver is '$new_driver', not fuse-overlayfs."
+                log_and_tty "         Read-only mode may not work correctly."
+            fi
+        else
+            log_and_tty "ERROR: Failed to install fuse-overlayfs — cannot switch storage driver."
         fi
     fi
 fi
@@ -541,8 +542,30 @@ setup_music_source() {
             log_progress "Streaming-only mode — no local music library" 2>/dev/null || true
             ;;
         usb)
-            # No-op: deploy.sh auto-detects USB drives at /media/*
-            log_progress "USB mode — deploy.sh will auto-detect" 2>/dev/null || true
+            # Find and mount the first USB block device with a filesystem.
+            # Headless Debian doesn't auto-mount — we need to do it explicitly.
+            local usb_dev="" usb_mount="/media/usb-music"
+            for dev in /dev/sd?1 /dev/sd?; do
+                [[ -b "$dev" ]] || continue
+                # Skip the SD card (mmcblk) and only match USB/SATA
+                blkid "$dev" &>/dev/null && { usb_dev="$dev"; break; }
+            done
+            if [[ -n "$usb_dev" ]]; then
+                mkdir -p "$usb_mount"
+                log_progress "Mounting USB: $usb_dev → $usb_mount" 2>/dev/null || true
+                if mount "$usb_dev" "$usb_mount" -o ro; then
+                    if ! grep -qF "$usb_dev" /etc/fstab; then
+                        echo "$usb_dev $usb_mount auto ro,nofail 0 0" >> /etc/fstab
+                    fi
+                    export MUSIC_PATH="$usb_mount"
+                    log_progress "USB mounted: $usb_dev at $usb_mount" 2>/dev/null || true
+                else
+                    log_and_tty "WARNING: Failed to mount $usb_dev — deploy.sh will try auto-detect"
+                fi
+            else
+                log_and_tty "WARNING: No USB drive found — plug in before powering on"
+                log_progress "USB mode — no drive detected, deploy.sh will scan /media/*" 2>/dev/null || true
+            fi
             ;;
         nfs)
             local mount_point="/media/nfs-music"
