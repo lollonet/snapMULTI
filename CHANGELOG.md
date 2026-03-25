@@ -21,8 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **write_version ordering** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — .env version written before containers start (metadata display), .version file after verify (correctness)
 - **fuse-overlayfs ordering** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — daemon.json gets `--fuse-overlayfs` after package is installed, not before Docker starts
 - **apt lock wait** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — waits for unattended-upgrades to finish before apt operations
-- **CAKE boot hook** — iptables DSCP rules now persist across reboots (were lost, only CAKE persisted)
+- **CAKE boot hook** — iptables DSCP rules now persist across reboots (were lost, only CAKE persisted); added PATH for networkd-dispatcher
+- **Verbose boot** — remove `quiet splash fbcon=map:9` from cmdline.txt so kernel messages are visible during boot
 - **Local snapserver detection** — client discover-server.sh prefers 127.0.0.1 when colocated server is running
+- **prepare-sd.sh verification** — shows WiFi SSID, server/client versions, checks install-docker.sh; clearer cmdline.txt message
 
 ### Changed
 - **Client submodule cleanup** ([#148](https://github.com/lollonet/snapMULTI/pull/148)) — removed obsolete client scripts (prepare-sd.sh, install/firstboot.sh) superseded by unified installer; updated client docs to reflect snapMULTI server dependency
