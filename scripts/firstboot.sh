@@ -412,6 +412,14 @@ log_progress "Files copied" 2>/dev/null || true
 next_step "Installing git and dependencies..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
+# Wait for any background apt (unattended-upgrades, cloud-init) to finish.
+# First boot often triggers apt-daily.service concurrently.
+log_progress "Waiting for apt lock..." 2>/dev/null || true
+for _apt_wait in $(seq 1 60); do
+    fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+    sleep 5
+done
+
 log_progress "apt-get update" 2>/dev/null || true
 apt-get update -qq
 
@@ -533,8 +541,30 @@ setup_music_source() {
             log_progress "Streaming-only mode — no local music library" 2>/dev/null || true
             ;;
         usb)
-            # No-op: deploy.sh auto-detects USB drives at /media/*
-            log_progress "USB mode — deploy.sh will auto-detect" 2>/dev/null || true
+            # Find and mount the first USB block device with a filesystem.
+            # Headless Debian doesn't auto-mount — we need to do it explicitly.
+            local usb_dev="" usb_mount="/media/usb-music"
+            for dev in /dev/sd?1 /dev/sd?; do
+                [[ -b "$dev" ]] || continue
+                # Skip the SD card (mmcblk) and only match USB/SATA
+                blkid "$dev" &>/dev/null && { usb_dev="$dev"; break; }
+            done
+            if [[ -n "$usb_dev" ]]; then
+                mkdir -p "$usb_mount"
+                log_progress "Mounting USB: $usb_dev → $usb_mount" 2>/dev/null || true
+                if mount "$usb_dev" "$usb_mount" -o ro; then
+                    if ! grep -qF "$usb_dev" /etc/fstab; then
+                        echo "$usb_dev $usb_mount auto ro,nofail 0 0" >> /etc/fstab
+                    fi
+                    export MUSIC_PATH="$usb_mount"
+                    log_progress "USB mounted: $usb_dev at $usb_mount" 2>/dev/null || true
+                else
+                    log_and_tty "WARNING: Failed to mount $usb_dev — deploy.sh will try auto-detect"
+                fi
+            else
+                log_and_tty "WARNING: No USB drive found — plug in before powering on"
+                log_progress "USB mode — no drive detected, deploy.sh will scan /media/*" 2>/dev/null || true
+            fi
             ;;
         nfs)
             local mount_point="/media/nfs-music"
