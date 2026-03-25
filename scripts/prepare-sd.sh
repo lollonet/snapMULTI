@@ -513,6 +513,8 @@ echo "--- OS configuration ---"
 if [[ -f "$BOOT/cmdline.txt" ]]; then
     if grep -qF "video=HDMI-A-1:" "$BOOT/cmdline.txt"; then
         echo "  [OK] cmdline.txt: install display set to 800x600 (ignored if headless)"
+    else
+        echo "  [INFO] cmdline.txt: no video= parameter (install TUI uses native resolution)"
     fi
 fi
 

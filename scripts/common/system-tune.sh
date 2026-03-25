@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared system tuning for snapMULTY (server + client)
+# Shared system tuning for snapMULTI (server + client)
 #
 # Provides idempotent functions for CPU governor, USB autosuspend,
 # WiFi power save, and Docker daemon configuration. Sourced by both

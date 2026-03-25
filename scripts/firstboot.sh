@@ -477,11 +477,9 @@ if ! command -v docker &>/dev/null; then
     log_progress "Installing docker-ce..." 2>/dev/null || true
     install_docker_apt
 
-    # Docker daemon config: deploy.sh adds live-restore, setup.sh adds
-    # fuse-overlayfs. For "both" mode, set both here before either runs.
-    if [[ "$INSTALL_TYPE" == "both" ]]; then
-        tune_docker_daemon --live-restore --fuse-overlayfs
-    fi
+    # Docker daemon config: live-restore only at this point.
+    # fuse-overlayfs is added AFTER the package is installed (below).
+    tune_docker_daemon --live-restore
 
     systemctl enable docker
     systemctl start docker
@@ -509,6 +507,7 @@ if [[ "$INSTALL_TYPE" == "both" ]]; then
     if [[ "$current_driver" != "fuse-overlayfs" ]]; then
         log_progress "Switching Docker to fuse-overlayfs (read-only FS support)..." 2>/dev/null || true
         if apt-get install -y fuse-overlayfs >> "$LOG" 2>&1; then
+            tune_docker_daemon --fuse-overlayfs
             systemctl stop docker
             rm -rf /var/lib/docker/*
             if ! systemctl start docker; then

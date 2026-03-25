@@ -594,7 +594,7 @@ create_directories() {
     done
 
     # Create FIFOs if they don't exist
-    for fifo in snapcast_fifo airplay_fifo spotify_fifo tidal_fifo; do
+    for fifo in mpd_fifo airplay_fifo spotify_fifo tidal_fifo; do
         if [[ ! -p "$PROJECT_ROOT/audio/$fifo" ]]; then
             mkfifo "$PROJECT_ROOT/audio/$fifo"
         fi
@@ -975,35 +975,42 @@ show_status() {
 # Version Tracking
 #######################################
 
-write_version() {
-    local version_file="$PROJECT_ROOT/.version"
+# Detect version from git tag or .version file
+_detect_version() {
     local version=""
-
-    # Try git tag first (advanced installs with git)
     if command -v git >/dev/null 2>&1 && git -C "$PROJECT_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
         version=$(git -C "$PROJECT_ROOT" describe --tags --abbrev=0 2>/dev/null || true)
-        version="${version#v}"  # strip leading 'v'
+        version="${version#v}"
     fi
-
-    # Fall back to existing .version file
-    if [[ -z "$version" ]] && [[ -f "$version_file" ]]; then
-        version=$(cat "$version_file")
+    if [[ -z "$version" ]] && [[ -f "$PROJECT_ROOT/.version" ]]; then
+        version=$(cat "$PROJECT_ROOT/.version")
     fi
+    echo "$version"
+}
 
-    if [[ -n "$version" ]]; then
-        echo "$version" > "$version_file"
-        info "Version: $version"
-    else
-        warn "Could not determine version (no git tag, no .version file)"
-    fi
-
-    # Propagate version to .env so metadata container can expose it
+# Write SNAPMULTI_VERSION to .env (called early so metadata container gets it).
+# Does NOT write .version file — that's done by write_version after verify.
+write_version_to_env() {
+    local version
+    version=$(_detect_version)
     if [[ -n "$version" ]] && [[ -f "$ENV_FILE" ]]; then
         if grep -q '^SNAPMULTI_VERSION=' "$ENV_FILE" 2>/dev/null; then
             sed -i "s|^SNAPMULTI_VERSION=.*|SNAPMULTI_VERSION=$version|" "$ENV_FILE"
         else
             echo "SNAPMULTI_VERSION=$version" >> "$ENV_FILE"
         fi
+        info "Version: $version"
+    fi
+}
+
+# Record deployed version to .version file (called after successful verify).
+write_version() {
+    local version
+    version=$(_detect_version)
+    if [[ -n "$version" ]]; then
+        echo "$version" > "$PROJECT_ROOT/.version"
+    else
+        warn "Could not determine version (no git tag, no .version file)"
     fi
 }
 
@@ -1079,11 +1086,12 @@ main() {
     info "Using profile: $profile"
 
     setup_env "$profile"
-    write_version
+    write_version_to_env
     validate_config
     pull_images
     start_services
     verify_services
+    write_version
 
     show_status
 }
