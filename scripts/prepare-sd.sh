@@ -34,18 +34,25 @@ check_client_submodule() {
 
 # ── Auto-detect boot partition ────────────────────────────────────
 detect_boot() {
+    local candidates=()
     # macOS
-    if [[ -d "/Volumes/bootfs" ]]; then
-        echo "/Volumes/bootfs"
-        return
-    fi
+    [[ -d "/Volumes/bootfs" ]] && candidates+=("/Volumes/bootfs")
     # Linux: common mount points
     for base in "/media/$USER" "/media" "/mnt"; do
-        if [[ -d "$base/bootfs" ]]; then
-            echo "$base/bootfs"
+        [[ -d "$base/bootfs" ]] && candidates+=("$base/bootfs")
+    done
+    # Prefer partitions that look like a Pi boot (has cmdline.txt or config.txt)
+    for candidate in "${candidates[@]}"; do
+        if [[ -f "$candidate/cmdline.txt" ]] || [[ -f "$candidate/config.txt" ]]; then
+            echo "$candidate"
             return
         fi
     done
+    # Fall back to first candidate if none have Pi boot files
+    if [[ ${#candidates[@]} -gt 0 ]]; then
+        echo "${candidates[0]}"
+        return
+    fi
     return 1
 }
 

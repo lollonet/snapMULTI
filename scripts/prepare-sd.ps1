@@ -251,7 +251,7 @@ function Copy-ServerFiles {
     }
 
     # Dockerfiles
-    foreach ($df in @('Dockerfile.snapserver', 'Dockerfile.shairport-sync', 'Dockerfile.mpd', 'Dockerfile.tidal')) {
+    foreach ($df in @('Dockerfile.snapserver', 'Dockerfile.shairport-sync', 'Dockerfile.mpd', 'Dockerfile.metadata', 'Dockerfile.tidal')) {
         $dfPath = Join-Path $ProjectDir $df
         if (Test-Path $dfPath) {
             Copy-Item $dfPath -Destination $serverDest

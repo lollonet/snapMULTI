@@ -888,7 +888,7 @@ pull_images() {
         info "Pulling $svc ($count/$total)"
         # metadata has a build: directive — pull from Hub if available,
         # fall back to local build on first bootstrap.
-        if ! docker compose pull "$svc" > /dev/null 2>&1; then
+        if ! docker compose pull "$svc" 2>&1 | tail -5; then
             if [[ "$svc" == "metadata" ]]; then
                 info "Building metadata locally (not yet on registry)"
                 if ! docker compose build metadata; then

@@ -47,6 +47,10 @@ jobs:
         id: snapcast
         run: |
           SHA=$(git ls-remote https://github.com/badaix/snapcast.git HEAD | cut -f1)
+          if [[ -z "$SHA" ]]; then
+            echo "ERROR: Failed to fetch snapcast HEAD commit"
+            exit 1
+          fi
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "snapcast HEAD: $SHA"
 
