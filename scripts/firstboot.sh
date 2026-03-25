@@ -175,6 +175,21 @@ has_display() {
 # Initialize progress display
 progress_init 2>/dev/null || true
 
+# ── Make future boots verbose (kernel messages on HDMI) ───────────
+# Stock images ship with "quiet splash" and setup.sh may have added
+# "fbcon=map:9" — both hide boot diagnostics. fb-display (client)
+# overwrites /dev/fb0 once started, so kernel text doesn't interfere.
+CMDLINE_FILE=""
+for candidate in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
+    [[ -f "$candidate" ]] && CMDLINE_FILE="$candidate" && break
+done
+if [[ -n "$CMDLINE_FILE" ]]; then
+    if grep -qE 'quiet|splash|fbcon=map:9' "$CMDLINE_FILE"; then
+        sed -i 's/ quiet//; s/ splash//; s/ fbcon=map:9//' "$CMDLINE_FILE"
+        log_and_tty "Enabled verbose boot (removed quiet/splash/fbcon=map:9)"
+    fi
+fi
+
 # ── Step counter (tracks current step across install phases) ──────
 CURRENT_STEP=0
 next_step() {
