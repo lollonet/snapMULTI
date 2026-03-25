@@ -248,7 +248,7 @@ Metadata: `tidal-meta-bridge.sh` scrapes `speaker_controller_application`'s tmux
 | 8000 | HTTP | Audio stream (direct access) |
 
 **Configuration**: `config/mpd.conf`
-- Output: FIFO to `/audio/snapcast_fifo`
+- Output: FIFO to `/audio/mpd_fifo`
 - Music directory: `/music` (mapped to `MUSIC_PATH` on host)
 - Database: `/data/mpd.db`
 
@@ -506,7 +506,7 @@ docker compose up -d
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | **Build & Push** | Tag push (`v*`) | Build 5 images (4 multi-arch + 1 ARM-only), push to Docker Hub, trigger deploy |
-| **Deploy** | Called by Build & Push | Pull images and restart 7 core containers on server via SSH |
+| **Deploy** | Called by Build & Push | Pull images and restart 7 core containers on server via SSH (8 total with watchtower opt-in) |
 | **Security Scan** | After build, weekly, manual | Trivy scans all images for CRITICAL/HIGH CVEs, uploads SARIF to GitHub Security tab |
 | **Validate** | Push to any branch, pull requests | Check docker-compose syntax, shellcheck scripts/, and environment template |
 | **Build Test** | Pull requests | Validate Docker images build correctly (no push) |
@@ -535,6 +535,8 @@ See GitHub Actions tab for workflow status and logs.
 ### docker-compose.yml
 
 Defines all services with pre-built images and host networking for mDNS. Each audio source runs in its own container, communicating via named pipes in the shared `/audio` volume:
+
+**Security features**: All containers use `cap_drop: ALL`, `read_only: true` filesystems, `no-new-privileges: true`, and run as non-root (`PUID:PGID`) except for tidal-connect (proprietary binary requirement). See [Security Architecture](docs/architecture/ARC-004.security.md) for complete details.
 
 ```yaml
 services:

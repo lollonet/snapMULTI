@@ -24,8 +24,8 @@ related: [ARC-003]
 ```mermaid
 flowchart LR
     tag[Tag Push v*] --> build[Build Images]
-    build --> arm64[ARM64 Build<br/>self-hosted runner]
-    build --> amd64[AMD64 Build<br/>self-hosted runner]
+    build --> arm64[ARM64 Build<br/>self-hosted runner + QEMU]
+    build --> amd64[AMD64 Build<br/>self-hosted runner native]
     arm64 --> manifest[Create Manifest]
     amd64 --> manifest
     manifest --> push[Push to Docker Hub]
@@ -75,12 +75,17 @@ cd snapMULTI
 
 ## Self-Hosted Runners
 
-Native builds on self-hosted runners (no QEMU emulation):
+Native builds on self-hosted runners using Docker buildx with platform emulation:
 
-| Runner | Architecture | Host |
-|--------|-------------|------|
-| snapmulti-runner | arm64 | Raspberry Pi (raspy) |
-| snapmulti-runner-2 | arm64 | Raspberry Pi (raspy) |
+| Runner | Host Architecture | Host | Container Runtime |
+|--------|------------------|------|------------------|
+| snapmulti-runner | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
+| snapmulti-runner-2 | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
+| rpi-runner-1 | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
+| rpi-runner-2 | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
+| snapctrl-runner | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
+
+**Total: 5 runners** running as Docker containers on a single amd64 host. Multi-arch builds use Docker buildx with QEMU platform emulation on the amd64 host.
 
 ## Quality Gates
 
