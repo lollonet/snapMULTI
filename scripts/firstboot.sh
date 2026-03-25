@@ -190,6 +190,15 @@ if [[ -n "$CMDLINE_FILE" ]]; then
     fi
 fi
 
+# ── System tuning (shared with server/client — runs before overlayroot) ──
+# shellcheck source=common/system-tune.sh
+if [[ -f "$SNAP_BOOT/common/system-tune.sh" ]]; then
+    source "$SNAP_BOOT/common/system-tune.sh"
+elif [[ -f "$SCRIPT_DIR/common/system-tune.sh" ]]; then
+    source "$SCRIPT_DIR/common/system-tune.sh"
+fi
+tune_wifi_powersave
+
 # ── Step counter (tracks current step across install phases) ──────
 CURRENT_STEP=0
 next_step() {
@@ -367,7 +376,9 @@ fi
 
 # Copy client files
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
-    mkdir -p "$CLIENT_DIR"
+    mkdir -p "$CLIENT_DIR/scripts"
+    # Copy shared libs (system-tune.sh, logging.sh, etc.) so setup.sh can source them
+    cp -r "$SNAP_BOOT/common" "$CLIENT_DIR/scripts/" 2>/dev/null || true
     if [[ -d "$SNAP_BOOT/client" ]]; then
         # Copy all client files — fail loudly on errors
         cp -r "$SNAP_BOOT/client/"* "$CLIENT_DIR/" || {
@@ -452,9 +463,11 @@ if ! command -v docker &>/dev/null; then
     log_progress "Installing docker-ce..." 2>/dev/null || true
     install_docker_apt
 
-    # daemon.json (live-restore, log rotation) is written by deploy.sh's
-    # install_docker() which has python3 merge logic for existing configs.
-    # Do not duplicate it here — deploy.sh owns Docker daemon configuration.
+    # Docker daemon config: deploy.sh adds live-restore, setup.sh adds
+    # fuse-overlayfs. For "both" mode, set both here before either runs.
+    if [[ "$INSTALL_TYPE" == "both" ]]; then
+        tune_docker_daemon --live-restore --fuse-overlayfs
+    fi
 
     systemctl enable docker
     systemctl start docker
@@ -475,56 +488,29 @@ if ! docker info &>/dev/null; then
     exit 1
 fi
 
-# In "both" mode, client's read-only filesystem requires fuse-overlayfs storage
-# driver. Switch BEFORE any images are pulled so deploy.sh and setup.sh both
-# use the same driver — avoids a destructive wipe mid-install.
+# In "both" mode, fuse-overlayfs was configured in daemon.json above.
+# Now ensure the storage driver is active (requires Docker restart + data wipe).
 if [[ "$INSTALL_TYPE" == "both" ]]; then
     current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "none")
     if [[ "$current_driver" != "fuse-overlayfs" ]]; then
         log_progress "Switching Docker to fuse-overlayfs (read-only FS support)..." 2>/dev/null || true
-        fuse_ok=false
-        if ! apt-get install -y fuse-overlayfs >> "$LOG" 2>&1; then
-            log_and_tty "ERROR: Failed to install fuse-overlayfs — cannot switch storage driver."
-            log_and_tty "       Docker data NOT wiped. Continuing with default driver."
-        else
+        if apt-get install -y fuse-overlayfs >> "$LOG" 2>&1; then
             systemctl stop docker
-            mkdir -p /etc/docker
-            # Merge fuse-overlayfs into existing daemon.json (or create new)
-            if [[ -f /etc/docker/daemon.json ]]; then
-                if python3 -c "
-import json
-with open('/etc/docker/daemon.json') as f:
-    cfg = json.load(f)
-cfg['storage-driver'] = 'fuse-overlayfs'
-with open('/etc/docker/daemon.json', 'w') as f:
-    json.dump(cfg, f, indent=2)
-" 2>>"$LOG"; then
-                    fuse_ok=true
-                else
-                    log_and_tty "ERROR: Failed to merge daemon.json — aborting storage driver switch."
-                fi
-            else
-                cat > /etc/docker/daemon.json <<'DJSON'
-{
-  "storage-driver": "fuse-overlayfs",
-  "log-driver": "json-file",
-  "log-opts": {
-    "max-size": "10m",
-    "max-file": "3"
-  }
-}
-DJSON
-                fuse_ok=true
-            fi
-            if [[ "$fuse_ok" == "true" ]]; then
-                rm -rf /var/lib/docker/*
-                log_progress "Docker storage driver: fuse-overlayfs" 2>/dev/null || true
-            fi
+            rm -rf /var/lib/docker/*
             if ! systemctl start docker; then
                 log_and_tty "ERROR: Docker failed to start after storage driver switch."
-                log_and_tty "       Manual recovery required (reflash SD or fix /etc/docker/daemon.json)."
                 exit 1
             fi
+            # Verify driver actually switched
+            new_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "unknown")
+            if [[ "$new_driver" == "fuse-overlayfs" ]]; then
+                log_progress "Docker storage driver: fuse-overlayfs" 2>/dev/null || true
+            else
+                log_and_tty "WARNING: Docker started but driver is '$new_driver', not fuse-overlayfs."
+                log_and_tty "         Read-only mode may not work correctly."
+            fi
+        else
+            log_and_tty "ERROR: Failed to install fuse-overlayfs — cannot switch storage driver."
         fi
     fi
 fi
