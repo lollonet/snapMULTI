@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Shared system-tune.sh** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — shared system tuning module eliminates configuration drift between server and client (CPU governor, USB autosuspend, WiFi power save, Docker daemon.json)
+- **apt upgrade on first boot** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — security patches applied during first boot, before overlayroot freezes the filesystem
+- **USB drive auto-mount** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — headless Debian doesn't auto-mount USB; firstboot.sh now mounts and adds fstab entry
+- **INSTALL.it.md** — Italian translation of installation guide
+
+### Fixed
+- **Docker image pull retry** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — 3 attempts with backoff (0s/10s/30s) prevents DNS failures during firstboot from bricking the install
+- **verify_services() timeout** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — uses MPD_START_PERIOD from .env (up to 300s for NFS) instead of hardcoded 60s
+- **Docker storage driver hardening** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — validates fuse-overlayfs before wiping Docker data; skips read-only mode on failure instead of bricking
+- **FIFO path** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — deploy.sh creates `mpd_fifo` (was `snapcast_fifo`, mismatched config)
+- **write_version ordering** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — .env version written before containers start (metadata display), .version file after verify (correctness)
+- **fuse-overlayfs ordering** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — daemon.json gets `--fuse-overlayfs` after package is installed, not before Docker starts
+- **apt lock wait** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — waits for unattended-upgrades to finish before apt operations
+- **CAKE boot hook** — iptables DSCP rules now persist across reboots (were lost, only CAKE persisted)
+- **Local snapserver detection** — client discover-server.sh prefers 127.0.0.1 when colocated server is running
+
+### Changed
+- **Client submodule cleanup** ([#148](https://github.com/lollonet/snapMULTI/pull/148)) — removed obsolete client scripts (prepare-sd.sh, install/firstboot.sh) superseded by unified installer; updated client docs to reflect snapMULTI server dependency
+- **Server docs updated** ([#148](https://github.com/lollonet/snapMULTI/pull/148)) — fixed security matrix, container count, CI runner architecture, Snapcast version; SSOT compliance; Italian translations synced
+
 ## [0.3.14] — 2026-03-25
 
 ### Added
