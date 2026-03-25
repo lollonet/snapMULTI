@@ -415,6 +415,13 @@ start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(
 log_progress "apt-get update" 2>/dev/null || true
 apt-get update -qq
 
+# Upgrade installed packages (security patches, bug fixes).
+# Hold kernel packages to avoid breaking boot on overlayroot systems.
+log_progress "Upgrading system packages..." 2>/dev/null || true
+apt-mark hold linux-image-* linux-headers-* raspi-firmware 2>/dev/null || true
+apt-get upgrade -y -qq 2>&1 | tail -3
+apt-mark unhold linux-image-* linux-headers-* raspi-firmware 2>/dev/null || true
+
 # Core dependencies (always needed)
 PKGS=(curl ca-certificates)
 
