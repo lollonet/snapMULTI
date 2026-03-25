@@ -483,25 +483,30 @@ install_dependencies() {
     if [[ -n "$net_iface" ]]; then
         if modprobe sch_cake 2>/dev/null; then
             # Mark Snapcast streaming and control ports with DSCP EF
-            iptables -t mangle -C OUTPUT -p tcp --sport 1704 -j DSCP --set-dscp-class EF 2>/dev/null \
-                || iptables -t mangle -A OUTPUT -p tcp --sport 1704 -j DSCP --set-dscp-class EF 2>/dev/null
-            iptables -t mangle -C OUTPUT -p tcp --sport 1705 -j DSCP --set-dscp-class EF 2>/dev/null \
-                || iptables -t mangle -A OUTPUT -p tcp --sport 1705 -j DSCP --set-dscp-class EF 2>/dev/null
+            if command -v iptables &>/dev/null; then
+                iptables -t mangle -C OUTPUT -p tcp --sport 1704 -j DSCP --set-dscp-class EF 2>/dev/null \
+                    || iptables -t mangle -A OUTPUT -p tcp --sport 1704 -j DSCP --set-dscp-class EF
+                iptables -t mangle -C OUTPUT -p tcp --sport 1705 -j DSCP --set-dscp-class EF 2>/dev/null \
+                    || iptables -t mangle -A OUTPUT -p tcp --sport 1705 -j DSCP --set-dscp-class EF
+                if command -v iptables-save &>/dev/null; then
+                    mkdir -p /etc/iptables
+                    iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+                fi
+            else
+                warn "Network QoS: iptables not found, DSCP marking skipped (CAKE still active)"
+            fi
             # Replace default qdisc with CAKE
             tc qdisc replace dev "$net_iface" root cake diffserv4 2>/dev/null \
                 && ok "Network QoS: CAKE + DSCP EF on $net_iface (Snapcast prioritized)" \
                 || warn "Network QoS: CAKE setup failed on $net_iface"
-            # Persist iptables rules across reboots
-            if command -v iptables-save &>/dev/null; then
-                mkdir -p /etc/iptables
-                iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
-            fi
-            # Persist CAKE via networkd or cron
+            # Persist CAKE via networkd-dispatcher (re-detect interface at boot)
             mkdir -p /etc/networkd-dispatcher/routable.d
-            cat > /etc/networkd-dispatcher/routable.d/50-cake-qos <<QEOF
+            cat > /etc/networkd-dispatcher/routable.d/50-cake-qos <<'QEOF'
 #!/bin/sh
+iface=$(ip route show default 2>/dev/null | awk '{print $5; exit}')
+[ -n "$iface" ] || exit 0
 modprobe sch_cake 2>/dev/null
-tc qdisc replace dev "$net_iface" root cake diffserv4 2>/dev/null
+tc qdisc replace dev "$iface" root cake diffserv4 2>/dev/null
 QEOF
             chmod +x /etc/networkd-dispatcher/routable.d/50-cake-qos
         else
