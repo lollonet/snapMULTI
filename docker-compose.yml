@@ -119,6 +119,7 @@ services:
     entrypoint: ["sh", "-c"]
     command:
       - |
+        # Use same sanitization logic as other services (match sanitize_device_name)
         NAME="$${SPOTIFY_NAME:-$$(hostname) Spotify}"
         NAME=$$(printf '%s' "$$NAME" | tr -cd 'A-Za-z0-9 ._-')
         [ -z "$$NAME" ] && NAME="snapMULTI Spotify"

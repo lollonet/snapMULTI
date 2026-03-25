@@ -95,6 +95,7 @@ class SubscribedClient:
 
 # Global state
 ws_clients: set[SubscribedClient] = set()
+ws_clients_lock = asyncio.Lock()  # CRITICAL: Protect concurrent access
 _service: "MetadataService | None" = None
 
 
@@ -202,8 +203,15 @@ class MetadataService:
             return None
 
     def _get_snap_socket(self) -> socket.socket | None:
+        # Check if existing socket is stale BEFORE reusing
         if self._snap_sock is not None:
-            return self._snap_sock
+            time_since_response = time.monotonic() - self._last_snap_response
+            if time_since_response > self._snap_stale_threshold:
+                logger.warning(f"Snapserver socket stale ({time_since_response:.1f}s), reconnecting")
+                self._close_snap_socket()
+            else:
+                return self._snap_sock
+
         self._snap_sock = self._create_socket(self.snapserver_host, self.snapserver_port)
         if self._snap_sock:
             self._snap_sock.settimeout(10.0)
@@ -330,12 +338,16 @@ class MetadataService:
         """Broadcast server_info to all connected WebSocket clients."""
         info = self._build_server_info(server)
         msg = json.dumps(info)
-        for sc in ws_clients.copy():
-            try:
-                await sc.websocket.send(msg)
-            except Exception as exc:
-                logger.debug("server_info send failed, dropping client: %s", exc)
-                ws_clients.discard(sc)
+        async with ws_clients_lock:
+            clients_to_remove = set()
+            for sc in list(ws_clients):  # Create list snapshot
+                try:
+                    await sc.websocket.send(msg)
+                except Exception as exc:
+                    logger.debug("server_info send failed, dropping client: %s", exc)
+                    clients_to_remove.add(sc)
+            # Remove failed clients outside iteration
+            ws_clients -= clients_to_remove
 
     def _resolve_client_stream(self, client_id: str) -> str | None:
         """Resolve a CLIENT_ID to its stream_id using cached mapping."""
