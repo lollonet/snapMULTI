@@ -197,7 +197,9 @@ if [[ -f "$SNAP_BOOT/common/system-tune.sh" ]]; then
 elif [[ -f "$SCRIPT_DIR/common/system-tune.sh" ]]; then
     source "$SCRIPT_DIR/common/system-tune.sh"
 fi
-tune_wifi_powersave
+if command -v tune_wifi_powersave &>/dev/null; then
+    tune_wifi_powersave
+fi
 
 # ── Step counter (tracks current step across install phases) ──────
 CURRENT_STEP=0
