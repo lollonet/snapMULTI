@@ -7,11 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.14] — 2026-03-25
+
+### Added
+- **Network QoS for Snapcast** ([#144](https://github.com/lollonet/snapMULTI/pull/144)) — `deploy.sh` sets up CAKE qdisc with DSCP EF marking on Snapcast ports 1704/1705, prioritizing audio packets over bulk file transfers to prevent bufferbloat-induced glitches. Persists across reboots via iptables-save and networkd-dispatcher hook
+
 ### Fixed
-- **CPU governor and USB autosuspend tuning** ([#139](https://github.com/lollonet/snapMULTI/pull/139)) — `deploy.sh` sets CPU governor to `performance` and disables USB autosuspend to prevent audio glitches; settings persist via `/etc/default/cpufrequtils` and udev rule. Success messages now reflect actual write outcome
+- **CPU governor and USB autosuspend tuning** ([#139](https://github.com/lollonet/snapMULTI/pull/139)) — `deploy.sh` sets CPU governor to `performance` and disables USB autosuspend to prevent audio glitches; settings persist via `/etc/default/cpufrequtils` and udev rule
+- **Tidal SIGTERM forwarding** ([#143](https://github.com/lollonet/snapMULTI/pull/143)) — tidal-connect entrypoint now properly forwards SIGTERM to child processes with trap disarming to prevent re-entrancy; metadata bridge has circuit breaker after 10 consecutive failures
+- **First-boot client file validation** ([#142](https://github.com/lollonet/snapMULTI/pull/142)) — `firstboot.sh` validates critical client files (setup.sh, audio-hats/, display scripts) exist before proceeding; copy errors now surface instead of being silenced
+- **SSH key cleanup and grep-c bug** ([#141](https://github.com/lollonet/snapMULTI/pull/141)) — deploy workflow SSH key file cleaned up via trap; fixed progress.sh `grep -c` producing double output on empty input
+- **Council audit batch 4** ([#145](https://github.com/lollonet/snapMULTI/pull/145)) — 8 cross-cutting fixes: missing Dockerfile.metadata in PowerShell SD prep, headless display false positive, visible docker pull errors, SSH StrictHostKeyChecking hardened, boot partition validation, snapcast SHA fetch guard, credential scrub fallback
+- **Deploy SSH hardened** ([#145](https://github.com/lollonet/snapMULTI/pull/145)) — `StrictHostKeyChecking=accept-new` instead of `=no` in deploy workflow
 
 ### Changed
-- **Client submodule updated** ([#140](https://github.com/lollonet/snapMULTI/pull/140)) — HAT mixer auto-detection: `setup.sh` auto-configures `MIXER` based on detected audio HAT (hardware mixer for DACs, software for S/PDIF/USB), preserving full 16-bit audio resolution
+- **Client submodule updated to v0.2.19** ([#140](https://github.com/lollonet/snapMULTI/pull/140)) — HAT mixer auto-detection, CPU governor tuning, display.sh safety fixes
 
 ## [0.3.13] — 2026-03-23
 
