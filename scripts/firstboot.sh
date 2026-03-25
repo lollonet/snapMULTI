@@ -168,8 +168,8 @@ has_display() {
     done
     # DRM status files exist but none say "connected" → headless
     $found_status && return 1
-    # No DRM status files at all (very old firmware) → assume display if fb0 exists
-    return 0
+    # No DRM status files at all (very old firmware / virtual fb) → assume headless
+    return 1
 }
 
 # Initialize progress display
@@ -600,7 +600,8 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
                 || scrub_failed=true
         done
         if [[ "$scrub_failed" == "true" ]]; then
-            log_and_tty "WARNING: Could not scrub some fields from boot partition — remove manually"
+            log_and_tty "WARNING: Could not scrub credentials via sed — removing install.conf"
+            rm -f "$SNAP_BOOT/install.conf" 2>/dev/null || true
         fi
     fi
 

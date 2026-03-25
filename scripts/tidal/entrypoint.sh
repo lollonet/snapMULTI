@@ -41,7 +41,10 @@ if [ -f /usr/bin/tmux ] && [ -f /app/ifi-tidal-release/bin/speaker_controller_ap
     # Start metadata bridge with auto-restart (scrapes speaker controller TUI → JSON file)
     if [ -f /tidal-meta-bridge.sh ]; then
         echo "Starting metadata bridge..."
-        (while true; do /tidal-meta-bridge.sh; echo "tidal-meta-bridge: restarting in 5s" >&2; sleep 5; done) &
+        (failures=0; while [ "$failures" -lt 10 ]; do
+            if /tidal-meta-bridge.sh; then failures=0; else failures=$((failures + 1)); fi
+            echo "tidal-meta-bridge: restarting in 5s (failures: $failures/10)" >&2; sleep 5
+        done; echo "tidal-meta-bridge: too many failures, giving up" >&2) &
     fi
 fi
 

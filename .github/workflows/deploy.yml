@@ -45,8 +45,8 @@ jobs:
           trap 'rm -f "$KEY_FILE"' EXIT
           echo "$SSH_KEY" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
-          ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no "${DEPLOY_USER}@${HOST}" "mkdir -p /tmp/snapmulti-deploy"
-          scp -i "$KEY_FILE" -o StrictHostKeyChecking=no docker-compose.yml "${DEPLOY_USER}@${HOST}:/tmp/snapmulti-deploy/docker-compose.yml"
+          ssh -i "$KEY_FILE" -o StrictHostKeyChecking=accept-new "${DEPLOY_USER}@${HOST}" "mkdir -p /tmp/snapmulti-deploy"
+          scp -i "$KEY_FILE" -o StrictHostKeyChecking=accept-new docker-compose.yml "${DEPLOY_USER}@${HOST}:/tmp/snapmulti-deploy/docker-compose.yml"
           rm -f "$KEY_FILE"
 
       - name: Deploy via SSH
