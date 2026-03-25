@@ -503,6 +503,7 @@ install_dependencies() {
             mkdir -p /etc/networkd-dispatcher/routable.d
             cat > /etc/networkd-dispatcher/routable.d/50-cake-qos <<'QEOF'
 #!/bin/sh
+PATH=/usr/sbin:/sbin:$PATH
 iface=$(ip route show default 2>/dev/null | awk '{print $5; exit}')
 [ -n "$iface" ] || exit 0
 modprobe sch_cake 2>/dev/null
