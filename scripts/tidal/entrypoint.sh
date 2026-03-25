@@ -3,6 +3,14 @@
 # Used with edgecrush3r/tidal-connect image
 set -euo pipefail
 
+# Forward SIGTERM to all child processes for clean container shutdown
+cleanup() {
+    echo "tidal-connect: shutting down..."
+    kill -TERM 0 2>/dev/null || true
+    wait
+}
+trap cleanup TERM INT
+
 # Source shared utilities (mounted at /common/sanitize.sh in container)
 # shellcheck source=../common/sanitize.sh
 source /common/sanitize.sh
@@ -44,6 +52,7 @@ mqa_passthrough=$(load_key_value "$KEY_MQA_PASSTHROUGH")
 
 echo "Starting TIDAL Connect: $friendly_name"
 
+TIDAL_PID=""
 while true; do
     echo "Starting TIDAL Connect..."
     /app/ifi-tidal-release/bin/tidal_connect_application \
@@ -57,7 +66,10 @@ while true; do
         --disable-web-security true \
         --enable-mqa-passthrough "${mqa_passthrough}" \
         --log-level "${LOG_LEVEL:-3}" \
-        --enable-websocket-log 0
+        --enable-websocket-log 0 &
+    TIDAL_PID=$!
+    wait "$TIDAL_PID" || true
+    TIDAL_PID=""
     echo "TIDAL Connect stopped."
     [ "${RESTART_ON_FAIL:-1}" -eq 1 ] || break
     echo "Restarting in ${RESTART_WAIT_SEC:-10} seconds..."
