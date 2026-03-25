@@ -5,9 +5,11 @@ set -euo pipefail
 
 # Forward SIGTERM to all child processes for clean container shutdown
 cleanup() {
+    trap - TERM INT
     echo "tidal-connect: shutting down..."
     kill -TERM 0 2>/dev/null || true
     wait
+    exit 0
 }
 trap cleanup TERM INT
 
