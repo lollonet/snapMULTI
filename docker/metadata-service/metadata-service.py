@@ -822,8 +822,9 @@ class MetadataService:
         if cache_key in self.artwork_cache:
             cached = self.artwork_cache[cache_key]
             if "|" in cached:
-                return tuple(cached.split("|", 1))  # type: ignore[return-value]
-            return cached, ""
+                url, source = cached.split("|", 1)
+                return url, source
+            return cached, ""  # old-format entry — source unknown
 
         # Priority: MusicBrainz (album-specific, scored) then iTunes
         artwork_url = self.fetch_musicbrainz_artwork(artist, album)
