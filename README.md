@@ -229,3 +229,24 @@ For major version upgrades, check [CHANGELOG.md](CHANGELOG.md) for breaking chan
 | [Usage & Operations](docs/USAGE.md) | Architecture, services, MPD control, mDNS setup, deployment, CI/CD |
 | [Audio Sources](docs/SOURCES.md) | All source types, parameters, JSON-RPC API, Android/Tidal streaming |
 | [Changelog](CHANGELOG.md) | Version history |
+
+## snapMULTI Ecosystem
+
+| App | Platform | Description |
+|-----|----------|-------------|
+| [snapMULTI](https://github.com/lollonet/snapMULTI) | Raspberry Pi / Linux | Multiroom audio server (this project) |
+| [rpi-snapclient-usb](https://github.com/lollonet/rpi-snapclient-usb) | Raspberry Pi | Audio player with cover display |
+| snapCTRL | iOS / Android | Remote control app — *coming soon* |
+| snapClient iOS | iOS | Snapcast client for iPhone/iPad — *coming soon* |
+| snapClient Android | Android | Snapcast client for Android — *coming soon* |
+
+## Acknowledgments
+
+snapMULTI is built on top of these open source projects:
+
+- **[Snapcast](https://github.com/badaix/snapcast)** by Johannes Pohl — the multiroom audio streaming engine at the heart of this project
+- **[go-librespot](https://github.com/devgianlu/go-librespot)** by devgianlu — Spotify Connect implementation
+- **[shairport-sync](https://github.com/mikebrady/shairport-sync)** by Mike Brady — AirPlay audio receiver
+- **[MPD](https://www.musicpd.org/)** — Music Player Daemon
+- **[myMPD](https://github.com/jcorporation/myMPD)** by jcorporation — MPD web client
+- **[tidal-connect](https://github.com/edgecrush3r/tidal-connect-docker)** by edgecrush3r — Tidal Connect for Raspberry Pi
