@@ -23,17 +23,19 @@ Progettato per applicazioni di gestione remota e configurazione avanzata.
 - **Attiva** — Abilitata in `config/snapserver.conf`, in esecuzione in produzione
 - **Disponibile** — Esempio commentato nel file di configurazione, pronta da abilitare
 
+**Integrazione metadata**: Tutte le sorgenti supportano i metadati delle tracce (titolo, artista, album) e le copertine tramite il servizio metadata (WS:8082, HTTP:8083). Vedi [USAGE.it.md](USAGE.it.md#servizio-metadata) per i dettagli di integrazione dei client.
+
 ---
 
 ## Sorgenti Attive
 
 ### 1. MPD (pipe)
 
-Legge audio PCM da una pipe FIFO con nome. MPD scrive il suo output su `/audio/snapcast_fifo` e Snapserver lo legge.
+Legge audio PCM da una pipe FIFO con nome. MPD scrive il suo output su `/audio/mpd_fifo` e Snapserver lo legge.
 
 **Configurazione:**
 ```ini
-source = pipe:////audio/snapcast_fifo?name=MPD&controlscript=meta_mpd.py
+source = pipe:////audio/mpd_fifo?name=MPD&controlscript=meta_mpd.py
 ```
 
 **Parametri:**
@@ -48,7 +50,7 @@ source = pipe:////audio/snapcast_fifo?name=MPD&controlscript=meta_mpd.py
 
 **Come funziona:**
 1. MPD riproduce file musicali locali da `/music` (mappato a `MUSIC_PATH` sull'host)
-2. MPD scrive audio PCM su `/audio/snapcast_fifo` (output FIFO in `mpd.conf`)
+2. MPD scrive audio PCM su `/audio/mpd_fifo` (output FIFO in `mpd.conf`)
 3. Snapserver legge dalla FIFO e distribuisce ai client
 
 **Controllo:**

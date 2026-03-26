@@ -200,6 +200,20 @@ sudo ufw allow 8083/tcp   # Metadata service (HTTP/cover art)
 sudo ufw allow 5353/udp   # mDNS (Avahi/Bonjour)
 ```
 
+### Network QoS (Quality of Service)
+
+For optimal audio streaming performance, especially on congested networks or with bulk file transfers, `deploy.sh` configures network QoS:
+
+**CAKE + DSCP EF**: Snapcast audio packets are marked with DSCP EF (Expedited Forwarding) for priority handling. The CAKE (Common Applications Kept Enhanced) qdisc provides low-latency queuing and automatic bandwidth management.
+
+```bash
+# Applied automatically by deploy.sh on compatible systems
+tc qdisc add dev eth0 root cake bandwidth 100mbit
+# Snapcast uses DSCP EF marking for real-time audio priority
+```
+
+This ensures consistent audio streaming even during network congestion from file transfers, updates, or other bulk traffic.
+
 ## Storage
 
 ### Docker Images

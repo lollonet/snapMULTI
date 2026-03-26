@@ -23,7 +23,7 @@ All audio streams use a consistent format:
 
 | Component | Version | Source |
 |-----------|---------|--------|
-| Snapcast | 0.35.0 | badaix/snapcast upstream (Dockerfile.snapserver) |
+| Snapcast | develop branch | badaix/snapcast upstream (Dockerfile.snapserver builds from latest HEAD) |
 | MPD | 0.24.x | Alpine packages (Dockerfile.mpd) |
 | go-librespot | v0.7.0 | Upstream image (ghcr.io/devgianlu/go-librespot) |
 | Shairport-sync | 4.x | Built from source (Dockerfile.shairport-sync) |
@@ -45,7 +45,7 @@ send_to_muted = false  # Save bandwidth
 audio_output {
     type "fifo"
     name "Snapcast"
-    path "/audio/snapcast_fifo"
+    path "/audio/mpd_fifo"
     format "44100:16:2"
 }
 ```
