@@ -1362,7 +1362,7 @@ class MetadataService:
                         old_title = sm.current.get("title", "")
                         old_artist = sm.current.get("artist", "")
                         if (new_title or new_artist) and (new_title, new_artist) != (old_title, old_artist):
-                            self._failed_downloads.clear()
+                            pass  # Let OrderedDict (capped at 500) handle eviction naturally
 
                         title = metadata.get("title", "N/A")
                         artist = metadata.get("artist", "N/A")

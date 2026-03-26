@@ -250,7 +250,7 @@ def main() -> None:
     stdin_buffer = ""
     pipe_buffer = b""
     MAX_STDIN_BUFFER = 65536    # 64 KB — snapserver sends small JSON-RPC messages
-    MAX_PIPE_BUFFER = 1048576   # 1 MB — cover art PICT items can be large
+    MAX_PIPE_BUFFER = 10485760  # 10 MB — high-res ALAC embedded art can exceed 1 MB
     pipe_fd: int | None = None
     last_pipe_check = 0.0
 
