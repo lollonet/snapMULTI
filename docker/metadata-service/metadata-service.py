@@ -1186,7 +1186,9 @@ class MetadataService:
         1. Embedded art (MPD) / Snapcast HTTP art URL
         2. MusicBrainz Cover Art Archive (album-specific, score >= 80)
         3. iTunes Search API (album-specific, validated)
-        4. artist_image (generic artist photo — last resort)
+        4. Radio-Browser logo (radio streams only)
+        5. artist_image (generic artist photo — last resort)
+        6. Default radio placeholder (radio streams only)
         """
         if not metadata.get("playing"):
             return
@@ -1254,6 +1256,7 @@ class MetadataService:
                     metadata["artist_image"] = artist_image_served
                     # Last resort: use artist_image as artwork if nothing else found
                     if not metadata.get("artwork"):
+                        logger.info("No album artwork for %s - %s, using artist image", metadata.get("artist"), metadata.get("album"))
                         metadata["artwork"] = artist_image_served
                         artwork_source = "artist_image"
 
@@ -1357,13 +1360,6 @@ class MetadataService:
                     )
 
                     if changed:
-                        new_title = metadata.get("title", "")
-                        new_artist = metadata.get("artist", "")
-                        old_title = sm.current.get("title", "")
-                        old_artist = sm.current.get("artist", "")
-                        if (new_title or new_artist) and (new_title, new_artist) != (old_title, old_artist):
-                            pass  # Let OrderedDict (capped at 500) handle eviction naturally
-
                         title = metadata.get("title", "N/A")
                         artist = metadata.get("artist", "N/A")
                         logger.info(f"[{stream_id}] Updated: {title} - {artist}")
