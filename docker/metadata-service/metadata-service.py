@@ -726,13 +726,17 @@ class MetadataService:
     def fetch_musicbrainz_artwork(self, artist: str, album: str) -> str:
         _mb_rate_limit()
         query = urllib.parse.quote(f'artist:"{artist}" AND release:"{album}"')
-        url = f"https://musicbrainz.org/ws/2/release/?query={query}&fmt=json&limit=1"
+        url = f"https://musicbrainz.org/ws/2/release/?query={query}&fmt=json&limit=5"
         data = self._make_api_request(url)
         if not data or not isinstance(data, dict):
             return ""
-        releases = data.get("releases", [])
-        if releases and (mbid := releases[0].get("id")):
-            return f"https://coverartarchive.org/release/{mbid}/front-500"
+        for release in data.get("releases", []):
+            score = release.get("score", 0)
+            if score < 80:
+                continue
+            mbid = release.get("id")
+            if mbid:
+                return f"https://coverartarchive.org/release/{mbid}/front-500"
         return ""
 
     def _get_wikidata_id_from_relations(self, relations: list) -> str | None:
@@ -809,28 +813,34 @@ class MetadataService:
         self._cache_set(self.artist_image_cache, artist, "")
         return ""
 
-    def fetch_album_artwork(self, artist: str, album: str) -> str:
+    def fetch_album_artwork(self, artist: str, album: str) -> tuple[str, str]:
+        """Fetch album artwork. Returns (url, source) tuple."""
         if not artist or not album:
-            return ""
+            return "", ""
 
         cache_key = f"{artist}|{album}"
         if cache_key in self.artwork_cache:
-            return self.artwork_cache[cache_key]
+            cached = self.artwork_cache[cache_key]
+            if "|" in cached:
+                url, source = cached.split("|", 1)
+                return url, source
+            return cached, ""  # old-format entry — source unknown
+
+        # Priority: MusicBrainz (album-specific, scored) then iTunes
+        artwork_url = self.fetch_musicbrainz_artwork(artist, album)
+        if artwork_url:
+            self._cache_set(self.artwork_cache, cache_key, f"{artwork_url}|musicbrainz")
+            logger.info("Found MusicBrainz artwork for %s - %s", artist, album)
+            return artwork_url, "musicbrainz"
 
         artwork_url = self._fetch_itunes_artwork(artist, album)
         if artwork_url:
-            self._cache_set(self.artwork_cache, cache_key, artwork_url)
-            logger.info(f"Found iTunes artwork for {artist} - {album}")
-            return artwork_url
-
-        artwork_url = self.fetch_musicbrainz_artwork(artist, album)
-        if artwork_url:
-            self._cache_set(self.artwork_cache, cache_key, artwork_url)
-            logger.info(f"Found MusicBrainz artwork for {artist} - {album}")
-            return artwork_url
+            self._cache_set(self.artwork_cache, cache_key, f"{artwork_url}|itunes")
+            logger.info("Found iTunes artwork for %s - %s", artist, album)
+            return artwork_url, "itunes"
 
         self._cache_set(self.artwork_cache, cache_key, "")
-        return ""
+        return "", ""
 
     def _fetch_itunes_artwork(self, artist: str, album: str) -> str:
         query = urllib.parse.quote(f"{artist} {album}")
@@ -1097,7 +1107,7 @@ class MetadataService:
     # Metadata change detection
     # ──────────────────────────────────────────────
 
-    _VOLATILE_FIELDS = {"bitrate", "artwork", "artist_image", "elapsed"}
+    _VOLATILE_FIELDS = {"bitrate", "artwork", "artist_image", "artwork_source", "elapsed"}
     _INTERNAL_FIELDS = {"file", "station_name"}
 
     def _metadata_changed(self, new: dict, old: dict) -> bool:
@@ -1170,11 +1180,19 @@ class MetadataService:
         return f"http://{EXTERNAL_HOST}:{HTTP_PORT}/artwork/{filename}"
 
     def enrich_artwork(self, metadata: dict[str, Any]) -> None:
-        """Fetch/download artwork for a metadata dict. Mutates in place."""
+        """Fetch/download artwork for a metadata dict. Mutates in place.
+
+        Priority chain:
+        1. Embedded art (MPD) / Snapcast HTTP art URL
+        2. MusicBrainz Cover Art Archive (album-specific, score >= 80)
+        3. iTunes Search API (album-specific, validated)
+        4. artist_image (generic artist photo — last resort)
+        """
         if not metadata.get("playing"):
             return
 
         artwork_url = metadata.get("artwork", "")
+        artwork_source = "snapcast" if artwork_url else ""
         is_radio = metadata.get("codec") == "RADIO"
 
         # For MPD files, try embedded cover art first
@@ -1182,6 +1200,7 @@ class MetadataService:
             mpd_art = self.fetch_mpd_artwork(metadata.get("file", ""))
             if mpd_art:
                 metadata["artwork"] = self._artwork_url(mpd_art)
+                artwork_source = "embedded"
                 artwork_url = None  # skip further lookups
 
         if not artwork_url and not metadata.get("artwork"):
@@ -1189,15 +1208,15 @@ class MetadataService:
                 artwork_url = self.fetch_radio_logo(
                     metadata["station_name"], metadata.get("file", "")
                 )
+                if artwork_url:
+                    artwork_source = "radio-browser"
             elif metadata.get("artist") and metadata.get("album"):
-                artwork_url = self.fetch_album_artwork(
+                artwork_url, artwork_source = self.fetch_album_artwork(
                     metadata["artist"], metadata["album"]
                 )
 
         # Download external artwork locally
         if artwork_url:
-            # shairport-sync serves all tracks at the same URL (/cover.jpg).
-            # Use track identity as cache key so each track gets its own file.
             cache_key = ""
             if "/cover.jpg" in artwork_url and metadata.get("title"):
                 cache_key = (
@@ -1216,10 +1235,12 @@ class MetadataService:
                 local_file = self.download_artwork(logo_url)
                 if local_file:
                     metadata["artwork"] = self._artwork_url(local_file)
+                    artwork_source = "radio-browser"
 
         # Final radio fallback
         if not metadata.get("artwork") and is_radio:
             metadata["artwork"] = f"http://{EXTERNAL_HOST}:{HTTP_PORT}/defaults/default-radio.png"
+            artwork_source = "default"
 
         # Artist image (not for radio) — download through SSRF-safe pipeline
         if not is_radio and metadata.get("artist"):
@@ -1227,9 +1248,16 @@ class MetadataService:
             if artist_image_url:
                 cached = self.download_artwork(artist_image_url)
                 if cached:
-                    metadata["artist_image"] = (
+                    artist_image_served = (
                         f"http://{EXTERNAL_HOST}:{HTTP_PORT}/artwork/{cached}"
                     )
+                    metadata["artist_image"] = artist_image_served
+                    # Last resort: use artist_image as artwork if nothing else found
+                    if not metadata.get("artwork"):
+                        metadata["artwork"] = artist_image_served
+                        artwork_source = "artist_image"
+
+        metadata["artwork_source"] = artwork_source
 
     # ──────────────────────────────────────────────
     # Main polling loop
