@@ -438,6 +438,11 @@ install_dependencies() {
     command -v dstat >/dev/null 2>&1 || mon_pkgs+=(dstat)
     if [[ ${#mon_pkgs[@]} -gt 0 ]]; then
         info "Installing monitoring tools: ${mon_pkgs[*]}..."
+        # Wait for apt lock — firstboot may still be upgrading packages
+        for _apt_wait in $(seq 1 60); do
+            fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+            sleep 5
+        done
         apt-get install -y -qq "${mon_pkgs[@]}" >/dev/null
         # Enable sysstat data collection (sar)
         if [[ -f /etc/default/sysstat ]]; then
