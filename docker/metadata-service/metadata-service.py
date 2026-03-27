@@ -362,7 +362,6 @@ class MetadataService:
         """Broadcast server_info to all connected WebSocket clients."""
         info = self._build_server_info(server)
         msg = json.dumps(info)
-        global ws_clients
         async with ws_clients_lock:
             clients_to_remove = set()
             for sc in list(ws_clients):  # Create list snapshot
@@ -372,7 +371,7 @@ class MetadataService:
                     logger.debug("server_info send failed, dropping client: %s", exc)
                     clients_to_remove.add(sc)
             # Remove failed clients outside iteration
-            ws_clients -= clients_to_remove
+            ws_clients.difference_update(clients_to_remove)
 
     def _resolve_client_stream(self, client_id: str) -> str | None:
         """Resolve a CLIENT_ID to its stream_id using cached mapping."""
