@@ -52,7 +52,9 @@ GO_LIBRESPOT_PORT = int(os.environ.get("GO_LIBRESPOT_PORT", "24879"))
 # External hostname for artwork URLs sent to remote clients.
 # SNAPSERVER_HOST may be 127.0.0.1 (for local socket connections),
 # but artwork URLs must use a host reachable by clients on the network.
-EXTERNAL_HOST = os.environ.get("EXTERNAL_HOST", "") or socket.getfqdn() or SNAPSERVER_HOST
+EXTERNAL_HOST = (
+    os.environ.get("EXTERNAL_HOST", "") or socket.getfqdn() or SNAPSERVER_HOST
+)
 _POLL_LOOP_MAX_ERRORS = 30
 
 # MusicBrainz rate limiter (1 request per 1.1 seconds, shared across threads)
@@ -86,7 +88,9 @@ class StreamMetadata:
 class SubscribedClient:
     """A WebSocket client subscribed to a CLIENT_ID or directly to a stream name."""
 
-    def __init__(self, websocket: Any, client_id: str = "", stream_id_direct: str = "") -> None:
+    def __init__(
+        self, websocket: Any, client_id: str = "", stream_id_direct: str = ""
+    ) -> None:
         self.websocket = websocket
         self.client_id = client_id
         self.stream_id: str | None = stream_id_direct if stream_id_direct else None
@@ -115,9 +119,15 @@ class MetadataService:
 
         # Caches (shared across all streams — same album art doesn't need re-fetch)
         # Bounded to _MAX_CACHE_ENTRIES to prevent unbounded memory growth
-        self.artwork_cache: collections.OrderedDict[str, str] = collections.OrderedDict()
-        self.artist_image_cache: collections.OrderedDict[str, str] = collections.OrderedDict()
-        self._failed_downloads: collections.OrderedDict[str, None] = collections.OrderedDict()
+        self.artwork_cache: collections.OrderedDict[str, str] = (
+            collections.OrderedDict()
+        )
+        self.artist_image_cache: collections.OrderedDict[str, str] = (
+            collections.OrderedDict()
+        )
+        self._failed_downloads: collections.OrderedDict[str, None] = (
+            collections.OrderedDict()
+        )
 
         self._cache_limit = _MAX_CACHE_ENTRIES
 
@@ -165,8 +175,12 @@ class MetadataService:
         self._track_timers: dict[str, dict[str, Any]] = {}
 
     @staticmethod
-    def _cache_set(cache: collections.OrderedDict, key: str, value: str,
-                   limit: int = _MAX_CACHE_ENTRIES) -> None:
+    def _cache_set(
+        cache: collections.OrderedDict,
+        key: str,
+        value: str,
+        limit: int = _MAX_CACHE_ENTRIES,
+    ) -> None:
         """Set a cache entry, evicting oldest if at capacity."""
         cache[key] = value
         cache.move_to_end(key)
@@ -184,8 +198,9 @@ class MetadataService:
     # Socket helpers
     # ──────────────────────────────────────────────
 
-    def _create_socket(self, host: str, port: int, timeout: int = 5,
-                       log_errors: bool = True) -> socket.socket | None:
+    def _create_socket(
+        self, host: str, port: int, timeout: int = 5, log_errors: bool = True
+    ) -> socket.socket | None:
         sock = None
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -207,16 +222,22 @@ class MetadataService:
         if self._snap_sock is not None:
             time_since_response = time.monotonic() - self._last_snap_response
             if time_since_response > self._snap_stale_threshold:
-                logger.warning(f"Snapserver socket stale ({time_since_response:.1f}s), reconnecting")
+                logger.warning(
+                    f"Snapserver socket stale ({time_since_response:.1f}s), reconnecting"
+                )
                 self._close_snap_socket()
             else:
                 return self._snap_sock
 
-        self._snap_sock = self._create_socket(self.snapserver_host, self.snapserver_port)
+        self._snap_sock = self._create_socket(
+            self.snapserver_host, self.snapserver_port
+        )
         if self._snap_sock:
             self._snap_sock.settimeout(10.0)
             self._last_snap_response = time.monotonic()
-            logger.info(f"Connected to Snapserver {self.snapserver_host}:{self.snapserver_port}")
+            logger.info(
+                f"Connected to Snapserver {self.snapserver_host}:{self.snapserver_port}"
+            )
         return self._snap_sock
 
     def _close_snap_socket(self) -> None:
@@ -232,8 +253,9 @@ class MetadataService:
     # Snapserver JSON-RPC
     # ──────────────────────────────────────────────
 
-    def send_rpc_request(self, sock: socket.socket, method: str,
-                         params: dict | None = None) -> dict | None:
+    def send_rpc_request(
+        self, sock: socket.socket, method: str, params: dict | None = None
+    ) -> dict | None:
         request = {
             "id": 1,
             "jsonrpc": "2.0",
@@ -254,7 +276,9 @@ class MetadataService:
                 try:
                     msg = json.loads(line.decode("utf-8", errors="replace"))
                 except json.JSONDecodeError as e:
-                    logger.warning(f"Malformed JSON from Snapserver: {line[:100]!r}: {e}")
+                    logger.warning(
+                        f"Malformed JSON from Snapserver: {line[:100]!r}: {e}"
+                    )
                     continue
                 if "id" in msg:
                     self._last_snap_response = time.monotonic()
@@ -274,8 +298,12 @@ class MetadataService:
     def get_server_status(self) -> dict | None:
         """Get full server status, with one retry on failure."""
         with self._snap_lock:
-            if (self._snap_sock is not None and self._last_snap_response > 0 and
-                    time.monotonic() - self._last_snap_response > self._snap_stale_threshold):
+            if (
+                self._snap_sock is not None
+                and self._last_snap_response > 0
+                and time.monotonic() - self._last_snap_response
+                > self._snap_stale_threshold
+            ):
                 logger.warning("Snapserver connection stale, reconnecting")
                 self._close_snap_socket()
 
@@ -318,13 +346,9 @@ class MetadataService:
     def _build_server_info(self, server: dict) -> dict:
         """Build server_info payload from current server status."""
         snap_info = server.get("snapserver", {})
-        clients = sum(
-            len(g.get("clients", []))
-            for g in server.get("groups", [])
-        )
+        clients = sum(len(g.get("clients", [])) for g in server.get("groups", []))
         active = [
-            s["id"] for s in server.get("streams", [])
-            if s.get("status") == "playing"
+            s["id"] for s in server.get("streams", []) if s.get("status") == "playing"
         ]
         return {
             "type": "server_info",
@@ -347,7 +371,7 @@ class MetadataService:
                     logger.debug("server_info send failed, dropping client: %s", exc)
                     clients_to_remove.add(sc)
             # Remove failed clients outside iteration
-            ws_clients -= clients_to_remove
+            ws_clients.difference_update(clients_to_remove)
 
     def _resolve_client_stream(self, client_id: str) -> str | None:
         """Resolve a CLIENT_ID to its stream_id using cached mapping."""
@@ -358,7 +382,9 @@ class MetadataService:
         # Snapserver has "snapvideo")
         for identifier, stream_id in self._client_stream_map.items():
             if client_id in identifier or identifier in client_id:
-                logger.debug(f"Fuzzy match: client '{client_id}' matched identifier '{identifier}'")
+                logger.debug(
+                    f"Fuzzy match: client '{client_id}' matched identifier '{identifier}'"
+                )
                 return stream_id
         return None
 
@@ -372,7 +398,9 @@ class MetadataService:
                     client.get("id", ""),
                 ]
                 if any(client_id in i or i in client_id for i in identifiers if i):
-                    return client.get("config", {}).get("volume", {"percent": 100, "muted": False})
+                    return client.get("config", {}).get(
+                        "volume", {"percent": 100, "muted": False}
+                    )
         return {"percent": 100, "muted": False}
 
     # ──────────────────────────────────────────────
@@ -394,7 +422,8 @@ class MetadataService:
         lines = response.decode("utf-8", errors="replace").split("\n")
         return {
             key: value
-            for line in lines if ": " in line
+            for line in lines
+            if ": " in line
             for key, value in [line.split(": ", 1)]
         }
 
@@ -412,10 +441,21 @@ class MetadataService:
         if file_path.startswith(("http://", "https://")):
             return "RADIO"
         codec_map = {
-            "flac": "FLAC", "wav": "WAV", "aiff": "AIFF", "aif": "AIFF",
-            "mp3": "MP3", "ogg": "OGG", "opus": "OPUS",
-            "m4a": "AAC", "aac": "AAC", "mp4": "AAC",
-            "wma": "WMA", "ape": "APE", "wv": "WV", "dsf": "DSD", "dff": "DSD",
+            "flac": "FLAC",
+            "wav": "WAV",
+            "aiff": "AIFF",
+            "aif": "AIFF",
+            "mp3": "MP3",
+            "ogg": "OGG",
+            "opus": "OPUS",
+            "m4a": "AAC",
+            "aac": "AAC",
+            "mp4": "AAC",
+            "wma": "WMA",
+            "ape": "APE",
+            "wv": "WV",
+            "dsf": "DSD",
+            "dff": "DSD",
         }
         ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else ""
         if ext in codec_map:
@@ -439,8 +479,9 @@ class MetadataService:
             return 0, 0
         return sample_rate, bit_depth
 
-    def _extract_radio_metadata(self, title: str, artist: str,
-                                song: dict[str, str]) -> tuple[str, str, str]:
+    def _extract_radio_metadata(
+        self, title: str, artist: str, song: dict[str, str]
+    ) -> tuple[str, str, str]:
         if not artist and " - " in title:
             parts = title.split(" - ", 1)
             artist = parts[0].strip()
@@ -455,15 +496,18 @@ class MetadataService:
             if now - self._mpd_last_fail < self._mpd_retry_interval:
                 return {"playing": False, "source": "MPD"}
 
-        sock = self._create_socket(self.mpd_host, self.mpd_port, timeout=2,
-                                   log_errors=False)
+        sock = self._create_socket(
+            self.mpd_host, self.mpd_port, timeout=2, log_errors=False
+        )
         if not sock:
             self._mpd_last_fail = now
             if self._mpd_was_connected:
                 logger.warning(f"MPD connection lost ({self.mpd_host}:{self.mpd_port})")
                 self._mpd_was_connected = False
             elif now - self._mpd_last_retry_log > self._mpd_retry_log_interval:
-                logger.info(f"MPD still unreachable ({self.mpd_host}:{self.mpd_port}), retrying...")
+                logger.info(
+                    f"MPD still unreachable ({self.mpd_host}:{self.mpd_port}), retrying..."
+                )
                 self._mpd_last_retry_log = now
             return {"playing": False, "source": "MPD"}
 
@@ -558,8 +602,9 @@ class MetadataService:
             if time.monotonic() - self._mpd_last_fail < self._mpd_retry_interval:
                 return ""
 
-        sock = self._create_socket(self.mpd_host, self.mpd_port, timeout=2,
-                                   log_errors=False)
+        sock = self._create_socket(
+            self.mpd_host, self.mpd_port, timeout=2, log_errors=False
+        )
         if not sock:
             return ""
 
@@ -581,7 +626,11 @@ class MetadataService:
                 sock.sendall(cmd.encode())
 
                 header = b""
-                while b"binary:" not in header and b"OK\n" not in header and b"ACK" not in header:
+                while (
+                    b"binary:" not in header
+                    and b"OK\n" not in header
+                    and b"ACK" not in header
+                ):
                     chunk = sock.recv(4096)
                     if not chunk:
                         return ""
@@ -608,7 +657,7 @@ class MetadataService:
                 marker_pos = header.find(bin_marker)
                 if marker_pos < 0:
                     break
-                remaining = header[marker_pos + len(bin_marker):]
+                remaining = header[marker_pos + len(bin_marker) :]
 
                 while len(remaining) < bin_size:
                     chunk = sock.recv(min(8192, bin_size - len(remaining)))
@@ -617,7 +666,9 @@ class MetadataService:
                     remaining += chunk
 
                 if len(image_data) + bin_size > self._MAX_MPD_ARTWORK_BYTES:
-                    logger.warning(f"MPD artwork exceeded size limit ({self._MAX_MPD_ARTWORK_BYTES} bytes)")
+                    logger.warning(
+                        f"MPD artwork exceeded size limit ({self._MAX_MPD_ARTWORK_BYTES} bytes)"
+                    )
                     return ""
 
                 image_data += remaining[:bin_size]
@@ -646,7 +697,9 @@ class MetadataService:
                     except Exception:
                         pass
                     return ""
-                logger.info(f"Got MPD artwork ({len(image_data)} bytes) for {file_path}")
+                logger.info(
+                    f"Got MPD artwork ({len(image_data)} bytes) for {file_path}"
+                )
                 return filename
 
             return ""
@@ -766,7 +819,11 @@ class MetadataService:
         query = urllib.parse.quote(f'artist:"{artist}"')
         url = f"https://musicbrainz.org/ws/2/artist/?query={query}&fmt=json&limit=1"
         data = self._make_api_request(url)
-        if not data or not isinstance(data, dict) or not (artists := data.get("artists", [])):
+        if (
+            not data
+            or not isinstance(data, dict)
+            or not (artists := data.get("artists", []))
+        ):
             self._cache_set(self.artist_image_cache, artist, "")
             return ""
 
@@ -897,7 +954,13 @@ class MetadataService:
             ):
                 addr = sockaddr[0]
                 ip = ipaddress.ip_address(addr)
-                if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+                if (
+                    ip.is_private
+                    or ip.is_loopback
+                    or ip.is_link_local
+                    or ip.is_multicast
+                    or ip.is_reserved
+                ):
                     if addr in self._trusted_ips:
                         logger.debug(f"Allowing artwork from trusted local IP: {addr}")
                         resolved_ip = addr
@@ -909,7 +972,9 @@ class MetadataService:
                     resolved_ip = addr
                     break
             if blocked_addr:
-                logger.warning(f"Blocked artwork download to restricted IP: {blocked_addr}")
+                logger.warning(
+                    f"Blocked artwork download to restricted IP: {blocked_addr}"
+                )
                 self._mark_failed(fail_key)
                 return ""
         except (socket.gaierror, ValueError, OSError) as e:
@@ -932,10 +997,13 @@ class MetadataService:
                 ip_for_url = f"[{resolved_ip}]" if ":" in resolved_ip else resolved_ip
                 fetch_url = url.replace(parsed.hostname, ip_for_url, 1)
                 req = urllib.request.Request(
-                    fetch_url, headers={"User-Agent": self.user_agent, "Host": parsed.hostname}
+                    fetch_url,
+                    headers={"User-Agent": self.user_agent, "Host": parsed.hostname},
                 )
             else:
-                req = urllib.request.Request(url, headers={"User-Agent": self.user_agent})
+                req = urllib.request.Request(
+                    url, headers={"User-Agent": self.user_agent}
+                )
             with urllib.request.urlopen(req, timeout=5) as response:
                 data = b""
                 dl_start = time.monotonic()
@@ -950,7 +1018,9 @@ class MetadataService:
                     data += chunk
 
                 if len(data) >= self._MAX_ARTWORK_BYTES:
-                    logger.warning(f"Artwork exceeded size limit ({self._MAX_ARTWORK_BYTES} bytes)")
+                    logger.warning(
+                        f"Artwork exceeded size limit ({self._MAX_ARTWORK_BYTES} bytes)"
+                    )
                     self._mark_failed(fail_key)
                     return ""
 
@@ -962,7 +1032,9 @@ class MetadataService:
                     with open(tmp_path, "wb") as f:
                         f.write(data)
                     tmp_path.rename(local_path)
-                    logger.info(f"Downloaded artwork ({len(data)} bytes) to {local_path}")
+                    logger.info(
+                        f"Downloaded artwork ({len(data)} bytes) to {local_path}"
+                    )
                     return filename
                 else:
                     logger.warning("Downloaded empty artwork")
@@ -1010,8 +1082,12 @@ class MetadataService:
     def set_client_volume(self, client_id: str, volume: int) -> bool:
         """Set volume for a specific client (0-100)."""
         with self._snap_lock:
-            if (self._snap_sock is not None and self._last_snap_response > 0 and
-                    time.monotonic() - self._last_snap_response > self._snap_stale_threshold):
+            if (
+                self._snap_sock is not None
+                and self._last_snap_response > 0
+                and time.monotonic() - self._last_snap_response
+                > self._snap_stale_threshold
+            ):
                 self._close_snap_socket()
 
             sock = self._get_snap_socket()
@@ -1042,7 +1118,10 @@ class MetadataService:
                 return False
 
             volume = max(0, min(100, volume))
-            params = {"id": snap_client_id, "volume": {"percent": volume, "muted": False}}
+            params = {
+                "id": snap_client_id,
+                "volume": {"percent": volume, "muted": False},
+            }
             response = self.send_rpc_request(sock, "Client.SetVolume", params)
             if response and "result" in response:
                 logger.info(f"Set client {client_id} volume to {volume}%")
@@ -1073,8 +1152,9 @@ class MetadataService:
             logger.debug(f"go-librespot API unavailable: {e}")
             return None
 
-    def _estimate_elapsed(self, stream_id: str, track_key: str,
-                          is_playing: bool) -> int:
+    def _estimate_elapsed(
+        self, stream_id: str, track_key: str, is_playing: bool
+    ) -> int:
         """Estimate elapsed seconds for sources without native position reporting.
 
         Tracks play/pause transitions per stream. Resets when track_key changes.
@@ -1107,7 +1187,13 @@ class MetadataService:
     # Metadata change detection
     # ──────────────────────────────────────────────
 
-    _VOLATILE_FIELDS = {"bitrate", "artwork", "artist_image", "artwork_source", "elapsed"}
+    _VOLATILE_FIELDS = {
+        "bitrate",
+        "artwork",
+        "artist_image",
+        "artwork_source",
+        "elapsed",
+    }
     _INTERNAL_FIELDS = {"file", "station_name"}
 
     def _metadata_changed(self, new: dict, old: dict) -> bool:
@@ -1241,7 +1327,9 @@ class MetadataService:
 
         # Final radio fallback
         if not metadata.get("artwork") and is_radio:
-            metadata["artwork"] = f"http://{EXTERNAL_HOST}:{HTTP_PORT}/defaults/default-radio.png"
+            metadata["artwork"] = (
+                f"http://{EXTERNAL_HOST}:{HTTP_PORT}/defaults/default-radio.png"
+            )
             artwork_source = "default"
 
         # Artist image (not for radio) — download through SSRF-safe pipeline
@@ -1256,7 +1344,11 @@ class MetadataService:
                     metadata["artist_image"] = artist_image_served
                     # Last resort: use artist_image as artwork if nothing else found
                     if not metadata.get("artwork"):
-                        logger.info("No album artwork for %s - %s, using artist image", metadata.get("artist"), metadata.get("album"))
+                        logger.info(
+                            "No album artwork for %s - %s, using artist image",
+                            metadata.get("artist"),
+                            metadata.get("album"),
+                        )
                         metadata["artwork"] = artist_image_served
                         artwork_source = "artist_image"
 
@@ -1316,22 +1408,22 @@ class MetadataService:
 
                     # Enrich MPD stream with richer metadata
                     if metadata.get("source") == "MPD":
-                        mpd_meta = await loop.run_in_executor(None, self.get_mpd_metadata)
+                        mpd_meta = await loop.run_in_executor(
+                            None, self.get_mpd_metadata
+                        )
                         if mpd_meta.get("playing"):
-                            if not mpd_meta.get("title") and mpd_meta.get("station_name"):
+                            if not mpd_meta.get("title") and mpd_meta.get(
+                                "station_name"
+                            ):
                                 mpd_meta["title"] = mpd_meta["station_name"]
                             metadata = mpd_meta
 
                     # Enrich non-MPD streams with position data
                     if metadata.get("source") != "MPD":
                         track_key = (
-                            f"{metadata.get('title', '')}|"
-                            f"{metadata.get('artist', '')}"
+                            f"{metadata.get('title', '')}|{metadata.get('artist', '')}"
                         )
-                        is_playing = (
-                            metadata.get("playing", False)
-                            and track_key != "|"
-                        )
+                        is_playing = metadata.get("playing", False) and track_key != "|"
 
                         if stream_id == "Spotify" and is_playing:
                             # Accurate position from go-librespot API
@@ -1374,7 +1466,9 @@ class MetadataService:
                                 json.dump(self._output_metadata(metadata), f, indent=2)
                             tmp_file.rename(meta_file)
                         except Exception as e:
-                            logger.error(f"Failed to write metadata for {stream_id}: {e}")
+                            logger.error(
+                                f"Failed to write metadata for {stream_id}: {e}"
+                            )
                             try:
                                 tmp_file.unlink(missing_ok=True)
                             except Exception:
@@ -1418,8 +1512,9 @@ class MetadataService:
 
             await asyncio.sleep(3)
 
-    async def _broadcast_to_stream(self, stream_id: str, metadata: dict,
-                                   server: dict) -> None:
+    async def _broadcast_to_stream(
+        self, stream_id: str, metadata: dict, server: dict
+    ) -> None:
         """Broadcast metadata to all clients subscribed to this stream."""
         output = self._output_metadata(metadata)
 
@@ -1477,6 +1572,7 @@ class MetadataService:
 # WebSocket handler
 # ──────────────────────────────────────────────
 
+
 async def ws_handler(websocket: Any) -> None:
     """Handle WebSocket connections. Clients must subscribe with CLIENT_ID."""
     client_addr = websocket.remote_address
@@ -1507,12 +1603,18 @@ async def ws_handler(websocket: Any) -> None:
                 if _service:
                     stream_id = _service._resolve_client_stream(client_id)
                     loop = asyncio.get_running_loop()
-                    server = await loop.run_in_executor(None, _service.get_server_status)
+                    server = await loop.run_in_executor(
+                        None, _service.get_server_status
+                    )
                     if stream_id:
                         sc.stream_id = stream_id
                         sm = _service.streams.get(stream_id)
                         if sm and sm.current:
-                            volume = _service._find_client_volume(server, client_id) if server else {}
+                            volume = (
+                                _service._find_client_volume(server, client_id)
+                                if server
+                                else {}
+                            )
                             output = {
                                 **_service._output_metadata(sm.current),
                                 "volume": volume.get("percent", 100),
@@ -1520,7 +1622,9 @@ async def ws_handler(websocket: Any) -> None:
                             }
                             await websocket.send(json.dumps(output))
                     if server:
-                        await websocket.send(json.dumps(_service._build_server_info(server)))
+                        await websocket.send(
+                            json.dumps(_service._build_server_info(server))
+                        )
                 continue
 
             # Stream subscription (controller clients — no client-ID resolution, no volume)
@@ -1530,7 +1634,9 @@ async def ws_handler(websocket: Any) -> None:
                     ws_clients.discard(sc)
                 sc = SubscribedClient(websocket, stream_id_direct=stream_name)
                 ws_clients.add(sc)
-                logger.info(f"Client {client_addr} subscribed to stream '{stream_name}'")
+                logger.info(
+                    f"Client {client_addr} subscribed to stream '{stream_name}'"
+                )
                 if _service:
                     sm = _service.streams.get(stream_name)
                     if sm is None:
@@ -1538,11 +1644,17 @@ async def ws_handler(websocket: Any) -> None:
                             f"Client {client_addr} subscribed to unknown stream '{stream_name}'"
                         )
                     elif sm.current:
-                        await websocket.send(json.dumps(_service._output_metadata(sm.current)))
+                        await websocket.send(
+                            json.dumps(_service._output_metadata(sm.current))
+                        )
                     loop = asyncio.get_running_loop()
-                    server = await loop.run_in_executor(None, _service.get_server_status)
+                    server = await loop.run_in_executor(
+                        None, _service.get_server_status
+                    )
                     if server:
-                        await websocket.send(json.dumps(_service._build_server_info(server)))
+                        await websocket.send(
+                            json.dumps(_service._build_server_info(server))
+                        )
                 continue
 
             # Control commands (must be subscribed as a client, not a stream subscriber)
@@ -1560,6 +1672,7 @@ async def ws_handler(websocket: Any) -> None:
 # ──────────────────────────────────────────────
 # HTTP server (artwork + metadata.json)
 # ──────────────────────────────────────────────
+
 
 async def handle_artwork(request: web.Request) -> web.StreamResponse:
     """Serve artwork files from the artwork directory."""
@@ -1582,17 +1695,23 @@ async def handle_artwork(request: web.Request) -> web.StreamResponse:
 
     # Detect content type
     content_types = {
-        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-        ".png": "image/png", ".gif": "image/gif",
-        ".webp": "image/webp", ".svg": "image/svg+xml",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml",
     }
     content_type = content_types.get(ext, "application/octet-stream")
 
-    return web.FileResponse(filepath, headers={
-        "Content-Type": content_type,
-        "Cache-Control": "public, max-age=3600",
-        "Access-Control-Allow-Origin": "*",
-    })
+    return web.FileResponse(
+        filepath,
+        headers={
+            "Content-Type": content_type,
+            "Cache-Control": "public, max-age=3600",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
 
 
 async def handle_defaults(request: web.Request) -> web.StreamResponse:
@@ -1609,16 +1728,22 @@ async def handle_defaults(request: web.Request) -> web.StreamResponse:
 
     ext = filepath.suffix.lower()
     content_types = {
-        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-        ".gif": "image/gif", ".webp": "image/webp",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
     }
     content_type = content_types.get(ext, "application/octet-stream")
 
-    return web.FileResponse(filepath, headers={
-        "Content-Type": content_type,
-        "Cache-Control": "public, max-age=86400",
-        "Access-Control-Allow-Origin": "*",
-    })
+    return web.FileResponse(
+        filepath,
+        headers={
+            "Content-Type": content_type,
+            "Cache-Control": "public, max-age=86400",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
 
 
 async def handle_metadata(request: web.Request) -> web.Response:
@@ -1627,19 +1752,26 @@ async def handle_metadata(request: web.Request) -> web.Response:
 
     if _service and stream_id and stream_id in _service.streams:
         sm = _service.streams[stream_id]
-        output = _service._output_metadata(sm.current) if sm.current else {"playing": False}
+        output = (
+            _service._output_metadata(sm.current) if sm.current else {"playing": False}
+        )
     elif _service and _service.streams:
         # Default: first playing stream, or first stream
         playing = [s for s in _service.streams.values() if s.current.get("playing")]
         sm = playing[0] if playing else next(iter(_service.streams.values()))
-        output = _service._output_metadata(sm.current) if sm.current else {"playing": False}
+        output = (
+            _service._output_metadata(sm.current) if sm.current else {"playing": False}
+        )
     else:
         output = {"playing": False}
 
-    return web.json_response(output, headers={
-        "Access-Control-Allow-Origin": "*",
-        "Cache-Control": "no-cache",
-    })
+    return web.json_response(
+        output,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-cache",
+        },
+    )
 
 
 async def handle_health(request: web.Request) -> web.Response:
@@ -1657,6 +1789,7 @@ async def handle_health(request: web.Request) -> web.Response:
 # ──────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────
+
 
 async def main() -> None:
     global _service
@@ -1677,8 +1810,10 @@ async def main() -> None:
     logger.info(f"  External host: {EXTERNAL_HOST}")
     try:
         if ipaddress.ip_address(socket.gethostbyname(EXTERNAL_HOST)).is_loopback:
-            logger.warning("EXTERNAL_HOST resolves to loopback — "
-                           "set EXTERNAL_HOST explicitly if artwork fails on clients")
+            logger.warning(
+                "EXTERNAL_HOST resolves to loopback — "
+                "set EXTERNAL_HOST explicitly if artwork fails on clients"
+            )
     except (socket.gaierror, ValueError):
         pass
     logger.info(f"  MPD: {MPD_HOST}:{MPD_PORT}")
@@ -1687,7 +1822,7 @@ async def main() -> None:
     logger.info(f"  Artwork dir: {ARTWORK_DIR}")
 
     # Start WebSocket server
-    ws_server = await websockets.serve(ws_handler, "0.0.0.0", WS_PORT)
+    ws_server = await websockets.serve(ws_handler, "0.0.0.0", WS_PORT)  # noqa: F841 — prevents GC
     logger.info(f"WebSocket server listening on port {WS_PORT}")
 
     # Start HTTP server

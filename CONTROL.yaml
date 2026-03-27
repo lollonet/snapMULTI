@@ -28,15 +28,29 @@ quality:
       paths: ["scripts/**/*.sh"]
     python:
       tool: ruff
-      paths: ["docker/metadata-service/"]
+      paths: ["docker/metadata-service/", "scripts/meta_*.py", "tests/"]
+      exclude: ["patches/"]
     docker:
       tool: hadolint
+      config: .hadolint.yaml
       paths: ["Dockerfile.*"]
+
+  formatting:
+    python:
+      tool: ruff
+      paths: ["docker/metadata-service/", "scripts/meta_*.py", "tests/"]
+      exclude: ["patches/"]
 
   validation:
     - name: docker-compose-syntax
       command: "docker compose config --quiet"
     - name: shellcheck
       command: "shellcheck -S warning scripts/**/*.sh"
-    - name: python-compile
-      command: "python3 -m py_compile docker/metadata-service/metadata-service.py"
+    - name: ruff-check
+      command: "ruff check docker/metadata-service/ scripts/meta_*.py tests/"
+    - name: ruff-format
+      command: "ruff format --check docker/metadata-service/ scripts/meta_*.py tests/"
+    - name: hadolint
+      command: "hadolint --config .hadolint.yaml Dockerfile.*"
+    - name: pytest
+      command: "pytest tests/ -v --tb=short"

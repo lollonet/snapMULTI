@@ -1,0 +1,13 @@
+# Hadolint configuration for Dockerfile linting
+
+ignored:
+  # DL3008: We use Debian stable (bookworm) which provides stable package versions.
+  # Pinning individual apt packages makes Dockerfiles brittle and prevents security updates.
+  - DL3008
+  # DL3018: Same as DL3008 but for Alpine apk. We use stable Alpine releases.
+  - DL3018
+  # DL3013: pip installs in build containers. Pinning adds brittleness
+  # for no security benefit on these internal services.
+  - DL3013
+  # DL3003: "Use WORKDIR" — multi-stage builds legitimately cd in RUN
+  - DL3003

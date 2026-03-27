@@ -6,6 +6,7 @@
 #
 # ARM-only: tidal-connect binaries only work on ARM (Pi 3/4/5)
 
+# hadolint ignore=DL3007
 FROM edgecrush3r/tidal-connect:latest
 
 # Install ALSA plugins, TLS certs, and tmux from archived Debian Stretch repos

@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Pre-push hook - runs CI checks before pushing
+# Mirrors validate.yml gates for local/remote parity
+# Install: ln -sf ../../scripts/git-hooks/pre-push .git/hooks/pre-push
+# Bypass with: git push --no-verify
+
+set -euo pipefail
+
+echo "Running pre-push CI checks..."
+echo ""
+
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+FAILED=0
+
+run_check() {
+    local name="$1"
+    local cmd="$2"
+
+    printf "${YELLOW}> ${name}${NC}\n"
+    local output
+    if output=$(eval "$cmd" 2>&1); then
+        printf "${GREEN}  passed${NC}\n"
+    else
+        printf "${RED}  FAILED${NC}\n"
+        printf "%s\n" "$output"
+        FAILED=$((FAILED + 1))
+    fi
+}
+
+# Docker compose syntax
+if command -v docker &> /dev/null && [ -f .env ]; then
+    run_check "Docker compose syntax" "docker compose config --quiet"
+fi
+
+# Shellcheck
+if command -v shellcheck &> /dev/null; then
+    run_check "Shellcheck (scripts)" "shellcheck -x -S warning scripts/*.sh scripts/**/*.sh"
+else
+    printf "${YELLOW}  shellcheck not installed - skipping${NC}\n"
+fi
+
+# Hadolint
+if command -v hadolint &> /dev/null; then
+    for f in Dockerfile.*; do
+        [ -f "$f" ] || continue
+        run_check "Hadolint ($f)" "hadolint --config .hadolint.yaml --failure-threshold warning $f"
+    done
+else
+    printf "${YELLOW}  hadolint not installed - skipping${NC}\n"
+fi
+
+# Ruff
+if command -v ruff &> /dev/null; then
+    run_check "Ruff check" "ruff check docker/metadata-service/ scripts/meta_*.py tests/"
+    run_check "Ruff format" "ruff format --check docker/metadata-service/ scripts/meta_*.py tests/"
+else
+    printf "${YELLOW}  ruff not installed - skipping${NC}\n"
+fi
+
+# Python tests
+if command -v pytest &> /dev/null; then
+    run_check "Python tests" "pytest tests/ -q --tb=short"
+else
+    printf "${YELLOW}  pytest not installed - skipping${NC}\n"
+fi
+
+echo ""
+if [ $FAILED -eq 0 ]; then
+    printf "${GREEN}All checks passed! Pushing...${NC}\n"
+    exit 0
+else
+    printf "${RED}${FAILED} check(s) failed!${NC}\n"
+    echo ""
+    echo "Fix the issues or bypass with: git push --no-verify"
+    exit 1
+fi
