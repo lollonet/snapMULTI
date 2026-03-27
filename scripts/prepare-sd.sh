@@ -559,7 +559,7 @@ fi
 echo ""
 echo "--- User ---"
 if [[ -f "$BOOT/user-data" ]]; then
-    USERNAME=$(sed -n 's/^.*name: *\([a-z][a-z0-9_-]*\).*/\1/p' "$BOOT/user-data" 2>/dev/null | head -1)
+    USERNAME=$(sed -n 's/^.*- name: *\([a-z][a-z0-9_-]*\).*/\1/p' "$BOOT/user-data" 2>/dev/null | head -1)
     if [[ -n "$USERNAME" ]]; then
         echo "  [OK] User: $USERNAME"
     else
