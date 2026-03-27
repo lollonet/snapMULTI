@@ -24,12 +24,10 @@ run_check() {
     local output
     if output=$(eval "$cmd" 2>&1); then
         printf "${GREEN}  passed${NC}\n"
-        return 0
     else
         printf "${RED}  FAILED${NC}\n"
         printf "%s\n" "$output"
         FAILED=$((FAILED + 1))
-        return 1
     fi
 }
 
