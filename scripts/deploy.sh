@@ -438,6 +438,15 @@ install_dependencies() {
     command -v dstat >/dev/null 2>&1 || mon_pkgs+=(dstat)
     if [[ ${#mon_pkgs[@]} -gt 0 ]]; then
         info "Installing monitoring tools: ${mon_pkgs[*]}..."
+        # Wait for apt lock — firstboot may still be upgrading packages
+        local _apt_wait
+        for _apt_wait in $(seq 1 60); do
+            fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+            sleep 5
+        done
+        if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
+            warn "apt lock still held after 5 minutes — proceeding anyway"
+        fi
         apt-get install -y -qq "${mon_pkgs[@]}" >/dev/null
         # Enable sysstat data collection (sar)
         if [[ -f /etc/default/sysstat ]]; then
@@ -497,6 +506,34 @@ QEOF
         else
             warn "Network QoS: CAKE kernel module not available, skipped"
         fi
+    fi
+
+    # Install boot-time tuning service (survives overlayroot reboots)
+    # The individual tune_* functions and CAKE setup above apply settings NOW,
+    # but cpufrequtils/networkd-dispatcher are not installed — nobody reads
+    # the /etc persistence files at boot. This oneshot service re-applies
+    # all runtime settings directly via /sys and tc/iptables.
+    local boot_tune="$SCRIPT_DIR/boot-tune.sh"
+    if [[ -f "$boot_tune" ]]; then
+        cp "$boot_tune" /usr/local/bin/snapmulti-boot-tune.sh
+        chmod +x /usr/local/bin/snapmulti-boot-tune.sh
+        cat > /etc/systemd/system/snapmulti-boot-tune.service <<'SEOF'
+[Unit]
+Description=snapMULTI boot-time system tuning
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/snapmulti-boot-tune.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+SEOF
+        systemctl daemon-reload
+        systemctl enable snapmulti-boot-tune.service 2>/dev/null
+        ok "Boot tuning service installed (CPU, USB, CAKE persist across reboots)"
     fi
 
     ok "System dependencies ready"

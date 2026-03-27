@@ -416,11 +416,17 @@ start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(
 
 # Wait for any background apt (unattended-upgrades, cloud-init) to finish.
 # First boot often triggers apt-daily.service concurrently.
+wait_for_apt_lock() {
+    local _apt_wait
+    for _apt_wait in $(seq 1 60); do
+        fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || return 0
+        sleep 5
+    done
+    log_and_tty "WARNING: apt lock still held after 5 minutes — proceeding anyway"
+}
+
 log_progress "Waiting for apt lock..." 2>/dev/null || true
-for _apt_wait in $(seq 1 60); do
-    fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
-    sleep 5
-done
+wait_for_apt_lock
 
 log_progress "apt-get update" 2>/dev/null || true
 apt-get update -qq
@@ -508,6 +514,7 @@ if [[ "$INSTALL_TYPE" == "both" ]]; then
     current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "none")
     if [[ "$current_driver" != "fuse-overlayfs" ]]; then
         log_progress "Switching Docker to fuse-overlayfs (read-only FS support)..." 2>/dev/null || true
+        wait_for_apt_lock
         if apt-get install -y fuse-overlayfs >> "$LOG" 2>&1; then
             tune_docker_daemon --fuse-overlayfs
             systemctl stop docker
