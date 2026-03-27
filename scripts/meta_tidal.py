@@ -52,8 +52,13 @@ def log(level: str, msg: str) -> None:
     sys.stderr.write(f"[{level.upper()}] meta_tidal: {msg}\n")
     sys.stderr.flush()
     with _lock:
-        send({"jsonrpc": "2.0", "method": "Plugin.Stream.Log",
-              "params": {"severity": level, "message": f"meta_tidal: {msg}"}})
+        send(
+            {
+                "jsonrpc": "2.0",
+                "method": "Plugin.Stream.Log",
+                "params": {"severity": level, "message": f"meta_tidal: {msg}"},
+            }
+        )
 
 
 def send_properties() -> None:
@@ -82,10 +87,17 @@ def send_properties() -> None:
     if params:
         artist = props.get("artist", ["?"])
         artist_str = artist[0] if isinstance(artist, list) and artist else "?"
-        sys.stderr.write(f"[INFO] meta_tidal: {playback_status}: {artist_str} - {props.get('title', '?')}\n")
+        sys.stderr.write(
+            f"[INFO] meta_tidal: {playback_status}: {artist_str} - {props.get('title', '?')}\n"
+        )
         sys.stderr.flush()
-        send({"jsonrpc": "2.0", "method": "Plugin.Stream.Player.Properties",
-              "params": params})
+        send(
+            {
+                "jsonrpc": "2.0",
+                "method": "Plugin.Stream.Player.Properties",
+                "params": params,
+            }
+        )
 
 
 def apply_metadata(data: dict) -> bool:
@@ -208,19 +220,32 @@ def handle_stdin_line(line: str) -> None:
             if method == "Plugin.Stream.GetMetadata":
                 send({"jsonrpc": "2.0", "id": rid, "result": _filtered_metadata()})
             elif method == "Plugin.Stream.GetProperties":
-                send({"jsonrpc": "2.0", "id": rid, "result": {
-                    "playbackStatus": playback_status,
-                    "canControl": False,
-                    "canGoNext": False,
-                    "canGoPrevious": False,
-                    "canPause": False,
-                    "canPlay": False,
-                    "canSeek": False,
-                }})
+                send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": rid,
+                        "result": {
+                            "playbackStatus": playback_status,
+                            "canControl": False,
+                            "canGoNext": False,
+                            "canGoPrevious": False,
+                            "canPause": False,
+                            "canPlay": False,
+                            "canSeek": False,
+                        },
+                    }
+                )
             elif method == "Plugin.Stream.Player.Control":
-                send({"jsonrpc": "2.0", "id": rid, "error": {
-                    "code": -32601,
-                    "message": "Tidal Connect does not support remote control"}})
+                send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": rid,
+                        "error": {
+                            "code": -32601,
+                            "message": "Tidal Connect does not support remote control",
+                        },
+                    }
+                )
             else:
                 send({"jsonrpc": "2.0", "id": rid, "result": "ok"})
     except json.JSONDecodeError:
@@ -289,5 +314,6 @@ if __name__ == "__main__":
     except Exception as e:
         log("error", f"Fatal error: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)

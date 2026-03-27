@@ -22,8 +22,13 @@ METADATA_PIPE = os.environ.get("METADATA_PIPE", "/audio/shairport-metadata")
 COVER_ART_PORT = int(os.environ.get("COVER_ART_PORT", "5858"))
 
 metadata: dict[str, str | list[str] | float] = {
-    "artist": [], "album": "", "title": "", "artUrl": "", "duration": 0.0,
-    "genre": [], "composer": [],
+    "artist": [],
+    "album": "",
+    "title": "",
+    "artUrl": "",
+    "duration": 0.0,
+    "genre": [],
+    "composer": [],
 }
 cover_art_path = "/tmp/cover.jpg"
 
@@ -40,8 +45,13 @@ def log(level: str, msg: str) -> None:
     """Log to stderr and send to snapserver."""
     sys.stderr.write(f"[{level.upper()}] meta_shairport: {msg}\n")
     sys.stderr.flush()
-    send({"jsonrpc": "2.0", "method": "Plugin.Stream.Log",
-          "params": {"severity": level, "message": f"meta_shairport: {msg}"}})
+    send(
+        {
+            "jsonrpc": "2.0",
+            "method": "Plugin.Stream.Log",
+            "params": {"severity": level, "message": f"meta_shairport: {msg}"},
+        }
+    )
 
 
 def send_metadata() -> None:
@@ -66,8 +76,13 @@ def send_metadata() -> None:
         artist_str = artist[0] if isinstance(artist, list) and artist else "?"
         log("info", f"Metadata: {artist_str} - {props.get('title', '?')}")
         # Use Plugin.Stream.Player.Properties with metadata key (same as meta_mpd.py)
-        send({"jsonrpc": "2.0", "method": "Plugin.Stream.Player.Properties",
-              "params": {"metadata": props}})
+        send(
+            {
+                "jsonrpc": "2.0",
+                "method": "Plugin.Stream.Player.Properties",
+                "params": {"metadata": props},
+            }
+        )
 
 
 def hex_to_str(h: str) -> str:
@@ -182,9 +197,20 @@ def handle_stdin_line(line: str) -> None:
         if method == "Plugin.Stream.GetMetadata":
             send({"jsonrpc": "2.0", "id": rid, "result": metadata})
         elif method == "Plugin.Stream.GetProperties":
-            send({"jsonrpc": "2.0", "id": rid, "result": {
-                "canControl": False, "canGoNext": False, "canGoPrevious": False,
-                "canPause": False, "canPlay": False, "canSeek": False}})
+            send(
+                {
+                    "jsonrpc": "2.0",
+                    "id": rid,
+                    "result": {
+                        "canControl": False,
+                        "canGoNext": False,
+                        "canGoPrevious": False,
+                        "canPause": False,
+                        "canPlay": False,
+                        "canSeek": False,
+                    },
+                }
+            )
         else:
             send({"jsonrpc": "2.0", "id": rid, "result": "ok"})
     except json.JSONDecodeError:
@@ -249,13 +275,14 @@ def main() -> None:
     # Buffers with safety caps to prevent unbounded growth
     stdin_buffer = ""
     pipe_buffer = b""
-    MAX_STDIN_BUFFER = 65536    # 64 KB — snapserver sends small JSON-RPC messages
+    MAX_STDIN_BUFFER = 65536  # 64 KB — snapserver sends small JSON-RPC messages
     MAX_PIPE_BUFFER = 10485760  # 10 MB — high-res ALAC embedded art can exceed 1 MB
     pipe_fd: int | None = None
     last_pipe_check = 0.0
 
     # Make stdin non-blocking
     import fcntl
+
     flags = fcntl.fcntl(sys.stdin.fileno(), fcntl.F_GETFL)
     fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
@@ -284,7 +311,9 @@ def main() -> None:
 
         for fd in readable:
             # Handle stdin
-            if fd == sys.stdin or (hasattr(fd, "fileno") and fd.fileno() == sys.stdin.fileno()):
+            if fd == sys.stdin or (
+                hasattr(fd, "fileno") and fd.fileno() == sys.stdin.fileno()
+            ):
                 try:
                     chunk = sys.stdin.read(4096)
                     if not chunk:
@@ -357,5 +386,6 @@ if __name__ == "__main__":
     except Exception as e:
         log("error", f"Fatal error: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)

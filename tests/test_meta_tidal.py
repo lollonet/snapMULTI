@@ -12,6 +12,7 @@ import meta_tidal
 # apply_metadata
 # ---------------------------------------------------------------------------
 
+
 class TestApplyMetadata:
     """Tests for apply_metadata() — pure logic, highest value."""
 
@@ -66,7 +67,9 @@ class TestApplyMetadata:
         assert meta_tidal.playback_status == "unknown"
 
     def test_empty_strings_no_change(self):
-        assert meta_tidal.apply_metadata({"title": "", "artist": "", "album": ""}) is False
+        assert (
+            meta_tidal.apply_metadata({"title": "", "artist": "", "album": ""}) is False
+        )
 
     def test_idempotent(self):
         data = {"title": "Song", "artist": "Band", "state": "PLAYING"}
@@ -95,6 +98,7 @@ class TestApplyMetadata:
 # _filtered_metadata
 # ---------------------------------------------------------------------------
 
+
 class TestFilteredMetadata:
     """Tests for _filtered_metadata() — removes empty/zero values."""
 
@@ -106,13 +110,15 @@ class TestFilteredMetadata:
         assert meta_tidal._filtered_metadata() == {"title": "Hello"}
 
     def test_all_populated(self):
-        meta_tidal.metadata.update({
-            "title": "Track",
-            "artist": ["Band"],
-            "album": "Album",
-            "artUrl": "http://example.com/art.jpg",
-            "duration": 180.0,
-        })
+        meta_tidal.metadata.update(
+            {
+                "title": "Track",
+                "artist": ["Band"],
+                "album": "Album",
+                "artUrl": "http://example.com/art.jpg",
+                "duration": 180.0,
+            }
+        )
         result = meta_tidal._filtered_metadata()
         assert result == {
             "title": "Track",
@@ -127,13 +133,16 @@ class TestFilteredMetadata:
 # handle_stdin_line
 # ---------------------------------------------------------------------------
 
+
 class TestHandleStdinLine:
     """Tests for handle_stdin_line() — JSON-RPC request dispatcher."""
 
     def test_get_metadata(self, capture_stdout):
         meta_tidal.metadata["title"] = "Test"
         meta_tidal.handle_stdin_line(
-            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "Plugin.Stream.GetMetadata"})
+            json.dumps(
+                {"jsonrpc": "2.0", "id": 1, "method": "Plugin.Stream.GetMetadata"}
+            )
         )
         assert len(capture_stdout) == 1
         assert capture_stdout[0]["id"] == 1
@@ -142,7 +151,9 @@ class TestHandleStdinLine:
     def test_get_properties(self, capture_stdout):
         meta_tidal.playback_status = "playing"
         meta_tidal.handle_stdin_line(
-            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "Plugin.Stream.GetProperties"})
+            json.dumps(
+                {"jsonrpc": "2.0", "id": 2, "method": "Plugin.Stream.GetProperties"}
+            )
         )
         assert len(capture_stdout) == 1
         result = capture_stdout[0]["result"]
@@ -153,14 +164,18 @@ class TestHandleStdinLine:
 
     def test_player_control_returns_error(self, capture_stdout):
         meta_tidal.handle_stdin_line(
-            json.dumps({"jsonrpc": "2.0", "id": 3, "method": "Plugin.Stream.Player.Control"})
+            json.dumps(
+                {"jsonrpc": "2.0", "id": 3, "method": "Plugin.Stream.Player.Control"}
+            )
         )
         assert len(capture_stdout) == 1
         assert capture_stdout[0]["error"]["code"] == -32601
 
     def test_unknown_method_returns_ok(self, capture_stdout):
         meta_tidal.handle_stdin_line(
-            json.dumps({"jsonrpc": "2.0", "id": 4, "method": "Plugin.Stream.SomethingNew"})
+            json.dumps(
+                {"jsonrpc": "2.0", "id": 4, "method": "Plugin.Stream.SomethingNew"}
+            )
         )
         assert len(capture_stdout) == 1
         assert capture_stdout[0]["result"] == "ok"
@@ -180,6 +195,7 @@ class TestHandleStdinLine:
 # ---------------------------------------------------------------------------
 # send_properties
 # ---------------------------------------------------------------------------
+
 
 class TestSendProperties:
     """Tests for send_properties() — sends metadata + playback status."""
@@ -214,18 +230,23 @@ class TestSendProperties:
 # file_watch_thread
 # ---------------------------------------------------------------------------
 
+
 class TestFileWatchThread:
     """Tests for file_watch_thread() — file polling loop."""
 
     def test_file_with_valid_json(self, tmp_path, capture_stdout, monkeypatch):
         meta_file = tmp_path / "tidal-metadata.json"
-        meta_file.write_text(json.dumps({
-            "state": "PLAYING",
-            "title": "Hello",
-            "artist": "World",
-            "album": "Earth",
-            "duration": 200,
-        }))
+        meta_file.write_text(
+            json.dumps(
+                {
+                    "state": "PLAYING",
+                    "title": "Hello",
+                    "artist": "World",
+                    "album": "Earth",
+                    "duration": 200,
+                }
+            )
+        )
 
         monkeypatch.setattr(meta_tidal, "METADATA_FILE", str(meta_file))
 
@@ -246,11 +267,17 @@ class TestFileWatchThread:
         assert meta_tidal.metadata["title"] == "Hello"
         assert meta_tidal.playback_status == "playing"
         # Should have sent properties
-        props_msgs = [m for m in capture_stdout if m.get("method") == "Plugin.Stream.Player.Properties"]
+        props_msgs = [
+            m
+            for m in capture_stdout
+            if m.get("method") == "Plugin.Stream.Player.Properties"
+        ]
         assert len(props_msgs) == 1
 
     def test_file_not_found_backs_off(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(meta_tidal, "METADATA_FILE", str(tmp_path / "nonexistent.json"))
+        monkeypatch.setattr(
+            meta_tidal, "METADATA_FILE", str(tmp_path / "nonexistent.json")
+        )
 
         delays: list[float] = []
         call_count = 0
@@ -294,11 +321,17 @@ class TestFileWatchThread:
         # No crash, metadata unchanged
         assert meta_tidal.metadata["title"] == ""
         # Only the log message, no properties sent
-        props_msgs = [m for m in capture_stdout if m.get("method") == "Plugin.Stream.Player.Properties"]
+        props_msgs = [
+            m
+            for m in capture_stdout
+            if m.get("method") == "Plugin.Stream.Player.Properties"
+        ]
         assert len(props_msgs) == 0
 
     @pytest.mark.parametrize("content", ["null", "[]", '"string"', "42"])
-    def test_non_dict_json_continues(self, tmp_path, capture_stdout, monkeypatch, content):
+    def test_non_dict_json_continues(
+        self, tmp_path, capture_stdout, monkeypatch, content
+    ):
         """Non-object JSON (null, array, string, number) must not crash the thread."""
         meta_file = tmp_path / "tidal-metadata.json"
         meta_file.write_text(content)
