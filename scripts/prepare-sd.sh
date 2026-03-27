@@ -214,6 +214,7 @@ copy_server_files() {
     mkdir -p "$dest"
 
     cp "$SCRIPT_DIR/deploy.sh" "$dest/"
+    cp "$SCRIPT_DIR/boot-tune.sh" "$dest/" 2>/dev/null || true
     cp "$SCRIPT_DIR/status.sh" "$dest/" 2>/dev/null || true
     cp -r "$PROJECT_DIR/config" "$dest/"
     cp "$PROJECT_DIR/docker-compose.yml" "$dest/"

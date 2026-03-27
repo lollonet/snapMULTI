@@ -238,6 +238,10 @@ function Copy-ServerFiles {
     New-Item -ItemType Directory -Path $serverDest -Force | Out-Null
 
     Copy-Item (Join-Path $ScriptDir 'deploy.sh') -Destination $serverDest
+    $bootTuneSh = Join-Path $ScriptDir 'boot-tune.sh'
+    if (Test-Path $bootTuneSh) {
+        Copy-Item $bootTuneSh -Destination $serverDest
+    }
     $statusSh = Join-Path $ScriptDir 'status.sh'
     if (Test-Path $statusSh) {
         Copy-Item $statusSh -Destination $serverDest
