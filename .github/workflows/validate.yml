@@ -68,7 +68,7 @@ jobs:
       - name: Install hadolint
         run: |
           HL_VERSION="v2.12.0"
-          curl -Lso /tmp/hadolint \
+          curl -fLso /tmp/hadolint \
             "https://github.com/hadolint/hadolint/releases/download/${HL_VERSION}/hadolint-Linux-x86_64"
           sudo install /tmp/hadolint /usr/local/bin/
           rm -f /tmp/hadolint
