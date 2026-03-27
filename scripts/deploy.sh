@@ -504,6 +504,34 @@ QEOF
         fi
     fi
 
+    # Install boot-time tuning service (survives overlayroot reboots)
+    # The individual tune_* functions and CAKE setup above apply settings NOW,
+    # but cpufrequtils/networkd-dispatcher are not installed — nobody reads
+    # the /etc persistence files at boot. This oneshot service re-applies
+    # all runtime settings directly via /sys and tc/iptables.
+    local boot_tune="$SCRIPT_DIR/boot-tune.sh"
+    if [[ -f "$boot_tune" ]]; then
+        cp "$boot_tune" /usr/local/bin/snapmulti-boot-tune.sh
+        chmod +x /usr/local/bin/snapmulti-boot-tune.sh
+        cat > /etc/systemd/system/snapmulti-boot-tune.service <<'SEOF'
+[Unit]
+Description=snapMULTI boot-time system tuning
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/snapmulti-boot-tune.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+SEOF
+        systemctl daemon-reload
+        systemctl enable snapmulti-boot-tune.service 2>/dev/null
+        ok "Boot tuning service installed (CPU, USB, CAKE persist across reboots)"
+    fi
+
     ok "System dependencies ready"
 }
 
