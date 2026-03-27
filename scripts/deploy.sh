@@ -439,10 +439,14 @@ install_dependencies() {
     if [[ ${#mon_pkgs[@]} -gt 0 ]]; then
         info "Installing monitoring tools: ${mon_pkgs[*]}..."
         # Wait for apt lock — firstboot may still be upgrading packages
+        local _apt_wait
         for _apt_wait in $(seq 1 60); do
             fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
             sleep 5
         done
+        if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
+            warn "apt lock still held after 5 minutes — proceeding anyway"
+        fi
         apt-get install -y -qq "${mon_pkgs[@]}" >/dev/null
         # Enable sysstat data collection (sar)
         if [[ -f /etc/default/sysstat ]]; then

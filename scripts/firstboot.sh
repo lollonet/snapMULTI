@@ -417,10 +417,12 @@ start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(
 # Wait for any background apt (unattended-upgrades, cloud-init) to finish.
 # First boot often triggers apt-daily.service concurrently.
 wait_for_apt_lock() {
+    local _apt_wait
     for _apt_wait in $(seq 1 60); do
         fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || return 0
         sleep 5
     done
+    log_and_tty "WARNING: apt lock still held after 5 minutes — proceeding anyway"
 }
 
 log_progress "Waiting for apt lock..." 2>/dev/null || true
