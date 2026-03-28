@@ -85,6 +85,13 @@ if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     SMB_PASS=$(grep -m1 '^SMB_PASS=' "$SNAP_BOOT/install.conf" | cut -d= -f2-)
 fi
 
+# Read-only filesystem setting (default: true for all modes)
+ENABLE_READONLY="true"
+if [[ -f "$SNAP_BOOT/install.conf" ]]; then
+    local_readonly=$(grep -m1 '^ENABLE_READONLY=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
+    [[ -n "$local_readonly" ]] && ENABLE_READONLY="$local_readonly"
+fi
+
 # Set install directories
 SERVER_DIR="/opt/snapmulti"
 CLIENT_DIR="/opt/snapclient"
@@ -817,6 +824,30 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     else
         log_and_tty "WARNING: snapclient container not running."
     fi
+fi
+
+# ══════════════════════════════════════════════════════════════════
+# Read-only filesystem (all modes, if enabled)
+# ══════════════════════════════════════════════════════════════════
+if [[ "${ENABLE_READONLY}" == "true" ]]; then
+    log_progress "Configuring read-only filesystem..." 2>/dev/null || true
+
+    # Find ro-mode helper script (server or client path)
+    RO_MODE_SCRIPT=""
+    if [[ -f "$SERVER_DIR/scripts/ro-mode.sh" ]]; then
+        RO_MODE_SCRIPT="$SERVER_DIR/scripts/ro-mode.sh"
+    elif [[ -f "$CLIENT_DIR/scripts/ro-mode.sh" ]]; then
+        RO_MODE_SCRIPT="$CLIENT_DIR/scripts/ro-mode.sh"
+    elif [[ -f "$SNAP_BOOT/server/ro-mode.sh" ]]; then
+        RO_MODE_SCRIPT="$SNAP_BOOT/server/ro-mode.sh"
+    elif [[ -f "$SNAP_BOOT/common/ro-mode.sh" ]]; then
+        RO_MODE_SCRIPT="$SNAP_BOOT/common/ro-mode.sh"
+    fi
+
+    setup_readonly_fs "$RO_MODE_SCRIPT"
+    log_progress "Read-only filesystem configured" 2>/dev/null || true
+else
+    log_progress "Read-only filesystem: skipped (ENABLE_READONLY=false)" 2>/dev/null || true
 fi
 
 # ══════════════════════════════════════════════════════════════════
