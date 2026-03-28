@@ -354,6 +354,23 @@ if [[ "$NETWORK_READY" == "false" ]]; then
     exit 1
 fi
 
+# ── Wait for NTP time sync before apt operations ─────────────────
+# Pi has no hardware RTC — clock starts at image build date.
+# apt signature verification (sqv) rejects repos with "Not live until"
+# timestamps in the future relative to the Pi's stale clock.
+log_progress "Waiting for time sync..." 2>/dev/null || true
+timedatectl set-ntp true 2>/dev/null || true
+for _ntp_wait in $(seq 1 30); do
+    if timedatectl show --property=NTPSynchronized --value 2>/dev/null | grep -q yes; then
+        log_progress "Clock synchronized" 2>/dev/null || true
+        break
+    fi
+    sleep 2
+done
+if ! timedatectl show --property=NTPSynchronized --value 2>/dev/null | grep -q yes; then
+    log_and_tty "WARNING: NTP sync not confirmed after 60s — apt signatures may fail"
+fi
+
 # ══════════════════════════════════════════════════════════════════
 # STEP 2: Copy files
 # ══════════════════════════════════════════════════════════════════
@@ -436,7 +453,9 @@ apt-get update -qq
 # Runs before overlayroot — changes persist in the base layer.
 # The reboot at the end of firstboot activates any new kernel.
 log_progress "Upgrading system packages..." 2>/dev/null || true
-apt-get upgrade -y -qq 2>&1 | tail -3
+if ! apt-get upgrade -y -qq >> "$LOG" 2>&1; then
+    log_and_tty "WARNING: apt upgrade failed (non-fatal, continuing with existing packages)"
+fi
 
 # Core dependencies (always needed)
 PKGS=(curl ca-certificates)
@@ -533,7 +552,8 @@ if [[ "$INSTALL_TYPE" == "both" ]]; then
                 log_and_tty "         Read-only mode may not work correctly."
             fi
         else
-            log_and_tty "ERROR: Failed to install fuse-overlayfs — cannot switch storage driver."
+            log_and_tty "ERROR: Failed to install fuse-overlayfs — required for both mode."
+            exit 1
         fi
     fi
 fi
