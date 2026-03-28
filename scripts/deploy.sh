@@ -572,8 +572,8 @@ install_docker() {
         info "Added $real_user to docker group (re-login to take effect)"
     fi
 
-    # Docker daemon config (live-restore + log rotation)
-    tune_docker_daemon --live-restore
+    # Docker daemon config (live-restore + fuse-overlayfs for read-only FS)
+    tune_docker_daemon --live-restore --fuse-overlayfs
 
     # Enable and start Docker
     systemctl enable docker >/dev/null 2>&1 || true

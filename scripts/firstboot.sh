@@ -505,8 +505,8 @@ if ! command -v docker &>/dev/null; then
     log_progress "Installing docker-ce..." 2>/dev/null || true
     install_docker_apt
 
-    # Docker daemon config: live-restore only at this point.
-    # fuse-overlayfs is added AFTER the package is installed (below).
+    # Docker daemon config: live-restore now, fuse-overlayfs added below
+    # after the package is installed.
     tune_docker_daemon --live-restore
 
     systemctl enable docker
@@ -528,9 +528,9 @@ if ! docker info &>/dev/null; then
     exit 1
 fi
 
-# In "both" mode, fuse-overlayfs was configured in daemon.json above.
-# Now ensure the storage driver is active (requires Docker restart + data wipe).
-if [[ "$INSTALL_TYPE" == "both" ]]; then
+# All modes use fuse-overlayfs — required for read-only filesystem support.
+# Install the package and switch Docker's storage driver.
+{
     current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "none")
     if [[ "$current_driver" != "fuse-overlayfs" ]]; then
         log_progress "Switching Docker to fuse-overlayfs (read-only FS support)..." 2>/dev/null || true
@@ -552,11 +552,11 @@ if [[ "$INSTALL_TYPE" == "both" ]]; then
                 log_and_tty "         Read-only mode may not work correctly."
             fi
         else
-            log_and_tty "ERROR: Failed to install fuse-overlayfs — required for both mode."
+            log_and_tty "ERROR: Failed to install fuse-overlayfs — required for read-only mode."
             exit 1
         fi
     fi
-fi
+}
 
 # ══════════════════════════════════════════════════════════════════
 # Music source setup (runs inside deploy step — no extra progress step)
