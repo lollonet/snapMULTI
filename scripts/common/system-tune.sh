@@ -196,10 +196,13 @@ tune_avahi_daemon() {
     local conf="/etc/avahi/avahi-daemon.conf"
     [[ -f "$conf" ]] || return 0
 
+    local avahi_changed=false
+
     # Pin hostname to prevent avahi from appending -2, -3, etc.
     if grep -q '^\[server\]' "$conf"; then
         if ! grep -q "^host-name=" "$conf"; then
             sed -i "/^\[server\]/a host-name=${hostname}" "$conf"
+            avahi_changed=true
         fi
     fi
 
@@ -211,15 +214,22 @@ tune_avahi_daemon() {
         ifaces="${ifaces}${iface}"
     done
     if [[ -n "$ifaces" ]]; then
-        if grep -q '^allow-interfaces=' "$conf"; then
-            sed -i "s/^allow-interfaces=.*/allow-interfaces=${ifaces}/" "$conf"
-        elif grep -q '^\[server\]' "$conf"; then
-            sed -i "/^\[server\]/a allow-interfaces=${ifaces}" "$conf"
+        if ! grep -q "^allow-interfaces=${ifaces}$" "$conf"; then
+            if grep -q '^allow-interfaces=' "$conf"; then
+                sed -i "s/^allow-interfaces=.*/allow-interfaces=${ifaces}/" "$conf"
+            elif grep -q '^\[server\]' "$conf"; then
+                sed -i "/^\[server\]/a allow-interfaces=${ifaces}" "$conf"
+            fi
+            avahi_changed=true
         fi
     fi
 
-    systemctl restart avahi-daemon 2>/dev/null || true
-    ok "Avahi hardened: host-name=${hostname}, interfaces=${ifaces:-all}"
+    if [[ "$avahi_changed" == "true" ]]; then
+        systemctl restart avahi-daemon 2>/dev/null || true
+        ok "Avahi hardened: host-name=${hostname}, interfaces=${ifaces:-all}"
+    else
+        ok "Avahi already configured"
+    fi
 }
 
 # ── Read-only filesystem (overlayroot) ──────────────────────────
