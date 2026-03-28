@@ -108,7 +108,7 @@ WEOF
 #   tune_docker_daemon                        # log rotation only
 #   tune_docker_daemon --live-restore         # + live-restore
 #   tune_docker_daemon --fuse-overlayfs       # + fuse-overlayfs storage driver
-#   tune_docker_daemon --live-restore --fuse-overlayfs  # both (for "both" mode)
+#   tune_docker_daemon --live-restore --fuse-overlayfs  # all modes (read-only FS support)
 #
 # Uses Python JSON merge to safely update existing configs.
 # Returns 0 on success, 1 on failure.

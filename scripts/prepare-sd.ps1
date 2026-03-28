@@ -289,6 +289,12 @@ function Copy-ClientFiles {
     New-Item -ItemType Directory -Path $scriptsDest -Force | Out-Null
     Copy-Item (Join-Path $ClientDir 'common\scripts\setup.sh') -Destination $scriptsDest
 
+    # boot-tune.sh is a server script but client also needs it for boot-time tuning
+    $bootTune = Join-Path $ScriptDir 'boot-tune.sh'
+    if (Test-Path $bootTune) {
+        Copy-Item $bootTune -Destination $scriptsDest
+    }
+
     $roMode = Join-Path $ClientDir 'common\scripts\ro-mode.sh'
     if (Test-Path $roMode) {
         Copy-Item $roMode -Destination $scriptsDest

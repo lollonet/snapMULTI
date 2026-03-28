@@ -354,6 +354,23 @@ if [[ "$NETWORK_READY" == "false" ]]; then
     exit 1
 fi
 
+# ── Wait for NTP time sync before apt operations ─────────────────
+# Pi has no hardware RTC — clock starts at image build date.
+# apt signature verification (sqv) rejects repos with "Not live until"
+# timestamps in the future relative to the Pi's stale clock.
+log_progress "Waiting for time sync..." 2>/dev/null || true
+timedatectl set-ntp true 2>/dev/null || true
+for _ntp_wait in $(seq 1 30); do
+    if timedatectl show --property=NTPSynchronized --value 2>/dev/null | grep -q yes; then
+        log_progress "Clock synchronized" 2>/dev/null || true
+        break
+    fi
+    sleep 2
+done
+if ! timedatectl show --property=NTPSynchronized --value 2>/dev/null | grep -q yes; then
+    log_and_tty "WARNING: NTP sync not confirmed after 60s — apt signatures may fail"
+fi
+
 # ══════════════════════════════════════════════════════════════════
 # STEP 2: Copy files
 # ══════════════════════════════════════════════════════════════════
@@ -436,7 +453,9 @@ apt-get update -qq
 # Runs before overlayroot — changes persist in the base layer.
 # The reboot at the end of firstboot activates any new kernel.
 log_progress "Upgrading system packages..." 2>/dev/null || true
-apt-get upgrade -y -qq 2>&1 | tail -3
+if ! apt-get upgrade -y -qq >> "$LOG" 2>&1; then
+    log_and_tty "WARNING: apt upgrade failed (non-fatal, continuing with existing packages)"
+fi
 
 # Core dependencies (always needed)
 PKGS=(curl ca-certificates)
@@ -486,8 +505,8 @@ if ! command -v docker &>/dev/null; then
     log_progress "Installing docker-ce..." 2>/dev/null || true
     install_docker_apt
 
-    # Docker daemon config: live-restore only at this point.
-    # fuse-overlayfs is added AFTER the package is installed (below).
+    # Docker daemon config: live-restore now, fuse-overlayfs added below
+    # after the package is installed.
     tune_docker_daemon --live-restore
 
     systemctl enable docker
@@ -509,9 +528,9 @@ if ! docker info &>/dev/null; then
     exit 1
 fi
 
-# In "both" mode, fuse-overlayfs was configured in daemon.json above.
-# Now ensure the storage driver is active (requires Docker restart + data wipe).
-if [[ "$INSTALL_TYPE" == "both" ]]; then
+# All modes use fuse-overlayfs — required for read-only filesystem support.
+# Install the package and switch Docker's storage driver.
+{
     current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "none")
     if [[ "$current_driver" != "fuse-overlayfs" ]]; then
         log_progress "Switching Docker to fuse-overlayfs (read-only FS support)..." 2>/dev/null || true
@@ -533,10 +552,11 @@ if [[ "$INSTALL_TYPE" == "both" ]]; then
                 log_and_tty "         Read-only mode may not work correctly."
             fi
         else
-            log_and_tty "ERROR: Failed to install fuse-overlayfs — cannot switch storage driver."
+            log_and_tty "ERROR: Failed to install fuse-overlayfs — required for read-only mode."
+            exit 1
         fi
     fi
-fi
+}
 
 # ══════════════════════════════════════════════════════════════════
 # Music source setup (runs inside deploy step — no extra progress step)
