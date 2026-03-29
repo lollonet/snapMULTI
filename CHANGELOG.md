@@ -7,10 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.17] — 2026-03-29
+
+### Added
+- **Hardware watchdog** ([#161](https://github.com/lollonet/snapMULTI/pull/161)) — `bcm2835_wdt` kernel module + `RuntimeWatchdogSec=60` auto-reboots on system hang; no more manual power cycles on headless Pis
+- **MPD log rotation** ([#161](https://github.com/lollonet/snapMULTI/pull/161)) — `log_file_max_size 1048576` caps MPD log at 1MB (was: unbounded growth filling SD card)
+- **Artwork cache cleanup** ([#161](https://github.com/lollonet/snapMULTI/pull/161)) — boot-tune removes cached artwork older than 30 days
+- **Cross-mode parity** ([#160](https://github.com/lollonet/snapMULTI/pull/160)) — overlayroot, avahi hardening, boot-tune service, and SSH key persistence now work in ALL install modes (was: some features client-only or server-only)
+- **NTP sync before apt** ([#159](https://github.com/lollonet/snapMULTI/pull/159)) — wait for system clock sync before package operations; Pi has no RTC and apt signature verification fails with stale clock
+- **CI quality gates** ([#155](https://github.com/lollonet/snapMULTI/pull/155)) — ruff check + format, hadolint for all Dockerfiles, server pre-push hook matching remote CI
+
+### Changed
+- **vm.swappiness=10** ([#161](https://github.com/lollonet/snapMULTI/pull/161)) — keeps audio buffers in RAM instead of swapping (was: default 60)
+- **Healthcheck interval 30s** ([#161](https://github.com/lollonet/snapMULTI/pull/161)) — faster failure detection (was: 60s, up to 3 min to detect)
+- **Shared system-tune.sh functions** ([#160](https://github.com/lollonet/snapMULTI/pull/160)) — `tune_avahi_daemon()`, `setup_readonly_fs()`, `install_boot_tune_service()` replace inline duplicates in deploy.sh and setup.sh
+
+### Fixed
+- **apt-get upgrade exit code masked** ([#159](https://github.com/lollonet/snapMULTI/pull/159)) — `| tail -3` hid failures; now checks exit code and logs warning
+- **fuse-overlayfs fatal in both mode** ([#159](https://github.com/lollonet/snapMULTI/pull/159)) — install failure now aborts (was: continued without it, then Docker fails on overlayroot)
+- **deploy.sh fuse-overlayfs ordering** ([#159](https://github.com/lollonet/snapMULTI/pull/159)) — install package before writing to daemon.json (was: Docker failed to start on fresh deploy)
+- **boot-tune.sh missing from SD** ([#158](https://github.com/lollonet/snapMULTI/pull/158)) — added to prepare-sd copy chain for all modes
+- **prepare-sd username parse** ([#157](https://github.com/lollonet/snapMULTI/pull/157)) — `name:` regex matched `hostname:` before `users:` in cloud-init user-data
+- **Avahi restart only on change** ([#160](https://github.com/lollonet/snapMULTI/pull/160)) — `tune_avahi_daemon()` no longer restarts unconditionally on every deploy
+
+## [0.3.16] — 2026-03-29
+
 ### Added
 - **Shared system-tune.sh** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — shared system tuning module eliminates configuration drift between server and client (CPU governor, USB autosuspend, WiFi power save, Docker daemon.json)
 - **apt upgrade on first boot** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — security patches applied during first boot, before overlayroot freezes the filesystem
-- **USB drive auto-mount** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — headless Debian doesn't auto-mount USB; firstboot.sh now mounts and adds fstab entry
+- **USB drive auto-mount** ([#147](https://github.com/lollonet/snapMULTY/pull/147)) — headless Debian doesn't auto-mount USB; firstboot.sh now mounts and adds fstab entry
 - **INSTALL.it.md** — Italian translation of installation guide
 
 ### Fixed
