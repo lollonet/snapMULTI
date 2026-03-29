@@ -11,6 +11,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common/logging.sh
 source "$SCRIPT_DIR/common/logging.sh"
+# shellcheck source=common/system-tune.sh
+source "$SCRIPT_DIR/common/system-tune.sh"
 
 # Global: set by preflight_checks based on architecture
 IS_ARM=false
@@ -423,9 +425,7 @@ install_dependencies() {
         ok "Monitoring tools installed"
     fi
 
-    # Audio performance tuning (shared with client — scripts/common/system-tune.sh)
-    # shellcheck source=common/system-tune.sh
-    source "$SCRIPT_DIR/common/system-tune.sh"
+    # Audio performance tuning (system-tune.sh sourced at top of file)
     tune_cpu_governor
     tune_usb_autosuspend
 
