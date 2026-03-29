@@ -6,7 +6,7 @@
 # - udev rules don't re-trigger for already-present USB devices at boot
 # - networkd-dispatcher is not installed (CAKE/DSCP hook never runs)
 #
-# Installed as systemd oneshot by deploy.sh. Idempotent and safe on
+# Installed as systemd oneshot by deploy.sh/setup.sh. Idempotent and safe on
 # both writable and overlayroot filesystems.
 
 set -euo pipefail
@@ -24,6 +24,17 @@ done
 for ctrl in /sys/bus/usb/devices/*/power/autosuspend; do
     [ -f "$ctrl" ] && echo -1 > "$ctrl" 2>/dev/null || true
 done
+
+# ── Memory tuning: reduce swappiness for audio workloads ──────────
+# Default 60 is too aggressive — audio buffers should stay in RAM
+echo 10 > /proc/sys/vm/swappiness 2>/dev/null || true
+
+# ── Hardware watchdog: auto-reboot on system hang ─────────────────
+# Pi's bcm2835_wdt triggers reboot if systemd stops petting it
+modprobe bcm2835_wdt 2>/dev/null || true
+
+# ── Artwork cache cleanup: remove files older than 30 days ────────
+find /opt/snapmulti/artwork -type f -mtime +30 -delete 2>/dev/null || true
 
 # ── CAKE QoS + DSCP EF on Snapcast ports ─────────────────────────
 modprobe sch_cake 2>/dev/null || true

@@ -285,6 +285,13 @@ install_boot_tune_service() {
 
     cp "$boot_tune_script" /usr/local/bin/snapmulti-boot-tune.sh
     chmod +x /usr/local/bin/snapmulti-boot-tune.sh
+
+    # Enable hardware watchdog — auto-reboot on system hang (60s timeout)
+    mkdir -p /etc/systemd/system.conf.d
+    cat > /etc/systemd/system.conf.d/watchdog.conf <<'WEOF'
+[Manager]
+RuntimeWatchdogSec=60
+WEOF
     cat > /etc/systemd/system/snapmulti-boot-tune.service <<'SEOF'
 [Unit]
 Description=snapMULTI boot-time system tuning
