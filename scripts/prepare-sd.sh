@@ -467,7 +467,10 @@ done
 
 case "$INSTALL_TYPE" in
     server|both)
-        for f in server/docker-compose.yml server/deploy.sh server/config/snapserver.conf server/config/mpd.conf; do
+        for f in server/docker-compose.yml server/deploy.sh server/boot-tune.sh \
+                 server/config/snapserver.conf server/config/mpd.conf \
+                 server/config/shairport-sync.conf server/config/go-librespot.yml \
+                 server/config/tidal-asound.conf server/ro-mode.sh; do
             if [[ -f "$DEST/$f" ]]; then
                 echo "  [OK] snapmulti/$f"
             else
@@ -480,7 +483,10 @@ esac
 
 case "$INSTALL_TYPE" in
     client|both)
-        for f in client/docker-compose.yml client/scripts/setup.sh; do
+        for f in client/docker-compose.yml client/scripts/setup.sh \
+                 client/scripts/boot-tune.sh client/scripts/ro-mode.sh \
+                 client/scripts/display.sh client/scripts/display-detect.sh \
+                 client/snapclient.conf; do
             if [[ -f "$DEST/$f" ]]; then
                 echo "  [OK] snapmulti/$f"
             else
@@ -488,10 +494,19 @@ case "$INSTALL_TYPE" in
                 VERIFY_ERRORS=$(( VERIFY_ERRORS + 1 ))
             fi
         done
+        # Verify audio HAT configs exist
+        hat_count=$(ls -1 "$DEST/client/audio-hats/"*.conf 2>/dev/null | wc -l)
+        if [[ "$hat_count" -ge 15 ]]; then
+            echo "  [OK] $hat_count audio HAT configs"
+        else
+            echo "  [WARN] Only $hat_count HAT configs (expected 15+)"
+        fi
         ;;
 esac
 
 echo "  install.conf -> INSTALL_TYPE=$(grep '^INSTALL_TYPE=' "$DEST/install.conf" | cut -d= -f2)"
+echo "  install.conf -> ENABLE_READONLY=$(grep '^ENABLE_READONLY=' "$DEST/install.conf" | cut -d= -f2)"
+echo "  install.conf -> MUSIC_SOURCE=$(grep '^MUSIC_SOURCE=' "$DEST/install.conf" | cut -d= -f2)"
 
 # Version files
 case "$INSTALL_TYPE" in
