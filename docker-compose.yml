@@ -43,7 +43,7 @@ services:
     logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "pidof snapserver || exit 1"]
-      interval: 60s
+      interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
@@ -81,7 +81,7 @@ services:
     logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "pgrep -x shairport-sync && test -p /audio/airplay_fifo || exit 1"]
-      interval: 60s
+      interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
@@ -134,7 +134,7 @@ services:
     logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "pgrep go-librespot && wget -q --spider http://127.0.0.1:24879/ || exit 1"]
-      interval: 60s
+      interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
@@ -179,7 +179,7 @@ services:
     logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8180/ || exit 1"]
-      interval: 60s
+      interval: 30s
       timeout: 10s
       retries: 3
       start_period: ${MPD_START_PERIOD:-300s}
@@ -219,7 +219,7 @@ services:
     logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "echo 'ping' | nc -w 2 127.0.0.1 6600 | grep -q OK || exit 1"]
-      interval: 60s
+      interval: 30s
       timeout: 10s
       retries: 3
       start_period: ${MPD_START_PERIOD:-300s}
@@ -257,7 +257,7 @@ services:
       - ./artwork:/app/artwork
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)"]
-      interval: 60s
+      interval: 30s
       timeout: 5s
       start_period: 10s
       retries: 3
@@ -311,7 +311,7 @@ services:
     logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f tidal || exit 1"]
-      interval: 60s
+      interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
