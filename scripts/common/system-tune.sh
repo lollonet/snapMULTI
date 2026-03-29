@@ -187,3 +187,118 @@ with open('$tmp', 'w') as f:
         ok "Docker daemon.json created"
     fi
 }
+
+# ── Avahi hardening ─────────────────────────────────────────────
+# Pins mDNS hostname and restricts to physical network interfaces.
+# Prevents Docker veth interfaces from polluting mDNS announcements.
+tune_avahi_daemon() {
+    local hostname="${1:-$(hostname)}"
+    local conf="/etc/avahi/avahi-daemon.conf"
+    [[ -f "$conf" ]] || return 0
+
+    local avahi_changed=false
+
+    # Pin hostname to prevent avahi from appending -2, -3, etc.
+    if grep -q '^\[server\]' "$conf"; then
+        if ! grep -q "^host-name=" "$conf"; then
+            sed -i "/^\[server\]/a host-name=${hostname}" "$conf"
+            avahi_changed=true
+        fi
+    fi
+
+    # Restrict to physical interfaces (exclude Docker veth*)
+    local ifaces=""
+    local iface
+    for iface in $(ip -o link show 2>/dev/null | awk -F': ' '$2 ~ /^(eth|wlan|en)/ {print $2}'); do
+        [[ -n "$ifaces" ]] && ifaces="${ifaces},"
+        ifaces="${ifaces}${iface}"
+    done
+    if [[ -n "$ifaces" ]]; then
+        if ! grep -q "^allow-interfaces=${ifaces}$" "$conf"; then
+            if grep -q '^allow-interfaces=' "$conf"; then
+                sed -i "s/^allow-interfaces=.*/allow-interfaces=${ifaces}/" "$conf"
+            elif grep -q '^\[server\]' "$conf"; then
+                sed -i "/^\[server\]/a allow-interfaces=${ifaces}" "$conf"
+            fi
+            avahi_changed=true
+        fi
+    fi
+
+    if [[ "$avahi_changed" == "true" ]]; then
+        systemctl restart avahi-daemon 2>/dev/null || true
+        ok "Avahi hardened: host-name=${hostname}, interfaces=${ifaces:-all}"
+    else
+        ok "Avahi already configured"
+    fi
+}
+
+# ── Read-only filesystem (overlayroot) ──────────────────────────
+# Configures overlayfs for SD card protection. Requires raspi-config.
+# Call from firstboot.sh/deploy.sh/setup.sh when ENABLE_READONLY=true.
+# Assumes fuse-overlayfs and Docker storage driver are already configured.
+setup_readonly_fs() {
+    local ro_mode_script="${1:-}"
+
+    # Install ro-mode helper if available
+    if [[ -n "$ro_mode_script" ]] && [[ -f "$ro_mode_script" ]]; then
+        install -m 755 "$ro_mode_script" /usr/local/bin/ro-mode
+        ok "ro-mode helper installed"
+    fi
+
+    # Persist SSH host keys across reboots
+    if [[ -d /etc/ssh ]]; then
+        mkdir -p /etc/ssh/keys_permanent
+        cp -n /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub /etc/ssh/keys_permanent/ 2>/dev/null || true
+        cat > /etc/systemd/system/ssh-keys-restore.service << 'SSHEOF'
+[Unit]
+Description=Restore SSH host keys from permanent storage
+Before=ssh.service sshd.service
+ConditionPathExists=/etc/ssh/keys_permanent
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'cp /etc/ssh/keys_permanent/ssh_host_* /etc/ssh/ 2>/dev/null && chmod 600 /etc/ssh/ssh_host_*_key'
+
+[Install]
+WantedBy=multi-user.target
+SSHEOF
+        systemctl daemon-reload
+        systemctl enable ssh-keys-restore.service 2>/dev/null
+        ok "SSH host keys persisted"
+    fi
+
+    # Enable overlayfs via raspi-config (takes effect after reboot)
+    if command -v raspi-config &>/dev/null; then
+        raspi-config nonint do_overlayfs 0
+        ok "Read-only filesystem enabled (activates after reboot)"
+    else
+        warn "raspi-config not found — overlayroot not enabled"
+    fi
+}
+
+# ── Boot tuning service ─────────────────────────────────────────
+# Installs systemd oneshot that re-applies runtime tuning at every boot.
+# Required because cpufrequtils/networkd-dispatcher aren't installed.
+install_boot_tune_service() {
+    local boot_tune_script="${1:-}"
+    [[ -f "$boot_tune_script" ]] || return 0
+
+    cp "$boot_tune_script" /usr/local/bin/snapmulti-boot-tune.sh
+    chmod +x /usr/local/bin/snapmulti-boot-tune.sh
+    cat > /etc/systemd/system/snapmulti-boot-tune.service <<'SEOF'
+[Unit]
+Description=snapMULTI boot-time system tuning
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/snapmulti-boot-tune.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+SEOF
+    systemctl daemon-reload
+    systemctl enable snapmulti-boot-tune.service 2>/dev/null
+    ok "Boot tuning service installed (CPU, USB, CAKE persist across reboots)"
+}

@@ -395,41 +395,8 @@ install_dependencies() {
         fi
     fi
 
-    # Harden avahi: pin hostname and restrict to physical interfaces.
-    # Pinning prevents silent rename after mDNS collisions (e.g. hostname-2).
-    # Restricting interfaces stops Docker bridges from polluting mDNS.
-    local avahi_conf="/etc/avahi/avahi-daemon.conf"
-    if [[ -f "$avahi_conf" ]]; then
-        local avahi_changed=false
-        local system_hostname
-        system_hostname=$(tr -d '[:space:]' < /etc/hostname)
-        # Pin host-name if not already set
-        if grep -q '^#host-name=' "$avahi_conf"; then
-            sed -i "s/^#host-name=.*/host-name=${system_hostname}/" "$avahi_conf"
-            avahi_changed=true
-        elif ! grep -q '^host-name=' "$avahi_conf"; then
-            sed -i "/^\[server\]/a host-name=${system_hostname}" "$avahi_conf"
-            avahi_changed=true
-        fi
-        # Build list of physical interfaces (exclude lo, docker*, br-*, veth*)
-        local phys_ifaces
-        phys_ifaces=$(ip -br link show | awk '$1 !~ /^(lo|docker|br-|veth)/ {print $1}' \
-            | sed 's/@.*//' | paste -sd,)
-        if [[ -n "$phys_ifaces" ]]; then
-            if grep -q '^#allow-interfaces=' "$avahi_conf"; then
-                sed -i "s/^#allow-interfaces=.*/allow-interfaces=${phys_ifaces}/" "$avahi_conf"
-                avahi_changed=true
-            elif ! grep -q '^allow-interfaces=' "$avahi_conf"; then
-                sed -i "/^\[server\]/a allow-interfaces=${phys_ifaces}" "$avahi_conf"
-                avahi_changed=true
-            fi
-        fi
-        if [[ "$avahi_changed" == "true" ]]; then
-            systemctl restart avahi-daemon
-            local iface_msg="${phys_ifaces:-(none found, restriction skipped)}"
-            ok "Avahi hardened: host-name=${system_hostname}, interfaces=${iface_msg}"
-        fi
-    fi
+    # Harden avahi: pin hostname and restrict to physical interfaces
+    tune_avahi_daemon "$(tr -d '[:space:]' < /etc/hostname)"
 
     # Lightweight monitoring tools (sar, iotop, dstat)
     local mon_pkgs=()
@@ -508,33 +475,8 @@ QEOF
         fi
     fi
 
-    # Install boot-time tuning service (survives overlayroot reboots)
-    # The individual tune_* functions and CAKE setup above apply settings NOW,
-    # but cpufrequtils/networkd-dispatcher are not installed — nobody reads
-    # the /etc persistence files at boot. This oneshot service re-applies
-    # all runtime settings directly via /sys and tc/iptables.
-    local boot_tune="$SCRIPT_DIR/boot-tune.sh"
-    if [[ -f "$boot_tune" ]]; then
-        cp "$boot_tune" /usr/local/bin/snapmulti-boot-tune.sh
-        chmod +x /usr/local/bin/snapmulti-boot-tune.sh
-        cat > /etc/systemd/system/snapmulti-boot-tune.service <<'SEOF'
-[Unit]
-Description=snapMULTI boot-time system tuning
-After=network-online.target docker.service
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/snapmulti-boot-tune.sh
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-SEOF
-        systemctl daemon-reload
-        systemctl enable snapmulti-boot-tune.service 2>/dev/null
-        ok "Boot tuning service installed (CPU, USB, CAKE persist across reboots)"
-    fi
+    # Boot-time tuning service (shared function from system-tune.sh)
+    install_boot_tune_service "$SCRIPT_DIR/boot-tune.sh"
 
     ok "System dependencies ready"
 }
