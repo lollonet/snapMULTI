@@ -51,3 +51,21 @@ for port in 1704 1705; do
         || iptables -t mangle -A OUTPUT -p tcp --sport "$port" -j DSCP --set-dscp-class EF 2>/dev/null \
         || true
 done
+
+# ── Restart MPD if music directory wasn't ready at container start ──
+# Docker bind-mounts capture directory state at start time. If NFS mounted
+# after Docker, MPD sees empty /music. Wait for NFS, then restart.
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^mpd$'; then
+    music_path=$(grep '^MUSIC_PATH=' /opt/snapmulti/.env 2>/dev/null | cut -d= -f2) || true
+    if [ -n "$music_path" ] && grep -q "$music_path" /etc/fstab 2>/dev/null; then
+        # Wait for network mount (up to 120s)
+        wait=0
+        while ! findmnt -n "$music_path" >/dev/null 2>&1 && [ "$wait" -lt 120 ]; do
+            sleep 5
+            wait=$((wait + 5))
+        done
+    fi
+    if ! docker exec mpd find /music -maxdepth 3 -type f \( -name '*.mp3' -o -name '*.flac' \) 2>/dev/null | head -1 | grep -q .; then
+        cd /opt/snapmulti && docker compose restart mpd 2>/dev/null || true
+    fi
+fi
