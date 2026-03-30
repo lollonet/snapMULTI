@@ -29,9 +29,15 @@ until echo 'ping' | nc -w 1 127.0.0.1 6600 2>/dev/null | grep -q OK; do
     sleep 1
 done
 
-# Trigger full library scan and wait for completion (blocks until MPD idle event).
-# Don't exit on failure — scan errors shouldn't prevent MPD from serving
-# already-indexed music (e.g., NFS temporarily unreachable).
-mpc -p 6600 update --wait 2>/dev/null || echo "WARNING: library scan failed or incomplete"
+# Only force a scan if the database is empty or missing.
+# A pre-built database (from prepare-sd.sh) gets a fast incremental update
+# via auto_update in mpd.conf — no need to force a full rescan.
+song_count=$(mpc -p 6600 stats 2>/dev/null | awk '/Songs:/{print $2}') || true
+if [ "${song_count:-0}" -eq 0 ]; then
+    echo "Empty database — triggering full library scan..."
+    mpc -p 6600 update --wait 2>/dev/null || echo "WARNING: library scan failed or incomplete"
+else
+    echo "Database has $song_count songs — auto_update handles incremental scan"
+fi
 wait $MPD_PID
 exit $?
