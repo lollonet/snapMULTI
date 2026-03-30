@@ -307,6 +307,11 @@ function Copy-ClientFiles {
         Copy-Item $roMode -Destination $scriptsDest
     }
 
+    $discoverSh = Join-Path $ClientDir 'common\scripts\discover-server.sh'
+    if (Test-Path $discoverSh) {
+        Copy-Item $discoverSh -Destination $scriptsDest
+    }
+
     $displaySh = Join-Path $ClientDir 'common\scripts\display.sh'
     if (Test-Path $displaySh) {
         Copy-Item $displaySh -Destination $scriptsDest
