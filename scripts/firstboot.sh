@@ -615,7 +615,7 @@ setup_music_source() {
             if mount -t nfs "$NFS_SERVER:$NFS_EXPORT" "$mount_point" -o ro,soft,timeo=50,_netdev; then
                 # Persist in fstab for reboots
                 if ! grep -qF "$NFS_SERVER:$NFS_EXPORT" /etc/fstab; then
-                    echo "$NFS_SERVER:$NFS_EXPORT $mount_point nfs ro,soft,timeo=50,_netdev,nofail 0 0" >> /etc/fstab
+                    echo "$NFS_SERVER:$NFS_EXPORT $mount_point nfs ro,soft,timeo=50,_netdev,nofail,x-systemd.before=docker.service 0 0" >> /etc/fstab
                 fi
                 export MUSIC_PATH="$mount_point"
                 log_progress "NFS mounted: $mount_point" 2>/dev/null || true
@@ -643,7 +643,7 @@ setup_music_source() {
             if timeout 60 mount -t cifs "//$SMB_SERVER/$SMB_SHARE" "$mount_point" -o "$mount_opts"; then
                 # Persist in fstab
                 if ! grep -qF "//$SMB_SERVER/$SMB_SHARE" /etc/fstab; then
-                    echo "//$SMB_SERVER/$SMB_SHARE $mount_point cifs ${mount_opts},nofail 0 0" >> /etc/fstab
+                    echo "//$SMB_SERVER/$SMB_SHARE $mount_point cifs ${mount_opts},nofail,x-systemd.before=docker.service 0 0" >> /etc/fstab
                 fi
                 export MUSIC_PATH="$mount_point"
                 log_progress "SMB mounted: $mount_point" 2>/dev/null || true
