@@ -1,6 +1,8 @@
+# syntax=docker/dockerfile:1
 FROM alpine:3.23 AS builder
 
-RUN apk add --no-cache \
+RUN --mount=type=cache,target=/var/cache/apk \
+    apk add \
     alsa-lib-dev \
     avahi-dev \
     boost-dev \
@@ -21,9 +23,9 @@ ARG SNAPCAST_SHA=latest
 RUN git clone --branch develop https://github.com/badaix/snapcast.git . && \
     mkdir build && cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
-          -DBUILD_CLIENT=OFF .. && \
-    make -j"$(nproc)" && \
-    make install
+          -DBUILD_CLIENT=OFF ..
+RUN --mount=type=cache,target=/build/build/CMakeFiles \
+    cd build && make -j"$(nproc)" && make install
 
 # Snapweb build: npm ci fails on arm64-musl due to npm/cli#4828 (optional native
 # bindings for rollup + swc not installed cross-platform). Removing the lockfile
@@ -38,7 +40,8 @@ RUN apk add --no-cache git && \
 
 FROM alpine:3.23
 
-RUN apk add --no-cache \
+RUN --mount=type=cache,target=/var/cache/apk \
+    apk add \
     alsa-lib \
     avahi \
     avahi-libs \
@@ -59,7 +62,8 @@ ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv --system-site-packages $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-RUN pip install --no-cache-dir \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install \
     python-mpd2==3.1.1 \
     musicbrainzngs==0.7.1 \
     requests==2.32.3 \

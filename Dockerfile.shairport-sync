@@ -1,6 +1,8 @@
+# syntax=docker/dockerfile:1
 FROM alpine:3.23
 
-RUN apk add --no-cache shairport-sync bash
+RUN --mount=type=cache,target=/var/cache/apk \
+    apk add shairport-sync bash
 
 RUN mkdir -p /audio
 
