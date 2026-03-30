@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Periodic snapserver re-discovery** ([#165](https://github.com/lollonet/snapMULTI/pull/165)) — systemd timer re-discovers snapserver every 5min via mDNS; snapclient restarts only when server IP actually changes (eth↔wlan failover). `.env` left untouched; server IP tracked in volatile `/run/snapclient-server-ip`
 - **MPD database backup on SD card** ([#164](https://github.com/lollonet/snapMULTI/pull/164)) — `prepare-sd.sh` includes pre-built `mpd.db` if present, avoiding full NFS library rescan (~7h → seconds) on reflash
 
+### Fixed
+- **NFS must mount before Docker** ([#166](https://github.com/lollonet/snapMULTI/pull/166)) — `x-systemd.before=docker.service` in fstab ensures NFS/SMB music is available before MPD starts, preventing database purge on empty `/music`
+- **prepare-sd.ps1 parity** ([#166](https://github.com/lollonet/snapMULTI/pull/166)) — Windows script now copies mpd.db backup, writes `ENABLE_READONLY`, includes ro-mode.sh; removed unnecessary Dockerfile copies
+
 ## [0.3.17] — 2026-03-29
 
 ### Added
