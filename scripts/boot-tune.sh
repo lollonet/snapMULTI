@@ -39,13 +39,15 @@ find /opt/snapmulti/artwork -type f -mtime +30 -delete 2>/dev/null || true
 # ── CAKE QoS + DSCP EF on Snapcast ports ─────────────────────────
 modprobe sch_cake 2>/dev/null || true
 
-iface=$(ip -o route show default 2>/dev/null | awk '{print $5; exit}')
-if [ -n "$iface" ]; then
+# Apply CAKE to all interfaces with a default route (eth + wlan failover).
+# CAKE on an idle interface costs nothing; avoids re-applying on failover.
+for iface in $(ip -o route show default 2>/dev/null | awk '{print $5}'); do
     tc qdisc replace dev "$iface" root cake diffserv4 2>/dev/null || true
+done
 
-    for port in 1704 1705; do
-        iptables -t mangle -C OUTPUT -p tcp --sport "$port" -j DSCP --set-dscp-class EF 2>/dev/null \
-            || iptables -t mangle -A OUTPUT -p tcp --sport "$port" -j DSCP --set-dscp-class EF 2>/dev/null \
-            || true
-    done
-fi
+# DSCP is interface-agnostic (OUTPUT chain by sport)
+for port in 1704 1705; do
+    iptables -t mangle -C OUTPUT -p tcp --sport "$port" -j DSCP --set-dscp-class EF 2>/dev/null \
+        || iptables -t mangle -A OUTPUT -p tcp --sport "$port" -j DSCP --set-dscp-class EF 2>/dev/null \
+        || true
+done
