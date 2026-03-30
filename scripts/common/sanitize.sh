@@ -44,3 +44,9 @@ sanitize_nfs_export() {
 sanitize_smb_share() {
     printf '%s' "$1" | tr -cd 'A-Za-z0-9._-'
 }
+
+# Sanitize SMB username: alphanumeric, dots, underscores, hyphens, @
+# Usage: sanitize_smb_user "user@domain"
+sanitize_smb_user() {
+    printf '%s' "$1" | tr -cd 'A-Za-z0-9._@-'
+}

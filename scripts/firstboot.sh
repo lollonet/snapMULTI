@@ -612,10 +612,10 @@ setup_music_source() {
             local mount_point="/media/nfs-music"
             mkdir -p "$mount_point"
             log_progress "Mounting NFS: $NFS_SERVER:$NFS_EXPORT" 2>/dev/null || true
-            if mount -t nfs "$NFS_SERVER:$NFS_EXPORT" "$mount_point" -o ro,soft,timeo=50,_netdev; then
+            if mount -t nfs "$NFS_SERVER:$NFS_EXPORT" "$mount_point" -o ro,soft,timeo=50,rsize=32768,wsize=32768,_netdev; then
                 # Persist in fstab for reboots
                 if ! grep -qF "$NFS_SERVER:$NFS_EXPORT" /etc/fstab; then
-                    echo "$NFS_SERVER:$NFS_EXPORT $mount_point nfs ro,soft,timeo=50,_netdev,nofail 0 0" >> /etc/fstab
+                    echo "$NFS_SERVER:$NFS_EXPORT $mount_point nfs ro,soft,timeo=50,rsize=32768,wsize=32768,_netdev,nofail 0 0" >> /etc/fstab
                 fi
                 export MUSIC_PATH="$mount_point"
                 log_progress "NFS mounted: $mount_point" 2>/dev/null || true

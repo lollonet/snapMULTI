@@ -196,7 +196,8 @@ get_smb_config() {
     done
 
     echo ""
-    read -rp "  Username (leave empty for guest): " SMB_USER
+    read -rp "  Username (leave empty for guest): " raw_user
+    SMB_USER=$(printf '%s' "$raw_user" | tr -cd 'A-Za-z0-9._@-')
     if [[ -n "$SMB_USER" ]]; then
         read -rsp "  Password: " SMB_PASS
         echo ""
