@@ -3,16 +3,17 @@
 # This ensures the container is only healthy after the full scan — not mid-scan.
 set -e
 
-# Wait for music directory to have content (NFS/SMB may mount after Docker starts).
-# Without this, MPD scans an empty /music and purges the pre-built database.
+# Wait for music files to be accessible (NFS/SMB may mount after Docker starts).
+# Check for actual files, not just directories — overlayroot upper layer can show
+# empty directory structure before NFS lower layer is fully mounted.
 wait=0
-while [ -z "$(ls -A /music 2>/dev/null)" ] && [ "$wait" -lt 120 ]; do
-    echo "Waiting for /music to be mounted... (${wait}s)"
+while [ "$(find /music -maxdepth 3 -type f -name '*.mp3' -o -name '*.flac' 2>/dev/null | head -1 | wc -l)" -eq 0 ] && [ "$wait" -lt 120 ]; do
+    echo "Waiting for music files to be accessible... (${wait}s)"
     sleep 5
     wait=$((wait + 5))
 done
-if [ -z "$(ls -A /music 2>/dev/null)" ]; then
-    echo "WARNING: /music still empty after 120s — MPD will do a full rescan when it appears"
+if [ "$(find /music -maxdepth 3 -type f -name '*.mp3' -o -name '*.flac' 2>/dev/null | head -1 | wc -l)" -eq 0 ]; then
+    echo "WARNING: no music files found after 120s — MPD may do a full rescan later"
 fi
 
 mpd --no-daemon /etc/mpd.conf &
