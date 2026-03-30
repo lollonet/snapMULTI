@@ -591,9 +591,12 @@ create_directories() {
         mkfifo "$PROJECT_ROOT/audio/shairport-metadata"
     fi
 
-    # Remove stale MPD database (empty/corrupt file causes "Database corrupted" on start).
-    # MPD creates a valid database on first scan when the file is absent.
-    rm -f "$PROJECT_ROOT/mpd/data/mpd.db"
+    # Remove empty/corrupt MPD database (causes "Database corrupted" on start).
+    # Keep valid pre-built databases (from prepare-sd.sh) for fast incremental scan.
+    local mpd_db="$PROJECT_ROOT/mpd/data/mpd.db"
+    if [[ -f "$mpd_db" && ! -s "$mpd_db" ]]; then
+        rm -f "$mpd_db"
+    fi
 
     # Set ownership and permissions
     # Note: 777/666 needed because containers run with cap_drop: ALL

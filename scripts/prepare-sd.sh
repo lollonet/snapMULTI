@@ -221,6 +221,13 @@ copy_server_files() {
     cp -r "$PROJECT_DIR/config" "$dest/"
     cp "$PROJECT_DIR/docker-compose.yml" "$dest/"
     cp "$PROJECT_DIR/.env.example" "$dest/" 2>/dev/null || true
+
+    # Optional: pre-built MPD database (avoids full NFS rescan on deploy)
+    if [[ -f "$PROJECT_DIR/mpd/data/mpd.db" ]]; then
+        mkdir -p "$dest/mpd/data"
+        cp "$PROJECT_DIR/mpd/data/mpd.db" "$dest/mpd/data/"
+        echo "  Including pre-built MPD database (fast incremental scan)"
+    fi
 }
 
 # ── Copy client files ─────────────────────────────────────────────
@@ -478,6 +485,12 @@ case "$INSTALL_TYPE" in
                 VERIFY_ERRORS=$(( VERIFY_ERRORS + 1 ))
             fi
         done
+        # Optional MPD database backup (not an error if missing)
+        if [[ -f "$DEST/server/mpd/data/mpd.db" ]]; then
+            echo "  [OK] MPD database backup included (fast rescan)"
+        else
+            echo "  [--] No MPD database backup (full scan on first boot)"
+        fi
         ;;
 esac
 

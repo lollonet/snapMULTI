@@ -396,6 +396,12 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         cp "$SNAP_BOOT/server/boot-tune.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/status.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/.version" "$SERVER_DIR/" 2>/dev/null || true
+        # Pre-built MPD database (avoids full NFS rescan — incremental update only)
+        if [[ -f "$SNAP_BOOT/server/mpd/data/mpd.db" ]]; then
+            mkdir -p "$SERVER_DIR/mpd/data"
+            cp "$SNAP_BOOT/server/mpd/data/mpd.db" "$SERVER_DIR/mpd/data/"
+            log_progress "Restored MPD database backup" 2>/dev/null || true
+        fi
     fi
     cp -r "$SNAP_BOOT/common" "$SERVER_DIR/scripts/" 2>/dev/null || true
     log_progress "Server files copied to $SERVER_DIR" 2>/dev/null || true
