@@ -21,7 +21,7 @@ We will acknowledge receipt within 48 hours and aim to release a fix within 7 da
 
 This policy covers:
 - The snapMULTI server (`lollonet/snapMULTI`)
-- The snapclient (`lollonet/rpi-snapclient-usb`)
+- The snapclient (`lollonet/snapclient-pi`)
 - Docker images published under `lollonet/snapmulti-*`
 - Install scripts (`prepare-sd.sh`, `firstboot.sh`, `deploy.sh`, `setup.sh`)
 

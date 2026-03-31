@@ -35,7 +35,7 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 
 ### Unified Installer
 
-snapMULTI is the umbrella project. The client repo (`rpi-snapclient-usb`) is included as a git submodule at `client/`.
+snapMULTI is the umbrella project. The client repo (`snapclient-pi`) is included as a git submodule at `client/`.
 
 `prepare-sd.sh` presents a 3-option menu:
 1. **Audio Player** (client) — snapclient + optional cover art display
@@ -81,7 +81,7 @@ Full-screen TUI on `/dev/tty1` (HDMI console), no-op when run via SSH.
 
 ```
 snapMULTI/
-  client/                    # Git submodule: rpi-snapclient-usb (audio player)
+  client/                    # Git submodule: snapclient-pi (audio player)
   config/
     snapserver.conf          # Snapcast server config (5 active + 4 commented sources)
     mpd.conf                 # MPD config (FIFO + HTTP outputs)

@@ -141,13 +141,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Headless Pi detection with vc4-kms-v3d** ([#122](https://github.com/lollonet/snapMULTI/pull/122)) — `has_display()` in `firstboot.sh` now correctly detects headless Pi 4 when HDMI is unplugged. Previously returned "display present" when DRM status files existed but all said "disconnected" (vc4-kms-v3d creates `/dev/fb0` even without HDMI). New `found_status` flag distinguishes "no DRM files" (old firmware, assume display) from "all disconnected" (headless)
-- **DAC+ clock race on EEPROM-less boards** ([rpi-snapclient-usb#97](https://github.com/lollonet/rpi-snapclient-usb/pull/97)) — clone/EEPROM-less PCM5122 boards were misdetected as DAC+ Pro (floating GPIO3), causing master clock race with no audio. ALSA and I2C fallback detection now uses `hifiberry-dacplus-std` overlay (Pi as clock master). Adds `dtparam=i2c_arm=on` for I2C-based HATs. New manual menu option for Standard/clone boards
+- **DAC+ clock race on EEPROM-less boards** ([snapclient-pi#97](https://github.com/lollonet/snapclient-pi/pull/97)) — clone/EEPROM-less PCM5122 boards were misdetected as DAC+ Pro (floating GPIO3), causing master clock race with no audio. ALSA and I2C fallback detection now uses `hifiberry-dacplus-std` overlay (Pi as clock master). Adds `dtparam=i2c_arm=on` for I2C-based HATs. New manual menu option for Standard/clone boards
 
 ### Added
-- **Boot-time display detection** ([rpi-snapclient-usb#97](https://github.com/lollonet/rpi-snapclient-usb/pull/97)) — new systemd oneshot service checks HDMI on every boot and reconciles Docker Compose profiles. Headless Pis now run only `snapclient` (saves ~300 MB RAM). `audio-visualizer` gated under `framebuffer` profile alongside `fb-display`
+- **Boot-time display detection** ([snapclient-pi#97](https://github.com/lollonet/snapclient-pi/pull/97)) — new systemd oneshot service checks HDMI on every boot and reconciles Docker Compose profiles. Headless Pis now run only `snapclient` (saves ~300 MB RAM). `audio-visualizer` gated under `framebuffer` profile alongside `fb-display`
 
 ### Maintenance
-- **Client submodule update** — DAC clock race fix + boot-time display detection (see [rpi-snapclient-usb#97](https://github.com/lollonet/rpi-snapclient-usb/pull/97))
+- **Client submodule update** — DAC clock race fix + boot-time display detection (see [snapclient-pi#97](https://github.com/lollonet/snapclient-pi/pull/97))
 
 ## [0.3.11] — 2026-03-18
 
@@ -176,7 +176,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **GitHub Environments for deploy** ([#115](https://github.com/lollonet/snapMULTI/pull/115)) — `HOST` secret moved from repo-level to environment-scoped (`snapvideo`); `deploy.yml` declares `environment:` so GitHub resolves the secret automatically; added concurrency group (`cancel-in-progress: false`) to queue rather than cancel in-progress deploys
 
 ### Maintenance
-- **Client submodule v0.2.10** — see [rpi-snapclient-usb CHANGELOG](https://github.com/lollonet/rpi-snapclient-usb/blob/main/CHANGELOG.md)
+- **Client submodule v0.2.10** — see [snapclient-pi CHANGELOG](https://github.com/lollonet/snapclient-pi/blob/main/CHANGELOG.md)
 
 ## [0.3.9] — 2026-03-16
 
@@ -320,7 +320,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Unified installer** — Single `prepare-sd.sh` supports both server and client installation
   - 3-option menu: Audio Player (client), Music Server (server), Server + Player (both)
   - `install.conf` marker controls what `firstboot.sh` installs on the Pi
-  - Client repo (`rpi-snapclient-usb`) added as git submodule at `client/`
+  - Client repo (`snapclient-pi`) added as git submodule at `client/`
 - **Windows SD card preparation** — `prepare-sd.ps1` PowerShell script with same functionality as `prepare-sd.sh`
   - Auto-detects bootfs drive, 3-option menu, patches cloud-init, safe eject
 - **Git installed on Pi** — `deploy.sh` and `firstboot.sh` install `git` so users can `git pull` for updates
@@ -464,7 +464,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MPD first-run startup** — Pre-create empty `mpd.db` file; auto-detect network mounts and set `MPD_START_PERIOD` to 5 min (NFS) or 30s (local)
 - **myMPD startup** — Uses extended `MPD_START_PERIOD` for healthcheck, waits for MPD healthy before starting
 - **deploy.sh validate_config** — Change to PROJECT_ROOT before running `docker compose config` (fixes first-run failures when script invoked from a different directory)
-- **prepare-sd.sh** — Support Bookworm cloud-init user-data and rpi-snapclient-usb boot pattern
+- **prepare-sd.sh** — Support Bookworm cloud-init user-data and snapclient-pi boot pattern
 - **firstboot.sh directory structure** — Create `scripts/` subdirectory expected by deploy.sh
 - **firstboot.sh healthcheck grep** — Fix `(unhealthy)` containers being counted as healthy due to substring match
 - **deploy.sh profile update** — Use BEGIN/END block markers instead of deleting to EOF (preserves user custom env vars)

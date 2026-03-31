@@ -1,4 +1,4 @@
-🇬🇧 [English](README.md) | 🇮🇹 **Italiano**
+🇬🇧 [English](repos/snapMULTI/README.md) | 🇮🇹 **Italiano**
 
 # snapMULTI - Server Audio Multiroom
 
@@ -214,7 +214,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Per aggiornamenti di versioni maggiori, controlla [CHANGELOG.md](CHANGELOG.md) per le modifiche incompatibili.
+Per aggiornamenti di versioni maggiori, controlla [CHANGELOG.md](repos/snapMULTI/CHANGELOG.md) per le modifiche incompatibili.
 
 ## Documentazione
 
@@ -224,4 +224,4 @@ Per aggiornamenti di versioni maggiori, controlla [CHANGELOG.md](CHANGELOG.md) p
 | [Hardware e Rete](docs/HARDWARE.it.md) | Requisiti server/client, configurazioni Raspberry Pi, banda di rete, setup consigliati |
 | [Uso e Operazioni](docs/USAGE.it.md) | Architettura, servizi, controllo MPD, configurazione mDNS, deployment, CI/CD |
 | [Sorgenti Audio](docs/SOURCES.it.md) | Tutti i tipi di sorgente, parametri, API JSON-RPC, streaming da Android/Tidal |
-| [Changelog](CHANGELOG.md) | Cronologia delle versioni |
+| [Changelog](repos/snapMULTI/CHANGELOG.md) | Cronologia delle versioni |
