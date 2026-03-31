@@ -90,6 +90,34 @@ jobs:
           fi
           echo "✓ All Dockerfiles pass hadolint"
 
+      - name: Verify prepare-sd.sh / prepare-sd.ps1 parity
+        run: |
+          echo "Checking file copy parity between bash and PowerShell scripts..."
+          # Extract copied filenames from both scripts
+          grep -oP "cp.*\"\$\w+/\K[^\"]+|Copy-Item.*'[^']*\\\\(\K[^']+)" \
+            scripts/prepare-sd.sh scripts/prepare-sd.ps1 2>/dev/null | sort -u > /dev/null
+
+          # Check install.conf fields match
+          SH_FIELDS=$(grep -oP '^\w+=' scripts/prepare-sd.sh | grep -v '^#' | sort -u)
+          PS_FIELDS=$(grep -oP '^\w+=' scripts/prepare-sd.ps1 | grep -v '^#' | sort -u)
+
+          # Check key files are in both copy functions
+          MISSING=0
+          for file in deploy.sh boot-tune.sh ro-mode.sh discover-server.sh setup.sh display.sh display-detect.sh; do
+            if grep -q "$file" scripts/prepare-sd.sh && ! grep -q "$file" scripts/prepare-sd.ps1; then
+              echo "ERROR: $file in prepare-sd.sh but missing from prepare-sd.ps1"
+              MISSING=1
+            fi
+            if grep -q "$file" scripts/prepare-sd.ps1 && ! grep -q "$file" scripts/prepare-sd.sh; then
+              echo "ERROR: $file in prepare-sd.ps1 but missing from prepare-sd.sh"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" -eq 1 ]; then
+            exit 1
+          fi
+          echo "✓ prepare-sd scripts in sync"
+
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
