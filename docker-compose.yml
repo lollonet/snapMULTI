@@ -9,12 +9,18 @@ x-logging: &default-logging
 
 x-security: &default-security
   security_opt:
-    - apparmor:unconfined  # Required for D-Bus access
     - no-new-privileges:true
   cap_drop:
     - ALL
+
+# Services that read/write FIFOs and use D-Bus (Avahi/zeroconf)
+x-fifo-security: &fifo-security
+  <<: *default-security
+  security_opt:
+    - apparmor:unconfined  # Required for D-Bus access (Avahi zeroconf)
+    - no-new-privileges:true
   cap_add:
-    - DAC_OVERRIDE      # File access as non-root (FIFOs in /audio may be root-owned)
+    - DAC_OVERRIDE
 
 services:
   snapserver:
@@ -25,7 +31,7 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     network_mode: host
-    <<: *default-security
+    <<: *fifo-security
     read_only: true
     tmpfs:
       - /tmp:size=64M
@@ -62,7 +68,7 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     network_mode: host
-    <<: *default-security
+    <<: *fifo-security
     read_only: true
     tmpfs:
       - /tmp:size=32M
@@ -103,7 +109,7 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
     network_mode: host
-    <<: *default-security
+    <<: *fifo-security
     read_only: true
     tmpfs:
       - /tmp:size=32M
