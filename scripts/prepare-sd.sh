@@ -186,8 +186,9 @@ get_smb_config() {
         read -rp "  Share name (e.g. Music): " raw_share
         # Detect spaces early — SMB shares with spaces need manual fstab escaping
         if [[ "$raw_share" == *" "* ]]; then
-            echo "  Share names with spaces are not supported. Try again without spaces,"
-            echo "  or restart and choose option 4 (manual). See docs/USAGE.md."
+            echo "  Share names with spaces are not supported in auto-setup."
+            echo "  Try the share name without spaces (e.g. 'My Music' -> 'MyMusic'),"
+            echo "  or choose option 4 (manual) to configure fstab yourself."
             continue
         fi
         SMB_SHARE=$(sanitize_smb_share "$raw_share")

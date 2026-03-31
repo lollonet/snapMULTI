@@ -27,10 +27,14 @@ More source types available — see [Audio Sources Reference](docs/SOURCES.md).
 
 ### Switching Sources
 
-Open **http://&lt;server-ip&gt;:1780** in any browser to manage your speakers. From the web interface you can:
-- Switch which source each room plays
-- Adjust volume per speaker
-- Group/ungroup speakers
+Two web interfaces are available:
+
+| Interface | URL | Purpose |
+|-----------|-----|---------|
+| **Snapweb** | `http://<server-ip>:1780` | Manage speakers: switch sources, adjust volume, group/ungroup |
+| **myMPD** | `http://<server-ip>:8180` | Browse and play your music library (MPD source) |
+
+From **Snapweb** you can:
 
 You can also use the Snapcast mobile apps:
 [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) |

@@ -42,7 +42,7 @@ services:
     command: ["snapserver", "-c", "/etc/snapserver.conf"]
     logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "pidof snapserver || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:1780/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -310,7 +310,7 @@ services:
         condition: service_healthy
     logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f tidal || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f speaker_controller || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

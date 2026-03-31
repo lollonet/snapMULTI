@@ -13,12 +13,15 @@ set -euo pipefail
 
 # ── CPU governor: performance ─────────────────────────────────────
 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
-    [ -f "$gov" ] && echo performance > "$gov" 2>/dev/null || true
+    [ -f "$gov" ] && echo performance > "$gov" 2>/dev/null \
+        || logger -t boot-tune -p warning "Failed to set CPU governor on $gov"
 done
 
 # ── USB autosuspend: disabled ─────────────────────────────────────
-[ -f /sys/module/usbcore/parameters/autosuspend ] && \
-    echo -1 > /sys/module/usbcore/parameters/autosuspend 2>/dev/null || true
+if [ -f /sys/module/usbcore/parameters/autosuspend ]; then
+    echo -1 > /sys/module/usbcore/parameters/autosuspend 2>/dev/null \
+        || logger -t boot-tune -p warning "Failed to disable USB autosuspend"
+fi
 
 # Also apply to any already-connected USB devices
 for ctrl in /sys/bus/usb/devices/*/power/autosuspend; do
@@ -35,6 +38,15 @@ modprobe bcm2835_wdt 2>/dev/null || true
 
 # ── Artwork cache cleanup: remove files older than 30 days ────────
 find /opt/snapmulti/artwork -type f -mtime +30 -delete 2>/dev/null || true
+
+# ── Tmpfs usage warning (overlayroot writes to RAM) ────────────────
+# Alert via syslog if tmpfs is >80% full — system will crash if it fills up
+if mount | grep -q ' on / type overlay'; then
+    usage=$(df / --output=pcent 2>/dev/null | tail -1 | tr -cd '0-9')
+    if [ -n "$usage" ] && [ "$usage" -gt 80 ] 2>/dev/null; then
+        logger -t boot-tune -p warning "WARNING: root tmpfs ${usage}% full — system may crash. Run: sudo ro-mode disable && sudo reboot"
+    fi
+fi
 
 # ── CAKE QoS + DSCP EF on Snapcast ports ─────────────────────────
 modprobe sch_cake 2>/dev/null || true

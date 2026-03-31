@@ -712,7 +712,9 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     set -eo pipefail
 
     if [[ "$deploy_rc" -ne 0 ]]; then
-        log_and_tty "ERROR: deploy.sh failed. Check $LOG"
+        log_and_tty "ERROR: Server deployment failed."
+        log_and_tty "  To troubleshoot: ssh into the Pi and run:"
+        log_and_tty "  sudo cat $LOG | tail -50"
         exit 1
     fi
     log_progress "Server deploy complete" 2>/dev/null || true
@@ -806,12 +808,16 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     export PROGRESS_LOG
     if [[ -n "$CONFIG_FILE" ]]; then
         if ! bash scripts/setup.sh --auto "$CONFIG_FILE" >> "$LOG" 2>&1; then
-            log_and_tty "ERROR: client setup.sh failed."
+            log_and_tty "ERROR: Client setup failed."
+            log_and_tty "  To troubleshoot: ssh into the Pi and run:"
+            log_and_tty "  sudo cat $LOG | tail -50"
             exit 1
         fi
     else
         if ! bash scripts/setup.sh --auto >> "$LOG" 2>&1; then
-            log_and_tty "ERROR: client setup.sh failed."
+            log_and_tty "ERROR: Client setup failed."
+            log_and_tty "  To troubleshoot: ssh into the Pi and run:"
+            log_and_tty "  sudo cat $LOG | tail -50"
             exit 1
         fi
     fi

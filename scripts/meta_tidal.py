@@ -248,8 +248,8 @@ def handle_stdin_line(line: str) -> None:
                 )
             else:
                 send({"jsonrpc": "2.0", "id": rid, "result": "ok"})
-    except json.JSONDecodeError:
-        pass
+    except json.JSONDecodeError as e:
+        log("warning", f"Invalid JSON from snapserver: {e}")
     except Exception as e:
         log("error", f"stdin error: {e}")
 
