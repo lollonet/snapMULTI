@@ -306,6 +306,20 @@ EOF
             ;;
     esac
 
+    # Warn if memory reserves exceed available RAM
+    local total_reserve_mb=0
+    while IFS='=' read -r key val; do
+        if [[ "$key" == *_MEM_RESERVE ]]; then
+            total_reserve_mb=$(( total_reserve_mb + ${val%M} ))
+        fi
+    done < <(grep '_MEM_RESERVE=' "$ENV_FILE")
+    local avail_mb
+    avail_mb=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo 2>/dev/null) || true
+    if [[ -n "$avail_mb" && "$total_reserve_mb" -gt "$avail_mb" ]]; then
+        warn "Memory reserves (${total_reserve_mb}M) exceed available RAM (${avail_mb}M)"
+        warn "Containers may be OOM-killed. Consider 'minimal' profile."
+    fi
+
     ok "Resource profile '$profile' applied"
 }
 
