@@ -12,7 +12,7 @@
 If you discover a security vulnerability in snapMULTI, please report it responsibly:
 
 1. **Do NOT open a public GitHub issue**
-2. Email **security@snapmulti.org** or use [GitHub Security Advisories](https://github.com/lollonet/snapMULTI/security/advisories/new)
+2. Use [GitHub Security Advisories](https://github.com/lollonet/snapMULTI/security/advisories/new)
 3. Include: description, reproduction steps, affected versions, potential impact
 
 We will acknowledge receipt within 48 hours and aim to release a fix within 7 days for critical issues.

@@ -43,11 +43,16 @@ modprobe sch_cake 2>/dev/null || true
 # CAKE on an idle interface costs nothing; avoids re-applying on failover.
 # Detect link speed for bandwidth hint (CAKE works best with a bandwidth limit).
 for iface in $(ip -o route show default 2>/dev/null | awk '{print $5}'); do
-    bw=$(cat "/sys/class/net/$iface/speed" 2>/dev/null) || true
-    if [ -n "$bw" ] && [ "$bw" -gt 0 ] 2>/dev/null; then
-        tc qdisc replace dev "$iface" root cake bandwidth "${bw}mbit" diffserv4 2>/dev/null || true
-    else
+    # WiFi interfaces don't report link speed reliably; skip bandwidth detection
+    if echo "$iface" | grep -qE '^(wlan|wlp)'; then
         tc qdisc replace dev "$iface" root cake diffserv4 2>/dev/null || true
+    else
+        bw=$(cat "/sys/class/net/$iface/speed" 2>/dev/null) || true
+        if [ -n "$bw" ] && [ "$bw" -gt 0 ] 2>/dev/null; then
+            tc qdisc replace dev "$iface" root cake bandwidth "${bw}mbit" diffserv4 2>/dev/null || true
+        else
+            tc qdisc replace dev "$iface" root cake diffserv4 2>/dev/null || true
+        fi
     fi
 done
 
