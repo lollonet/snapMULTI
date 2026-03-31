@@ -870,8 +870,8 @@ touch "$MARKER"
 progress_complete 2>/dev/null || true
 
 # Show completion summary with access info
-HOSTNAME=$(hostname 2>/dev/null || echo "snapmulti")
-IP_ADDR=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}') || true
+LOCAL_HOSTNAME=$(hostname 2>/dev/null || echo "snapmulti")
+IP_ADDR=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}') || true
 log_and_tty ""
 log_and_tty "  +--------------------------------------------+"
 log_and_tty "  |       Installation complete!               |"
@@ -879,8 +879,8 @@ log_and_tty "  +--------------------------------------------+"
 log_and_tty ""
 case "$INSTALL_TYPE" in
     server|both)
-        log_and_tty "  Speakers:  http://${IP_ADDR:-$HOSTNAME}:1780"
-        log_and_tty "  Library:   http://${IP_ADDR:-$HOSTNAME}:8180"
+        log_and_tty "  Speakers:  http://${IP_ADDR:-$LOCAL_HOSTNAME}:1780"
+        log_and_tty "  Library:   http://${IP_ADDR:-$LOCAL_HOSTNAME}:8180"
         ;;
     client)
         log_and_tty "  Player will auto-discover your server"
