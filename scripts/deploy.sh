@@ -759,10 +759,14 @@ EOF
     }
 
     # Tidal Connect is ARM-only
-    [[ "$IS_ARM" == "true" ]] && ensure_profile "tidal"
+    if [[ "$IS_ARM" == "true" ]]; then
+        ensure_profile "tidal"
+    fi
 
     # Watchtower auto-update (opt-in)
-    grep -q '^AUTO_UPDATE=true' "$ENV_FILE" 2>/dev/null && ensure_profile "auto-update"
+    if grep -q '^AUTO_UPDATE=true' "$ENV_FILE" 2>/dev/null; then
+        ensure_profile "auto-update"
+    fi
 }
 
 #######################################
