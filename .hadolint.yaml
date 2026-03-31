@@ -11,3 +11,8 @@ ignored:
   - DL3013
   # DL3003: "Use WORKDIR" — multi-stage builds legitimately cd in RUN
   - DL3003
+  # DL3042: "Avoid cache directory with pip" — we use BuildKit --mount=type=cache
+  # which is the recommended replacement for --no-cache-dir
+  - DL3042
+  # DL3059: "Multiple consecutive RUN" — intentional for BuildKit cache mount boundaries
+  - DL3059
