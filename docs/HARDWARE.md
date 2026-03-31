@@ -83,12 +83,12 @@ Snapcast clients are lightweight — they receive audio and play it through spea
 
 ### Client Install Method
 
-snapMULTI uses **Docker Compose for client deployment** via the [`rpi-snapclient-usb`](../client/) submodule. This provides a self-contained stack including snapclient, cover art display, and audio visualizer — all managed together.
+snapMULTI uses **Docker Compose for client deployment** via the [`snapclient-pi`](../client/) submodule. This provides a self-contained stack including snapclient, cover art display, and audio visualizer — all managed together.
 
 The client Docker stack runs three containers:
-- `lollonet/rpi-snapclient-usb:latest` — Snapcast audio player
-- `lollonet/rpi-snapclient-usb-fb-display:latest` — Cover art display (framebuffer)
-- `lollonet/rpi-snapclient-usb-visualizer:latest` — Audio visualizer
+- `lollonet/snapclient-pi:latest` — Snapcast audio player
+- `lollonet/snapclient-pi-fb-display:latest` — Cover art display (framebuffer)
+- `lollonet/snapclient-pi-visualizer:latest` — Audio visualizer
 
 See [README.md](../README.md) for the full installation procedure (SD card path or manual).
 
@@ -230,13 +230,13 @@ This ensures consistent audio streaming even during network congestion from file
 | `ghcr.io/jcorporation/mympd/mympd:latest` | ~30–50 MB |
 | `lollonet/snapmulti-tidal:latest` | ~200–300 MB |
 
-**Client images** (from [`rpi-snapclient-usb`](../client/) submodule):
+**Client images** (from [`snapclient-pi`](../client/) submodule):
 
 | Image | Size |
 |-------|------|
-| `lollonet/rpi-snapclient-usb:latest` | ~30–50 MB |
-| `lollonet/rpi-snapclient-usb-fb-display:latest` | ~80–120 MB |
-| `lollonet/rpi-snapclient-usb-visualizer:latest` | ~50–80 MB |
+| `lollonet/snapclient-pi:latest` | ~30–50 MB |
+| `lollonet/snapclient-pi-fb-display:latest` | ~80–120 MB |
+| `lollonet/snapclient-pi-visualizer:latest` | ~50–80 MB |
 
 ### Music Library
 

@@ -237,7 +237,7 @@ For major version upgrades, check [CHANGELOG.md](CHANGELOG.md) for breaking chan
 | App | Platform | Description |
 |-----|----------|-------------|
 | [snapMULTI](https://github.com/lollonet/snapMULTI) | Raspberry Pi / Linux | Multiroom audio server (this project) |
-| [rpi-snapclient-usb](https://github.com/lollonet/rpi-snapclient-usb) | Raspberry Pi | Audio player with cover display |
+| [snapclient-pi](https://github.com/lollonet/snapclient-pi) | Raspberry Pi | Audio player with cover display |
 | snapCTRL | iOS / Android | Remote control app — *coming soon* |
 | snapClient iOS | iOS | Snapcast client for iPhone/iPad — *coming soon* |
 | snapClient Android | Android | Snapcast client for Android — *coming soon* |
