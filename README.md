@@ -220,7 +220,7 @@ docker compose pull
 docker compose up -d
 ```
 
-For major version upgrades, check [CHANGELOG.md](repos/snapMULTI/CHANGELOG.md) for breaking changes.
+For major version upgrades, check [CHANGELOG.md](CHANGELOG.md) for breaking changes.
 
 ## Documentation
 
@@ -230,7 +230,7 @@ For major version upgrades, check [CHANGELOG.md](repos/snapMULTI/CHANGELOG.md) f
 | [Hardware & Network](docs/HARDWARE.md) | Server/client requirements, Raspberry Pi setups, network bandwidth, recommended configs |
 | [Usage & Operations](docs/USAGE.md) | Architecture, services, MPD control, mDNS setup, deployment, CI/CD |
 | [Audio Sources](docs/SOURCES.md) | All source types, parameters, JSON-RPC API, Android/Tidal streaming |
-| [Changelog](repos/snapMULTI/CHANGELOG.md) | Version history |
+| [Changelog](CHANGELOG.md) | Version history |
 
 ## snapMULTI Ecosystem
 

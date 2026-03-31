@@ -1,6 +1,6 @@
 # snapMULTI — Guida Completa all'Installazione
 
-🇬🇧 [English](repos/snapMULTI/docs/INSTALL.md) | 🇮🇹 **Italiano**
+🇬🇧 [English](INSTALL.md) | 🇮🇹 **Italiano**
 
 Questa guida ti porta da una scheda SD vuota a un sistema audio multiroom funzionante, passo dopo passo.
 
