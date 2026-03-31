@@ -180,9 +180,12 @@ class TestHandleStdinLine:
         assert len(capture_stdout) == 1
         assert capture_stdout[0]["result"] == "ok"
 
-    def test_invalid_json_silently_ignored(self, capture_stdout):
+    def test_invalid_json_logs_warning(self, capture_stdout):
         meta_tidal.handle_stdin_line("not json at all {{{")
-        assert len(capture_stdout) == 0
+        # Should log a warning, not produce a response
+        assert len(capture_stdout) == 1
+        assert capture_stdout[0]["method"] == "Plugin.Stream.Log"
+        assert "Invalid JSON" in capture_stdout[0]["params"]["message"]
 
     def test_missing_id_responds_with_null_id(self, capture_stdout):
         meta_tidal.handle_stdin_line(
