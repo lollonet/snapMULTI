@@ -116,6 +116,9 @@ function Show-MusicMenu {
     Write-Host '  |                                              |'
     Write-Host '  +---------------------------------------------+'
     Write-Host ''
+    Write-Host '  Most users choose 1 (streaming). Pick 3 if you'
+    Write-Host '  have a music collection on a NAS or server.'
+    Write-Host ''
 }
 
 function Get-MusicSource {

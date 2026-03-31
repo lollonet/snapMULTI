@@ -110,6 +110,9 @@ show_music_menu() {
     echo "  |                                              |"
     echo "  +---------------------------------------------+"
     echo ""
+    echo "  Most users choose 1 (streaming). Pick 3 if you"
+    echo "  have a music collection on a NAS or server."
+    echo ""
 }
 
 get_music_source() {
