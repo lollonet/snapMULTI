@@ -7,13 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.22] — 2026-03-31
+
 ### Added
-- **Periodic snapserver re-discovery** ([#165](https://github.com/lollonet/snapMULTI/pull/165)) — systemd timer re-discovers snapserver every 5min via mDNS; snapclient restarts only when server IP actually changes (eth↔wlan failover). `.env` left untouched; server IP tracked in volatile `/run/snapclient-server-ip`
+- **Periodic snapserver re-discovery** ([#165](https://github.com/lollonet/snapMULTI/pull/165)) — systemd timer re-discovers snapserver every 5min via mDNS; snapclient restarts only when server IP actually changes (eth↔wlan failover)
 - **MPD database backup on SD card** ([#164](https://github.com/lollonet/snapMULTI/pull/164)) — `prepare-sd.sh` includes pre-built `mpd.db` if present, avoiding full NFS library rescan (~7h → seconds) on reflash
+- **SECURITY.md** — vulnerability disclosure policy via GitHub Security Advisories
+- **Post-install summary screen** ([#170](https://github.com/lollonet/snapMULTI/pull/170)) — shows Snapweb/myMPD URLs with detected IP on HDMI before reboot
+- **RAM validation** ([#170](https://github.com/lollonet/snapMULTI/pull/170)) — warns if memory reserves exceed available RAM during deploy
+- **Tmpfs usage monitoring** — boot-tune logs syslog warning when overlayroot tmpfs >80% full
+- **Music source menu guidance** ([#171](https://github.com/lollonet/snapMULTI/pull/171)) — hint text helps beginners choose the right option
+- **prepare-sd parity CI check** ([#171](https://github.com/lollonet/snapMULTI/pull/171)) — validates bash and PowerShell scripts copy the same files
+
+### Changed
+- **Healthchecks upgraded** — snapserver tests Snapweb HTTP (was `pidof`), tidal checks `speaker_controller` process
+- **CAKE QoS on all interfaces** — applies to both eth and wlan for failover; detects link speed for bandwidth hint
+- **BuildKit cache mounts** on all Dockerfiles — faster rebuilds for apk, apt, pip, uv, cmake
+- **Shared Docker install** ([#168](https://github.com/lollonet/snapMULTI/pull/168)) — client setup.sh uses `install_docker_apt()` from shared script
+- **deploy.sh** — `ensure_profile()` helper deduplicates COMPOSE_PROFILES management
 
 ### Fixed
-- **NFS must mount before Docker** ([#166](https://github.com/lollonet/snapMULTI/pull/166)) — `x-systemd.before=docker.service` in fstab ensures NFS/SMB music is available before MPD starts, preventing database purge on empty `/music`
-- **prepare-sd.ps1 parity** ([#166](https://github.com/lollonet/snapMULTI/pull/166)) — Windows script now copies mpd.db backup, writes `ENABLE_READONLY`, includes ro-mode.sh; removed unnecessary Dockerfile copies
+- **MPD database purge on reboot** ([#167](https://github.com/lollonet/snapMULTI/issues/167)) — entrypoint waits for actual music files before starting MPD; skips forced rescan when pre-built db exists; boot-tune restarts MPD if bind-mount is stale
+- **discover-server.sh missing from SD card** — was never added to prepare-sd copy chain
+- **NFS mount options** — added `rsize=32768` for read performance; removed redundant `wsize` on ro mount; removed `x-systemd` options that caused boot hangs
+- **SMB username sanitization** — prepare-sd.sh now uses shared `sanitize_smb_user()` with user feedback
+- **meta_tidal.py** — JSON decode errors logged instead of silently swallowed
+- **Boot-tune logging** — CPU governor and USB autosuspend failures logged via syslog
+
+### Security
+- **DAC_OVERRIDE scoped** ([#169](https://github.com/lollonet/snapMULTI/pull/169), closes [#146](https://github.com/lollonet/snapMULTI/issues/146)) — only FIFO-writing containers get DAC_OVERRIDE; mympd, mpd, metadata no longer have it
+- **apparmor:unconfined removed** from default security anchor — only on containers needing D-Bus
 
 ## [0.3.17] — 2026-03-29
 
