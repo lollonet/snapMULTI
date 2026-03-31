@@ -34,8 +34,6 @@ Two web interfaces are available:
 | **Snapweb** | `http://<server-ip>:1780` | Manage speakers: switch sources, adjust volume, group/ungroup |
 | **myMPD** | `http://<server-ip>:8180` | Browse and play your music library (MPD source) |
 
-From **Snapweb** you can:
-
 You can also use the Snapcast mobile apps:
 [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) |
 [iOS (SnapForge)](https://apps.apple.com/app/snapforge/id6670397895)

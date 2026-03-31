@@ -731,32 +731,24 @@ EOF
         apply_resource_profile "$profile"
     fi
 
-    # Migrate existing .env: add COMPOSE_PROFILES=tidal on ARM if absent
-    # (installs from before PR #99 have no COMPOSE_PROFILES key)
-    if [[ "$IS_ARM" == "true" ]]; then
+    # Ensure COMPOSE_PROFILES includes required profiles
+    ensure_profile() {
+        local profile="$1"
         if ! grep -q '^COMPOSE_PROFILES=' "$ENV_FILE" 2>/dev/null; then
-            printf '\n# Docker Compose profiles (tidal-connect is ARM-only)\nCOMPOSE_PROFILES=tidal\n' >> "$ENV_FILE"
-            info "Migrated .env: added COMPOSE_PROFILES=tidal for ARM"
-        elif ! grep -q '^COMPOSE_PROFILES=.*tidal' "$ENV_FILE"; then
-            sed -i 's/^COMPOSE_PROFILES=\(.*\)/COMPOSE_PROFILES=\1,tidal/' "$ENV_FILE"
-            info "Migrated .env: added tidal to existing COMPOSE_PROFILES"
-        fi
-    fi
-
-    # Enable auto-update profile if requested
-    if grep -q '^AUTO_UPDATE=true' "$ENV_FILE" 2>/dev/null; then
-        if grep -q '^COMPOSE_PROFILES=' "$ENV_FILE"; then
-            # Append auto-update to existing profiles (if not already present)
-            if ! grep -q 'auto-update' "$ENV_FILE"; then
-                sed -i 's/^COMPOSE_PROFILES=\(.*\)/COMPOSE_PROFILES=\1,auto-update/' "$ENV_FILE"
-                info "Added auto-update to COMPOSE_PROFILES"
-            fi
+            printf '\n# Docker Compose profiles\nCOMPOSE_PROFILES=%s\n' "$profile" >> "$ENV_FILE"
+        elif ! grep -q "^COMPOSE_PROFILES=.*${profile}" "$ENV_FILE"; then
+            sed -i "s/^COMPOSE_PROFILES=\(.*\)/COMPOSE_PROFILES=\1,${profile}/" "$ENV_FILE"
         else
-            echo "COMPOSE_PROFILES=auto-update" >> "$ENV_FILE"
-            info "Set COMPOSE_PROFILES=auto-update"
+            return 0
         fi
-        ok "Watchtower auto-update enabled"
-    fi
+        info "Enabled profile: $profile"
+    }
+
+    # Tidal Connect is ARM-only
+    [[ "$IS_ARM" == "true" ]] && ensure_profile "tidal"
+
+    # Watchtower auto-update (opt-in)
+    grep -q '^AUTO_UPDATE=true' "$ENV_FILE" 2>/dev/null && ensure_profile "auto-update"
 }
 
 #######################################
