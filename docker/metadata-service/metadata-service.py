@@ -878,10 +878,22 @@ class MetadataService:
         cache_key = f"{artist}|{album}"
         if cache_key in self.artwork_cache:
             cached = self.artwork_cache[cache_key]
-            if "|" in cached:
+            # Expired failed lookup — retry after 1 hour
+            if cached.startswith("|failed|"):
+                try:
+                    failed_at = int(cached.split("|")[2])
+                    if time.monotonic() - failed_at < 3600:
+                        return "", ""
+                except (IndexError, ValueError):
+                    pass
+                self.artwork_cache.pop(cache_key, None)
+            elif "|" in cached:
                 url, source = cached.split("|", 1)
                 return url, source
-            return cached, ""  # old-format entry — source unknown
+            elif cached:
+                return cached, ""  # old-format entry — source unknown
+            else:
+                return "", ""
 
         # Priority: MusicBrainz (album-specific, scored) then iTunes
         artwork_url = self.fetch_musicbrainz_artwork(artist, album)
@@ -896,7 +908,10 @@ class MetadataService:
             logger.info("Found iTunes artwork for %s - %s", artist, album)
             return artwork_url, "itunes"
 
-        self._cache_set(self.artwork_cache, cache_key, "")
+        # Cache miss with TTL — retry after 1 hour (don't cache failures forever)
+        self._cache_set(
+            self.artwork_cache, cache_key, f"|failed|{int(time.monotonic())}"
+        )
         return "", ""
 
     def _fetch_itunes_artwork(self, artist: str, album: str) -> str:
@@ -1292,6 +1307,12 @@ class MetadataService:
                 artwork_url = None  # skip further lookups
 
         if not artwork_url and not metadata.get("artwork"):
+            logger.debug(
+                "No artwork from source for %s - %s (%s), trying fallback",
+                metadata.get("artist"),
+                metadata.get("album"),
+                metadata.get("source"),
+            )
             if is_radio and metadata.get("station_name"):
                 artwork_url = self.fetch_radio_logo(
                     metadata["station_name"], metadata.get("file", "")
