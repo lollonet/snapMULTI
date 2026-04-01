@@ -15,7 +15,7 @@ jobs:
             runner: snapcast-runner
           - platform: linux/arm64
             suffix: arm64
-            runner: snapcast-runner
+            runner: ARM64
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
