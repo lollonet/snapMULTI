@@ -886,7 +886,7 @@ class MetadataService:
                         return "", ""
                 except (IndexError, ValueError):
                     pass
-                del self.artwork_cache[cache_key]
+                self.artwork_cache.pop(cache_key, None)
             elif "|" in cached:
                 url, source = cached.split("|", 1)
                 return url, source
