@@ -220,6 +220,7 @@ services:
       - ./mpd/playlists:/playlists
       - ./mpd/data:/data
       - /run/avahi-daemon/socket:/run/avahi-daemon/socket
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
     logging: *default-logging
