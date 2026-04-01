@@ -12,9 +12,11 @@ jobs:
         include:
           - platform: linux/amd64
             suffix: amd64
+            runner: snapcast-runner
           - platform: linux/arm64
             suffix: arm64
-    runs-on: snapcast-runner
+            runner: ARM64
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
     steps:
