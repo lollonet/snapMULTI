@@ -909,7 +909,9 @@ class MetadataService:
             return artwork_url, "itunes"
 
         # Cache miss with TTL — retry after 1 hour (don't cache failures forever)
-        self._cache_set(self.artwork_cache, cache_key, f"|failed|{int(time.monotonic())}")
+        self._cache_set(
+            self.artwork_cache, cache_key, f"|failed|{int(time.monotonic())}"
+        )
         return "", ""
 
     def _fetch_itunes_artwork(self, artist: str, album: str) -> str:
@@ -1307,7 +1309,9 @@ class MetadataService:
         if not artwork_url and not metadata.get("artwork"):
             logger.debug(
                 "No artwork from source for %s - %s (%s), trying fallback",
-                metadata.get("artist"), metadata.get("album"), metadata.get("source"),
+                metadata.get("artist"),
+                metadata.get("album"),
+                metadata.get("source"),
             )
             if is_radio and metadata.get("station_name"):
                 artwork_url = self.fetch_radio_logo(
