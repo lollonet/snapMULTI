@@ -209,14 +209,3 @@ jobs:
             "lollonet/snapmulti-mpd:$VERSION-amd64" \
             "lollonet/snapmulti-mpd:$VERSION-arm64"
 
-  deploy:
-    needs: manifest
-    uses: ./.github/workflows/deploy.yml
-    with:
-      environment_name: snapvideo
-    secrets:
-      HOST:               ${{ secrets.HOST_SNAPVIDEO }}
-      USER:               ${{ secrets.USER }}
-      SSH_KEY:            ${{ secrets.SSH_KEY }}
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN:    ${{ secrets.DOCKERHUB_TOKEN }}
