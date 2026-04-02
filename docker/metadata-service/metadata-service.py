@@ -826,13 +826,19 @@ class MetadataService:
         if not artist or not album:
             return
 
-        cache_key = f"{artist}|{album}"
+        # Clean album name: remove truncated parenthetical suffixes
+        # e.g. "Version 2.0 (20th Annivers" → "Version 2.0"
+        clean_album = album
+        if "(" in clean_album and ")" not in clean_album:
+            clean_album = clean_album[: clean_album.rfind("(")].rstrip()
+
+        cache_key = f"{artist}|{clean_album}"
         cached = self._release_meta_cache.get(cache_key)
 
         if cached is None:
-            # No cached data — trigger a MusicBrainz lookup (also populates artwork cache)
+            # No cached data — trigger a MusicBrainz lookup
             _mb_rate_limit()
-            query = urllib.parse.quote(f'artist:"{artist}" AND release:"{album}"')
+            query = urllib.parse.quote(f'artist:"{artist}" AND release:"{clean_album}"')
             url = (
                 f"https://musicbrainz.org/ws/2/release/?query={query}&fmt=json&limit=5"
             )
