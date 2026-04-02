@@ -423,6 +423,7 @@ Pushing a version tag (e.g. `git tag v1.1.0 && git push origin v1.1.0`) triggers
 
 ```
 tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :version)
+                                                 → scan.yml → Trivy SARIF → GitHub Security tab
 ```
 
 Devices get the new images on next reflash (`prepare-sd.sh` → `firstboot.sh` pulls `:latest`).
