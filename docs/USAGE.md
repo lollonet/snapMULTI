@@ -412,20 +412,20 @@ ss -tlnp | grep -E "1704|1705|1780"
 | **Zero-touch SD** | Beginners | Raspberry Pi | Flash SD, insert, power on — fully automatic |
 | **`deploy.sh`** | Advanced | Pi or x86_64 | Detects hardware, creates dirs, starts services |
 | **Manual** | Advanced | Pi or x86_64 | Clone, edit `.env`, `docker compose up` |
-| **CI/CD (tag push)** | Maintainers | N/A | Builds images, deploys to server via SSH |
+| **CI/CD (tag push)** | Maintainers | N/A | Builds images, pushes to Docker Hub |
 
-### Automated Deployment (Recommended)
+### Automated Build (tag push)
 
-Pushing a version tag (e.g. `git tag v1.1.0 && git push origin v1.1.0`) triggers the full CI/CD pipeline:
+Pushing a version tag (e.g. `git tag v1.1.0 && git push origin v1.1.0`) triggers the CI pipeline:
 
-1. **Build** — Docker images built on self-hosted runner (amd64 native + arm64 via QEMU cross-compilation)
+1. **Build** — Docker images built on self-hosted runners (amd64 native + arm64 via QEMU)
 2. **Manifest** — Per-arch images combined into multi-arch `:latest` tags on Docker Hub
-3. **Deploy** — Images pulled and all containers (`snapserver`, `shairport-sync`, `librespot`, `mpd`, `mympd`, `metadata`, `tidal-connect`) restarted on the home server via SSH
 
 ```
-tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :version) → deploy.yml → server updated
-                                                                                  → scan.yml → Trivy SARIF → GitHub Security tab
+tag v* → build-push.yml → build (amd64 + arm64) → manifest (:latest + :version)
 ```
+
+Devices get the new images on next reflash (`prepare-sd.sh` → `firstboot.sh` pulls `:latest`).
 
 ### Zero-Touch SD Card (Raspberry Pi)
 

@@ -7,15 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- **Native arm64 CI builds** ([#181](https://github.com/lollonet/snapMULTI/pull/181)) — arm64 Docker builds routed to Apple Silicon Mac runner (native speed, was QEMU emulated on amd64)
-
 ### Changed
 - **Client repo renamed** ([#179](https://github.com/lollonet/snapMULTI/pull/179)) — `rpi-snapclient-usb` → `snapclient-pi` across all docs, submodule, CI, issue templates. GitHub redirect handles old URLs
+- **CI: removed deploy step** ([#183](https://github.com/lollonet/snapMULTI/pull/183)) — build workflow no longer SSH-deploys to devices; deployment is via reflash only (live deploy caused fuse-overlayfs corruption on overlayroot)
 
 ### Fixed
 - **deploy.sh crash on fresh install** ([#178](https://github.com/lollonet/snapMULTI/pull/178)) — `ensure_profile()` used `&&` pattern as last command in function; `set -e` killed the script when `AUTO_UPDATE` was absent (always on fresh installs)
 - **Artwork lookup failures cached forever** ([#180](https://github.com/lollonet/snapMULTI/pull/180)) — failed MusicBrainz/iTunes lookups now expire after 1 hour; sources like Tidal that never provide artwork get retried instead of permanent empty cache. Thread-safe cache eviction with `dict.pop`
+- **MPD zeroconf registration** ([#183](https://github.com/lollonet/snapMULTI/pull/183)) — added D-Bus socket mount so MPD can register via Avahi; mobile apps (MPDroid, Cantata) now auto-discover the server
 
 ## [0.3.22] — 2026-03-31
 
