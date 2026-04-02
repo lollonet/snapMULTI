@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.24] — 2026-04-02
+
 ### Added
-- **Mac arm64 CI runner** ([#181](https://github.com/lollonet/snapMULTI/pull/181)) — self-hosted runner registered; reverted to QEMU on raspy due to Docker Desktop buildx issues ([#182](https://github.com/lollonet/snapMULTI/issues/182))
+- **Native arm64 CI builds** ([#184](https://github.com/lollonet/snapMULTI/pull/184)) — arm64 builds on Apple Silicon Mac runner with `docker` driver (native speed, was QEMU on raspy)
 
 ### Changed
 - **Client repo renamed** ([#179](https://github.com/lollonet/snapMULTI/pull/179)) — `rpi-snapclient-usb` → `snapclient-pi` across all docs, submodule, CI, issue templates. GitHub redirect handles old URLs
