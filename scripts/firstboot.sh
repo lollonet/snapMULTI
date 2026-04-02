@@ -468,6 +468,10 @@ apt-get update -qq
 # Upgrade all packages (security patches, bug fixes, kernel).
 # Runs before overlayroot — changes persist in the base layer.
 # The reboot at the end of firstboot activates any new kernel.
+# Refresh package index (cloud-init's apt-get update likely failed due to stale clock)
+log_progress "Refreshing package index..." 2>/dev/null || true
+apt-get update -qq >> "$LOG" 2>&1 || true
+
 log_progress "Upgrading system packages..." 2>/dev/null || true
 if ! apt-get upgrade -y -qq >> "$LOG" 2>&1; then
     log_and_tty "WARNING: apt upgrade failed (non-fatal, continuing with existing packages)"
