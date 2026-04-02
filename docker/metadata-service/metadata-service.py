@@ -795,7 +795,11 @@ class MetadataService:
             if score < 80:
                 continue
             # Cache release metadata (date, genre) for enrich_tags()
-            cache_key = f"{artist}|{album}"
+            # Clean album name to match enrich_tags() cache key
+            clean = album
+            if "(" in clean and ")" not in clean:
+                clean = clean[: clean.rfind("(")].rstrip()
+            cache_key = f"{artist}|{clean}"
             date = release.get("date", "")
             tags = release.get("tags", [])
             genre = tags[0].get("name", "") if tags else ""
