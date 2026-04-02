@@ -96,7 +96,7 @@ TIDAL_NAME="Living Room Tidal"
 
 **Sample format:** 44100:16:2 (fixed by tidal-connect)
 
-**Metadata:** Track title, artist, album, duration, and playback state. Extracted by `tidal-meta-bridge.sh` running inside the tidal-connect container, which scrapes the `speaker_controller_application` TUI output via tmux. The bridge writes JSON to `/audio/tidal-metadata.json`, which `meta_tidal.py` (running inside snapserver) polls and forwards to snapserver via JSON-RPC. Album art is not available (the speaker controller does not expose artwork URLs).
+**Metadata:** Track title, artist, album, duration, and playback state. Extracted by `tidal-meta-bridge.sh` running inside the tidal-connect container, which scrapes the `speaker_controller_application` TUI output via tmux. The bridge writes JSON to `/audio/tidal-metadata.json`, which `meta_tidal.py` (running inside snapserver) polls and forwards to snapserver via JSON-RPC. Album art is not available (the speaker controller does not expose artwork URLs). Date and genre are enriched from MusicBrainz when available (cached, no extra API call if artwork was already looked up). Truncated album names (unclosed parentheses from TUI scraping) are cleaned before lookup.
 
 **Connect from Tidal:**
 1. Open **Tidal** on your phone/tablet
