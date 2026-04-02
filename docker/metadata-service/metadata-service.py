@@ -128,6 +128,9 @@ class MetadataService:
         self._failed_downloads: collections.OrderedDict[str, None] = (
             collections.OrderedDict()
         )
+        self._release_meta_cache: collections.OrderedDict[str, str] = (
+            collections.OrderedDict()
+        )
 
         self._cache_limit = _MAX_CACHE_ENTRIES
 
@@ -550,6 +553,10 @@ class MetadataService:
                 "title": title,
                 "artist": artist,
                 "album": album,
+                "date": song.get("Date", ""),
+                "genre": song.get("Genre", ""),
+                "track": song.get("Track", ""),
+                "disc": song.get("Disc", ""),
                 "artwork": "",
                 "stream_id": "MPD",
                 "source": "MPD",
@@ -787,10 +794,77 @@ class MetadataService:
             score = release.get("score", 0)
             if score < 80:
                 continue
+            # Cache release metadata (date, genre) for enrich_tags()
+            # Clean album name to match enrich_tags() cache key
+            clean = album
+            if "(" in clean and ")" not in clean:
+                clean = clean[: clean.rfind("(")].rstrip()
+            cache_key = f"{artist}|{clean}"
+            date = release.get("date", "")
+            tags = release.get("tags", [])
+            genre = tags[0].get("name", "") if tags else ""
+            self._cache_set(
+                self._release_meta_cache,
+                cache_key,
+                f"{date}|{genre}",
+            )
             mbid = release.get("id")
             if mbid:
                 return f"https://coverartarchive.org/release/{mbid}/front-500"
         return ""
+
+    def enrich_tags(self, metadata: dict[str, Any]) -> None:
+        """Fill in missing date/genre from MusicBrainz release data.
+
+        Uses cached data from fetch_musicbrainz_artwork() — no extra API calls
+        when artwork was already looked up. Only makes a new query if no cached
+        release metadata exists.
+        """
+        if not metadata.get("playing"):
+            return
+        # Skip if already has both fields (MPD provides them)
+        if metadata.get("date") and metadata.get("genre"):
+            return
+        artist = metadata.get("artist", "")
+        album = metadata.get("album", "")
+        if not artist or not album:
+            return
+
+        # Clean album name: remove truncated parenthetical suffixes
+        # e.g. "Version 2.0 (20th Annivers" → "Version 2.0"
+        clean_album = album
+        if "(" in clean_album and ")" not in clean_album:
+            clean_album = clean_album[: clean_album.rfind("(")].rstrip()
+
+        cache_key = f"{artist}|{clean_album}"
+        cached = self._release_meta_cache.get(cache_key)
+
+        if cached is None:
+            # No cached data — trigger a MusicBrainz lookup
+            _mb_rate_limit()
+            query = urllib.parse.quote(f'artist:"{artist}" AND release:"{clean_album}"')
+            url = (
+                f"https://musicbrainz.org/ws/2/release/?query={query}&fmt=json&limit=5"
+            )
+            data = self._make_api_request(url)
+            if data and isinstance(data, dict):
+                for release in data.get("releases", []):
+                    if release.get("score", 0) >= 80:
+                        date = release.get("date", "")
+                        tags = release.get("tags", [])
+                        genre = tags[0].get("name", "") if tags else ""
+                        cached = f"{date}|{genre}"
+                        self._cache_set(self._release_meta_cache, cache_key, cached)
+                        break
+            if cached is None:
+                self._cache_set(self._release_meta_cache, cache_key, "|")
+                return
+
+        parts = cached.split("|", 1)
+        if not metadata.get("date") and len(parts) > 0 and parts[0]:
+            metadata["date"] = parts[0]
+        if not metadata.get("genre") and len(parts) > 1 and parts[1]:
+            metadata["genre"] = parts[1]
 
     def _get_wikidata_id_from_relations(self, relations: list) -> str | None:
         for rel in relations:
@@ -1462,8 +1536,9 @@ class MetadataService:
                         if is_playing and metadata.get("elapsed", 0) <= 0:
                             metadata["elapsed"] = estimated
 
-                    # Enrich with artwork
+                    # Enrich with artwork and tags
                     await loop.run_in_executor(None, self.enrich_artwork, metadata)
+                    await loop.run_in_executor(None, self.enrich_tags, metadata)
 
                     # Check for changes
                     changed = self._metadata_changed(metadata, sm.current)
