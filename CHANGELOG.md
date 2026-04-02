@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.25] — 2026-04-02
+
+### Added
+- **Album details in metadata** ([#185](https://github.com/lollonet/snapMULTI/pull/185)) — metadata-service exposes date, genre, track, disc from MPD. Non-MPD sources (Tidal, Spotify, AirPlay) enriched via MusicBrainz lookup with caching. Client display shows `1978 · Reggae · Track 3 · Disc 1`
+- **MusicBrainz tag enrichment** ([#185](https://github.com/lollonet/snapMULTI/pull/185)) — all sources get date/genre from MusicBrainz when the source doesn't provide them. Reuses artwork lookup cache — no extra API calls
+
+### Fixed
+- **Truncated album names** ([#185](https://github.com/lollonet/snapMULTI/pull/185)) — tidal-meta-bridge truncates long names with unclosed parentheses; metadata-service strips them before MusicBrainz queries
+
 ## [0.3.24] — 2026-04-02
 
 ### Added
