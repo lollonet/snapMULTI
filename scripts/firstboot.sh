@@ -131,6 +131,9 @@ case "$INSTALL_TYPE" in
         ;;
 esac
 
+# Include hostname in progress title so user can identify which Pi
+PROGRESS_TITLE="$PROGRESS_TITLE ($(hostname))"
+
 # Guard: step names and weights must match
 if [[ ${#STEP_NAMES[@]} -ne ${#STEP_WEIGHTS[@]} ]]; then
     echo "BUG: STEP_NAMES (${#STEP_NAMES[@]}) != STEP_WEIGHTS (${#STEP_WEIGHTS[@]})" | tee -a "$LOG"
@@ -161,7 +164,7 @@ cleanup_on_failure() {
 trap cleanup_on_failure EXIT
 
 log_and_tty "========================================="
-log_and_tty "snapMULTI Auto-Install ($INSTALL_TYPE)"
+log_and_tty "snapMULTI Auto-Install ($INSTALL_TYPE) -- $(hostname)"
 log_and_tty "========================================="
 
 # ── Headless detection (for client modes) ─────────────────────────
