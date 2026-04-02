@@ -15,7 +15,7 @@ jobs:
             runner: snapcast-runner
           - platform: linux/arm64
             suffix: arm64
-            runner: snapcast-runner
+            runner: ARM64
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -23,6 +23,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Set up QEMU
+        if: runner.os == 'Linux'
         uses: docker/setup-qemu-action@v4
 
       - name: Extract version from tag
@@ -34,10 +35,12 @@ jobs:
             echo "tag=" >> "$GITHUB_OUTPUT"
           fi
 
+      # docker driver on Mac: inherits host credentials, no isolated BuildKit container
+      # docker-container on Linux: supports GHA cache export
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
         with:
-          driver: docker-container
+          driver: ${{ runner.os == 'macOS' && 'docker' || 'docker-container' }}
 
       - name: Login to Docker Hub
         uses: docker/login-action@v4
@@ -68,8 +71,8 @@ jobs:
           tags: |
             lollonet/snapmulti-server:${{ matrix.suffix }}
             ${{ steps.version.outputs.tag && format('lollonet/snapmulti-server:{0}-{1}', steps.version.outputs.tag, matrix.suffix) || '' }}
-          cache-from: type=gha,scope=snapserver-${{ matrix.suffix }}
-          cache-to: type=gha,mode=max,scope=snapserver-${{ matrix.suffix }}
+          cache-from: ${{ runner.os == 'Linux' && format('type=gha,scope=snapserver-{0}', matrix.suffix) || '' }}
+          cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=snapserver-{0}', matrix.suffix) || '' }}
 
       - name: Build and push shairport-sync
         uses: docker/build-push-action@v7
@@ -81,8 +84,8 @@ jobs:
           tags: |
             lollonet/snapmulti-airplay:${{ matrix.suffix }}
             ${{ steps.version.outputs.tag && format('lollonet/snapmulti-airplay:{0}-{1}', steps.version.outputs.tag, matrix.suffix) || '' }}
-          cache-from: type=gha,scope=airplay-${{ matrix.suffix }}
-          cache-to: type=gha,mode=max,scope=airplay-${{ matrix.suffix }}
+          cache-from: ${{ runner.os == 'Linux' && format('type=gha,scope=airplay-{0}', matrix.suffix) || '' }}
+          cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=airplay-{0}', matrix.suffix) || '' }}
 
       # Spotify Connect: uses official ghcr.io/devgianlu/go-librespot image (no build needed)
 
@@ -96,8 +99,8 @@ jobs:
           tags: |
             lollonet/snapmulti-mpd:${{ matrix.suffix }}
             ${{ steps.version.outputs.tag && format('lollonet/snapmulti-mpd:{0}-{1}', steps.version.outputs.tag, matrix.suffix) || '' }}
-          cache-from: type=gha,scope=mpd-${{ matrix.suffix }}
-          cache-to: type=gha,mode=max,scope=mpd-${{ matrix.suffix }}
+          cache-from: ${{ runner.os == 'Linux' && format('type=gha,scope=mpd-{0}', matrix.suffix) || '' }}
+          cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=mpd-{0}', matrix.suffix) || '' }}
 
       - name: Build and push metadata
         uses: docker/build-push-action@v7
@@ -109,8 +112,8 @@ jobs:
           tags: |
             lollonet/snapmulti-metadata:${{ matrix.suffix }}
             ${{ steps.version.outputs.tag && format('lollonet/snapmulti-metadata:{0}-{1}', steps.version.outputs.tag, matrix.suffix) || '' }}
-          cache-from: type=gha,scope=metadata-${{ matrix.suffix }}
-          cache-to: type=gha,mode=max,scope=metadata-${{ matrix.suffix }}
+          cache-from: ${{ runner.os == 'Linux' && format('type=gha,scope=metadata-{0}', matrix.suffix) || '' }}
+          cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=metadata-{0}', matrix.suffix) || '' }}
 
       # Tidal Connect - ARM only (Pi 3/4/5)
       # Base image edgecrush3r/tidal-connect only provides ARM binaries
@@ -126,8 +129,8 @@ jobs:
             lollonet/snapmulti-tidal:arm64
             lollonet/snapmulti-tidal:latest
             ${{ steps.version.outputs.tag && format('lollonet/snapmulti-tidal:{0}', steps.version.outputs.tag) || '' }}
-          cache-from: type=gha,scope=tidal-arm64
-          cache-to: type=gha,mode=max,scope=tidal-arm64
+          cache-from: ${{ runner.os == 'Linux' && format('type=gha,scope=tidal-arm64') || '' }}
+          cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=tidal-arm64') || '' }}
 
   manifest:
     needs: build
