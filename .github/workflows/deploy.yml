@@ -33,7 +33,7 @@ jobs:
       group: deploy-${{ inputs.environment_name }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Copy updated docker-compose.yml
         env:
@@ -50,7 +50,7 @@ jobs:
           rm -f "$KEY_FILE"
 
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.5
+        uses: appleboy/ssh-action@2ead5e36573838044bfdd81083b27846db753b4c # v1.2.5
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
