@@ -8,7 +8,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.6.3 /uv /usr/local/bin/uv
 
 # Install dependencies: WebSocket server + HTTP server
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system "websockets==14.2" "aiohttp==3.11.12"
+    uv pip install --system "websockets==16.0" "aiohttp==3.13.5"
 
 # Copy metadata service
 COPY docker/metadata-service/metadata-service.py /app/
