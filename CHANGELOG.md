@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.26] — 2026-04-03
+
+### Added
+- **Hostname in install TUI** — progress screen shows device name for multi-Pi installs
+- **Gitleaks secrets detection** — new CI workflow on push/PR
+- **Dependabot** — GitHub Actions updates (already configured for Docker)
+
+### Changed
+- **Python 3.14** — metadata-service bumped from 3.13-slim to 3.14-slim
+- **SHA-pinned all GitHub Actions** — 8 workflows hardened against supply chain attacks
+- **Client submodule** — Python 3.14, enterprise readiness, autodiscovery fix, Mac runner, deploy removal
+
+### Fixed
+- **apt-get upgrade on first boot** — cloud-init's `apt-get update` runs before NTP sync (stale signatures); our `apt-get update` runs after NTP, indices are fresh for upgrade
+- **Client SNAPSERVER_HOST cleanup** — discover-server.sh clears hardcoded IPs (including stale 127.0.0.1) at boot for mDNS autodiscovery
+
 ## [0.3.25] — 2026-04-02
 
 ### Added
