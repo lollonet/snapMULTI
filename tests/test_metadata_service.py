@@ -45,10 +45,20 @@ class _DummyTCPSite:
         return None
 
 
+class _DummyConnectionClosed(Exception):
+    pass
+
+
 @pytest.fixture()
 def metadata_service_module(monkeypatch, tmp_path):
     monkeypatch.setenv("ARTWORK_DIR", str(tmp_path / "artwork"))
     monkeypatch.setenv("DEFAULTS_DIR", str(tmp_path / "defaults"))
+    websockets_module = types.ModuleType("websockets")
+    websockets_module.exceptions = types.SimpleNamespace(
+        ConnectionClosed=_DummyConnectionClosed
+    )
+    websockets_module.serve = lambda *args, **kwargs: None
+    monkeypatch.setitem(sys.modules, "websockets", websockets_module)
     aiohttp_module = types.ModuleType("aiohttp")
     aiohttp_module.web = types.SimpleNamespace(
         Request=type("Request", (), {}),
