@@ -459,6 +459,26 @@ wait_for_apt_lock() {
     log_and_tty "WARNING: apt lock still held after 5 minutes — proceeding anyway"
 }
 
+apt_install_with_recovery() {
+    if apt-get install -y "$@" >> "$LOG" 2>&1; then
+        return 0
+    fi
+
+    log_and_tty "WARNING: apt install failed for: $*"
+    log_and_tty "WARNING: attempting dpkg/apt recovery and retry"
+
+    dpkg --configure -a >> "$LOG" 2>&1 || true
+    apt-get -f install -y >> "$LOG" 2>&1 || true
+    wait_for_apt_lock
+
+    if apt-get install -y "$@" >> "$LOG" 2>&1; then
+        return 0
+    fi
+
+    log_and_tty "ERROR: apt install still failing for: $*"
+    return 1
+}
+
 log_progress "Waiting for apt lock..." 2>/dev/null || true
 wait_for_apt_lock
 
@@ -489,6 +509,19 @@ if ! command -v avahi-daemon &>/dev/null; then
     PKGS+=(avahi-daemon)
 fi
 
+# Client auto-detect needs these before setup.sh --auto runs.
+# Without i2c-tools/kmod on a fresh image, EEPROM-less GPIO DACs can fall
+# through to the USB fallback before setup.sh has a chance to write the HAT
+# overlay and enable read-only mode.
+if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+    if ! command -v i2cdetect &>/dev/null; then
+        PKGS+=(i2c-tools)
+    fi
+    if ! command -v modprobe &>/dev/null; then
+        PKGS+=(kmod)
+    fi
+fi
+
 # NFS/SMB packages for music source mounts
 if [[ "$MUSIC_SOURCE" == "nfs" ]]; then
     PKGS+=(nfs-common)
@@ -498,7 +531,9 @@ if [[ "$MUSIC_SOURCE" == "smb" ]]; then
 fi
 
 log_progress "Installing: ${PKGS[*]}" 2>/dev/null || true
-apt-get install -y -qq "${PKGS[@]}" >/dev/null
+if ! apt_install_with_recovery "${PKGS[@]}"; then
+    exit 1
+fi
 
 # Enable avahi if just installed
 if command -v avahi-daemon &>/dev/null; then
@@ -842,6 +877,20 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     else
         log_and_tty "WARNING: snapclient container not running."
     fi
+fi
+
+# ── Final package refresh before sealing the image/reboot ────────
+# A second pass catches upgrades that become available after repository
+# setup earlier in firstboot (for example after Docker CE repo wiring),
+# while the root filesystem is still writable.
+log_progress "Final package refresh before reboot..." 2>/dev/null || true
+wait_for_apt_lock
+if ! apt-get update >> "$LOG" 2>&1; then
+    log_and_tty "WARNING: final apt-get update failed (non-fatal, continuing to reboot)"
+elif ! apt-get upgrade -y >> "$LOG" 2>&1; then
+    log_and_tty "WARNING: final apt upgrade failed (non-fatal, continuing to reboot)"
+else
+    log_progress "Final package refresh complete" 2>/dev/null || true
 fi
 
 # ══════════════════════════════════════════════════════════════════

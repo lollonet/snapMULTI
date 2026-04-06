@@ -197,6 +197,30 @@ class MetadataService:
         while len(self._failed_downloads) > self._cache_limit:
             self._failed_downloads.popitem(last=False)
 
+    @staticmethod
+    def _release_meta_cache_value(date: str, original_date: str, genre: str) -> str:
+        """Serialize release metadata for cache storage.
+
+        Format is pipe-delimited for compactness and backward-compatible parsing.
+        """
+        return f"{date}|{original_date}|{genre}"
+
+    @staticmethod
+    def _parse_release_meta_cache(cached: str) -> tuple[str, str, str]:
+        """Parse cached release metadata.
+
+        Legacy cache entries stored `date|genre`; treat those as missing
+        `original_date` so in-memory caches remain backward-compatible.
+        """
+        parts = cached.split("|")
+        if len(parts) >= 3:
+            return parts[0], parts[1], parts[2]
+        if len(parts) == 2:
+            return parts[0], "", parts[1]
+        if len(parts) == 1:
+            return parts[0], "", ""
+        return "", "", ""
+
     # ──────────────────────────────────────────────
     # Socket helpers
     # ──────────────────────────────────────────────
@@ -801,20 +825,41 @@ class MetadataService:
                 clean = clean[: clean.rfind("(")].rstrip()
             cache_key = f"{artist}|{clean}"
             date = release.get("date", "")
+            original_date = ""
             tags = release.get("tags", [])
             genre = tags[0].get("name", "") if tags else ""
+            release_group = release.get("release-group", {})
+            release_group_id = (
+                release_group.get("id", "") if isinstance(release_group, dict) else ""
+            )
+            if release_group_id:
+                original_date = self.fetch_musicbrainz_release_group_first_date(
+                    release_group_id
+                )
             self._cache_set(
                 self._release_meta_cache,
                 cache_key,
-                f"{date}|{genre}",
+                self._release_meta_cache_value(date, original_date, genre),
             )
             mbid = release.get("id")
             if mbid:
                 return f"https://coverartarchive.org/release/{mbid}/front-500"
         return ""
 
+    def fetch_musicbrainz_release_group_first_date(self, release_group_id: str) -> str:
+        """Fetch the earliest known release date for a release group."""
+        if not release_group_id:
+            return ""
+        _mb_rate_limit()
+        url = f"https://musicbrainz.org/ws/2/release-group/{release_group_id}?fmt=json"
+        data = self._make_api_request(url)
+        if not data or not isinstance(data, dict):
+            return ""
+        value = str(data.get("first-release-date", "") or "").strip()
+        return value
+
     def enrich_tags(self, metadata: dict[str, Any]) -> None:
-        """Fill in missing date/genre from MusicBrainz release data.
+        """Fill in missing date/original_date/genre from MusicBrainz release data.
 
         Uses cached data from fetch_musicbrainz_artwork() — no extra API calls
         when artwork was already looked up. Only makes a new query if no cached
@@ -822,8 +867,12 @@ class MetadataService:
         """
         if not metadata.get("playing"):
             return
-        # Skip if already has both fields (MPD provides them)
-        if metadata.get("date") and metadata.get("genre"):
+        # Skip if already has all fields we can enrich.
+        if (
+            metadata.get("date")
+            and metadata.get("original_date")
+            and metadata.get("genre")
+        ):
             return
         artist = metadata.get("artist", "")
         album = metadata.get("album", "")
@@ -851,20 +900,41 @@ class MetadataService:
                 for release in data.get("releases", []):
                     if release.get("score", 0) >= 80:
                         date = release.get("date", "")
+                        original_date = ""
                         tags = release.get("tags", [])
                         genre = tags[0].get("name", "") if tags else ""
-                        cached = f"{date}|{genre}"
+                        release_group = release.get("release-group", {})
+                        release_group_id = (
+                            release_group.get("id", "")
+                            if isinstance(release_group, dict)
+                            else ""
+                        )
+                        if release_group_id:
+                            original_date = (
+                                self.fetch_musicbrainz_release_group_first_date(
+                                    release_group_id
+                                )
+                            )
+                        cached = self._release_meta_cache_value(
+                            date, original_date, genre
+                        )
                         self._cache_set(self._release_meta_cache, cache_key, cached)
                         break
             if cached is None:
-                self._cache_set(self._release_meta_cache, cache_key, "|")
+                self._cache_set(
+                    self._release_meta_cache,
+                    cache_key,
+                    self._release_meta_cache_value("", "", ""),
+                )
                 return
 
-        parts = cached.split("|", 1)
-        if not metadata.get("date") and len(parts) > 0 and parts[0]:
-            metadata["date"] = parts[0]
-        if not metadata.get("genre") and len(parts) > 1 and parts[1]:
-            metadata["genre"] = parts[1]
+        date, original_date, genre = self._parse_release_meta_cache(cached)
+        if not metadata.get("date") and date:
+            metadata["date"] = date
+        if not metadata.get("original_date") and original_date:
+            metadata["original_date"] = original_date
+        if not metadata.get("genre") and genre:
+            metadata["genre"] = genre
 
     def _get_wikidata_id_from_relations(self, relations: list) -> str | None:
         for rel in relations:
