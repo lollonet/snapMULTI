@@ -116,7 +116,8 @@ log_progress() {
 }
 
 # Display a key milestone message with a brief pause so users can read it.
-# Stops the spinner, renders the message, waits, then resumes animation.
+# Stops the spinner, renders the message, and waits. Animation is NOT resumed —
+# the caller is expected to call next_step() or start_progress_animation() after.
 milestone() {
     local step=$1 msg="$2" pause=${3:-2}
 
@@ -253,27 +254,35 @@ progress_complete() {
         printf '  \033[32m>>> Installation complete! <<<\033[0m\n'
         printf '\n'
         printf '  +------------------------------- Summary -------------------------------+\n'
+        local used_lines=0
         printf '  | \033[32m%-68s\033[0m |\n' "All steps completed successfully"
+        (( used_lines++ ))
         if [[ -n "$services" ]]; then
             printf '  | %-68s |\n' ""
+            (( used_lines++ ))
             printf '  | \033[36m%-68s\033[0m |\n' "Running services:"
+            (( used_lines++ ))
             # Wrap service names to fit the box (68 chars per line)
             local line=""
             for svc in ${services//,/ }; do
                 if [[ $(( ${#line} + ${#svc} + 2 )) -gt 64 ]]; then
                     printf '  |   \033[36m%-66s\033[0m |\n' "$line"
+                    (( used_lines++ ))
                     line="$svc"
                 else
                     [[ -n "$line" ]] && line="$line, $svc" || line="$svc"
                 fi
             done
-            [[ -n "$line" ]] && printf '  |   \033[36m%-66s\033[0m |\n' "$line"
+            if [[ -n "$line" ]]; then
+                printf '  |   \033[36m%-66s\033[0m |\n' "$line"
+                (( used_lines++ ))
+            fi
         fi
         printf '  | %-68s |\n' ""
+        (( used_lines++ ))
         printf '  | \033[33m%-68s\033[0m |\n' "System will reboot shortly..."
-        # Fill remaining lines
-        local used_lines=4
-        [[ -n "$services" ]] && used_lines=6
+        (( used_lines++ ))
+        # Fill remaining lines to consistent box height
         for ((i=used_lines; i<8; i++)); do
             printf '  | %-68s |\n' ""
         done
