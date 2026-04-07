@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Diagnostic log persistence** — saves dmesg audio errors, docker logs, ALSA state, and system health to boot partition every 30 minutes. Survives overlayroot reboots. Keeps last 3 snapshots at `/boot/firmware/diagnostics/`
+
 ## [0.3.26] — 2026-04-07
 
 ### Added

@@ -911,7 +911,8 @@ if [[ -n "$DIAG_SCRIPT" ]]; then
     install -m 755 "$DIAG_SCRIPT" /usr/local/bin/save-diagnostics
     # Install systemd service + timer
     DIAG_DIR="$(dirname "$DIAG_SCRIPT")"
-    if [[ -f "$DIAG_DIR/snapmulti-diagnostics.service" ]]; then
+    if [[ -f "$DIAG_DIR/snapmulti-diagnostics.service" && \
+          -f "$DIAG_DIR/snapmulti-diagnostics.timer" ]]; then
         cp "$DIAG_DIR/snapmulti-diagnostics.service" /etc/systemd/system/
         cp "$DIAG_DIR/snapmulti-diagnostics.timer" /etc/systemd/system/
         systemctl daemon-reload

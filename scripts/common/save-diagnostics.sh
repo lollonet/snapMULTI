@@ -29,6 +29,7 @@ remount_ro() {
 }
 
 remount_rw
+trap 'remount_ro' EXIT
 mkdir -p "$DIAG_DIR"
 
 # Rotate: keep only the last MAX_SNAPSHOTS
@@ -99,6 +100,6 @@ cat /proc/asound/cards > "$SNAPSHOT/asound-cards.log" 2>/dev/null || true
     ip route show default 2>/dev/null
 } > "$SNAPSHOT/network.log" 2>/dev/null || true
 
-remount_ro
+# remount_ro handled by EXIT trap
 
 echo "Diagnostics saved to $SNAPSHOT"
