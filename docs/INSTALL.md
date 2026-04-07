@@ -171,7 +171,7 @@ If auto-detection fails:
 |--------|----------|
 | **1 — Audio Player** | This Pi will be a speaker only. Streams audio from a snapMULTI server elsewhere on your network |
 | **2 — Music Server** | Central hub. Hosts Spotify Connect, AirPlay, Tidal, MPD. No local speaker output |
-| **3 — Server + Player** | One Pi does everything — server and local speaker. Good for starting out with a single device |
+| **3 — Server + Player** | One Pi does everything — server and local speaker. **Choose this if you only have one Pi** and want to play music on it directly |
 
 ---
 
@@ -314,6 +314,8 @@ The **Snapcast web UI** (control which speaker plays what) is at:
 http://snapvideo.local:1780
 ```
 
+If everything shows "healthy" and the web interfaces load — your server is ready. Try playing a track from Snapweb (`http://snapvideo.local:1780`) or cast from Spotify/AirPlay to confirm audio works.
+
 ---
 
 ## Connecting music sources
@@ -347,13 +349,14 @@ The new speaker appears in the Snapcast web UI at `http://snapvideo.local:1780` 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | HDMI blank, no progress | Normal on headless boot | Wait 10 min; check with `ping snapvideo.local` |
-| `ping snapvideo.local` fails | Pi not on network yet | Wait 2 min; if still failing, check WiFi country setting in Imager |
+| `ping snapvideo.local` fails | Pi not on network yet | Wait 2 min; if still failing, check WiFi country setting in Imager. 5 GHz channels 100+ (DFS) may fail on first boot — try 2.4 GHz or a non-DFS 5 GHz channel (36–48) |
 | `.local` resolves but SSH refused | SSH not yet started | Wait 1–2 more min |
 | SSH works but containers missing | Installation still running | Run `sudo journalctl -u cloud-init -f` to watch progress |
 | Containers in restart loop | Image pull failed (network) | Run `sudo docker compose logs -f` in `/opt/snapmulti` |
 | Wrong hostname | Set wrong value in Imager | Re-flash SD, redo from Step 1 |
 | `prepare-sd.sh`: boot partition not found | SD not re-inserted after Imager | Remove SD, re-insert, run script again |
 | Windows: script won't run | Execution policy | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` first |
+| Audio HAT not detected (client) | EEPROM-less board | SSH in and run `sudo bash /opt/snapclient/common/scripts/setup.sh` to select your HAT manually |
 
 For post-install issues see [Troubleshooting in USAGE.md](USAGE.md#troubleshooting).
 
@@ -380,16 +383,6 @@ sudo docker compose up -d           # NOT restart — restart doesn't reload .en
 ## Network requirements
 
 - The Pi and your phone/computer must be on the **same subnet** (same router) for mDNS (`.local` hostnames) and auto-discovery to work
-- Ports that must be reachable from other devices on your LAN:
-
-| Port | Service |
-|------|---------|
-| 1704 | Snapcast audio streaming |
-| 1705 | Snapcast control |
-| 1780 | Snapcast web UI |
-| 6600 | MPD |
-| 8082 | Metadata WebSocket |
-| 8083 | Metadata HTTP (artwork) |
-| 8180 | myMPD web UI |
-
+- Most home networks work out of the box — no port forwarding or firewall changes needed
+- For the full list of ports and firewall rules, see [Hardware & Network Guide — Firewall Rules](HARDWARE.md#firewall-rules)
 - mDNS uses UDP 5353 — if you have multiple VLANs, you'll need an mDNS repeater or set static IPs in `.env`

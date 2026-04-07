@@ -149,6 +149,8 @@ Se il rilevamento automatico fallisce:
 
 ### Menu 1 — Cosa dovrebbe fare questo Pi?
 
+> **Nota:** I menu di `prepare-sd.sh` sono in inglese. Le descrizioni in italiano qui sotto ti aiutano a scegliere l'opzione giusta.
+
 ```
   +---------------------------------------------+
   |        snapMULTI -- SD Card Setup            |
@@ -201,7 +203,7 @@ Se il rilevamento automatico fallisce:
 | **1 — Solo streaming** | Nessuna libreria musicale locale. Spotify, AirPlay e Tidal funzionano senza file |
 | **2 — Drive USB** | Collega il tuo drive USB al Pi *prima* di accenderlo. Si monta automaticamente |
 | **3 — Condivisione di rete** | Ti verranno chiesti hostname/IP del server e percorso di condivisione. NFS per Linux/Mac/NAS; SMB per condivisioni Windows. Le credenziali sono memorizzate sulla scheda SD temporaneamente e rimosse dopo il primo avvio |
-| **4 — Configurare dopo** | Salta la configurazione musicale. Aggiungi la tua libreria a `/opt/snapmulti/.env` dopo l'installazione (vedi [USAGE.md](USAGE.md)) |
+| **4 — Configurare dopo** | Salta la configurazione musicale. Aggiungi la tua libreria a `/opt/snapmulti/.env` dopo l'installazione (vedi [USAGE.it.md](USAGE.it.md)) |
 
 Se scegli **Condivisione di rete**, dovrai quindi inserire:
 - **NFS:** hostname o IP del server (es. `nas.local`) e percorso di export (es. `/volume1/music`)
@@ -347,15 +349,16 @@ Il nuovo speaker appare nell'interfaccia web Snapcast a `http://snapvideo.local:
 | Sintomo | Causa probabile | Soluzione |
 |---------|-----------------|-----------|
 | HDMI vuoto, nessun progresso | Normale su avvio headless | Aspetta 10 min; controlla con `ping snapvideo.local` |
-| `ping snapvideo.local` fallisce | Pi non ancora in rete | Aspetta 2 min; se ancora fallisce, controlla impostazione paese WiFi in Imager |
+| `ping snapvideo.local` fallisce | Pi non ancora in rete | Aspetta 2 min; se ancora fallisce, controlla impostazione paese WiFi in Imager. I canali 5 GHz 100+ (DFS) possono fallire al primo avvio — prova il 2.4 GHz o un canale 5 GHz non-DFS (36–48) |
 | `.local` si risolve ma SSH rifiutato | SSH non ancora avviato | Aspetta altri 1–2 min |
 | SSH funziona ma container mancanti | Installazione ancora in corso | Esegui `sudo journalctl -u cloud-init -f` per guardare il progresso |
 | Container in loop di restart | Download immagini fallito (rete) | Esegui `sudo docker compose logs -f` in `/opt/snapmulti` |
 | Hostname sbagliato | Valore sbagliato impostato in Imager | Reflasha SD, ricomincia dal Passo 1 |
 | `prepare-sd.sh`: partizione boot non trovata | SD non reinserita dopo Imager | Rimuovi SD, reinserisci, esegui di nuovo lo script |
 | Windows: script non si avvia | Execution policy | Esegui prima `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
+| HAT audio non rilevato (client) | Scheda senza EEPROM | Collegati via SSH ed esegui `sudo bash /opt/snapclient/common/scripts/setup.sh` per selezionare il tuo HAT manualmente |
 
-Per problemi post-installazione vedi [Risoluzione problemi in USAGE.md](USAGE.md#troubleshooting).
+Per problemi post-installazione vedi [Risoluzione problemi in USAGE.it.md](USAGE.it.md#risoluzione-problemi).
 
 ---
 
@@ -380,16 +383,6 @@ sudo docker compose up -d           # NON restart — restart non ricarica .env
 ## Requisiti di rete
 
 - Il Pi e il tuo telefono/computer devono essere sulla **stessa subnet** (stesso router) perché mDNS (hostname `.local`) e auto-discovery funzionino
-- Porte che devono essere raggiungibili da altri dispositivi sulla tua LAN:
-
-| Porta | Servizio |
-|-------|----------|
-| 1704 | Streaming audio Snapcast |
-| 1705 | Controllo Snapcast |
-| 1780 | Interfaccia web Snapcast |
-| 6600 | MPD |
-| 8082 | Metadata WebSocket |
-| 8083 | Metadata HTTP (copertine) |
-| 8180 | Interfaccia web myMPD |
-
+- La maggior parte delle reti domestiche funziona senza modifiche — nessun port forwarding o firewall necessario
+- Per la lista completa delle porte e le regole firewall, vedi [Guida Hardware e Rete — Regole Firewall](HARDWARE.it.md#regole-firewall)
 - mDNS usa UDP 5353 — se hai più VLAN, avrai bisogno di un ripetitore mDNS o imposta IP statici in `.env`

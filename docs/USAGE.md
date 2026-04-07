@@ -139,6 +139,17 @@ Restart MPD to pick up the new library:
 cd /opt/snapmulti && docker compose restart mpd
 ```
 
+### Troubleshooting Network Shares
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `mount: permission denied` | NAS share not exported to Pi's IP | On NAS, add Pi's IP to allowed hosts for the share |
+| `mount: wrong fs type` | Missing NFS/CIFS packages | `sudo apt install nfs-common` (NFS) or `sudo apt install cifs-utils` (SMB) |
+| `mount: connection timed out` | Firewall blocking NFS/SMB | Allow port 2049 (NFS) or 445 (SMB) on your NAS/router |
+| `mount: bad UNC` | Wrong SMB path format | Use `//hostname/ShareName` (forward slashes, case-sensitive) |
+| myMPD shows empty library | MPD hasn't scanned yet | Run `printf 'update\n' \| nc localhost 6600` and wait for scan to complete |
+| MPD scan takes very long | Large NFS library | Normal for first scan over NFS (each file requires a network call). Subsequent boots use the cached `mpd.db` |
+
 ## Network Mode
 
 All snapMULTI containers use **host network mode** (`network_mode: host`). This is required for:
@@ -251,6 +262,21 @@ Metadata: `tidal-meta-bridge.sh` scrapes `speaker_controller_application`'s tmux
 - Output: FIFO to `/audio/mpd_fifo`
 - Music directory: `/music` (mapped to `MUSIC_PATH` on host)
 - Database: `/data/mpd.db`
+
+## Control Interfaces
+
+snapMULTI has three control interfaces, each for a different purpose:
+
+| Interface | Access | What it does |
+|-----------|--------|-------------|
+| **Snapweb** | `http://<server-ip>:1780` | Manage speakers: switch audio sources, adjust volume per room, group/ungroup speakers |
+| **myMPD** | `http://<server-ip>:8180` | Browse and play your music library, manage playlists, view album art |
+| **Snapcast apps** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) / [iOS (SnapForge)](https://apps.apple.com/app/snapforge/id6670397895) | Mobile speaker control — same features as Snapweb, from your phone |
+
+**Which one do I need?**
+- To **play music from your library** → open myMPD
+- To **switch what a speaker plays** (e.g. from MPD to Spotify) → open Snapweb or the mobile app
+- To **cast from Spotify/AirPlay/Tidal** → use those apps directly (they find snapMULTI automatically)
 
 ## Control MPD
 
@@ -432,30 +458,7 @@ Devices get the new images on next reflash (`prepare-sd.sh` → `firstboot.sh` p
 
 Prepare an SD card that automatically installs snapMULTI on first boot. No SSH required.
 
-**On your computer (macOS/Linux):**
-
-1. Flash SD card with **Raspberry Pi Imager**:
-   - Choose: Raspberry Pi OS Lite (64-bit)
-   - Configure (gear icon): hostname, username/password, WiFi, enable SSH
-
-2. Keep SD card mounted and run:
-   ```bash
-   git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
-   ./snapMULTI/scripts/prepare-sd.sh
-   ```
-
-3. Choose what to install:
-   - **1) Audio Player** — snapclient + optional HDMI display (cover art, visualizer)
-   - **2) Music Server** — Spotify, AirPlay, MPD, Tidal Connect
-   - **3) Server + Player** — both on the same Pi
-
-4. Eject SD card, insert into Pi, power on
-
-**On Windows (PowerShell):**
-```powershell
-git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
-.\snapMULTI\scripts\prepare-sd.ps1
-```
+For complete step-by-step instructions (Imager screenshots, SD card mount points, all three OS), see **[INSTALL.md](../docs/INSTALL.md)**.
 
 **What happens on first boot:**
 - Reads `install.conf` to determine install type (client/server/both)
@@ -718,6 +721,12 @@ sudo bash /boot/firmware/snapmulti/firstboot.sh
 ## Updating
 
 snapMULTI has two update mechanisms: **Watchtower** for automatic Docker image updates and **update.sh** for config/script updates.
+
+> **Read-only filesystem (SD card installs):** If your Pi uses read-only mode (enabled by default on client installs), you must disable it before updating:
+> ```bash
+> sudo ro-mode disable && sudo reboot
+> ```
+> After updating, re-enable with `sudo ro-mode enable && sudo reboot`.
 
 ### Automatic Image Updates (Watchtower)
 

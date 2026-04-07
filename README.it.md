@@ -2,8 +2,10 @@
 
 # snapMULTI - Server Audio Multiroom
 
-[![CI/CD](https://github.com/lollonet/snapMULTI/actions/workflows/deploy.yml/badge.svg)](https://github.com/lollonet/snapMULTI/actions/workflows/deploy.yml)
-[![SnapForge](https://img.shields.io/badge/part%20of-SnapForge-blue)](https://github.com/lollonet/snapforge)
+[![CI](https://github.com/lollonet/snapMULTI/actions/workflows/validate.yml/badge.svg)](https://github.com/lollonet/snapMULTI/actions/workflows/validate.yml)
+[![release](https://img.shields.io/github/v/release/lollonet/snapMULTI?color=orange)](https://github.com/lollonet/snapMULTI/releases/latest)
+[![downloads](https://img.shields.io/docker/pulls/lollonet/snapmulti-server?color=green)](https://hub.docker.com/r/lollonet/snapmulti-server)
+[![Donate](https://img.shields.io/badge/Donate-PayPal-yellowgreen)](https://paypal.me/lolettic)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Riproduci musica sincronizzata in ogni stanza. Trasmetti da Spotify, AirPlay, la tua libreria musicale o qualsiasi app — tutti gli altoparlanti suonano insieme.
@@ -18,17 +20,19 @@ snapMULTI gira su un server domestico e trasmette l'audio agli altoparlanti in t
 | **Tidal** | Apri l'app Tidal → Cast → "<hostname> Tidal" (solo ARM/Pi) |
 | **AirPlay** | iPhone/iPad/Mac → AirPlay → "<hostname> AirPlay" |
 | **Libreria musicale** | Usa l'interfaccia web [myMPD](http://ip-del-server:8180), oppure un'app MPD ([Cantata](https://github.com/CDrummond/cantata), [MPDroid](https://play.google.com/store/apps/details?id=com.namelessdev.mpdroid)) → connettiti al server |
-| **Qualsiasi app** | Aggiungi sorgente TCP al config, trasmetti via ffmpeg (vedi [Sorgenti](docs/SOURCES.it.md)) |
+| **Qualsiasi app** | Trasmetti via ffmpeg alla porta 4953 (vedi [Sorgenti](docs/SOURCES.it.md#5-tcp-input-tcp-server)) |
 | **Android** | Vedi la [guida allo streaming](docs/SOURCES.it.md#streaming-da-android) |
 
 Altre sorgenti disponibili — vedi il [Riferimento Sorgenti Audio](docs/SOURCES.it.md).
 
 ### Cambio Sorgente
 
-Apri **http://&lt;ip-del-server&gt;:1780** in un browser per gestire gli altoparlanti. Dall'interfaccia web puoi:
-- Cambiare la sorgente audio di ogni stanza
-- Regolare il volume per ogni altoparlante
-- Raggruppare/separare gli altoparlanti
+Due interfacce web sono disponibili:
+
+| Interfaccia | URL | Scopo |
+|-------------|-----|-------|
+| **Snapweb** | `http://<ip-del-server>:1780` | Gestisci altoparlanti: cambia sorgente, regola volume, raggruppa/separa |
+| **myMPD** | `http://<ip-del-server>:8180` | Sfoglia e riproduci la tua libreria musicale (sorgente MPD) |
 
 Puoi anche usare le app Snapcast per smartphone:
 [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) |
@@ -38,7 +42,7 @@ Puoi anche usare le app Snapcast per smartphone:
 
 ### Principianti: Plug-and-Play (Raspberry Pi)
 
-Nessuna competenza tecnica richiesta. Prepara una scheda SD, rispondi a una domanda, inseriscila, accendi — fatto.
+Prepara una scheda SD, esegui un breve script, inseriscila, accendi — fatto. Devi solo copiare e incollare due comandi sul tuo computer (non serve accedere al Pi).
 
 **Ti serve:**
 - Raspberry Pi 4 (2GB+ RAM consigliati)
@@ -47,11 +51,11 @@ Nessuna competenza tecnica richiesta. Prepara una scheda SD, rispondi a una doma
 
 **Sul tuo computer (macOS/Linux):**
 ```bash
-# 1. Scrivi la scheda SD con Raspberry Pi Imager
+# 1. Scrivi la scheda SD con Raspberry Pi Imager (https://www.raspberrypi.com/software/)
 #    - Scegli: Raspberry Pi OS Lite (64-bit)
 #    - Configura: hostname, utente/password, WiFi, SSH
 
-# 2. Mantieni la SD montata, esegui:
+# 2. Mantieni la SD montata, esegui (richiede Git — vedi docs/INSTALL.it.md Passo 3 se non installato):
 git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
 ./snapMULTI/scripts/prepare-sd.sh
 
@@ -71,7 +75,7 @@ git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
 
 Il primo avvio installa tutto automaticamente (~5-10 min). L'HDMI mostra una schermata di progresso. Il Pi si riavvia quando ha finito.
 
-> **Istruzioni passo-passo complete** (screenshot di Imager, punti di montaggio SD, tutti e tre i SO): **[docs/INSTALL.md](docs/INSTALL.md)**
+> **Istruzioni passo-passo complete** (screenshot di Imager, punti di montaggio SD, tutti e tre i SO): **[docs/INSTALL.it.md](docs/INSTALL.it.md)**
 
 #### Collega la Tua Musica
 
@@ -187,18 +191,18 @@ snapclient --host <ip-del-server>
 
 | Problema | Soluzione |
 |----------|----------|
-| **Spotify/AirPlay non visibile** | Controlla mDNS: `avahi-browse -r _spotify-connect._tcp` — assicurati che l'host abbia `avahi-daemon` in esecuzione |
-| **Nessuna uscita audio** | Verifica che il FIFO esista: `ls -la audio/*_fifo` — deploy.sh li crea automaticamente |
-| **I container si riavviano** | Controlla i log: `docker compose logs -f` — causa comune: file di configurazione mancanti |
-| **I client non si connettono** | Verifica le porte: `ss -tlnp \| grep 1704` — assicurati che il firewall consenta le porte 1704, 1705, 1780 |
-| **myMPD mostra libreria vuota** | Aggiorna il database: `echo 'update' \| nc localhost 6600` — attendi il completamento della scansione |
+| **Spotify/AirPlay non visibile** | Assicurati che il Pi e il telefono siano sulla stessa rete WiFi. Riavvia il Pi se necessario |
+| **Nessuna uscita audio** | Collegati via SSH ed esegui `docker compose logs -f` per controllare gli errori |
+| **I container si riavviano** | Collegati via SSH ed esegui `docker compose logs -f` — causa comune: file di configurazione mancanti |
+| **I client non si connettono** | Assicurati che il firewall consenta le porte 1704, 1705, 1780 (vedi [Regole Firewall](docs/HARDWARE.it.md#regole-firewall)) |
+| **myMPD mostra libreria vuota** | La libreria musicale potrebbe essere ancora in scansione — attendi qualche minuto e ricarica la pagina |
 | **Audio non sincronizzato** | Aumenta il buffer in `config/snapserver.conf`: `buffer = 3000` (default: 2400) |
 
-Per la risoluzione dettagliata, vedi [Guida all'Uso — Autodiscovery](docs/USAGE.it.md#autodiscovery-mdns).
+Per la risoluzione dettagliata (mDNS, log, diagnostica), vedi [Guida all'Uso](docs/USAGE.it.md#log-e-diagnostica).
 
 ## Aggiornamento
 
-Git viene installato automaticamente durante il setup, quindi puoi aggiornare direttamente sul Pi:
+Collegati via SSH al Pi (dal tuo computer: `ssh <username>@<hostname>.local`), poi esegui:
 
 ```bash
 # Server
@@ -207,21 +211,42 @@ git pull
 docker compose pull
 docker compose up -d
 
-# Client (se installato)
+# Client (se installato — disabilita prima la modalità read-only: sudo ro-mode disable && sudo reboot)
 cd /opt/snapclient
 git pull
 docker compose pull
 docker compose up -d
 ```
 
-Per aggiornamenti di versioni maggiori, controlla [CHANGELOG.md](CHANGELOG.md) per le modifiche incompatibili.
+Per aggiornamenti di versioni maggiori, controlla [CHANGELOG.md](CHANGELOG.md) per le modifiche incompatibili. Per dettagli su Watchtower (aggiornamenti automatici) e update.sh (aggiornamenti config), vedi [Guida all'Uso — Aggiornamento](docs/USAGE.it.md#aggiornamento).
 
 ## Documentazione
 
 | Guida | Contenuto |
 |-------|-----------|
-| [**Installazione**](docs/INSTALL.md) | Passo-passo completo: Raspberry Pi Imager, preparazione SD, primo avvio, verifica — macOS/Linux/Windows |
+| [**Installazione**](docs/INSTALL.it.md) | Passo-passo completo: Raspberry Pi Imager, preparazione SD, primo avvio, verifica — macOS/Linux/Windows |
 | [Hardware e Rete](docs/HARDWARE.it.md) | Requisiti server/client, configurazioni Raspberry Pi, banda di rete, setup consigliati |
 | [Uso e Operazioni](docs/USAGE.it.md) | Architettura, servizi, controllo MPD, configurazione mDNS, deployment, CI/CD |
 | [Sorgenti Audio](docs/SOURCES.it.md) | Tutti i tipi di sorgente, parametri, API JSON-RPC, streaming da Android/Tidal |
 | [Changelog](CHANGELOG.md) | Cronologia delle versioni |
+
+## Ecosistema snapMULTI
+
+| App | Piattaforma | Descrizione |
+|-----|-------------|-------------|
+| [snapMULTI](https://github.com/lollonet/snapMULTI) | Raspberry Pi / Linux | Server audio multiroom (questo progetto) |
+| [snapclient-pi](https://github.com/lollonet/snapclient-pi) | Raspberry Pi | Player audio con display copertine |
+| snapCTRL | iOS / Android | App di controllo remoto — *in arrivo* |
+| snapClient iOS | iOS | Client Snapcast per iPhone/iPad — *in arrivo* |
+| snapClient Android | Android | Client Snapcast per Android — *in arrivo* |
+
+## Ringraziamenti
+
+snapMULTI è costruito su questi progetti open source:
+
+- **[Snapcast](https://github.com/badaix/snapcast)** di Johannes Pohl — il motore di streaming audio multiroom al cuore di questo progetto
+- **[go-librespot](https://github.com/devgianlu/go-librespot)** di devgianlu — implementazione Spotify Connect
+- **[shairport-sync](https://github.com/mikebrady/shairport-sync)** di Mike Brady — ricevitore audio AirPlay
+- **[MPD](https://www.musicpd.org/)** — Music Player Daemon
+- **[myMPD](https://github.com/jcorporation/myMPD)** di jcorporation — client web per MPD
+- **[tidal-connect](https://github.com/edgecrush3r/tidal-connect-docker)** di edgecrush3r — Tidal Connect per Raspberry Pi
