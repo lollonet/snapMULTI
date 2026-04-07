@@ -60,7 +60,7 @@ jobs:
           echo "snapcast HEAD: $SHA"
 
       - name: Build and push snapserver
-        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           context: .
           file: Dockerfile.snapserver
@@ -75,7 +75,7 @@ jobs:
           cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=snapserver-{0}', matrix.suffix) || '' }}
 
       - name: Build and push shairport-sync
-        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           context: .
           file: Dockerfile.shairport-sync
@@ -90,7 +90,7 @@ jobs:
       # Spotify Connect: uses official ghcr.io/devgianlu/go-librespot image (no build needed)
 
       - name: Build and push mpd
-        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           context: .
           file: Dockerfile.mpd
@@ -103,7 +103,7 @@ jobs:
           cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=mpd-{0}', matrix.suffix) || '' }}
 
       - name: Build and push metadata
-        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           context: .
           file: Dockerfile.metadata
@@ -119,7 +119,7 @@ jobs:
       # Base image edgecrush3r/tidal-connect only provides ARM binaries
       - name: Build and push tidal
         if: matrix.platform == 'linux/arm64'
-        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           context: .
           file: Dockerfile.tidal
