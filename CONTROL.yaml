@@ -45,7 +45,7 @@ quality:
     - name: docker-compose-syntax
       command: "docker compose config --quiet"
     - name: shellcheck
-      command: "shellcheck -S warning scripts/**/*.sh"
+      command: "shellcheck -x -S warning scripts/**/*.sh"
     - name: ruff-check
       command: "ruff check docker/metadata-service/ scripts/meta_*.py tests/"
     - name: ruff-format

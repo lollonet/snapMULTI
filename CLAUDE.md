@@ -13,6 +13,7 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 | User quickstart, client basic setup | `README.md` |
 | Changelog | `CHANGELOG.md` |
 | Source config (inline comments) | `config/snapserver.conf` |
+| Quality gates (tools, paths, thresholds) | `CONTROL.yaml` |
 
 **Rules:**
 - README is an appliance manual — what it does, how to install, how to connect. No jargon.
@@ -21,6 +22,7 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 - Services/ports/CI changes → `docs/USAGE.md` only
 - Hardware/network changes → `docs/HARDWARE.md` only
 - README links to docs/ for anything technical — never inline technical details
+- Quality gate changes (tools, paths, severity) → update `CONTROL.yaml` + CI workflow + pre-push hook together
 
 ## Deployment Targets
 
