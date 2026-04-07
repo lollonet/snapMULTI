@@ -1,0 +1,7 @@
+[Unit]
+Description=Save snapMULTI diagnostic logs to boot partition
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/save-diagnostics

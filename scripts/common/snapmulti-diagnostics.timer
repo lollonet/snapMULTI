@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic snapMULTI diagnostic log capture
+
+[Timer]
+# Save diagnostics every 30 minutes and on boot
+OnBootSec=2min
+OnUnitActiveSec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
