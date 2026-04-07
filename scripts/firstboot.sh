@@ -343,7 +343,7 @@ for i in $(seq 1 90); do
        ping -c1 -W2 8.8.8.8 &>/dev/null; then
         if getent hosts deb.debian.org &>/dev/null; then
             log_and_tty "Network ready."
-            log_progress "Network ready" 2>/dev/null || true
+            milestone "$CURRENT_STEP" "Network ready" 2 2>/dev/null || true
             NETWORK_READY=true
             break
         fi
@@ -540,7 +540,7 @@ if command -v avahi-daemon &>/dev/null; then
     systemctl enable --now avahi-daemon >/dev/null 2>&1 || true
 fi
 
-log_progress "System dependencies installed" 2>/dev/null || true
+milestone "$CURRENT_STEP" "System dependencies installed" 2 2>/dev/null || true
 
 # ══════════════════════════════════════════════════════════════════
 # STEP 4: Docker
@@ -571,7 +571,7 @@ if ! command -v docker &>/dev/null; then
 
     # cgroup memory controller (cmdline.txt) is also handled by deploy.sh
 
-    log_progress "Docker installed" 2>/dev/null || true
+    milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
 else
     log_progress "Docker already installed, skipping" 2>/dev/null || true
 fi
@@ -738,14 +738,14 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     bash scripts/deploy.sh 2>&1 | while IFS= read -r line; do
         printf '%s\n' "$line" >> "$LOG"
         case "$line" in
-            *"[INFO] Pulling "*|*"[OK] All "*"images ready"*|\
-            *"[INFO] Building metadata"*|\
-            *"==> Starting services"*|*"[OK] Services started"*|\
-            *"[INFO] Using profile:"*|*"[OK] Configuration valid"*)
-                # Strip [INFO]/[OK] prefix or ==> prefix for clean display
+            *"[INFO] "*|*"[OK] "*|*"==> "*)
+                # Forward all INFO/OK/==> lines to TUI for visibility
                 msg="${line#*] }"
                 msg="${msg#==> }"
                 log_progress "  $msg" 2>/dev/null || true
+                ;;
+            *"Pulling "*|*"pulling "*|*"Downloaded"*|*"Pull complete"*)
+                log_progress "  $line" 2>/dev/null || true
                 ;;
         esac
     done
@@ -758,7 +758,7 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         log_and_tty "  sudo cat $LOG | tail -50"
         exit 1
     fi
-    log_progress "Server deploy complete" 2>/dev/null || true
+    milestone "$CURRENT_STEP" "Server deploy complete" 2 2>/dev/null || true
 
     # ── Verify server containers ──────────────────────────────────
     next_step "Verifying server containers..."
@@ -863,7 +863,7 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
         fi
     fi
     unset PROGRESS_MANAGED
-    log_progress "Client setup complete" 2>/dev/null || true
+    milestone "$CURRENT_STEP" "Client setup complete" 2 2>/dev/null || true
 
     next_step "Verifying client..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
