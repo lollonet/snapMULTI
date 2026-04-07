@@ -7,12 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.26] — 2026-04-03
+## [0.3.26] — 2026-04-07
 
 ### Added
 - **Hostname in install TUI** — progress screen shows device name for multi-Pi installs
 - **Gitleaks secrets detection** — new CI workflow on push/PR
 - **Dependabot** — GitHub Actions updates (already configured for Docker)
+- **Original release date in metadata** ([#189](https://github.com/lollonet/snapMULTI/pull/189)) — metadata-service exposes `originalDate` from MPD (original release year) alongside `date`
 
 ### Changed
 - **Python 3.14** — metadata-service bumped from 3.13-slim to 3.14-slim
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **apt-get upgrade on first boot** — cloud-init's `apt-get update` runs before NTP sync (stale signatures); our `apt-get update` runs after NTP, indices are fresh for upgrade
 - **Client SNAPSERVER_HOST cleanup** — discover-server.sh clears hardcoded IPs (including stale 127.0.0.1) at boot for mDNS autodiscovery
+- **Firstboot hardening** ([#189](https://github.com/lollonet/snapMULTI/pull/189)) — log apt update/upgrade output (remove `-qq`), stub websockets in metadata test harness
 
 ## [0.3.25] — 2026-04-02
 
