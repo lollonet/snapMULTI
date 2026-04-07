@@ -894,6 +894,36 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════
+# Diagnostic log persistence (all modes)
+# ══════════════════════════════════════════════════════════════════
+# Saves dmesg, docker logs, and system state to the boot partition
+# (FAT32, survives overlayroot reboots) every 30 minutes.
+DIAG_SCRIPT=""
+for _diag_candidate in \
+    "$SNAP_BOOT/common/save-diagnostics.sh" \
+    "$SCRIPT_DIR/common/save-diagnostics.sh" \
+    "$SERVER_DIR/scripts/common/save-diagnostics.sh" \
+    "$CLIENT_DIR/scripts/common/save-diagnostics.sh"; do
+    [[ -f "$_diag_candidate" ]] && DIAG_SCRIPT="$_diag_candidate" && break
+done
+
+if [[ -n "$DIAG_SCRIPT" ]]; then
+    install -m 755 "$DIAG_SCRIPT" /usr/local/bin/save-diagnostics
+    # Install systemd service + timer
+    DIAG_DIR="$(dirname "$DIAG_SCRIPT")"
+    if [[ -f "$DIAG_DIR/snapmulti-diagnostics.service" && \
+          -f "$DIAG_DIR/snapmulti-diagnostics.timer" ]]; then
+        cp "$DIAG_DIR/snapmulti-diagnostics.service" /etc/systemd/system/
+        cp "$DIAG_DIR/snapmulti-diagnostics.timer" /etc/systemd/system/
+        systemctl daemon-reload
+        systemctl enable snapmulti-diagnostics.timer
+    fi
+    log_progress "Diagnostic log persistence installed" 2>/dev/null || true
+else
+    log_progress "save-diagnostics.sh not found — skipping" 2>/dev/null || true
+fi
+
+# ══════════════════════════════════════════════════════════════════
 # Read-only filesystem (all modes, if enabled)
 # ══════════════════════════════════════════════════════════════════
 if [[ "${ENABLE_READONLY}" == "true" ]]; then
