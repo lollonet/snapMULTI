@@ -42,7 +42,7 @@ You can also use the Snapcast mobile apps:
 
 ### Beginners: Plug-and-Play (Raspberry Pi)
 
-No terminal skills required. Flash an SD card, answer one question, insert it, power on — done.
+Flash an SD card, run a short script, insert it, power on — done. You only need to copy-paste two commands on your computer (no Pi terminal needed).
 
 **You need:**
 - Raspberry Pi 4 (2GB+ RAM recommended)
@@ -51,11 +51,11 @@ No terminal skills required. Flash an SD card, answer one question, insert it, p
 
 **On your computer (macOS/Linux):**
 ```bash
-# 1. Flash SD card with Raspberry Pi Imager
+# 1. Flash SD card with Raspberry Pi Imager (https://www.raspberrypi.com/software/)
 #    - Choose OS: Raspberry Pi OS Lite (64-bit)
 #    - Click Next → Edit Settings → set hostname, user/password, WiFi, enable SSH
 
-# 2. Re-insert SD card, then run:
+# 2. Re-insert SD card, then run (requires Git — see docs/INSTALL.md Step 3 if not installed):
 git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
 ./snapMULTI/scripts/prepare-sd.sh
 
@@ -193,18 +193,18 @@ snapclient --host <server-ip>
 
 | Problem | Solution |
 |---------|----------|
-| **Spotify/AirPlay not visible** | Check mDNS: `avahi-browse -r _spotify-connect._tcp` — ensure host has `avahi-daemon` running |
-| **No audio output** | Verify FIFO exists: `ls -la audio/*_fifo` — deploy.sh creates these automatically |
-| **Containers keep restarting** | Check logs: `docker compose logs -f` — common cause is missing config files |
-| **Clients can't connect** | Verify ports: `ss -tlnp \| grep 1704` — ensure firewall allows ports 1704, 1705, 1780 |
-| **myMPD shows empty library** | Update database: `echo 'update' \| nc localhost 6600` — wait for scan to complete |
+| **Spotify/AirPlay not visible** | Make sure the Pi and your phone are on the same WiFi network. Restart the Pi if needed |
+| **No audio output** | SSH in and run `docker compose logs -f` to check for errors |
+| **Containers keep restarting** | SSH in and run `docker compose logs -f` — common cause is missing config files |
+| **Clients can't connect** | Ensure firewall allows ports 1704, 1705, 1780 (see [Firewall Rules](docs/HARDWARE.md#firewall-rules)) |
+| **myMPD shows empty library** | Your music library may still be scanning — wait a few minutes, then refresh the page |
 | **Audio out of sync** | Increase buffer in `config/snapserver.conf`: `buffer = 3000` (default: 2400) |
 
-For detailed troubleshooting, see [Usage Guide — Autodiscovery](docs/USAGE.md#autodiscovery-mdns).
+For detailed troubleshooting (mDNS, logs, diagnostics), see [Usage Guide](docs/USAGE.md#logs--diagnostics).
 
 ## Upgrading
 
-Git is installed automatically during setup, so you can update directly on the Pi:
+SSH into your Pi (from your computer: `ssh <username>@<hostname>.local`), then run:
 
 ```bash
 # Server
@@ -213,14 +213,14 @@ git pull
 docker compose pull
 docker compose up -d
 
-# Client (if installed)
+# Client (if installed — disable read-only mode first: sudo ro-mode disable && sudo reboot)
 cd /opt/snapclient
 git pull
 docker compose pull
 docker compose up -d
 ```
 
-For major version upgrades, check [CHANGELOG.md](CHANGELOG.md) for breaking changes.
+For major version upgrades, check [CHANGELOG.md](CHANGELOG.md) for breaking changes. For details on Watchtower (automatic updates) and update.sh (config updates), see [Usage Guide — Updating](docs/USAGE.md#updating).
 
 ## Documentation
 

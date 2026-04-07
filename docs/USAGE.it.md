@@ -216,6 +216,17 @@ Riavvia MPD per aggiornare la libreria:
 cd /opt/snapmulti && docker compose restart mpd
 ```
 
+### Risoluzione Problemi Condivisioni di Rete
+
+| Problema | Causa | Soluzione |
+|----------|-------|-----------|
+| `mount: permission denied` | Condivisione NAS non esportata all'IP del Pi | Sul NAS, aggiungi l'IP del Pi agli host consentiti |
+| `mount: wrong fs type` | Pacchetti NFS/CIFS mancanti | `sudo apt install nfs-common` (NFS) o `sudo apt install cifs-utils` (SMB) |
+| `mount: connection timed out` | Firewall blocca NFS/SMB | Consenti porta 2049 (NFS) o 445 (SMB) sul NAS/router |
+| `mount: bad UNC` | Formato percorso SMB errato | Usa `//hostname/NomeCondivisione` (slash in avanti, case-sensitive) |
+| myMPD mostra libreria vuota | MPD non ha ancora scansionato | Esegui `printf 'update\n' \| nc localhost 6600` e attendi il completamento |
+| Scansione MPD molto lenta | Libreria NFS grande | Normale per la prima scansione via NFS. Gli avvii successivi usano il `mpd.db` in cache |
+
 ## Modalità di Rete
 
 Tutti i container snapMULTI usano la **modalità rete host** (`network_mode: host`). Questo è necessario per:
@@ -251,6 +262,21 @@ Per deployment multi-istanza, la rete macvlan assegna a ogni container un indiri
 - Setup più complesso
 
 La modalità host è consigliata per deployment con un singolo server.
+
+## Interfacce di Controllo
+
+snapMULTI ha tre interfacce di controllo, ognuna per uno scopo diverso:
+
+| Interfaccia | Accesso | Cosa fa |
+|-------------|---------|---------|
+| **Snapweb** | `http://<ip-del-server>:1780` | Gestisci altoparlanti: cambia sorgente audio, regola volume per stanza, raggruppa/separa |
+| **myMPD** | `http://<ip-del-server>:8180` | Sfoglia e riproduci la tua libreria musicale, gestisci playlist, visualizza copertine |
+| **App Snapcast** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) / [iOS (SnapForge)](https://apps.apple.com/app/snapforge/id6670397895) | Controllo altoparlanti da smartphone — stesse funzioni di Snapweb |
+
+**Quale mi serve?**
+- Per **riprodurre musica dalla libreria** → apri myMPD
+- Per **cambiare cosa riproduce un altoparlante** (es. da MPD a Spotify) → apri Snapweb o l'app mobile
+- Per **trasmettere da Spotify/AirPlay/Tidal** → usa direttamente quelle app (trovano snapMULTI automaticamente)
 
 ## Controllare MPD
 
@@ -717,6 +743,12 @@ sudo bash /boot/firmware/snapmulti/firstboot.sh
 ## Aggiornamento
 
 snapMULTI ha due meccanismi di aggiornamento: **Watchtower** per aggiornamenti automatici delle immagini Docker e **update.sh** per aggiornamenti di configurazione e script.
+
+> **Filesystem read-only (installazioni da SD):** Se il tuo Pi usa la modalità read-only (abilitata di default sulle installazioni client), devi disabilitarla prima di aggiornare:
+> ```bash
+> sudo ro-mode disable && sudo reboot
+> ```
+> Dopo l'aggiornamento, riabilita con `sudo ro-mode enable && sudo reboot`.
 
 ### Aggiornamenti Automatici delle Immagini (Watchtower)
 
