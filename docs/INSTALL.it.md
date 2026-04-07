@@ -326,7 +326,7 @@ http://snapvideo.local:1780
 | **AirPlay** | iPhone/iPad/Mac → icona AirPlay → seleziona **"snapvideo AirPlay"** |
 | **Tidal** | Apri l'app Tidal → Cast → seleziona **"snapvideo Tidal"** (solo ARM/Pi) |
 | **Libreria musicale** | Apri `http://snapvideo.local:8180` e naviga i tuoi file |
-| **App Snapcast** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) / [iOS (SnapForge)](https://apps.apple.com/app/snapforge/id6670397895) — connetti a `snapvideo.local` |
+| **App Snapcast** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) — connetti a `snapvideo.local` |
 
 ---
 

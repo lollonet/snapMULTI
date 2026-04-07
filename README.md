@@ -34,9 +34,7 @@ Two web interfaces are available:
 | **Snapweb** | `http://<server-ip>:1780` | Manage speakers: switch sources, adjust volume, group/ungroup |
 | **myMPD** | `http://<server-ip>:8180` | Browse and play your music library (MPD source) |
 
-You can also use the Snapcast mobile apps:
-[Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) |
-[iOS (SnapForge)](https://apps.apple.com/app/snapforge/id6670397895)
+You can also use the [Snapcast Android app](https://play.google.com/store/apps/details?id=de.badaix.snapcast).
 
 ## Quick Start
 
@@ -238,9 +236,6 @@ For major version upgrades, check [CHANGELOG.md](CHANGELOG.md) for breaking chan
 |-----|----------|-------------|
 | [snapMULTI](https://github.com/lollonet/snapMULTI) | Raspberry Pi / Linux | Multiroom audio server (this project) |
 | [snapclient-pi](https://github.com/lollonet/snapclient-pi) | Raspberry Pi | Audio player with cover display |
-| snapCTRL | iOS / Android | Remote control app — *coming soon* |
-| snapClient iOS | iOS | Snapcast client for iPhone/iPad — *coming soon* |
-| snapClient Android | Android | Snapcast client for Android — *coming soon* |
 
 ## Acknowledgments
 

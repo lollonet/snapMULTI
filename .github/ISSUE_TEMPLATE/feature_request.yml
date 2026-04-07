@@ -34,8 +34,6 @@ body:
       options:
         - snapMULTI (server)
         - snapclient-pi (client)
-        - SnapCTRL (desktop app)
         - Documentation
-        - Ecosystem-wide
     validations:
       required: true

@@ -326,7 +326,7 @@ If everything shows "healthy" and the web interfaces load — your server is rea
 | **AirPlay** | iPhone/iPad/Mac → AirPlay icon → select **"snapvideo AirPlay"** |
 | **Tidal** | Open Tidal app → Cast → select **"snapvideo Tidal"** (ARM/Pi only) |
 | **Music library** | Open `http://snapvideo.local:8180` and browse your files |
-| **Snapcast app** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) / [iOS (SnapForge)](https://apps.apple.com/app/snapforge/id6670397895) — connect to `snapvideo.local` |
+| **Snapcast app** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) — connect to `snapvideo.local` |
 
 ---
 

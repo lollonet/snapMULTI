@@ -271,7 +271,7 @@ snapMULTI ha tre interfacce di controllo, ognuna per uno scopo diverso:
 |-------------|---------|---------|
 | **Snapweb** | `http://<ip-del-server>:1780` | Gestisci altoparlanti: cambia sorgente audio, regola volume per stanza, raggruppa/separa |
 | **myMPD** | `http://<ip-del-server>:8180` | Sfoglia e riproduci la tua libreria musicale, gestisci playlist, visualizza copertine |
-| **App Snapcast** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) / [iOS (SnapForge)](https://apps.apple.com/app/snapforge/id6670397895) | Controllo altoparlanti da smartphone — stesse funzioni di Snapweb |
+| **App Snapcast** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) | Controllo altoparlanti da smartphone — stesse funzioni di Snapweb |
 
 **Quale mi serve?**
 - Per **riprodurre musica dalla libreria** → apri myMPD

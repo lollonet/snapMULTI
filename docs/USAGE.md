@@ -271,7 +271,7 @@ snapMULTI has three control interfaces, each for a different purpose:
 |-----------|--------|-------------|
 | **Snapweb** | `http://<server-ip>:1780` | Manage speakers: switch audio sources, adjust volume per room, group/ungroup speakers |
 | **myMPD** | `http://<server-ip>:8180` | Browse and play your music library, manage playlists, view album art |
-| **Snapcast apps** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) / [iOS (SnapForge)](https://apps.apple.com/app/snapforge/id6670397895) | Mobile speaker control — same features as Snapweb, from your phone |
+| **Snapcast app** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) | Mobile speaker control — same features as Snapweb, from your phone |
 
 **Which one do I need?**
 - To **play music from your library** → open myMPD
