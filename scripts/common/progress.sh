@@ -115,6 +115,35 @@ log_progress() {
     echo "$*" >> "$PROGRESS_LOG"
 }
 
+# Display a key milestone message with a brief pause so users can read it.
+# Stops the spinner, renders the message, waits, then resumes animation.
+milestone() {
+    local step=$1 msg="$2" pause=${3:-2}
+
+    stop_progress_animation
+
+    log_progress "$msg"
+
+    local now_mono elapsed
+    now_mono=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
+    elapsed=$(( now_mono - PROGRESS_START_MONO ))
+
+    # Calculate weighted percentage
+    local total=${#STEP_NAMES[@]}
+    local weight_sum=0 total_weight=0
+    for ((i=0; i<total; i++)); do
+        total_weight=$(( total_weight + STEP_WEIGHTS[i] ))
+        if (( i < step - 1 )); then
+            weight_sum=$(( weight_sum + STEP_WEIGHTS[i] ))
+        fi
+    done
+    local pct=0
+    (( total_weight > 0 )) && pct=$(( weight_sum * 100 / total_weight ))
+
+    render_progress "$step" "$pct" "$elapsed" "*"
+    sleep "$pause"
+}
+
 start_progress_animation() {
     local step=$1 base_pct=$2 step_weight=$3
 
@@ -196,11 +225,16 @@ progress_complete() {
     local bar
     printf -v bar '%*s' 50 ''; bar="${bar// /#}"
 
+    # Collect running container names for the summary
+    local services=""
+    if command -v docker &>/dev/null; then
+        services=$(docker ps --format '{{.Names}}' 2>/dev/null | sort | tr '\n' ', ' | sed 's/,$//')
+    fi
+
     {
         printf '\033[2J\033[H'
         printf '\n'
         printf '  +----------------------------------------------------------------------+\n'
-        # Box interior = 70 chars: 21 leading spaces + 38 title field + 11 trailing spaces
         printf '  |                     \033[1m%-38.38s\033[0m           |\n' "$PROGRESS_TITLE"
         printf '  +----------------------------------------------------------------------+\n'
         printf '\n'
@@ -212,10 +246,29 @@ progress_complete() {
         printf '\n'
         printf '  \033[32m>>> Installation complete! <<<\033[0m\n'
         printf '\n'
-        printf '  +------------------------------- Output -------------------------------+\n'
+        printf '  +------------------------------- Summary -------------------------------+\n'
         printf '  | \033[32m%-68s\033[0m |\n' "All steps completed successfully"
-        printf '  | \033[32m%-68s\033[0m |\n' "System will reboot shortly..."
-        for ((i=0; i<6; i++)); do
+        if [[ -n "$services" ]]; then
+            printf '  | %-68s |\n' ""
+            printf '  | \033[36m%-68s\033[0m |\n' "Running services:"
+            # Wrap service names to fit the box (68 chars per line)
+            local line=""
+            for svc in ${services//,/ }; do
+                if [[ $(( ${#line} + ${#svc} + 2 )) -gt 64 ]]; then
+                    printf '  |   \033[36m%-66s\033[0m |\n' "$line"
+                    line="$svc"
+                else
+                    [[ -n "$line" ]] && line="$line, $svc" || line="$svc"
+                fi
+            done
+            [[ -n "$line" ]] && printf '  |   \033[36m%-66s\033[0m |\n' "$line"
+        fi
+        printf '  | %-68s |\n' ""
+        printf '  | \033[33m%-68s\033[0m |\n' "System will reboot shortly..."
+        # Fill remaining lines
+        local used_lines=4
+        [[ -n "$services" ]] && used_lines=6
+        for ((i=used_lines; i<8; i++)); do
             printf '  | %-68s |\n' ""
         done
         printf '  +----------------------------------------------------------------------+\n'
