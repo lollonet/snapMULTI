@@ -120,9 +120,11 @@ log_progress() {
 milestone() {
     local step=$1 msg="$2" pause=${3:-2}
 
-    stop_progress_animation
-
     log_progress "$msg"
+    # Skip rendering when parent owns the display
+    [[ -n "${PROGRESS_MANAGED:-}" ]] && return
+
+    stop_progress_animation
 
     local now_mono elapsed
     now_mono=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
@@ -145,6 +147,8 @@ milestone() {
 }
 
 start_progress_animation() {
+    # Skip animation when parent (firstboot.sh) owns the display
+    [[ -n "${PROGRESS_MANAGED:-}" ]] && return
     local step=$1 base_pct=$2 step_weight=$3
 
     stop_progress_animation
@@ -214,6 +218,8 @@ progress() {
 
 progress_complete() {
     stop_progress_animation
+    # Skip rendering when parent owns the display
+    [[ -n "${PROGRESS_MANAGED:-}" ]] && return
 
     local total=${#STEP_NAMES[@]}
     local now_mono
