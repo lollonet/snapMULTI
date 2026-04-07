@@ -163,8 +163,10 @@ def parse_item(item_data: bytes) -> None:
         metadata["composer"] = [data]
     elif code == "PICT" and isinstance(data, bytes) and len(data) > 0:
         try:
-            with open(cover_art_path, "wb") as f:
+            tmp_path = str(cover_art_path) + ".tmp"
+            with open(tmp_path, "wb") as f:
                 f.write(data)
+            os.replace(tmp_path, cover_art_path)
             # Cache host IP on first use
             if _host_ip is None:
                 _host_ip = get_host_ip()
