@@ -85,11 +85,21 @@ if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     SMB_PASS=$(grep -m1 '^SMB_PASS=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '\r')
 fi
 
-# Read-only filesystem setting (default: true for all modes)
+# Read advanced options from install.conf (defaults are production-safe)
 ENABLE_READONLY="true"
+SKIP_UPGRADE="false"
+IMAGE_TAG="latest"
+AUTO_UPDATE=""
+VERBOSE_INSTALL="false"
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
-    local_readonly=$(grep -m1 '^ENABLE_READONLY=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
-    [[ -n "$local_readonly" ]] && ENABLE_READONLY="$local_readonly"
+    _read_conf() { grep -m1 "^$1=" "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]'; }
+    local_val=$(_read_conf ENABLE_READONLY); [[ -n "$local_val" ]] && ENABLE_READONLY="$local_val"
+    local_val=$(_read_conf SKIP_UPGRADE);    [[ -n "$local_val" ]] && SKIP_UPGRADE="$local_val"
+    local_val=$(_read_conf IMAGE_TAG);       [[ -n "$local_val" ]] && IMAGE_TAG="$local_val"
+    local_val=$(_read_conf AUTO_UPDATE);     [[ -n "$local_val" ]] && AUTO_UPDATE="$local_val"
+    local_val=$(_read_conf VERBOSE_INSTALL); [[ -n "$local_val" ]] && VERBOSE_INSTALL="$local_val"
+    unset -f _read_conf
+    unset local_val
 fi
 
 # Set install directories
@@ -491,9 +501,13 @@ fi
 # Runs before overlayroot — changes persist in the base layer.
 # The reboot at the end of firstboot activates any new kernel.
 # Note: apt-get update above already refreshed indices (after NTP sync).
-log_progress "Upgrading system packages..." 2>/dev/null || true
-if ! apt-get upgrade -y >> "$LOG" 2>&1; then
-    log_and_tty "WARNING: apt upgrade failed (non-fatal, continuing with existing packages)"
+if [[ "$SKIP_UPGRADE" == "true" ]]; then
+    log_progress "Skipping apt upgrade (SKIP_UPGRADE=true)" 2>/dev/null || true
+else
+    log_progress "Upgrading system packages..." 2>/dev/null || true
+    if ! apt-get upgrade -y >> "$LOG" 2>&1; then
+        log_and_tty "WARNING: apt upgrade failed (non-fatal, continuing with existing packages)"
+    fi
 fi
 
 # Core dependencies (always needed)
@@ -708,6 +722,18 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
     log_progress "Running deploy.sh ..." 2>/dev/null || true
 
+    # Export IMAGE_TAG so deploy.sh can override docker-compose image tags
+    if [[ "$IMAGE_TAG" != "latest" ]]; then
+        export IMAGE_TAG
+        log_progress "Using image tag: $IMAGE_TAG" 2>/dev/null || true
+    fi
+
+    # Export AUTO_UPDATE so deploy.sh enables Watchtower
+    if [[ "$AUTO_UPDATE" == "true" ]]; then
+        export AUTO_UPDATE
+        log_progress "Auto-update: enabled" 2>/dev/null || true
+    fi
+
     # Set up music source before deploy.sh (mounts NFS/SMB, exports MUSIC_PATH)
     setup_music_source
 
@@ -737,6 +763,10 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     set +eo pipefail
     bash scripts/deploy.sh 2>&1 | while IFS= read -r line; do
         printf '%s\n' "$line" >> "$LOG"
+        if [[ "$VERBOSE_INSTALL" == "true" ]]; then
+            # Verbose: forward ALL lines to TUI
+            log_progress "  ${line:0:68}" 2>/dev/null || true
+        else
         case "$line" in
             *"[INFO] "*|*"[OK] "*|*"==> "*)
                 # Forward all INFO/OK/==> lines to TUI for visibility
@@ -748,6 +778,7 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
                 log_progress "  $line" 2>/dev/null || true
                 ;;
         esac
+        fi
     done
     deploy_rc=${PIPESTATUS[0]}
     set -eo pipefail
@@ -883,14 +914,18 @@ fi
 # A second pass catches upgrades that become available after repository
 # setup earlier in firstboot (for example after Docker CE repo wiring),
 # while the root filesystem is still writable.
-log_progress "Final package refresh before reboot..." 2>/dev/null || true
-wait_for_apt_lock
-if ! apt-get update >> "$LOG" 2>&1; then
-    log_and_tty "WARNING: final apt-get update failed (non-fatal, continuing to reboot)"
-elif ! apt-get upgrade -y >> "$LOG" 2>&1; then
-    log_and_tty "WARNING: final apt upgrade failed (non-fatal, continuing to reboot)"
+if [[ "$SKIP_UPGRADE" == "true" ]]; then
+    log_progress "Skipping final package refresh (SKIP_UPGRADE=true)" 2>/dev/null || true
 else
-    log_progress "Final package refresh complete" 2>/dev/null || true
+    log_progress "Final package refresh before reboot..." 2>/dev/null || true
+    wait_for_apt_lock
+    if ! apt-get update >> "$LOG" 2>&1; then
+        log_and_tty "WARNING: final apt-get update failed (non-fatal, continuing to reboot)"
+    elif ! apt-get upgrade -y >> "$LOG" 2>&1; then
+        log_and_tty "WARNING: final apt upgrade failed (non-fatal, continuing to reboot)"
+    else
+        log_progress "Final package refresh complete" 2>/dev/null || true
+    fi
 fi
 
 # ══════════════════════════════════════════════════════════════════
