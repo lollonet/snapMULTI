@@ -30,9 +30,17 @@ jobs:
         id: version
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+            # Dev builds skip :latest to avoid overwriting stable images
+            if [[ "$VERSION" == *dev* ]]; then
+              echo "is_dev=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "is_dev=false" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "is_dev=false" >> "$GITHUB_OUTPUT"
           fi
 
       # docker driver on Mac: inherits host credentials, no isolated BuildKit container
@@ -51,7 +59,7 @@ jobs:
       - name: Get latest snapcast commit SHA
         id: snapcast
         run: |
-          SHA=$(git ls-remote https://github.com/badaix/snapcast.git HEAD | cut -f1)
+          SHA=$(git ls-remote https://github.com/lollonet/santcasp.git HEAD | cut -f1)
           if [[ -z "$SHA" ]]; then
             echo "ERROR: Failed to fetch snapcast HEAD commit"
             exit 1
@@ -69,7 +77,7 @@ jobs:
           build-args: |
             SNAPCAST_SHA=${{ steps.snapcast.outputs.sha }}
           tags: |
-            lollonet/snapmulti-server:${{ matrix.suffix }}
+            ${{ steps.version.outputs.is_dev != 'true' && format('lollonet/snapmulti-server:{0}', matrix.suffix) || '' }}
             ${{ steps.version.outputs.tag && format('lollonet/snapmulti-server:{0}-{1}', steps.version.outputs.tag, matrix.suffix) || '' }}
           cache-from: ${{ runner.os == 'Linux' && format('type=gha,scope=snapserver-{0}', matrix.suffix) || '' }}
           cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=snapserver-{0}', matrix.suffix) || '' }}
@@ -82,7 +90,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            lollonet/snapmulti-airplay:${{ matrix.suffix }}
+            ${{ steps.version.outputs.is_dev != 'true' && format('lollonet/snapmulti-airplay:{0}', matrix.suffix) || '' }}
             ${{ steps.version.outputs.tag && format('lollonet/snapmulti-airplay:{0}-{1}', steps.version.outputs.tag, matrix.suffix) || '' }}
           cache-from: ${{ runner.os == 'Linux' && format('type=gha,scope=airplay-{0}', matrix.suffix) || '' }}
           cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=airplay-{0}', matrix.suffix) || '' }}
@@ -97,7 +105,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            lollonet/snapmulti-mpd:${{ matrix.suffix }}
+            ${{ steps.version.outputs.is_dev != 'true' && format('lollonet/snapmulti-mpd:{0}', matrix.suffix) || '' }}
             ${{ steps.version.outputs.tag && format('lollonet/snapmulti-mpd:{0}-{1}', steps.version.outputs.tag, matrix.suffix) || '' }}
           cache-from: ${{ runner.os == 'Linux' && format('type=gha,scope=mpd-{0}', matrix.suffix) || '' }}
           cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=mpd-{0}', matrix.suffix) || '' }}
@@ -110,7 +118,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            lollonet/snapmulti-metadata:${{ matrix.suffix }}
+            ${{ steps.version.outputs.is_dev != 'true' && format('lollonet/snapmulti-metadata:{0}', matrix.suffix) || '' }}
             ${{ steps.version.outputs.tag && format('lollonet/snapmulti-metadata:{0}-{1}', steps.version.outputs.tag, matrix.suffix) || '' }}
           cache-from: ${{ runner.os == 'Linux' && format('type=gha,scope=metadata-{0}', matrix.suffix) || '' }}
           cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=metadata-{0}', matrix.suffix) || '' }}
@@ -126,8 +134,8 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            lollonet/snapmulti-tidal:arm64
-            lollonet/snapmulti-tidal:latest
+            ${{ steps.version.outputs.is_dev != 'true' && 'lollonet/snapmulti-tidal:arm64' || '' }}
+            ${{ steps.version.outputs.is_dev != 'true' && 'lollonet/snapmulti-tidal:latest' || '' }}
             ${{ steps.version.outputs.tag && format('lollonet/snapmulti-tidal:{0}', steps.version.outputs.tag) || '' }}
           cache-from: ${{ runner.os == 'Linux' && format('type=gha,scope=tidal-arm64') || '' }}
           cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=tidal-arm64') || '' }}
@@ -140,9 +148,17 @@ jobs:
         id: version
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+            # Dev builds skip :latest to avoid overwriting stable images
+            if [[ "$VERSION" == *dev* ]]; then
+              echo "is_dev=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "is_dev=false" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "is_dev=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Docker Buildx
@@ -155,6 +171,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Create multi-arch manifest for snapserver
+        if: steps.version.outputs.is_dev != 'true'
         run: |
           docker buildx imagetools create -t lollonet/snapmulti-server:latest \
             lollonet/snapmulti-server:amd64 \
@@ -169,6 +186,7 @@ jobs:
             "lollonet/snapmulti-server:$VERSION-arm64"
 
       - name: Create multi-arch manifest for airplay
+        if: steps.version.outputs.is_dev != 'true'
         run: |
           docker buildx imagetools create -t lollonet/snapmulti-airplay:latest \
             lollonet/snapmulti-airplay:amd64 \
@@ -185,6 +203,7 @@ jobs:
       # Spotify Connect: uses official ghcr.io/devgianlu/go-librespot image (no manifest needed)
 
       - name: Create multi-arch manifest for metadata
+        if: steps.version.outputs.is_dev != 'true'
         run: |
           docker buildx imagetools create -t lollonet/snapmulti-metadata:latest \
             lollonet/snapmulti-metadata:amd64 \
@@ -199,6 +218,7 @@ jobs:
             "lollonet/snapmulti-metadata:$VERSION-arm64"
 
       - name: Create multi-arch manifest for mpd
+        if: steps.version.outputs.is_dev != 'true'
         run: |
           docker buildx imagetools create -t lollonet/snapmulti-mpd:latest \
             lollonet/snapmulti-mpd:amd64 \

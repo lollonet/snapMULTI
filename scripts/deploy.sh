@@ -764,7 +764,7 @@ EOF
     fi
 
     # Watchtower auto-update (opt-in)
-    if grep -q '^AUTO_UPDATE=true' "$ENV_FILE" 2>/dev/null; then
+    if grep -q '^AUTO_UPDATE=true' "$ENV_FILE" 2>/dev/null || [[ "${AUTO_UPDATE:-}" == "true" ]]; then
         ensure_profile "auto-update"
     fi
 }
