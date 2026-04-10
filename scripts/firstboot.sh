@@ -540,7 +540,7 @@ fi
 # Enable avahi if just installed
 if command -v avahi-daemon &>/dev/null; then
     if ! systemctl enable --now avahi-daemon >> "$LOG" 2>&1; then
-        log_and_tty "WARNING: avahi-daemon failed to start — mDNS autodiscovery may not work"
+        log_and_tty "WARNING: avahi-daemon failed to start -- mDNS autodiscovery may not work"
     fi
 fi
 
