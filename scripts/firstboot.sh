@@ -298,6 +298,8 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     [[ -f "$CLIENT_DIR/docker-compose.yml" ]] || local_missing+=("docker-compose.yml")
     [[ -f "$CLIENT_DIR/scripts/setup.sh" ]] || local_missing+=("scripts/setup.sh")
     [[ -d "$CLIENT_DIR/audio-hats" ]] || local_missing+=("audio-hats/")
+    [[ -f "$CLIENT_DIR/scripts/display.sh" ]] || local_missing+=("scripts/display.sh")
+    [[ -f "$CLIENT_DIR/scripts/display-detect.sh" ]] || local_missing+=("scripts/display-detect.sh")
     if [[ ${#local_missing[@]} -gt 0 ]]; then
         log_error "Critical client files missing: ${local_missing[*]}"
         exit 1
