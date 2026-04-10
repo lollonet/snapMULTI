@@ -466,18 +466,16 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     export PROGRESS_MANAGED=1
     export PROGRESS_LOG
     export IMAGE_TAG
-    if [[ -n "$CONFIG_FILE" ]]; then
-        if ! bash scripts/setup.sh --auto "$CONFIG_FILE" >> "$UNIFIED_LOG" 2>&1; then
-            log_error "Client setup failed"
-            log_error "Troubleshoot: sudo cat $UNIFIED_LOG | tail -50"
-            exit 1
-        fi
-    else
-        if ! bash scripts/setup.sh --auto >> "$UNIFIED_LOG" 2>&1; then
-            log_error "Client setup failed"
-            log_error "Troubleshoot: sudo cat $UNIFIED_LOG | tail -50"
-            exit 1
-        fi
+
+    # Build setup.sh args
+    setup_args=(--auto)
+    [[ -n "$CONFIG_FILE" ]] && setup_args+=("$CONFIG_FILE")
+    [[ "$ENABLE_READONLY" != "true" ]] && setup_args+=(--no-readonly)
+
+    if ! bash scripts/setup.sh "${setup_args[@]}" >> "$UNIFIED_LOG" 2>&1; then
+        log_error "Client setup failed"
+        log_error "Troubleshoot: sudo cat $UNIFIED_LOG | tail -50"
+        exit 1
     fi
     unset PROGRESS_MANAGED
     milestone "$CURRENT_STEP" "Client setup complete" 2 2>/dev/null || true
