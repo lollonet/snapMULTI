@@ -95,7 +95,7 @@ IMAGE_TAG="latest"
 AUTO_UPDATE=""
 VERBOSE_INSTALL="false"
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
-    _rc() { grep -m1 "^$1=" "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]'; }
+    _rc() { grep -m1 "^$1=" "$SNAP_BOOT/install.conf" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true; }
     local_val=$(_rc ENABLE_READONLY); [[ -n "$local_val" ]] && ENABLE_READONLY="$local_val"
     local_val=$(_rc SKIP_UPGRADE);    [[ -n "$local_val" ]] && SKIP_UPGRADE="$local_val"
     local_val=$(_rc IMAGE_TAG);       [[ -n "$local_val" ]] && IMAGE_TAG="$local_val"
