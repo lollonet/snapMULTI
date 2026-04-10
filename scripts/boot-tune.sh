@@ -52,8 +52,8 @@ fi
 # CAKE prioritizes outbound audio packets from snapserver (ports 1704/1705).
 # On clients, audio arrives inbound — DSCP OUTPUT marking does nothing,
 # and CAKE can hang on Pi Zero 2 W when interfaces are DOWN.
-# Skip entirely if no snapserver container is running.
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^snapserver$'; then
+# Skip entirely on client-only systems (no server compose file present).
+if [[ -f /opt/snapmulti/docker-compose.yml ]]; then
     modprobe sch_cake 2>/dev/null || true
 
     for iface in $(ip -o route show default 2>/dev/null | awk '{print $5}'); do
