@@ -69,6 +69,16 @@ Snapcast clients are lightweight — they receive audio and play it through spea
 | **Old Android phone** | Free | Built-in speaker | Battery | Via [Snapcast Android app](https://github.com/badaix/snapdroid) |
 | **Any Linux PC** | Varies | Built-in audio | Varies | `apt install snapclient` |
 
+### Pi Zero 2 W Notes
+
+The Pi Zero 2 W is the cheapest client option but has specific requirements:
+
+- **64-bit OS required** — Imager defaults to 32-bit for this model. Select "Raspberry Pi OS Lite (64-bit)" explicitly
+- **2.4 GHz WiFi only** — no 5 GHz. Use your 2.4 GHz SSID when configuring WiFi in Imager
+- **512 MB RAM** — headless audio only (no display). Cannot run fb-display or server
+- **I2S HAT compatibility** — works with PCM5122-based HATs (HiFiBerry DAC+, InnoMaker Mini). The USB `otg_mode=1` setting from Imager conflicts with I2S — `prepare-sd.sh` and `setup.sh` fix this automatically
+- **USB gadget mode** — for debugging without WiFi, connect the data USB port to your computer. Requires `dtoverlay=dwc2` under `[all]` in config.txt (not under `[cm5]`)
+
 ### Audio Output Quality
 
 | Output Method | Quality | Cost | Notes |
