@@ -299,7 +299,9 @@ try_recover_network() {
     if [[ "$mode" != "dns-only" ]] && (( i == 30 )); then
         log_progress "Restarting NetworkManager..." 2>/dev/null || true
         log_net_state
-        systemctl restart NetworkManager 2>/dev/null || true
+        if ! systemctl restart NetworkManager >> "$LOG" 2>&1; then
+            log_progress "NetworkManager restart failed" 2>/dev/null || true
+        fi
         sleep 3
         if command -v nmcli &>/dev/null; then
             nmcli -t -f NAME,TYPE connection show 2>/dev/null | while IFS=: read -r name _type; do
@@ -537,7 +539,9 @@ fi
 
 # Enable avahi if just installed
 if command -v avahi-daemon &>/dev/null; then
-    systemctl enable --now avahi-daemon >/dev/null 2>&1 || true
+    if ! systemctl enable --now avahi-daemon >> "$LOG" 2>&1; then
+        log_and_tty "WARNING: avahi-daemon failed to start — mDNS autodiscovery may not work"
+    fi
 fi
 
 milestone "$CURRENT_STEP" "System dependencies installed" 2 2>/dev/null || true
@@ -590,6 +594,12 @@ fi
         log_progress "Switching Docker to fuse-overlayfs (read-only FS support)..." 2>/dev/null || true
         wait_for_apt_lock
         if apt-get install -y fuse-overlayfs >> "$LOG" 2>&1; then
+            # Verify fuse-overlayfs binary actually works before wiping Docker storage
+            if ! fuse-overlayfs --version >> "$LOG" 2>&1; then
+                log_and_tty "ERROR: fuse-overlayfs installed but binary is broken."
+                log_and_tty "  Keeping current Docker storage driver to avoid data loss."
+                log_and_tty "  Read-only mode will not work."
+            else
             tune_docker_daemon --fuse-overlayfs
             systemctl stop docker
             rm -rf /var/lib/docker/*
@@ -605,6 +615,7 @@ fi
                 log_and_tty "WARNING: Docker started but driver is '$new_driver', not fuse-overlayfs."
                 log_and_tty "         Read-only mode may not work correctly."
             fi
+            fi  # end fuse-overlayfs binary check
         else
             log_and_tty "ERROR: Failed to install fuse-overlayfs — required for read-only mode."
             exit 1
@@ -847,6 +858,10 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     # not render its own TUI, and should log to our progress log instead.
     export PROGRESS_MANAGED=1
     export PROGRESS_LOG
+    # Pass IMAGE_TAG to client so both server and client pull the same
+    # label (:latest or :dev). Without this, "both" mode installs get
+    # mismatched versions (server=dev, client=latest).
+    export IMAGE_TAG
     if [[ -n "$CONFIG_FILE" ]]; then
         if ! bash scripts/setup.sh --auto "$CONFIG_FILE" >> "$LOG" 2>&1; then
             log_and_tty "ERROR: Client setup failed."
