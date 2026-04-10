@@ -6,58 +6,61 @@
 #   server — Music Server (Spotify, AirPlay, MPD, etc.)
 #   both   — Server + Player on the same Pi
 #
+# Modular architecture: sources modules from scripts/common/ for each phase.
+# All logging goes through unified-log.sh (single log file with timestamps).
+#
 # Called by cloud-init runcmd or firstrun.sh (patched by prepare-sd.sh).
 set -euo pipefail
 
-# Secure PATH - prevent PATH hijacking attacks
+# Secure PATH
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-# Mode-neutral marker directory (works for client, server, or both)
+# ══════════════════════════════════════════════════════════════════
+# INIT: markers, boot partition, install.conf
+# ══════════════════════════════════════════════════════════════════
 INSTALLER_STATE="/var/lib/snapmulti-installer"
 MARKER="$INSTALLER_STATE/.auto-installed"
 FAILED_MARKER="$INSTALLER_STATE/.install-failed"
 mkdir -p "$INSTALLER_STATE"
 
-# Skip if already installed
 if [[ -f "$MARKER" ]]; then
     echo "snapMULTI already installed, skipping."
     exit 0
 fi
-
-# Skip if previous install failed (requires manual intervention)
 if [[ -f "$FAILED_MARKER" ]]; then
     echo "Previous install failed. Check /var/log/snapmulti-install.log"
     echo "Remove $FAILED_MARKER to retry."
     exit 1
 fi
 
-# Detect boot partition path
+# Detect boot partition
 if [[ -d /boot/firmware ]]; then
     BOOT="/boot/firmware"
 else
     BOOT="/boot"
 fi
-
 SNAP_BOOT="$BOOT/snapmulti"
-LOG="/var/log/snapmulti-install.log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export DEBIAN_FRONTEND=noninteractive
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 
-# Verify source files exist
 if [[ ! -d "$SNAP_BOOT" ]]; then
-    echo "ERROR: $SNAP_BOOT not found on boot partition." | tee -a "$LOG"
+    echo "ERROR: $SNAP_BOOT not found on boot partition."
     exit 1
 fi
 
-# Read install type (targeted parse — do not source FAT32 files as root)
+# ── Read install.conf ────────────────────────────────────────────
 INSTALL_TYPE="server"
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     INSTALL_TYPE=$(grep -m1 '^INSTALL_TYPE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
     INSTALL_TYPE="${INSTALL_TYPE:-server}"
 fi
 
-# Read music source config (server/both only)
+# Read music source config
+# Music source config — used by sourced mount-music.sh module
+# shellcheck disable=SC2034
+{
 MUSIC_SOURCE=""
 NFS_SERVER=""
 NFS_EXPORT=""
@@ -65,11 +68,11 @@ SMB_SERVER=""
 SMB_SHARE=""
 SMB_USER=""
 SMB_PASS=""
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+}
+# shellcheck disable=SC2034
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     MUSIC_SOURCE=$(grep -m1 '^MUSIC_SOURCE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
-    # Source sanitize.sh for re-validation (FAT32 has no file permissions —
-    # values could be hand-edited before first boot)
+    # Source sanitize.sh for re-validation
     if [[ -f "$SNAP_BOOT/common/sanitize.sh" ]]; then
         # shellcheck source=common/sanitize.sh
         source "$SNAP_BOOT/common/sanitize.sh"
@@ -85,22 +88,41 @@ if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     SMB_PASS=$(grep -m1 '^SMB_PASS=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '\r')
 fi
 
-# Read-only filesystem setting (default: true for all modes)
+# Read advanced options
 ENABLE_READONLY="true"
+SKIP_UPGRADE="false"
+IMAGE_TAG="latest"
+AUTO_UPDATE=""
+VERBOSE_INSTALL="false"
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
-    local_readonly=$(grep -m1 '^ENABLE_READONLY=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
-    [[ -n "$local_readonly" ]] && ENABLE_READONLY="$local_readonly"
+    _rc() { grep -m1 "^$1=" "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]'; }
+    local_val=$(_rc ENABLE_READONLY); [[ -n "$local_val" ]] && ENABLE_READONLY="$local_val"
+    local_val=$(_rc SKIP_UPGRADE);    [[ -n "$local_val" ]] && SKIP_UPGRADE="$local_val"
+    local_val=$(_rc IMAGE_TAG);       [[ -n "$local_val" ]] && IMAGE_TAG="$local_val"
+    local_val=$(_rc AUTO_UPDATE);     [[ -n "$local_val" ]] && AUTO_UPDATE="$local_val"
+    local_val=$(_rc VERBOSE_INSTALL); [[ -n "$local_val" ]] && VERBOSE_INSTALL="$local_val"
+    unset -f _rc
+    unset local_val
 fi
 
-# Set install directories
+# Install directories
 SERVER_DIR="/opt/snapmulti"
 CLIENT_DIR="/opt/snapclient"
 
-# Helper: write to both log and HDMI console
-log_and_tty() { echo "$*" | tee -a "$LOG" /dev/tty1 2>/dev/null || true; }
+# ══════════════════════════════════════════════════════════════════
+# LOGGING + PROGRESS
+# ══════════════════════════════════════════════════════════════════
+# shellcheck disable=SC2034
+LOG_SOURCE="firstboot"
+export UNIFIED_LOG="/var/log/snapmulti-install.log"
 
-# ── Configure progress steps based on install type ────────────────
-# These variables are read by progress.sh when sourced below
+# Source unified logger
+COMMON="$SNAP_BOOT/common"
+[[ ! -d "$COMMON" ]] && COMMON="$SCRIPT_DIR/common"
+# shellcheck source=common/unified-log.sh
+source "$COMMON/unified-log.sh"
+
+# Configure progress steps based on install type
 # shellcheck disable=SC2034
 case "$INSTALL_TYPE" in
     client)
@@ -126,99 +148,53 @@ case "$INSTALL_TYPE" in
         PROGRESS_TITLE="snapMULTI Server + Player"
         ;;
     *)
-        log_and_tty "ERROR: Unknown INSTALL_TYPE=$INSTALL_TYPE"
+        log_error "Unknown INSTALL_TYPE=$INSTALL_TYPE"
         exit 1
         ;;
 esac
-
-# Include hostname in progress title so user can identify which Pi
 PROGRESS_TITLE="$PROGRESS_TITLE ($(hostname))"
 
-# Guard: step names and weights must match
+# Verify step arrays match
 if [[ ${#STEP_NAMES[@]} -ne ${#STEP_WEIGHTS[@]} ]]; then
-    echo "BUG: STEP_NAMES (${#STEP_NAMES[@]}) != STEP_WEIGHTS (${#STEP_WEIGHTS[@]})" | tee -a "$LOG"
+    log_error "BUG: STEP_NAMES (${#STEP_NAMES[@]}) != STEP_WEIGHTS (${#STEP_WEIGHTS[@]})"
     exit 1
 fi
 
-# Source progress display (boot partition copy, or local fallback for manual testing)
-if [[ -f "$SNAP_BOOT/common/progress.sh" ]]; then
-    # shellcheck source=common/progress.sh
-    source "$SNAP_BOOT/common/progress.sh"
-elif [[ -f "$SCRIPT_DIR/common/progress.sh" ]]; then
-    # shellcheck source=common/progress.sh
-    source "$SCRIPT_DIR/common/progress.sh"
-fi
+# Source progress display
+# shellcheck source=common/progress.sh
+source "$COMMON/progress.sh"
 
-# Cleanup on failure
-cleanup_on_failure() {
-    local exit_code=$?
-    if [[ $exit_code -ne 0 ]]; then
-        stop_progress_animation 2>/dev/null || true
-        log_and_tty ""
-        log_and_tty "  --- Installation FAILED (exit code: $exit_code) ---"
-        log_and_tty "  Check log: $LOG"
-        log_and_tty ""
-        touch "$FAILED_MARKER"
-    fi
-}
-trap cleanup_on_failure EXIT
-
-log_and_tty "========================================="
-log_and_tty "snapMULTI Auto-Install ($INSTALL_TYPE) -- $(hostname)"
-log_and_tty "========================================="
-
-# ── Headless detection (for client modes) ─────────────────────────
-has_display() {
-    [[ -c /dev/fb0 ]] || return 1
-    local found_status=false
-    for card in /sys/class/drm/card*-HDMI-*/status; do
-        [[ -f "$card" ]] || continue
-        found_status=true
-        grep -q "^connected" "$card" && return 0
-    done
-    # DRM status files exist but none say "connected" → headless
-    $found_status && return 1
-    # No DRM status files at all (very old firmware / virtual fb) → assume headless
-    return 1
-}
-
-# Initialize progress display
-progress_init 2>/dev/null || true
-
-# ── Make future boots verbose (kernel messages on HDMI) ───────────
-# Stock images ship with "quiet splash" and setup.sh may have added
-# "fbcon=map:9" — both hide boot diagnostics. fb-display (client)
-# overwrites /dev/fb0 once started, so kernel text doesn't interfere.
-CMDLINE_FILE=""
-for candidate in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
-    [[ -f "$candidate" ]] && CMDLINE_FILE="$candidate" && break
-done
-if [[ -n "$CMDLINE_FILE" ]]; then
-    if grep -qE 'quiet|splash|fbcon=map:9' "$CMDLINE_FILE"; then
-        sed -i 's/ quiet//; s/ splash//; s/ fbcon=map:9//' "$CMDLINE_FILE"
-        log_and_tty "Enabled verbose boot (removed quiet/splash/fbcon=map:9)"
-    fi
-fi
-
-# ── System tuning (shared with server/client — runs before overlayroot) ──
+# Source system tuning
 # shellcheck source=common/system-tune.sh
-if [[ -f "$SNAP_BOOT/common/system-tune.sh" ]]; then
-    source "$SNAP_BOOT/common/system-tune.sh"
-elif [[ -f "$SCRIPT_DIR/common/system-tune.sh" ]]; then
-    source "$SCRIPT_DIR/common/system-tune.sh"
+if [[ -f "$COMMON/system-tune.sh" ]]; then
+    source "$COMMON/system-tune.sh"
 fi
 if command -v tune_wifi_powersave &>/dev/null; then
     tune_wifi_powersave
 fi
 
-# ── Step counter (tracks current step across install phases) ──────
+# ── Error handling ───────────────────────────────────────────────
+CURRENT_MODULE="init"
+cleanup_on_failure() {
+    local exit_code=$?
+    if [[ $exit_code -ne 0 ]]; then
+        stop_progress_animation 2>/dev/null || true
+        log_error "Installation FAILED in module: $CURRENT_MODULE (exit code: $exit_code)"
+        log_error "Check log: $UNIFIED_LOG"
+        echo "" > /dev/tty1 2>/dev/null || true
+        echo "  --- Installation FAILED (module: $CURRENT_MODULE) ---" > /dev/tty1 2>/dev/null || true
+        echo "  Check log: $UNIFIED_LOG" > /dev/tty1 2>/dev/null || true
+        touch "$FAILED_MARKER"
+    fi
+}
+trap cleanup_on_failure EXIT
+
+# ── Step counter ─────────────────────────────────────────────────
 CURRENT_STEP=0
 next_step() {
     CURRENT_STEP=$(( CURRENT_STEP + 1 ))
     progress "$CURRENT_STEP" "$1" 2>/dev/null || true
 }
-
-# Get weight for the current step (safe accessor, returns 5 as fallback)
 current_weight() {
     local idx=$(( CURRENT_STEP - 1 ))
     if (( idx >= 0 && idx < ${#STEP_WEIGHTS[@]} )); then
@@ -227,8 +203,6 @@ current_weight() {
         echo 5
     fi
 }
-
-# Compute cumulative base percentage for completed steps
 cumulative_pct() {
     local step=$1
     local total_weight=0 weight_sum=0
@@ -242,153 +216,54 @@ cumulative_pct() {
     echo $(( weight_sum * 100 / total_weight ))
 }
 
+# Headless detection (for client modes)
+has_display() {
+    [[ -c /dev/fb0 ]] || return 1
+    local found_status=false
+    for card in /sys/class/drm/card*-HDMI-*/status; do
+        [[ -f "$card" ]] || continue
+        found_status=true
+        grep -q "^connected" "$card" && return 0
+    done
+    $found_status && return 1
+    return 1
+}
+
+# Make future boots verbose
+CMDLINE_FILE=""
+for candidate in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
+    [[ -f "$candidate" ]] && CMDLINE_FILE="$candidate" && break
+done
+if [[ -n "$CMDLINE_FILE" ]]; then
+    if grep -qE 'quiet|splash|fbcon=map:9' "$CMDLINE_FILE"; then
+        sed -i 's/ quiet//; s/ splash//; s/ fbcon=map:9//' "$CMDLINE_FILE"
+        log_info "Enabled verbose boot"
+    fi
+fi
+
+# Initialize progress display
+progress_init 2>/dev/null || true
+
+log_info "Starting snapMULTI auto-install ($INSTALL_TYPE) — $(hostname)"
+
 # ══════════════════════════════════════════════════════════════════
-# STEP 1: Network
+# STEP 1: Network + NTP
 # ══════════════════════════════════════════════════════════════════
+CURRENT_MODULE="network"
 next_step "Waiting for network..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-log_progress "Waiting for network connectivity..." 2>/dev/null || true
-
-# Ensure WiFi regulatory domain is applied (brcmfmac may ignore the
-# kernel parameter on first boot, blocking 5 GHz DFS channels).
-REG_DOMAIN=$(sed -n 's/.*cfg80211.ieee80211_regdom=\([A-Z]*\).*/\1/p' /proc/cmdline)
-if [[ "$REG_DOMAIN" =~ ^[A-Z]{2}$ ]] && command -v iw &>/dev/null; then
-    iw reg set "$REG_DOMAIN" 2>/dev/null || true
-    log_progress "Set regulatory domain: $REG_DOMAIN" 2>/dev/null || true
-fi
-
-# Diagnostic: log interface states for troubleshooting
-log_net_state() {
-    log_progress "--- Network diagnostics ---" 2>/dev/null || true
-    ip -brief link 2>/dev/null | while read -r line; do
-        log_progress "  Link: $line" 2>/dev/null || true
-    done
-    ip -brief addr 2>/dev/null | while read -r line; do
-        log_progress "  Addr: $line" 2>/dev/null || true
-    done
-    log_progress "  Route: $(ip route show default 2>/dev/null || echo 'none')" 2>/dev/null || true
-    if command -v nmcli &>/dev/null; then
-        log_progress "  NM: $(nmcli -t general status 2>/dev/null || echo 'unavailable')" 2>/dev/null || true
-        nmcli -t -f NAME,TYPE,STATE connection show 2>/dev/null | while read -r line; do
-            log_progress "  Conn: $line" 2>/dev/null || true
-        done
-    fi
-}
-
-# Staged network recovery — escalates with each threshold
-# Usage: try_recover_network <iteration> [dns-only]
-#   dns-only: skip destructive stages (1,2,4) when IP already works
-try_recover_network() {
-    local i=$1
-    local mode=${2:-full}
-
-    # Stage 1 (30s, 40s): Kick WiFi connection
-    if [[ "$mode" != "dns-only" ]] && { (( i == 15 )) || (( i == 20 )); }; then
-        if command -v nmcli &>/dev/null; then
-            local wifi_conn
-            wifi_conn=$(nmcli -t -f NAME,TYPE connection show 2>/dev/null \
-                | awk -F: '/wifi/ {print $1; exit}')
-            if [[ -n "$wifi_conn" ]]; then
-                log_progress "Activating WiFi: $wifi_conn" 2>/dev/null || true
-                nmcli connection up "$wifi_conn" 2>/dev/null || true
-            fi
-        fi
-    fi
-
-    # Stage 2 (60s): Restart NetworkManager, re-activate all connections
-    if [[ "$mode" != "dns-only" ]] && (( i == 30 )); then
-        log_progress "Restarting NetworkManager..." 2>/dev/null || true
-        log_net_state
-        systemctl restart NetworkManager 2>/dev/null || true
-        sleep 3
-        if command -v nmcli &>/dev/null; then
-            nmcli -t -f NAME,TYPE connection show 2>/dev/null | while IFS=: read -r name _type; do
-                log_progress "Activating: $name" 2>/dev/null || true
-                nmcli connection up "$name" 2>/dev/null || true
-            done
-        fi
-    fi
-
-    # Stage 3 (90s): Add fallback DNS if ping works but resolution fails
-    if (( i == 45 )); then
-        if ping -c1 -W2 1.1.1.1 &>/dev/null && ! getent hosts deb.debian.org &>/dev/null; then
-            log_progress "Adding fallback DNS (1.1.1.1)..." 2>/dev/null || true
-            if [[ -f /etc/resolv.conf ]]; then
-                sed -i '1i nameserver 1.1.1.1' /etc/resolv.conf 2>/dev/null || true
-            else
-                echo "nameserver 1.1.1.1" > /etc/resolv.conf
-            fi
-        fi
-    fi
-
-    # Stage 4 (120s): Bounce interfaces to force re-negotiation
-    if [[ "$mode" != "dns-only" ]] && (( i == 60 )); then
-        log_progress "Bouncing network interfaces..." 2>/dev/null || true
-        for iface in wlan0 eth0; do
-            if ip link show "$iface" &>/dev/null; then
-                ip link set "$iface" down 2>/dev/null || true
-                sleep 1
-                ip link set "$iface" up 2>/dev/null || true
-            fi
-        done
-    fi
-}
-
-NETWORK_READY=false
-log_net_state
-for i in $(seq 1 90); do
-    GATEWAY=$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')
-    if { [[ -n "$GATEWAY" ]] && ping -c1 -W2 "$GATEWAY" &>/dev/null; } || \
-       ping -c1 -W2 1.1.1.1 &>/dev/null || \
-       ping -c1 -W2 8.8.8.8 &>/dev/null; then
-        if getent hosts deb.debian.org &>/dev/null; then
-            log_and_tty "Network ready."
-            milestone "$CURRENT_STEP" "Network ready" 2 2>/dev/null || true
-            NETWORK_READY=true
-            break
-        fi
-        # IP works but DNS fails — only Stage 3 (fallback DNS), skip destructive stages
-        try_recover_network "$i" dns-only
-        [[ $((i % 10)) -eq 0 ]] && log_progress "  DNS not ready ($i/90)..." 2>/dev/null || true
-    else
-        try_recover_network "$i"
-        [[ $((i % 10)) -eq 0 ]] && log_progress "  No connectivity ($i/90)..." 2>/dev/null || true
-    fi
-    sleep 2
-done
-
-if [[ "$NETWORK_READY" == "false" ]]; then
-    log_and_tty "ERROR: Network not available after 3 minutes."
-    log_net_state
-    log_and_tty "Check WiFi credentials or Ethernet connection."
-    exit 1
-fi
-
-# ── Wait for NTP time sync before apt operations ─────────────────
-# Pi has no hardware RTC — clock starts at image build date.
-# apt signature verification (sqv) rejects repos with "Not live until"
-# timestamps in the future relative to the Pi's stale clock.
-log_progress "Waiting for time sync..." 2>/dev/null || true
-timedatectl set-ntp true 2>/dev/null || true
-for _ntp_wait in $(seq 1 30); do
-    if timedatectl show --property=NTPSynchronized --value 2>/dev/null | grep -q yes; then
-        log_progress "Clock synchronized" 2>/dev/null || true
-        break
-    fi
-    sleep 2
-done
-if ! timedatectl show --property=NTPSynchronized --value 2>/dev/null | grep -q yes; then
-    log_and_tty "WARNING: NTP sync not confirmed after 60s — apt signatures may fail"
-fi
+# shellcheck source=common/wait-network.sh
+source "$COMMON/wait-network.sh"
+wait_for_network
+milestone "$CURRENT_STEP" "Network ready" 2 2>/dev/null || true
 
 # ══════════════════════════════════════════════════════════════════
 # STEP 2: Copy files
 # ══════════════════════════════════════════════════════════════════
+CURRENT_MODULE="copy"
 next_step "Copying project files..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-log_progress "Copying files from boot partition..." 2>/dev/null || true
 
-# Copy server files
 if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     mkdir -p "$SERVER_DIR/scripts"
     if [[ -d "$SNAP_BOOT/server" ]]; then
@@ -399,394 +274,142 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         cp "$SNAP_BOOT/server/boot-tune.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/status.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/.version" "$SERVER_DIR/" 2>/dev/null || true
-        # Pre-built MPD database (avoids full NFS rescan — incremental update only)
         if [[ -f "$SNAP_BOOT/server/mpd/data/mpd.db" ]]; then
             mkdir -p "$SERVER_DIR/mpd/data"
             cp "$SNAP_BOOT/server/mpd/data/mpd.db" "$SERVER_DIR/mpd/data/"
-            log_progress "Restored MPD database backup" 2>/dev/null || true
+            log_info "Restored MPD database backup"
         fi
     fi
     cp -r "$SNAP_BOOT/common" "$SERVER_DIR/scripts/" 2>/dev/null || true
-    log_progress "Server files copied to $SERVER_DIR" 2>/dev/null || true
+    log_info "Server files copied to $SERVER_DIR"
 fi
 
-# Copy client files
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     mkdir -p "$CLIENT_DIR/scripts"
-    # Copy shared libs (system-tune.sh, logging.sh, etc.) so setup.sh can source them
     cp -r "$SNAP_BOOT/common" "$CLIENT_DIR/scripts/" 2>/dev/null || true
     if [[ -d "$SNAP_BOOT/client" ]]; then
-        # Copy all client files — fail loudly on errors
         cp -r "$SNAP_BOOT/client/"* "$CLIENT_DIR/" || {
-            log_and_tty "ERROR: Failed to copy client files from $SNAP_BOOT/client/"
+            log_error "Failed to copy client files from $SNAP_BOOT/client/"
             exit 1
         }
-        # Copy dotfiles (.env.example) — glob may match nothing, which is OK
-        if ! cp -r "$SNAP_BOOT/client/".??* "$CLIENT_DIR/" 2>/dev/null; then
-            echo "Note: no dotfiles found in client source (non-fatal)" >> "$LOG"
-        fi
+        cp -r "$SNAP_BOOT/client/".??* "$CLIENT_DIR/" 2>/dev/null || true
     fi
-    # Verify critical client files were copied
-    missing=()
-    [[ -f "$CLIENT_DIR/docker-compose.yml" ]] || missing+=("docker-compose.yml")
-    [[ -f "$CLIENT_DIR/scripts/setup.sh" ]] || missing+=("scripts/setup.sh")
-    [[ -d "$CLIENT_DIR/audio-hats" ]] || missing+=("audio-hats/")
-    [[ -f "$CLIENT_DIR/scripts/display.sh" ]] || missing+=("scripts/display.sh")
-    [[ -f "$CLIENT_DIR/scripts/display-detect.sh" ]] || missing+=("scripts/display-detect.sh")
-    if [[ ${#missing[@]} -gt 0 ]]; then
-        log_and_tty "ERROR: Critical client files missing after copy: ${missing[*]}"
+    local_missing=()
+    [[ -f "$CLIENT_DIR/docker-compose.yml" ]] || local_missing+=("docker-compose.yml")
+    [[ -f "$CLIENT_DIR/scripts/setup.sh" ]] || local_missing+=("scripts/setup.sh")
+    [[ -d "$CLIENT_DIR/audio-hats" ]] || local_missing+=("audio-hats/")
+    if [[ ${#local_missing[@]} -gt 0 ]]; then
+        log_error "Critical client files missing: ${local_missing[*]}"
         exit 1
     fi
-    log_progress "Client files copied to $CLIENT_DIR" 2>/dev/null || true
+    log_info "Client files copied to $CLIENT_DIR"
 fi
 
-log_progress "Files copied" 2>/dev/null || true
-
 # ══════════════════════════════════════════════════════════════════
-# STEP 3: Install git + system dependencies
+# STEP 3: System dependencies
 # ══════════════════════════════════════════════════════════════════
+CURRENT_MODULE="deps"
 next_step "Installing git and dependencies..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-
-# Wait for any background apt (unattended-upgrades, cloud-init) to finish.
-# First boot often triggers apt-daily.service concurrently.
-wait_for_apt_lock() {
-    local _apt_wait
-    for _apt_wait in $(seq 1 60); do
-        fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || return 0
-        sleep 5
-    done
-    log_and_tty "WARNING: apt lock still held after 5 minutes — proceeding anyway"
-}
-
-apt_install_with_recovery() {
-    if apt-get install -y "$@" >> "$LOG" 2>&1; then
-        return 0
-    fi
-
-    log_and_tty "WARNING: apt install failed for: $*"
-    log_and_tty "WARNING: attempting dpkg/apt recovery and retry"
-
-    dpkg --configure -a >> "$LOG" 2>&1 || true
-    apt-get -f install -y >> "$LOG" 2>&1 || true
-    wait_for_apt_lock
-
-    if apt-get install -y "$@" >> "$LOG" 2>&1; then
-        return 0
-    fi
-
-    log_and_tty "ERROR: apt install still failing for: $*"
-    return 1
-}
-
-log_progress "Waiting for apt lock..." 2>/dev/null || true
-wait_for_apt_lock
-
-log_progress "Refreshing package index..." 2>/dev/null || true
-if ! apt-get update >> "$LOG" 2>&1; then
-    log_and_tty "WARNING: apt-get update failed — upgrade may be incomplete"
-fi
-
-# Upgrade all packages (security patches, bug fixes, kernel).
-# Runs before overlayroot — changes persist in the base layer.
-# The reboot at the end of firstboot activates any new kernel.
-# Note: apt-get update above already refreshed indices (after NTP sync).
-log_progress "Upgrading system packages..." 2>/dev/null || true
-if ! apt-get upgrade -y >> "$LOG" 2>&1; then
-    log_and_tty "WARNING: apt upgrade failed (non-fatal, continuing with existing packages)"
-fi
-
-# Core dependencies (always needed)
-PKGS=(curl ca-certificates)
-
-# Git for updates
-if ! command -v git &>/dev/null; then
-    PKGS+=(git)
-fi
-
-# Avahi for mDNS (server needs it for Spotify/AirPlay, client for discovery)
-if ! command -v avahi-daemon &>/dev/null; then
-    PKGS+=(avahi-daemon)
-fi
-
-# Client auto-detect needs these before setup.sh --auto runs.
-# Without i2c-tools/kmod on a fresh image, EEPROM-less GPIO DACs can fall
-# through to the USB fallback before setup.sh has a chance to write the HAT
-# overlay and enable read-only mode.
-if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
-    if ! command -v i2cdetect &>/dev/null; then
-        PKGS+=(i2c-tools)
-    fi
-    if ! command -v modprobe &>/dev/null; then
-        PKGS+=(kmod)
-    fi
-fi
-
-# NFS/SMB packages for music source mounts
-if [[ "$MUSIC_SOURCE" == "nfs" ]]; then
-    PKGS+=(nfs-common)
-fi
-if [[ "$MUSIC_SOURCE" == "smb" ]]; then
-    PKGS+=(cifs-utils)
-fi
-
-log_progress "Installing: ${PKGS[*]}" 2>/dev/null || true
-if ! apt_install_with_recovery "${PKGS[@]}"; then
-    exit 1
-fi
-
-# Enable avahi if just installed
-if command -v avahi-daemon &>/dev/null; then
-    systemctl enable --now avahi-daemon >/dev/null 2>&1 || true
-fi
-
+# shellcheck source=common/install-deps.sh
+source "$COMMON/install-deps.sh"
+install_dependencies
 milestone "$CURRENT_STEP" "System dependencies installed" 2 2>/dev/null || true
 
 # ══════════════════════════════════════════════════════════════════
 # STEP 4: Docker
 # ══════════════════════════════════════════════════════════════════
+CURRENT_MODULE="docker"
 next_step "Installing Docker..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-
-if ! command -v docker &>/dev/null; then
-    log_progress "Setting up Docker repository..." 2>/dev/null || true
-    # shellcheck source=common/install-docker.sh
-    if [[ -f "$SNAP_BOOT/common/install-docker.sh" ]]; then
-        source "$SNAP_BOOT/common/install-docker.sh"
-    else
-        source "$SCRIPT_DIR/common/install-docker.sh"
-    fi
-    log_progress "Installing docker-ce..." 2>/dev/null || true
-    install_docker_apt
-
-    # Docker daemon config: live-restore now, fuse-overlayfs added below
-    # after the package is installed.
-    tune_docker_daemon --live-restore
-
-    systemctl enable docker
-    systemctl start docker
-
-    FIRST_USER=$(getent passwd 1000 | cut -d: -f1 || true)
-    [[ -n "$FIRST_USER" ]] && usermod -aG docker "$FIRST_USER"
-
-    # cgroup memory controller (cmdline.txt) is also handled by deploy.sh
-
-    milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
-else
-    log_progress "Docker already installed, skipping" 2>/dev/null || true
-fi
-
-# Verify Docker is running
-if ! docker info &>/dev/null; then
-    log_and_tty "ERROR: Docker failed to start."
-    exit 1
-fi
-
-# All modes use fuse-overlayfs — required for read-only filesystem support.
-# Install the package and switch Docker's storage driver.
-{
-    current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "none")
-    if [[ "$current_driver" != "fuse-overlayfs" ]]; then
-        log_progress "Switching Docker to fuse-overlayfs (read-only FS support)..." 2>/dev/null || true
-        wait_for_apt_lock
-        if apt-get install -y fuse-overlayfs >> "$LOG" 2>&1; then
-            tune_docker_daemon --fuse-overlayfs
-            systemctl stop docker
-            rm -rf /var/lib/docker/*
-            if ! systemctl start docker; then
-                log_and_tty "ERROR: Docker failed to start after storage driver switch."
-                exit 1
-            fi
-            # Verify driver actually switched
-            new_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "unknown")
-            if [[ "$new_driver" == "fuse-overlayfs" ]]; then
-                log_progress "Docker storage driver: fuse-overlayfs" 2>/dev/null || true
-            else
-                log_and_tty "WARNING: Docker started but driver is '$new_driver', not fuse-overlayfs."
-                log_and_tty "         Read-only mode may not work correctly."
-            fi
-        else
-            log_and_tty "ERROR: Failed to install fuse-overlayfs — required for read-only mode."
-            exit 1
-        fi
-    fi
-}
-
-# ══════════════════════════════════════════════════════════════════
-# Music source setup (runs inside deploy step — no extra progress step)
-# ══════════════════════════════════════════════════════════════════
-setup_music_source() {
-    case "${MUSIC_SOURCE:-}" in
-        streaming)
-            mkdir -p /media/music
-            export MUSIC_PATH="/media/music"
-            export SKIP_MUSIC_SCAN=1
-            log_progress "Streaming-only mode — no local music library" 2>/dev/null || true
-            ;;
-        usb)
-            # Find and mount the first USB block device with a filesystem.
-            # Headless Debian doesn't auto-mount — we need to do it explicitly.
-            local usb_dev="" usb_mount="/media/usb-music"
-            for dev in /dev/sd?1 /dev/sd?; do
-                [[ -b "$dev" ]] || continue
-                # Skip the SD card (mmcblk) and only match USB/SATA
-                blkid "$dev" &>/dev/null && { usb_dev="$dev"; break; }
-            done
-            if [[ -n "$usb_dev" ]]; then
-                mkdir -p "$usb_mount"
-                log_progress "Mounting USB: $usb_dev → $usb_mount" 2>/dev/null || true
-                if mount "$usb_dev" "$usb_mount" -o ro; then
-                    if ! grep -qF "$usb_dev" /etc/fstab; then
-                        echo "$usb_dev $usb_mount auto ro,nofail 0 0" >> /etc/fstab
-                    fi
-                    export MUSIC_PATH="$usb_mount"
-                    log_progress "USB mounted: $usb_dev at $usb_mount" 2>/dev/null || true
-                else
-                    log_and_tty "WARNING: Failed to mount $usb_dev — deploy.sh will try auto-detect"
-                fi
-            else
-                log_and_tty "WARNING: No USB drive found — plug in before powering on"
-                log_progress "USB mode — no drive detected, deploy.sh will scan /media/*" 2>/dev/null || true
-            fi
-            ;;
-        nfs)
-            local mount_point="/media/nfs-music"
-            mkdir -p "$mount_point"
-            log_progress "Mounting NFS: $NFS_SERVER:$NFS_EXPORT" 2>/dev/null || true
-            if mount -t nfs "$NFS_SERVER:$NFS_EXPORT" "$mount_point" -o ro,soft,timeo=50,rsize=32768,_netdev; then
-                # Persist in fstab for reboots (ro mount: rsize only, wsize irrelevant)
-                if ! grep -qF "$NFS_SERVER:$NFS_EXPORT" /etc/fstab; then
-                    echo "$NFS_SERVER:$NFS_EXPORT $mount_point nfs ro,soft,timeo=50,rsize=32768,_netdev,nofail 0 0" >> /etc/fstab
-                fi
-                export MUSIC_PATH="$mount_point"
-                log_progress "NFS mounted: $mount_point" 2>/dev/null || true
-            else
-                log_and_tty "WARNING: NFS mount failed — falling back to auto-detect"
-            fi
-            ;;
-        smb)
-            local mount_point="/media/smb-music"
-            local creds_file="/etc/snapmulti-smb-credentials"
-            mkdir -p "$mount_point"
-            log_progress "Mounting SMB: //$SMB_SERVER/$SMB_SHARE" 2>/dev/null || true
-
-            # Build mount options
-            local mount_opts="ro,_netdev,iocharset=utf8"
-            if [[ -n "$SMB_USER" ]]; then
-                # Write credentials to a root-only file
-                printf 'username=%s\npassword=%s\n' "$SMB_USER" "$SMB_PASS" > "$creds_file"
-                chmod 600 "$creds_file"
-                mount_opts="${mount_opts},credentials=$creds_file"
-            else
-                mount_opts="${mount_opts},guest"
-            fi
-
-            if timeout 60 mount -t cifs "//$SMB_SERVER/$SMB_SHARE" "$mount_point" -o "$mount_opts"; then
-                # Persist in fstab
-                if ! grep -qF "//$SMB_SERVER/$SMB_SHARE" /etc/fstab; then
-                    echo "//$SMB_SERVER/$SMB_SHARE $mount_point cifs ${mount_opts},nofail 0 0" >> /etc/fstab
-                fi
-                export MUSIC_PATH="$mount_point"
-                log_progress "SMB mounted: $mount_point" 2>/dev/null || true
-            else
-                log_and_tty "WARNING: SMB mount failed — falling back to auto-detect"
-            fi
-            ;;
-        manual|"")
-            # No-op: deploy.sh auto-detect fallback
-            ;;
-    esac
-}
+# shellcheck source=common/setup-docker.sh
+source "$COMMON/setup-docker.sh"
+setup_docker
+milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
 
 # ══════════════════════════════════════════════════════════════════
 # SERVER INSTALL
 # ══════════════════════════════════════════════════════════════════
 if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
-
-    # ── Deploy server ─────────────────────────────────────────────
+    CURRENT_MODULE="deploy"
     next_step "Deploy server..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-    log_progress "Running deploy.sh ..." 2>/dev/null || true
 
-    # Set up music source before deploy.sh (mounts NFS/SMB, exports MUSIC_PATH)
+    # Mount music source
+    # shellcheck source=common/mount-music.sh
+    source "$COMMON/mount-music.sh"
     setup_music_source
+    scrub_credentials
 
-    # Scrub credentials and network topology from boot partition
-    # (FAT32 has no file permissions — anyone mounting the SD can read these)
-    if [[ -f "$SNAP_BOOT/install.conf" ]]; then
-        scrub_failed=false
-        for field in SMB_PASS SMB_USER SMB_SERVER SMB_SHARE NFS_SERVER NFS_EXPORT; do
-            sed -i "s/^${field}=.*/${field}=/" "$SNAP_BOOT/install.conf" 2>/dev/null \
-                || scrub_failed=true
-        done
-        if [[ "$scrub_failed" == "true" ]]; then
-            log_and_tty "WARNING: Could not scrub credentials via sed — removing install.conf"
-            rm -f "$SNAP_BOOT/install.conf" 2>/dev/null || true
-        fi
+    # Export IMAGE_TAG + AUTO_UPDATE for deploy.sh
+    if [[ "$IMAGE_TAG" != "latest" ]]; then
+        export IMAGE_TAG
+        log_info "Using image tag: $IMAGE_TAG"
+    fi
+    if [[ "$AUTO_UPDATE" == "true" ]]; then
+        export AUTO_UPDATE
+        log_info "Auto-update: enabled"
     fi
 
     if [[ ! -d "$SERVER_DIR" ]]; then
-        log_and_tty "ERROR: Server directory missing: $SERVER_DIR"
+        log_error "Server directory missing: $SERVER_DIR"
         exit 1
     fi
     cd "$SERVER_DIR"
 
-    # Run deploy.sh with progress forwarded to TUI.
-    # logging.sh outputs plain text when piped (no ANSI codes since stderr
-    # is not a TTY), so we match on [INFO]/[OK]/==> prefixes directly.
+    # Run deploy.sh — parse output through unified logger
     set +eo pipefail
     bash scripts/deploy.sh 2>&1 | while IFS= read -r line; do
-        printf '%s\n' "$line" >> "$LOG"
-        case "$line" in
-            *"[INFO] "*|*"[OK] "*|*"==> "*)
-                # Forward all INFO/OK/==> lines to TUI for visibility
-                msg="${line#*] }"
-                msg="${msg#==> }"
-                log_progress "  $msg" 2>/dev/null || true
-                ;;
-            *"Pulling "*|*"pulling "*|*"Downloaded"*|*"Pull complete"*)
-                log_progress "  $line" 2>/dev/null || true
-                ;;
-        esac
+        if [[ "$VERBOSE_INSTALL" == "true" ]]; then
+            log_msg INFO deploy "${line:0:200}"
+        else
+            case "$line" in
+                *"[INFO] "*|*"[OK] "*|*"==> "*)
+                    local_msg="${line#*] }"
+                    local_msg="${local_msg#==> }"
+                    log_msg INFO deploy "$local_msg"
+                    ;;
+                *"Pulling "*|*"pulling "*|*"Downloaded"*|*"Pull complete"*)
+                    log_msg INFO deploy "$line"
+                    ;;
+            esac
+        fi
     done
     deploy_rc=${PIPESTATUS[0]}
     set -eo pipefail
 
     if [[ "$deploy_rc" -ne 0 ]]; then
-        log_and_tty "ERROR: Server deployment failed."
-        log_and_tty "  To troubleshoot: ssh into the Pi and run:"
-        log_and_tty "  sudo cat $LOG | tail -50"
+        log_error "Server deployment failed"
+        log_error "Troubleshoot: sudo cat $UNIFIED_LOG | tail -50"
         exit 1
     fi
     milestone "$CURRENT_STEP" "Server deploy complete" 2 2>/dev/null || true
 
-    # ── Verify server containers ──────────────────────────────────
+    # Verify server containers
+    CURRENT_MODULE="verify-server"
     next_step "Verifying server containers..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-    log_progress "Waiting for containers to become healthy..." 2>/dev/null || true
 
-    HEALTHY=false
+    local_healthy=false
     for attempt in $(seq 1 12); do
-        TOTAL=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps -q 2>/dev/null | wc -l)
-        RUNNING_COUNT=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps --format '{{.State}}' 2>/dev/null | grep -c '^running' || true)
-        # Fallback for Compose < v2.23 where --format may not work
-        if [[ "$RUNNING_COUNT" -eq 0 ]] && [[ "$TOTAL" -gt 0 ]]; then
-            RUNNING_COUNT=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps 2>/dev/null | grep -c ' Up ' || true)
+        local_total=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps -q 2>/dev/null | wc -l)
+        local_running=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps --format '{{.State}}' 2>/dev/null | grep -c '^running' || true)
+        if [[ "$local_running" -eq 0 ]] && [[ "$local_total" -gt 0 ]]; then
+            local_running=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps 2>/dev/null | grep -c ' Up ' || true)
         fi
-        if [[ "$TOTAL" -ge 6 ]] && [[ "$RUNNING_COUNT" -eq "$TOTAL" ]]; then
-            log_and_tty "All $TOTAL server containers running."
-            log_progress "All $TOTAL server containers running" 2>/dev/null || true
-            HEALTHY=true
+        if [[ "$local_total" -ge 6 ]] && [[ "$local_running" -eq "$local_total" ]]; then
+            log_info "All $local_total server containers running"
+            local_healthy=true
             break
         fi
-        log_progress "  Attempt $attempt/12: $RUNNING_COUNT/$TOTAL running..." 2>/dev/null || true
+        log_info "Attempt $attempt/12: $local_running/$local_total running..."
         sleep 10
     done
 
-    if [[ "$HEALTHY" == "false" ]]; then
-        log_and_tty "WARNING: Not all server containers healthy after 2 minutes."
+    if [[ "$local_healthy" == "false" ]]; then
+        log_warn "Not all server containers healthy after 2 minutes"
         docker ps --format '{{.Names}}\t{{.Status}}' | while read -r line; do
-            log_and_tty "  $line"
+            log_warn "  $line"
         done
     fi
 fi
@@ -795,17 +418,16 @@ fi
 # CLIENT INSTALL
 # ══════════════════════════════════════════════════════════════════
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+    CURRENT_MODULE="setup"
 
-    # Detect display for headless mode
     DISPLAY_MODE="framebuffer"
     if ! has_display; then
         DISPLAY_MODE="headless"
-        log_progress "No display detected -- headless mode" 2>/dev/null || true
+        log_info "No display detected — headless mode"
     else
-        log_progress "Display detected -- full visual stack" 2>/dev/null || true
+        log_info "Display detected — full visual stack"
     fi
 
-    # For "both" mode, set client to connect to local server
     SNAPSERVER_HOST=""
     if [[ "$INSTALL_TYPE" == "both" ]]; then
         SNAPSERVER_HOST="127.0.0.1"
@@ -816,15 +438,12 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
         CONFIG_FILE="$CLIENT_DIR/snapclient.conf"
     fi
 
-    # Write display mode override to config so setup.sh picks it up
     if [[ -n "$CONFIG_FILE" ]]; then
-        # Override DISPLAY_MODE in the config
         if grep -q '^DISPLAY_MODE=' "$CONFIG_FILE"; then
             sed -i "s|^DISPLAY_MODE=.*|DISPLAY_MODE=${DISPLAY_MODE}|" "$CONFIG_FILE"
         else
             echo "DISPLAY_MODE=$DISPLAY_MODE" >> "$CONFIG_FILE"
         fi
-        # Set snapserver host for "both" mode
         if [[ -n "$SNAPSERVER_HOST" ]]; then
             if grep -q '^SNAPSERVER_HOST=' "$CONFIG_FILE"; then
                 sed -i "s|^SNAPSERVER_HOST=.*|SNAPSERVER_HOST=${SNAPSERVER_HOST}|" "$CONFIG_FILE"
@@ -836,80 +455,76 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
 
     next_step "Setting up audio player..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-    log_progress "Running client setup.sh --auto ..." 2>/dev/null || true
 
     if [[ ! -d "$CLIENT_DIR" ]]; then
-        log_and_tty "ERROR: Client directory missing: $CLIENT_DIR"
+        log_error "Client directory missing: $CLIENT_DIR"
         exit 1
     fi
     cd "$CLIENT_DIR"
-    # Tell setup.sh that firstboot.sh owns the progress display — it should
-    # not render its own TUI, and should log to our progress log instead.
+
+    # Pass IMAGE_TAG + progress delegation to setup.sh
     export PROGRESS_MANAGED=1
     export PROGRESS_LOG
+    export IMAGE_TAG
     if [[ -n "$CONFIG_FILE" ]]; then
-        if ! bash scripts/setup.sh --auto "$CONFIG_FILE" >> "$LOG" 2>&1; then
-            log_and_tty "ERROR: Client setup failed."
-            log_and_tty "  To troubleshoot: ssh into the Pi and run:"
-            log_and_tty "  sudo cat $LOG | tail -50"
+        if ! bash scripts/setup.sh --auto "$CONFIG_FILE" >> "$UNIFIED_LOG" 2>&1; then
+            log_error "Client setup failed"
+            log_error "Troubleshoot: sudo cat $UNIFIED_LOG | tail -50"
             exit 1
         fi
     else
-        if ! bash scripts/setup.sh --auto >> "$LOG" 2>&1; then
-            log_and_tty "ERROR: Client setup failed."
-            log_and_tty "  To troubleshoot: ssh into the Pi and run:"
-            log_and_tty "  sudo cat $LOG | tail -50"
+        if ! bash scripts/setup.sh --auto >> "$UNIFIED_LOG" 2>&1; then
+            log_error "Client setup failed"
+            log_error "Troubleshoot: sudo cat $UNIFIED_LOG | tail -50"
             exit 1
         fi
     fi
     unset PROGRESS_MANAGED
     milestone "$CURRENT_STEP" "Client setup complete" 2 2>/dev/null || true
 
+    CURRENT_MODULE="verify-client"
     next_step "Verifying client..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-    log_progress "Checking client containers..." 2>/dev/null || true
-
-    # Brief wait for containers
     sleep 5
-    CLIENT_CONTAINERS=$(docker ps --format '{{.Names}}' | grep -c "snapclient" || true)
-    if [[ "$CLIENT_CONTAINERS" -ge 1 ]]; then
-        log_progress "Client container running" 2>/dev/null || true
+    local_client_count=$(docker ps --format '{{.Names}}' | grep -c "snapclient" || true)
+    if [[ "$local_client_count" -ge 1 ]]; then
+        log_info "Client container running"
     else
-        log_and_tty "WARNING: snapclient container not running."
+        log_warn "snapclient container not running"
     fi
 fi
 
-# ── Final package refresh before sealing the image/reboot ────────
-# A second pass catches upgrades that become available after repository
-# setup earlier in firstboot (for example after Docker CE repo wiring),
-# while the root filesystem is still writable.
-log_progress "Final package refresh before reboot..." 2>/dev/null || true
-wait_for_apt_lock
-if ! apt-get update >> "$LOG" 2>&1; then
-    log_and_tty "WARNING: final apt-get update failed (non-fatal, continuing to reboot)"
-elif ! apt-get upgrade -y >> "$LOG" 2>&1; then
-    log_and_tty "WARNING: final apt upgrade failed (non-fatal, continuing to reboot)"
+# ══════════════════════════════════════════════════════════════════
+# FINAL OPERATIONS
+# ══════════════════════════════════════════════════════════════════
+CURRENT_MODULE="finalize"
+
+# Final package refresh
+if [[ "$SKIP_UPGRADE" == "true" ]]; then
+    log_info "Skipping final package refresh (SKIP_UPGRADE=true)"
 else
-    log_progress "Final package refresh complete" 2>/dev/null || true
+    log_info "Final package refresh..."
+    # Reuse apt lock waiter from install-deps module
+    _wait_for_apt_lock 2>/dev/null || true
+    if ! apt-get update >> "$UNIFIED_LOG" 2>&1; then
+        log_warn "Final apt-get update failed (non-fatal)"
+    elif ! apt-get upgrade -y >> "$UNIFIED_LOG" 2>&1; then
+        log_warn "Final apt upgrade failed (non-fatal)"
+    else
+        log_info "Final package refresh complete"
+    fi
 fi
 
-# ══════════════════════════════════════════════════════════════════
-# Diagnostic log persistence (all modes)
-# ══════════════════════════════════════════════════════════════════
-# Saves dmesg, docker logs, and system state to the boot partition
-# (FAT32, survives overlayroot reboots) every 30 minutes.
+# Diagnostic log persistence
 DIAG_SCRIPT=""
 for _diag_candidate in \
-    "$SNAP_BOOT/common/save-diagnostics.sh" \
-    "$SCRIPT_DIR/common/save-diagnostics.sh" \
+    "$COMMON/save-diagnostics.sh" \
     "$SERVER_DIR/scripts/common/save-diagnostics.sh" \
     "$CLIENT_DIR/scripts/common/save-diagnostics.sh"; do
     [[ -f "$_diag_candidate" ]] && DIAG_SCRIPT="$_diag_candidate" && break
 done
-
 if [[ -n "$DIAG_SCRIPT" ]]; then
     install -m 755 "$DIAG_SCRIPT" /usr/local/bin/save-diagnostics
-    # Install systemd service + timer
     DIAG_DIR="$(dirname "$DIAG_SCRIPT")"
     if [[ -f "$DIAG_DIR/snapmulti-diagnostics.service" && \
           -f "$DIAG_DIR/snapmulti-diagnostics.timer" ]]; then
@@ -918,64 +533,56 @@ if [[ -n "$DIAG_SCRIPT" ]]; then
         systemctl daemon-reload
         systemctl enable snapmulti-diagnostics.timer
     fi
-    log_progress "Diagnostic log persistence installed" 2>/dev/null || true
-else
-    log_progress "save-diagnostics.sh not found — skipping" 2>/dev/null || true
+    log_info "Diagnostic log persistence installed"
 fi
 
-# ══════════════════════════════════════════════════════════════════
-# Read-only filesystem (all modes, if enabled)
-# ══════════════════════════════════════════════════════════════════
+# Read-only filesystem
 if [[ "${ENABLE_READONLY}" == "true" ]]; then
-    log_progress "Configuring read-only filesystem..." 2>/dev/null || true
-
-    # Find ro-mode helper script (server or client path)
+    log_info "Configuring read-only filesystem..."
     RO_MODE_SCRIPT=""
-    if [[ -f "$SERVER_DIR/scripts/ro-mode.sh" ]]; then
-        RO_MODE_SCRIPT="$SERVER_DIR/scripts/ro-mode.sh"
-    elif [[ -f "$CLIENT_DIR/scripts/ro-mode.sh" ]]; then
-        RO_MODE_SCRIPT="$CLIENT_DIR/scripts/ro-mode.sh"
-    elif [[ -f "$SNAP_BOOT/server/ro-mode.sh" ]]; then
-        RO_MODE_SCRIPT="$SNAP_BOOT/server/ro-mode.sh"
-    elif [[ -f "$SNAP_BOOT/common/ro-mode.sh" ]]; then
-        RO_MODE_SCRIPT="$SNAP_BOOT/common/ro-mode.sh"
-    fi
-
+    for _ro_candidate in \
+        "$SERVER_DIR/scripts/ro-mode.sh" \
+        "$CLIENT_DIR/scripts/ro-mode.sh" \
+        "$SNAP_BOOT/server/ro-mode.sh" \
+        "$SNAP_BOOT/common/ro-mode.sh"; do
+        [[ -f "$_ro_candidate" ]] && RO_MODE_SCRIPT="$_ro_candidate" && break
+    done
     setup_readonly_fs "$RO_MODE_SCRIPT"
-    log_progress "Read-only filesystem configured" 2>/dev/null || true
+    log_info "Read-only filesystem configured"
 else
-    log_progress "Read-only filesystem: skipped (ENABLE_READONLY=false)" 2>/dev/null || true
+    log_info "Read-only filesystem: skipped (ENABLE_READONLY=false)"
 fi
 
 # ══════════════════════════════════════════════════════════════════
 # COMPLETE
 # ══════════════════════════════════════════════════════════════════
+CURRENT_MODULE="complete"
 touch "$MARKER"
 
 progress_complete 2>/dev/null || true
 
-# Show completion summary with access info
 LOCAL_HOSTNAME=$(hostname 2>/dev/null || echo "snapmulti")
 IP_ADDR=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}') || true
-log_and_tty ""
-log_and_tty "  +--------------------------------------------+"
-log_and_tty "  |       Installation complete!               |"
-log_and_tty "  +--------------------------------------------+"
-log_and_tty ""
+
+log_info ""
+log_info "+--------------------------------------------+"
+log_info "|       Installation complete!               |"
+log_info "+--------------------------------------------+"
+log_info ""
 case "$INSTALL_TYPE" in
     server|both)
-        log_and_tty "  Speakers:  http://${IP_ADDR:-$LOCAL_HOSTNAME}:1780"
-        log_and_tty "  Library:   http://${IP_ADDR:-$LOCAL_HOSTNAME}:8180"
+        log_info "Speakers:  http://${IP_ADDR:-$LOCAL_HOSTNAME}:1780"
+        log_info "Library:   http://${IP_ADDR:-$LOCAL_HOSTNAME}:8180"
         ;;
     client)
-        log_and_tty "  Player will auto-discover your server"
+        log_info "Player will auto-discover your server"
         ;;
 esac
-log_and_tty ""
-log_and_tty "  Rebooting in 10 seconds..."
+log_info ""
+log_info "Rebooting in 10 seconds..."
 sleep 5
 for i in 5 4 3 2 1; do
-    log_and_tty "  Rebooting in $i..."
+    log_info "Rebooting in $i..."
     sleep 1
 done
 reboot
