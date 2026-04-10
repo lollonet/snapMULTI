@@ -283,8 +283,9 @@ install_boot_tune_service() {
     local boot_tune_script="${1:-}"
     [[ -f "$boot_tune_script" ]] || return 0
 
-    cp "$boot_tune_script" /usr/local/bin/snapmulti-boot-tune.sh
-    chmod +x /usr/local/bin/snapmulti-boot-tune.sh
+    # Always overwrite — ensures fixes propagate even on overlayroot systems
+    # where the lower layer may have a stale copy from a previous install.
+    install -m 755 "$boot_tune_script" /usr/local/bin/snapmulti-boot-tune.sh
 
     # Enable hardware watchdog — auto-reboot on system hang (60s timeout)
     mkdir -p /etc/systemd/system.conf.d

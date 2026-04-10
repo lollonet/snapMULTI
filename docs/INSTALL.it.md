@@ -33,6 +33,8 @@ Usa **[Raspberry Pi Imager](https://www.raspberrypi.com/software/)** (download g
 
 > **Perché Lite?** snapMULTI funziona interamente in Docker. L'ambiente desktop spreca RAM e storage. Usa Lite.
 
+> **Importante: la versione 64-bit è obbligatoria.** Non selezionare la versione 32-bit — le immagini Docker di snapMULTI sono compilate solo per `arm64`. Questo vale per tutti i modelli di Pi, incluso il Pi Zero 2 W (Imager potrebbe proporre 32-bit come predefinito — assicurati di selezionare 64-bit).
+
 ### 1b. Scegliere la scheda SD
 
 Clicca **Choose Storage** → seleziona la tua scheda SD.

@@ -504,6 +504,26 @@ fi
 
 echo "  Copied $(du -sh "$DEST" | cut -f1) to boot partition."
 
+# ── Fix USB/I2S conflicts in config.txt ──────────────────────────
+# Raspberry Pi Imager sets otg_mode=1 and/or dwc2 with dr_mode=host.
+# Both force USB into host mode, which interferes with GPIO I2S/I2C
+# communication to audio HATs (PCM5122, WM8804, etc.).
+CONFIG_TXT="$BOOT/config.txt"
+if [[ -f "$CONFIG_TXT" ]]; then
+    # Comment out otg_mode=1 (anywhere in file)
+    if grep -q '^otg_mode=1' "$CONFIG_TXT"; then
+        sed -i.bak 's/^otg_mode=1/#otg_mode=1 # disabled by snapMULTI (conflicts with I2S HATs)/' "$CONFIG_TXT"
+        rm -f "${CONFIG_TXT}.bak"
+        echo "  Disabled otg_mode=1 (conflicts with I2S audio HATs)"
+    fi
+    # Strip dr_mode=host from dwc2 overlay (keep dwc2 for USB gadget support)
+    if grep -q '^dtoverlay=dwc2,dr_mode=host' "$CONFIG_TXT"; then
+        sed -i.bak 's/^dtoverlay=dwc2,dr_mode=host/dtoverlay=dwc2/' "$CONFIG_TXT"
+        rm -f "${CONFIG_TXT}.bak"
+        echo "  Removed dr_mode=host from dwc2 overlay (conflicts with I2S HATs)"
+    fi
+fi
+
 # ── Set temporary 800x600 resolution for setup TUI ────────────────
 # KMS driver ignores hdmi_group/hdmi_mode; use kernel video= parameter.
 CMDLINE="$BOOT/cmdline.txt"
