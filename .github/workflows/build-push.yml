@@ -40,8 +40,9 @@ jobs:
             echo "tag=" >> "$GITHUB_OUTPUT"
             echo "label=dev" >> "$GITHUB_OUTPUT"
           else
+            # Manual dispatch: push :manual (avoid empty tag)
             echo "tag=" >> "$GITHUB_OUTPUT"
-            echo "label=" >> "$GITHUB_OUTPUT"
+            echo "label=manual" >> "$GITHUB_OUTPUT"
           fi
 
       # docker driver on Mac: inherits host credentials, no isolated BuildKit container
@@ -157,8 +158,9 @@ jobs:
             echo "tag=" >> "$GITHUB_OUTPUT"
             echo "label=dev" >> "$GITHUB_OUTPUT"
           else
+            # Manual dispatch: push :manual (avoid empty tag)
             echo "tag=" >> "$GITHUB_OUTPUT"
-            echo "label=" >> "$GITHUB_OUTPUT"
+            echo "label=manual" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Docker Buildx
