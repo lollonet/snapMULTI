@@ -33,6 +33,8 @@ Use **[Raspberry Pi Imager](https://www.raspberrypi.com/software/)** (free downl
 
 > **Why Lite?** snapMULTI runs entirely in Docker. The desktop environment wastes RAM and storage. Use Lite.
 
+> **Important: 64-bit is required.** Do not select the 32-bit version — snapMULTI Docker images are built for `arm64` only. This applies to all Pi models including Pi Zero 2 W (Imager may default to 32-bit for it — make sure to select 64-bit).
+
 ### 1b. Choose the SD card
 
 Click **Choose Storage** → select your SD card.
@@ -357,6 +359,7 @@ The new speaker appears in the Snapcast web UI at `http://snapvideo.local:1780` 
 | `prepare-sd.sh`: boot partition not found | SD not re-inserted after Imager | Remove SD, re-insert, run script again |
 | Windows: script won't run | Execution policy | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` first |
 | Audio HAT not detected (client) | EEPROM-less board | SSH in and run `sudo bash /opt/snapclient/common/scripts/setup.sh` to select your HAT manually |
+| `no matching manifest for linux/arm/v7` | 32-bit OS flashed instead of 64-bit | Re-flash with **Raspberry Pi OS Lite (64-bit)** — all Pi models including Zero 2 W support it |
 
 For post-install issues see [Troubleshooting in USAGE.md](USAGE.md#troubleshooting).
 
