@@ -504,8 +504,10 @@ if [[ "$SKIP_UPGRADE" == "true" ]]; then
     log_info "Skipping final package refresh (SKIP_UPGRADE=true)"
 else
     log_info "Final package refresh..."
-    # Reuse apt lock waiter from install-deps module
-    _wait_for_apt_lock 2>/dev/null || true
+    # Wait for apt lock (reuse from install-deps module if sourced)
+    if declare -F _wait_for_apt_lock &>/dev/null; then
+        _wait_for_apt_lock
+    fi
     if ! apt-get update >> "$UNIFIED_LOG" 2>&1; then
         log_warn "Final apt-get update failed (non-fatal)"
     elif ! apt-get upgrade -y >> "$UNIFIED_LOG" 2>&1; then
@@ -564,25 +566,29 @@ progress_complete 2>/dev/null || true
 LOCAL_HOSTNAME=$(hostname 2>/dev/null || echo "snapmulti")
 IP_ADDR=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}') || true
 
-log_info ""
-log_info "+--------------------------------------------+"
-log_info "|       Installation complete!               |"
-log_info "+--------------------------------------------+"
-log_info ""
+# Show completion banner on both log and HDMI console
+# (log_info only writes to log + PROGRESS_LOG, not tty1 — use direct echo)
+_tty() { echo "$*" > /dev/tty1 2>/dev/null || true; log_info "$*"; }
+
+_tty ""
+_tty "  +--------------------------------------------+"
+_tty "  |       Installation complete!               |"
+_tty "  +--------------------------------------------+"
+_tty ""
 case "$INSTALL_TYPE" in
     server|both)
-        log_info "Speakers:  http://${IP_ADDR:-$LOCAL_HOSTNAME}:1780"
-        log_info "Library:   http://${IP_ADDR:-$LOCAL_HOSTNAME}:8180"
+        _tty "  Speakers:  http://${IP_ADDR:-$LOCAL_HOSTNAME}:1780"
+        _tty "  Library:   http://${IP_ADDR:-$LOCAL_HOSTNAME}:8180"
         ;;
     client)
-        log_info "Player will auto-discover your server"
+        _tty "  Player will auto-discover your server"
         ;;
 esac
-log_info ""
-log_info "Rebooting in 10 seconds..."
+_tty ""
+_tty "  Rebooting in 10 seconds..."
 sleep 5
 for i in 5 4 3 2 1; do
-    log_info "Rebooting in $i..."
+    _tty "  Rebooting in $i..."
     sleep 1
 done
 reboot

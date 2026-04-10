@@ -75,6 +75,10 @@ setup_docker() {
     if [[ "$current_driver" != "fuse-overlayfs" ]]; then
         log_info "Switching Docker to fuse-overlayfs..."
 
+        # Wait for apt lock (Docker CE post-install hooks may hold it)
+        if declare -F _wait_for_apt_lock &>/dev/null; then
+            _wait_for_apt_lock
+        fi
         # Install fuse-overlayfs package
         if ! apt-get install -y fuse-overlayfs >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
             log_error "Failed to install fuse-overlayfs — required for read-only mode"
