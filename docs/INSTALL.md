@@ -360,6 +360,8 @@ The new speaker appears in the Snapcast web UI at `http://snapvideo.local:1780` 
 | Windows: script won't run | Execution policy | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` first |
 | Audio HAT not detected (client) | EEPROM-less board | SSH in and run `sudo bash /opt/snapclient/common/scripts/setup.sh` to select your HAT manually |
 | `no matching manifest for linux/arm/v7` | 32-bit OS flashed instead of 64-bit | Re-flash with **Raspberry Pi OS Lite (64-bit)** — all Pi models including Zero 2 W support it |
+| Pi Zero 2 W: WiFi won't connect | 5 GHz SSID configured but Pi Zero only has 2.4 GHz | Re-flash with your 2.4 GHz SSID in Imager WiFi settings |
+| Pi Zero 2 W: audio HAT not detected | `otg_mode=1` or `dr_mode=host` in config.txt | `prepare-sd.sh` fixes this automatically. For manual installs: comment out `otg_mode=1` and remove `dr_mode=host` from dwc2 overlay |
 
 For post-install issues see [Troubleshooting in USAGE.md](USAGE.md#troubleshooting).
 

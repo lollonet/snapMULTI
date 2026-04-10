@@ -48,39 +48,38 @@ if mount | grep -q ' on / type overlay'; then
     fi
 fi
 
-# ── CAKE QoS + DSCP EF on Snapcast ports ─────────────────────────
-modprobe sch_cake 2>/dev/null || true
+# ── CAKE QoS + DSCP EF on Snapcast ports (server only) ────────────
+# CAKE prioritizes outbound audio packets from snapserver (ports 1704/1705).
+# On clients, audio arrives inbound — DSCP OUTPUT marking does nothing,
+# and CAKE can hang on Pi Zero 2 W when interfaces are DOWN.
+# Skip entirely if no snapserver container is running.
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^snapserver$'; then
+    modprobe sch_cake 2>/dev/null || true
 
-# Apply CAKE to all interfaces with a default route (eth + wlan failover).
-# CAKE on an idle interface costs nothing; avoids re-applying on failover.
-# Detect link speed for bandwidth hint (CAKE works best with a bandwidth limit).
-for iface in $(ip -o route show default 2>/dev/null | awk '{print $5}'); do
-    # Skip interfaces that are not UP — tc qdisc can hang in D-state on
-    # kernel versions where the interface driver blocks (seen on Pi Zero 2 W
-    # with wlan0 DOWN). The || true does not help because the process blocks
-    # in kernel space before returning.
-    if ! ip link show "$iface" 2>/dev/null | grep -q 'state UP'; then
-        continue
-    fi
-    # WiFi interfaces don't report link speed reliably; skip bandwidth detection
-    if echo "$iface" | grep -qE '^(wlan|wlp)'; then
-        tc qdisc replace dev "$iface" root cake diffserv4 2>/dev/null || true
-    else
-        bw=$(cat "/sys/class/net/$iface/speed" 2>/dev/null) || true
-        if [ -n "$bw" ] && [ "$bw" -gt 0 ] 2>/dev/null; then
-            tc qdisc replace dev "$iface" root cake bandwidth "${bw}mbit" diffserv4 2>/dev/null || true
-        else
-            tc qdisc replace dev "$iface" root cake diffserv4 2>/dev/null || true
+    for iface in $(ip -o route show default 2>/dev/null | awk '{print $5}'); do
+        # Skip interfaces that are not UP — tc qdisc can hang in D-state
+        if ! ip link show "$iface" 2>/dev/null | grep -q 'state UP'; then
+            continue
         fi
-    fi
-done
+        if echo "$iface" | grep -qE '^(wlan|wlp)'; then
+            tc qdisc replace dev "$iface" root cake diffserv4 2>/dev/null || true
+        else
+            bw=$(cat "/sys/class/net/$iface/speed" 2>/dev/null) || true
+            if [ -n "$bw" ] && [ "$bw" -gt 0 ] 2>/dev/null; then
+                tc qdisc replace dev "$iface" root cake bandwidth "${bw}mbit" diffserv4 2>/dev/null || true
+            else
+                tc qdisc replace dev "$iface" root cake diffserv4 2>/dev/null || true
+            fi
+        fi
+    done
 
-# DSCP is interface-agnostic (OUTPUT chain by sport)
-for port in 1704 1705; do
-    iptables -t mangle -C OUTPUT -p tcp --sport "$port" -j DSCP --set-dscp-class EF 2>/dev/null \
-        || iptables -t mangle -A OUTPUT -p tcp --sport "$port" -j DSCP --set-dscp-class EF 2>/dev/null \
-        || true
-done
+    # DSCP is interface-agnostic (OUTPUT chain by sport)
+    for port in 1704 1705; do
+        iptables -t mangle -C OUTPUT -p tcp --sport "$port" -j DSCP --set-dscp-class EF 2>/dev/null \
+            || iptables -t mangle -A OUTPUT -p tcp --sport "$port" -j DSCP --set-dscp-class EF 2>/dev/null \
+            || true
+    done
+fi
 
 # ── Restart MPD if music directory wasn't ready at container start ──
 # Docker bind-mounts capture directory state at start time. If NFS mounted
