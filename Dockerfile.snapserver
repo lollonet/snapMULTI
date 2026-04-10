@@ -18,9 +18,13 @@ RUN --mount=type=cache,target=/var/cache/apk \
     soxr-dev
 
 WORKDIR /build
-# SNAPCAST_SHA busts the Docker cache when upstream has new commits
+# Build from santcasp fork (snapcast + IPDV jitter measurement)
+# Pin to develop branch — tracks lollonet/santcasp which is
+# upstream v0.35.0 + IPDV patches
+ARG SNAPCAST_REPO=https://github.com/lollonet/santcasp.git
+ARG SNAPCAST_BRANCH=develop
 ARG SNAPCAST_SHA=latest
-RUN git clone --branch develop https://github.com/badaix/snapcast.git . && \
+RUN git clone --branch "$SNAPCAST_BRANCH" "$SNAPCAST_REPO" . && \
     mkdir build && cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
           -DBUILD_CLIENT=OFF ..

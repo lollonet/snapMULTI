@@ -23,3 +23,30 @@ SMB_SERVER=
 SMB_SHARE=
 SMB_USER=
 SMB_PASS=
+#
+# Advanced options (defaults are production-safe)
+#
+# ENABLE_READONLY: Enable read-only filesystem (overlayroot).
+#   true (default) -- SD card protected, changes lost on reboot
+#   false          -- Changes persist, useful for development
+ENABLE_READONLY=true
+#
+# SKIP_UPGRADE: Skip apt-get upgrade during install.
+#   false (default) -- Full upgrade (security patches, ~5 min)
+#   true            -- Skip upgrade (faster install for testing)
+SKIP_UPGRADE=false
+#
+# IMAGE_TAG: Docker image tag to pull.
+#   latest (default) -- Stable release images
+#   0.4.0-dev.1      -- Dev/pre-release images
+IMAGE_TAG=latest
+#
+# AUTO_UPDATE: Enable Watchtower for automatic Docker image updates.
+#   (empty, default) -- Disabled
+#   true             -- Watchtower checks for updates daily at 3 AM
+AUTO_UPDATE=
+#
+# VERBOSE_INSTALL: Show all output on HDMI during install.
+#   false (default) -- Only milestones and key events
+#   true            -- Full apt/docker output (useful for debugging)
+VERBOSE_INSTALL=false

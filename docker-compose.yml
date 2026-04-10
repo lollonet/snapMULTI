@@ -24,7 +24,7 @@ x-fifo-security: &fifo-security
 
 services:
   snapserver:
-    image: lollonet/snapmulti-server:latest
+    image: lollonet/snapmulti-server:${IMAGE_TAG:-latest}
     container_name: snapserver
     hostname: snapmulti
     restart: unless-stopped
