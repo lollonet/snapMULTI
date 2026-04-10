@@ -24,7 +24,7 @@ x-fifo-security: &fifo-security
 
 services:
   snapserver:
-    image: lollonet/snapmulti-server:latest
+    image: lollonet/snapmulti-server:${IMAGE_TAG:-latest}
     container_name: snapserver
     hostname: snapmulti
     restart: unless-stopped
@@ -62,7 +62,7 @@ services:
           memory: ${SNAPSERVER_MEM_RESERVE:-96M}
 
   shairport-sync:
-    image: lollonet/snapmulti-airplay:latest
+    image: lollonet/snapmulti-airplay:${IMAGE_TAG:-latest}
     container_name: shairport-sync
     restart: unless-stopped
     labels:
@@ -198,7 +198,7 @@ services:
           memory: ${MYMPD_MEM_RESERVE:-32M}
 
   mpd:
-    image: lollonet/snapmulti-mpd:latest
+    image: lollonet/snapmulti-mpd:${IMAGE_TAG:-latest}
     container_name: mpd
     restart: unless-stopped
     labels:
@@ -242,7 +242,7 @@ services:
   # WebSocket (port 8082): clients subscribe with CLIENT_ID to get their stream's metadata
   # HTTP (port 8083): serves artwork files and metadata.json
   metadata:
-    image: lollonet/snapmulti-metadata:latest
+    image: lollonet/snapmulti-metadata:${IMAGE_TAG:-latest}
     container_name: metadata
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
@@ -284,7 +284,7 @@ services:
   # Open Tidal app → Select device → "<hostname> Tidal"
   # Note: x86_64 not supported - tidal-connect binaries are ARM-only
   tidal-connect:
-    image: lollonet/snapmulti-tidal:latest
+    image: lollonet/snapmulti-tidal:${IMAGE_TAG:-latest}
     container_name: tidal-connect
     profiles:
       - tidal
