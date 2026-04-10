@@ -202,13 +202,14 @@ show_advanced_menu() {
 apply_dev_defaults() {
     ADV_READONLY="false"
     ADV_SKIP_UPGRADE="true"
-    ADV_IMAGE_TAG="latest"
+    ADV_IMAGE_TAG="dev"
     ADV_AUTO_UPDATE=""
     ADV_VERBOSE_INSTALL="true"
     echo ""
     echo "  Dev mode enabled:"
     echo "    -> Read-only: DISABLED"
     echo "    -> Apt upgrade: SKIPPED"
+    echo "    -> Image tag: dev (santcasp)"
     echo "    -> Verbose install: ENABLED"
     echo ""
 }
