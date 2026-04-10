@@ -173,8 +173,15 @@ if command -v tune_wifi_powersave &>/dev/null; then
     tune_wifi_powersave
 fi
 
-# ── Error handling ───────────────────────────────────────────────
-CURRENT_MODULE="init"
+# ── Module tracking ──────────────────────────────────────────────
+# Sourced modules overwrite LOG_SOURCE — reset it after each call
+# so subsequent log lines show the correct source.
+set_module() {
+    CURRENT_MODULE="$1"
+    # shellcheck disable=SC2034
+    LOG_SOURCE="$1"
+}
+set_module "init"
 cleanup_on_failure() {
     local exit_code=$?
     if [[ $exit_code -ne 0 ]]; then
@@ -249,7 +256,7 @@ log_info "Starting snapMULTI auto-install ($INSTALL_TYPE) — $(hostname)"
 # ══════════════════════════════════════════════════════════════════
 # STEP 1: Network + NTP
 # ══════════════════════════════════════════════════════════════════
-CURRENT_MODULE="network"
+set_module "network"
 next_step "Waiting for network..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 # shellcheck source=common/wait-network.sh
@@ -260,7 +267,7 @@ milestone "$CURRENT_STEP" "Network ready" 2 2>/dev/null || true
 # ══════════════════════════════════════════════════════════════════
 # STEP 2: Copy files
 # ══════════════════════════════════════════════════════════════════
-CURRENT_MODULE="copy"
+set_module "copy"
 next_step "Copying project files..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
@@ -310,7 +317,7 @@ fi
 # ══════════════════════════════════════════════════════════════════
 # STEP 3: System dependencies
 # ══════════════════════════════════════════════════════════════════
-CURRENT_MODULE="deps"
+set_module "deps"
 next_step "Installing git and dependencies..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 # shellcheck source=common/install-deps.sh
@@ -321,7 +328,7 @@ milestone "$CURRENT_STEP" "System dependencies installed" 2 2>/dev/null || true
 # ══════════════════════════════════════════════════════════════════
 # STEP 4: Docker
 # ══════════════════════════════════════════════════════════════════
-CURRENT_MODULE="docker"
+set_module "docker"
 next_step "Installing Docker..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 # shellcheck source=common/setup-docker.sh
@@ -333,7 +340,7 @@ milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
 # SERVER INSTALL
 # ══════════════════════════════════════════════════════════════════
 if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
-    CURRENT_MODULE="deploy"
+    set_module "deploy"
     next_step "Deploy server..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
@@ -388,7 +395,7 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     milestone "$CURRENT_STEP" "Server deploy complete" 2 2>/dev/null || true
 
     # Verify server containers
-    CURRENT_MODULE="verify-server"
+    set_module "verify-server"
     next_step "Verifying server containers..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
@@ -420,7 +427,7 @@ fi
 # CLIENT INSTALL
 # ══════════════════════════════════════════════════════════════════
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
-    CURRENT_MODULE="setup"
+    set_module "setup"
 
     DISPLAY_MODE="framebuffer"
     if ! has_display; then
@@ -482,7 +489,7 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     unset PROGRESS_MANAGED
     milestone "$CURRENT_STEP" "Client setup complete" 2 2>/dev/null || true
 
-    CURRENT_MODULE="verify-client"
+    set_module "verify-client"
     next_step "Verifying client..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
     sleep 5
@@ -497,7 +504,7 @@ fi
 # ══════════════════════════════════════════════════════════════════
 # FINAL OPERATIONS
 # ══════════════════════════════════════════════════════════════════
-CURRENT_MODULE="finalize"
+set_module "finalize"
 
 # Final package refresh
 if [[ "$SKIP_UPGRADE" == "true" ]]; then
@@ -558,7 +565,7 @@ fi
 # ══════════════════════════════════════════════════════════════════
 # COMPLETE
 # ══════════════════════════════════════════════════════════════════
-CURRENT_MODULE="complete"
+set_module "complete"
 touch "$MARKER"
 
 progress_complete 2>/dev/null || true
