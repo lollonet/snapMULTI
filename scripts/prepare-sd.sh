@@ -409,8 +409,8 @@ if [[ -f "$CONFIG_TXT" ]]; then
         echo "  Disabled otg_mode=1 (conflicts with I2S audio HATs)"
     fi
     # Strip dr_mode=host from dwc2 overlay (keep dwc2 for USB gadget support)
-    if grep -q 'dtoverlay=dwc2,dr_mode=host' "$CONFIG_TXT"; then
-        sed -i.bak 's/dtoverlay=dwc2,dr_mode=host/dtoverlay=dwc2/' "$CONFIG_TXT"
+    if grep -q '^dtoverlay=dwc2,dr_mode=host' "$CONFIG_TXT"; then
+        sed -i.bak 's/^dtoverlay=dwc2,dr_mode=host/dtoverlay=dwc2/' "$CONFIG_TXT"
         rm -f "${CONFIG_TXT}.bak"
         echo "  Removed dr_mode=host from dwc2 overlay (conflicts with I2S HATs)"
     fi
