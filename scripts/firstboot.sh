@@ -469,10 +469,10 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     export PROGRESS_LOG
     export IMAGE_TAG
 
-    # Build setup.sh args
+    # Build setup.sh args (flags before positional arg)
     setup_args=(--auto)
-    [[ -n "$CONFIG_FILE" ]] && setup_args+=("$CONFIG_FILE")
     [[ "$ENABLE_READONLY" != "true" ]] && setup_args+=(--no-readonly)
+    [[ -n "$CONFIG_FILE" ]] && setup_args+=("$CONFIG_FILE")
 
     if ! bash scripts/setup.sh "${setup_args[@]}" >> "$UNIFIED_LOG" 2>&1; then
         log_error "Client setup failed"
