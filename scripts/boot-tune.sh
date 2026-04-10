@@ -55,6 +55,13 @@ modprobe sch_cake 2>/dev/null || true
 # CAKE on an idle interface costs nothing; avoids re-applying on failover.
 # Detect link speed for bandwidth hint (CAKE works best with a bandwidth limit).
 for iface in $(ip -o route show default 2>/dev/null | awk '{print $5}'); do
+    # Skip interfaces that are not UP — tc qdisc can hang in D-state on
+    # kernel versions where the interface driver blocks (seen on Pi Zero 2 W
+    # with wlan0 DOWN). The || true does not help because the process blocks
+    # in kernel space before returning.
+    if ! ip link show "$iface" 2>/dev/null | grep -q 'state UP'; then
+        continue
+    fi
     # WiFi interfaces don't report link speed reliably; skip bandwidth detection
     if echo "$iface" | grep -qE '^(wlan|wlp)'; then
         tc qdisc replace dev "$iface" root cake diffserv4 2>/dev/null || true
