@@ -771,7 +771,7 @@ EOF
     # Persist IMAGE_TAG (covers both new and existing .env)
     if [[ "${IMAGE_TAG:-latest}" != "latest" ]]; then
         if grep -q '^IMAGE_TAG=' "$ENV_FILE" 2>/dev/null; then
-            sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=$IMAGE_TAG|" "$ENV_FILE"
+            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$IMAGE_TAG/" "$ENV_FILE"
         else
             printf '\n# Docker image tag (non-default, set by --dev or advanced options)\nIMAGE_TAG=%s\n' "$IMAGE_TAG" >> "$ENV_FILE"
         fi
