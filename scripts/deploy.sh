@@ -869,12 +869,14 @@ pull_images() {
         count=$((count + 1))
         info "Pulling $svc1 ($count/$total)"
 
-        # Start svc2 in background if it exists
+        # Start svc2 in background if it exists (output to temp file to avoid interleaving)
+        local bg_pid="" bg_log=""
         if [[ -n "$svc2" ]]; then
             count=$((count + 1))
             info "Pulling $svc2 ($count/$total)"
-            _pull_one "$svc2" &
-            local bg_pid=$!
+            bg_log=$(mktemp)
+            _pull_one "$svc2" >"$bg_log" 2>&1 &
+            bg_pid=$!
         fi
 
         # Pull svc1 in foreground with retry
@@ -887,19 +889,18 @@ pull_images() {
             fi
         fi
 
-        # Wait for background svc2
-        if [[ -n "${svc2:-}" ]]; then
+        # Wait for background svc2 (already retried 3x in background)
+        if [[ -n "$bg_pid" ]]; then
             if ! wait "$bg_pid" 2>/dev/null; then
-                # Retry in foreground
-                if ! _pull_one "$svc2"; then
-                    if [[ "$svc2" == "metadata" ]]; then
-                        info "Building metadata locally (not yet on registry)"
-                        docker compose build metadata || { error "Failed to build metadata"; exit 1; }
-                    else
-                        pull_failed+=("$svc2")
-                    fi
+                cat "$bg_log"  # surface output on failure
+                if [[ "$svc2" == "metadata" ]]; then
+                    info "Building metadata locally (not yet on registry)"
+                    docker compose build metadata || { error "Failed to build metadata"; exit 1; }
+                else
+                    pull_failed+=("$svc2")
                 fi
             fi
+            rm -f "$bg_log"
         fi
     done
 
