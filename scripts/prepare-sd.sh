@@ -648,10 +648,10 @@ case "$INSTALL_TYPE" in
         done
         # Verify audio HAT configs exist
         hat_count=$(ls -1 "$DEST/client/audio-hats/"*.conf 2>/dev/null | wc -l)
-        if [[ "$hat_count" -ge 15 ]]; then
+        if [[ "$hat_count" -ge 17 ]]; then
             echo "  [OK] $hat_count audio HAT configs"
         else
-            echo "  [WARN] Only $hat_count HAT configs (expected 15+)"
+            echo "  [WARN] Only $hat_count HAT configs (expected 17+)"
         fi
         ;;
 esac
