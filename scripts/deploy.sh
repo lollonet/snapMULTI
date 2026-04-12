@@ -847,32 +847,67 @@ pull_images() {
     local total=${#services[@]}
     local count=0
 
-    for svc in "${services[@]}"; do
-        count=$((count + 1))
-        info "Pulling $svc ($count/$total)"
-        local pull_ok=false
-        local delays=(0 10 30)  # retry after 10s, 30s
+    # Pull a single service with 3-attempt retry. Returns 0 on success.
+    _pull_one() {
+        local svc="$1"
+        local delays=(0 10 30)
         for delay in "${delays[@]}"; do
             [[ $delay -gt 0 ]] && { info "Retrying $svc in ${delay}s..."; sleep "$delay"; }
             if docker compose pull "$svc" 2>&1 | tail -5; then
-                pull_ok=true
-                break
+                return 0
             fi
         done
-        if [[ "$pull_ok" != "true" ]]; then
-            # metadata has a build: directive — fall back to local build
-            if [[ "$svc" == "metadata" ]]; then
+        return 1
+    }
+
+    # Pull 2 services at a time — balances network throughput vs SD I/O
+    local pull_failed=()
+    for ((i=0; i<${#services[@]}; i+=2)); do
+        local svc1="${services[$i]}"
+        local svc2="${services[$i+1]:-}"
+
+        count=$((count + 1))
+        info "Pulling $svc1 ($count/$total)"
+
+        # Start svc2 in background if it exists (output to temp file to avoid interleaving)
+        local bg_pid="" bg_log=""
+        if [[ -n "$svc2" ]]; then
+            count=$((count + 1))
+            info "Pulling $svc2 ($count/$total)"
+            bg_log=$(mktemp)
+            _pull_one "$svc2" >"$bg_log" 2>&1 &
+            bg_pid=$!
+        fi
+
+        # Pull svc1 in foreground with retry
+        if ! _pull_one "$svc1"; then
+            if [[ "$svc1" == "metadata" ]]; then
                 info "Building metadata locally (not yet on registry)"
-                if ! docker compose build metadata; then
-                    error "Failed to build metadata image"
-                    exit 1
-                fi
+                docker compose build metadata || { error "Failed to build metadata"; exit 1; }
             else
-                error "Failed to pull $svc after 3 attempts"
-                exit 1
+                pull_failed+=("$svc1")
             fi
         fi
+
+        # Wait for background svc2 (already retried 3x in background)
+        if [[ -n "$bg_pid" ]]; then
+            if ! wait "$bg_pid" 2>/dev/null; then
+                cat "$bg_log"  # surface output on failure
+                if [[ "$svc2" == "metadata" ]]; then
+                    info "Building metadata locally (not yet on registry)"
+                    docker compose build metadata || { error "Failed to build metadata"; exit 1; }
+                else
+                    pull_failed+=("$svc2")
+                fi
+            fi
+            rm -f "$bg_log"
+        fi
     done
+
+    if [[ ${#pull_failed[@]} -gt 0 ]]; then
+        error "Failed to pull after 3 attempts: ${pull_failed[*]}"
+        exit 1
+    fi
 
     ok "All $total images ready"
 }
