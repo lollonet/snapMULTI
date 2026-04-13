@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ws:;">
+    <title>Now Playing</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            gap: 2.5vmin;
+            align-items: center;
+            justify-content: center;
+            width: 92vw;
+            max-width: 1600px;
+            height: 85vh;
+        }
+
+        /* Left: album art square */
+        .panel-art {
+            width: min(42vw, 75vh);
+            height: min(42vw, 75vh);
+            border-radius: 2vmin;
+            overflow: hidden;
+            position: relative;
+            background: #111;
+            flex-shrink: 0;
+        }
+
+        /* Right: info + spectrum stacked */
+        .right-side {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: min(42vw, 75vh);
+            flex: 1;
+            min-width: 0;
+            gap: 2vmin;
+        }
+
+        .panel-art .album-art {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            z-index: 2;
+        }
+
+        .panel-art .album-art.visible {
+            opacity: 1;
+        }
+
+        /* Vinyl record (shown when no artwork) */
+        .vinyl-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
+        }
+
+        .vinyl {
+            width: 80%;
+            height: 80%;
+            border-radius: 50%;
+            background:
+                radial-gradient(circle at center, #1a1a1a 0%, #1a1a1a 15%, transparent 15.5%),
+                radial-gradient(circle at center, #333 15.5%, #333 16%, transparent 16.5%),
+                radial-gradient(circle at center, #1a1a1a 35%, #222 35.5%, #1a1a1a 36%, #222 45%, #1a1a1a 45.5%),
+                repeating-radial-gradient(circle at center, #111 0px, #222 1px, #111 2px, #1a1a1a 3px),
+                linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);
+            box-shadow: 0 0 0 3px #333, inset 0 0 30px rgba(0,0,0,0.8);
+            animation: spin 4s linear infinite;
+        }
+
+        .vinyl::before {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 30%; height: 30%;
+            border-radius: 50%;
+            background: radial-gradient(circle, #e74c3c 0%, #c0392b 40%, #333 41%, #222 100%);
+        }
+
+        .vinyl::after {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 8%; height: 8%;
+            border-radius: 50%;
+            background: #111;
+        }
+
+        .vinyl.paused { animation-play-state: paused; }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Spectrum: bottom-right, 1/3 height */
+        .panel-spectrum {
+            background: #0a0a0f;
+            border-radius: 1.5vmin;
+            overflow: hidden;
+            height: 40%;
+            flex-shrink: 0;
+        }
+
+        #spectrumCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Track info: top-right */
+        .track-info {
+            text-align: right;
+            padding: 2vmin 1vmin;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            overflow: hidden;
+            min-width: 0;
+        }
+
+        .track-line {
+            font-size: clamp(1.1rem, 3vw, 2.8rem);
+            line-height: 1.4;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .track-line.title {
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .track-line.artist {
+            color: #b3b3b3;
+        }
+
+        .track-line.album {
+            color: #888;
+        }
+
+        .no-music .track-line {
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="panel-art">
+            <div class="vinyl-wrapper">
+                <div id="vinyl" class="vinyl"></div>
+            </div>
+            <div id="albumArt" class="album-art"></div>
+        </div>
+        <div class="right-side">
+            <div id="trackInfo" class="track-info">
+                <div id="trackTitle" class="track-line title">No Music Playing</div>
+                <div id="trackArtist" class="track-line artist"></div>
+                <div id="trackAlbum" class="track-line album"></div>
+            </div>
+            <div class="panel-spectrum">
+                <canvas id="spectrumCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTrack = null;
+        let visualizerWs = null;
+        let artworkCacheBust = Date.now();
+
+        // Spectrum state — NUM_BANDS auto-detected from first WS message
+        let NUM_BANDS = 21; // default, updated on first WS message
+        const NOISE_FLOOR = -72.0; // dBFS — must match visualizer.py
+        const REF_LEVEL = 0.0;     // dBFS — top of display
+        const DB_RANGE = REF_LEVEL - NOISE_FLOOR; // 72 dB dynamic range
+        let bands = new Float32Array(NUM_BANDS).fill(NOISE_FLOOR);
+        let displayBands = new Float32Array(NUM_BANDS).fill(NOISE_FLOOR);
+        let peakBands = new Float32Array(NUM_BANDS);
+        let peakTime = new Float64Array(NUM_BANDS);
+        const PEAK_HOLD_MS = 2000;
+        const PEAK_FALL_SPEED = 0.5; // dB per frame
+        let isPlaying = false;
+        let hasWsData = false;
+        let lastWsMessage = 0;
+
+        function resizeBands(n) {
+            if (n === NUM_BANDS) return;
+            NUM_BANDS = n;
+            bands = new Float32Array(n).fill(NOISE_FLOOR);
+            displayBands = new Float32Array(n).fill(NOISE_FLOOR);
+            peakBands = new Float32Array(n);
+            peakTime = new Float64Array(n);
+        }
+
+        // Canvas setup
+        const canvas = document.getElementById('spectrumCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * devicePixelRatio;
+            canvas.height = rect.height * devicePixelRatio;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Rainbow color for each bar (HSL hue 0-300)
+        function barColor(i, total) {
+            const hue = (i / total) * 300;
+            return `hsl(${hue}, 85%, 55%)`;
+        }
+
+        function barGlow(i, total) {
+            const hue = (i / total) * 300;
+            return `hsla(${hue}, 90%, 50%, 0.4)`;
+        }
+
+        // Render spectrum bars
+        function renderSpectrum() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const pad = canvas.width * 0.06;
+            const areaW = canvas.width - pad * 2;
+            const areaH = canvas.height - pad * 2;
+            const gap = Math.max(1, areaW * 0.008);
+            const barW = (areaW - gap * (NUM_BANDS - 1)) / NUM_BANDS;
+            const maxH = areaH;
+            const baseY = canvas.height - pad;
+            const radius = Math.max(1, barW * 0.3);
+
+            const now = Date.now();
+
+            for (let i = 0; i < NUM_BANDS; i++) {
+                // Asymmetric smoothing in dB domain: fast attack, slow decay
+                const target = bands[i];
+                if (target > displayBands[i]) {
+                    displayBands[i] += (target - displayBands[i]) * 0.6; // fast attack
+                } else {
+                    displayBands[i] += (target - displayBands[i]) * 0.15; // slow decay
+                }
+
+                // Map dBFS to 0..1 range: NOISE_FLOOR → 0, REF_LEVEL → 1
+                const dbVal = Math.max(displayBands[i], NOISE_FLOOR);
+                const fraction = (dbVal - NOISE_FLOOR) / DB_RANGE; // 0..1
+
+                // Peak hold in fraction domain
+                if (fraction >= peakBands[i]) {
+                    peakBands[i] = fraction;
+                    peakTime[i] = now;
+                } else if (now - peakTime[i] > PEAK_HOLD_MS) {
+                    peakBands[i] -= PEAK_FALL_SPEED / DB_RANGE; // decay in fraction units
+                    if (peakBands[i] < 0) peakBands[i] = 0;
+                }
+
+                const barH = fraction < 0.01 ? 0 : Math.max(2, fraction * maxH);
+                const x = pad + i * (barW + gap);
+                const y = baseY - barH;
+
+                if (barH === 0 && peakBands[i] < 0.01) continue;
+
+                const color = barColor(i, NUM_BANDS);
+
+                // Glow
+                ctx.shadowColor = barGlow(i, NUM_BANDS);
+                ctx.shadowBlur = 8;
+
+                // Rounded bar
+                if (barH > 0) {
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.moveTo(x, baseY);
+                    ctx.lineTo(x, y + radius);
+                    ctx.quadraticCurveTo(x, y, x + radius, y);
+                    ctx.lineTo(x + barW - radius, y);
+                    ctx.quadraticCurveTo(x + barW, y, x + barW, y + radius);
+                    ctx.lineTo(x + barW, baseY);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                ctx.shadowBlur = 0;
+
+                // Peak marker — thin line
+                if (peakBands[i] > 0.01) {
+                    const peakH = peakBands[i] * maxH;
+                    const peakY = baseY - peakH;
+                    const hue = (i / NUM_BANDS) * 300;
+                    ctx.fillStyle = `hsla(${hue}, 95%, 75%, 0.9)`;
+                    ctx.fillRect(x, peakY, barW, Math.max(2, barW * 0.08));
+                }
+
+                // Reflection
+                if (barH > 0) {
+                    const reflH = barH * 0.15;
+                    const reflGrad = ctx.createLinearGradient(x, baseY, x, baseY + reflH);
+                    reflGrad.addColorStop(0, barGlow(i, NUM_BANDS));
+                    reflGrad.addColorStop(1, 'transparent');
+                    ctx.fillStyle = reflGrad;
+                    ctx.fillRect(x, baseY, barW, reflH);
+                }
+            }
+
+            requestAnimationFrame(renderSpectrum);
+        }
+        requestAnimationFrame(renderSpectrum);
+
+        // Idle animation when no WebSocket data but music playing
+        let idlePhase = 0;
+        function idleAnimation() {
+            if (hasWsData || !isPlaying) return;
+            idlePhase += 0.03;
+            for (let i = 0; i < NUM_BANDS; i++) {
+                // Gentle idle wave in dBFS domain (-40 to -25 dBFS)
+                bands[i] = -32 + 7 * Math.sin(idlePhase + i * 0.4);
+            }
+        }
+        setInterval(idleAnimation, 50);
+
+        // Silence watchdog: decay bands to noise floor if no WS data for 500ms
+        setInterval(() => {
+            if (hasWsData && lastWsMessage > 0 && Date.now() - lastWsMessage > 500) {
+                for (let i = 0; i < NUM_BANDS; i++) {
+                    bands[i] -= 3; // decay 3 dB per tick
+                    if (bands[i] < NOISE_FLOOR) bands[i] = NOISE_FLOOR;
+                }
+            }
+        }, 50);
+
+        // URL validation
+        function isValidImageUrl(url) {
+            if (!url || typeof url !== 'string') return false;
+            if (url.startsWith('/')) return /^\/[\w\-._~:/?#[\]@!$&'()*+,;=%]+$/.test(url);
+            try {
+                const parsed = new URL(url);
+                return ['http:', 'https:'].includes(parsed.protocol);
+            } catch { return false; }
+        }
+
+        async function fetchMetadata() {
+            try {
+                const response = await fetch('/metadata.json', { cache: 'no-store' });
+                const data = await response.json();
+                if (JSON.stringify(data) !== JSON.stringify(currentTrack)) {
+                    artworkCacheBust = Date.now();
+                    currentTrack = data;
+                    updateDisplay(data);
+                }
+            } catch (error) {
+                console.error('Error fetching metadata:', error);
+            }
+        }
+
+        function updateDisplay(data) {
+            const albumArt = document.getElementById('albumArt');
+            const vinyl = document.getElementById('vinyl');
+            const trackTitle = document.getElementById('trackTitle');
+            const trackArtist = document.getElementById('trackArtist');
+            const trackAlbum = document.getElementById('trackAlbum');
+            const trackInfo = document.getElementById('trackInfo');
+
+            if (data.playing && data.title) {
+                isPlaying = true;
+                vinyl.classList.remove('paused');
+                trackInfo.classList.remove('no-music');
+
+                const imageUrl = data.artwork || data.artist_image || '';
+                if (imageUrl && isValidImageUrl(imageUrl)) {
+                    const cacheBust = imageUrl.startsWith('/') ? `?t=${artworkCacheBust}` : '';
+                    albumArt.style.backgroundImage = `url("${imageUrl.replace(/"/g, '\\"')}${cacheBust}")`;
+                    albumArt.classList.add('visible');
+                } else {
+                    albumArt.style.backgroundImage = '';
+                    albumArt.classList.remove('visible');
+                }
+
+                trackTitle.textContent = data.title || 'Unknown Track';
+                trackArtist.textContent = data.artist || '';
+                trackAlbum.textContent = data.album || '';
+            } else {
+                isPlaying = false;
+                vinyl.classList.add('paused');
+                trackInfo.classList.add('no-music');
+                albumArt.style.backgroundImage = '';
+                albumArt.classList.remove('visible');
+                trackTitle.textContent = 'No Music Playing';
+                trackArtist.textContent = '';
+                trackAlbum.textContent = '';
+                bands.fill(NOISE_FLOOR);
+            }
+        }
+
+        // WebSocket visualizer
+        function connectVisualizer() {
+            const wsUrl = `ws://${window.location.hostname}:8081`;
+            visualizerWs = new WebSocket(wsUrl);
+
+            visualizerWs.onopen = () => {
+                console.log('Visualizer connected');
+                hasWsData = true;
+            };
+
+            visualizerWs.onmessage = (event) => {
+                lastWsMessage = Date.now();
+                const values = event.data.split(';');
+                resizeBands(values.length);
+                for (let i = 0; i < NUM_BANDS; i++) {
+                    const v = parseFloat(values[i]);
+                    bands[i] = isNaN(v) ? NOISE_FLOOR : v;
+                }
+            };
+
+            visualizerWs.onclose = () => {
+                hasWsData = false;
+                bands.fill(NOISE_FLOOR);
+                setTimeout(connectVisualizer, 5000);
+            };
+
+            visualizerWs.onerror = () => {
+                visualizerWs.close();
+            };
+        }
+
+        setInterval(fetchMetadata, 2000);
+        fetchMetadata();
+        connectVisualizer();
+    </script>
+</body>
+</html>

@@ -43,21 +43,17 @@ jobs:
         run: |
           echo "Running shellcheck on shell scripts..."
           FAILED=0
-          # Check top-level scripts
-          for f in scripts/*.sh; do
+          # Server scripts
+          for f in scripts/*.sh scripts/**/*.sh; do
             [ -f "$f" ] || continue
             echo "  Checking $f"
-            if ! shellcheck -x -S warning "$f"; then
-              FAILED=1
-            fi
+            if ! shellcheck -x -S warning "$f"; then FAILED=1; fi
           done
-          # Check subdirectory scripts (e.g., scripts/tidal/)
-          for f in scripts/**/*.sh; do
+          # Client scripts
+          for f in client/common/scripts/*.sh client/tests/*.sh client/dev/*.sh client/dev/git-hooks/*; do
             [ -f "$f" ] || continue
             echo "  Checking $f"
-            if ! shellcheck -x -S warning "$f"; then
-              FAILED=1
-            fi
+            if ! shellcheck -x -S warning "$f"; then FAILED=1; fi
           done
           if [ "$FAILED" -eq 1 ]; then
             echo "ERROR: shellcheck found issues"
@@ -77,12 +73,17 @@ jobs:
         run: |
           echo "Linting Dockerfiles..."
           FAILED=0
+          # Server Dockerfiles
           for f in Dockerfile.*; do
             [ -f "$f" ] || continue
             echo "  Checking $f"
-            if ! hadolint --config .hadolint.yaml --failure-threshold warning "$f"; then
-              FAILED=1
-            fi
+            if ! hadolint --config .hadolint.yaml --failure-threshold warning "$f"; then FAILED=1; fi
+          done
+          # Client Dockerfiles
+          for f in client/common/docker/*/Dockerfile; do
+            [ -f "$f" ] || continue
+            echo "  Checking $f"
+            if ! hadolint --config .hadolint.yaml --failure-threshold warning "$f"; then FAILED=1; fi
           done
           if [ "$FAILED" -eq 1 ]; then
             echo "ERROR: hadolint found issues"
@@ -133,10 +134,32 @@ jobs:
           ruff format --check docker/metadata-service/ scripts/meta_*.py tests/
           echo "✓ ruff format passed"
 
-      - name: Run Python tests
+      - name: Run server Python tests
         run: |
           pip install pytest==8.3.4
           pytest tests/ -v --tb=short
+
+      - name: Run client Python tests
+        run: |
+          pip install numpy==2.4.3 Pillow==11.1.0 requests==2.32.3 websockets==14.1
+          pytest client/tests/ -v --tb=short
+
+      - name: Client bash tests
+        run: |
+          bash -n client/common/scripts/setup.sh
+          bash client/tests/test_hat_configs.sh
+          bash client/tests/test_entrypoint.sh
+          bash client/tests/test_resource_profiles.sh
+          bash client/tests/test_pull_hardening.sh
+
+      - name: Validate HAT config count
+        run: |
+          count=$(ls -1 client/common/audio-hats/*.conf | wc -l)
+          if [ "$count" -ne 17 ]; then
+            echo "Expected 17 HAT configs, found $count"
+            exit 1
+          fi
+          echo "All 17 HAT configs present"
 
       - name: Check environment template
         run: |

@@ -1,0 +1,20 @@
+# Environment files with secrets
+.env
+*.env
+!.env.example
+
+# Backups
+*.backup
+*.bak
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+volumes/
+
+# Logs
+*.log
+logs/
+__pycache__/
