@@ -11,9 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dynamic tmpfs sizing** ([#221](https://github.com/lollonet/snapMULTI/pull/221)) — overlayroot tmpfs sized to 25% of RAM (floor 256MB, cap 2048MB) with monitoring at 70%/90% thresholds
 
 ### Fixed
-- **Health check logic** ([#220](https://github.com/lollonet/snapMULTY/pull/220)) — require running AND healthy (was OR, could pass with 0 healthy containers)
-- **fuse-overlayfs broken binary** ([#220](https://github.com/lollonet/snapMULTY/pull/220)) — setup-docker.sh now returns error (was silently succeeding)
-- **Shell injection in _image_exists** ([#219](https://github.com/lollonet/snapMULTY/pull/219)) — pass service name via env var instead of string interpolation
+- **Health check logic** ([#220](https://github.com/lollonet/snapMULTI/pull/220)) — require running AND healthy (was OR, could pass with 0 healthy containers)
+- **fuse-overlayfs broken binary** ([#220](https://github.com/lollonet/snapMULTI/pull/220)) — setup-docker.sh now returns error (was silently succeeding)
+- **Shell injection in _image_exists** ([#219](https://github.com/lollonet/snapMULTI/pull/219)) — pass service name via env var instead of string interpolation
 
 ## [0.4.1] — 2026-04-13
 
@@ -159,7 +159,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Shared system-tune.sh** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — shared system tuning module eliminates configuration drift between server and client (CPU governor, USB autosuspend, WiFi power save, Docker daemon.json)
 - **apt upgrade on first boot** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — security patches applied during first boot, before overlayroot freezes the filesystem
-- **USB drive auto-mount** ([#147](https://github.com/lollonet/snapMULTY/pull/147)) — headless Debian doesn't auto-mount USB; firstboot.sh now mounts and adds fstab entry
+- **USB drive auto-mount** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — headless Debian doesn't auto-mount USB; firstboot.sh now mounts and adds fstab entry
 - **INSTALL.it.md** — Italian translation of installation guide
 
 ### Fixed
@@ -379,7 +379,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Source numbering in snapserver.conf** — Commented-out example sources were numbered 6–9 instead of 5–8, mismatching `docs/SOURCES.md`
 - **Shell option restoration in deploy.sh** — `$old_nullglob` changed to `eval "$old_nullglob"` for proper `shopt` state restoration in `detect_music_library()`
 - **Metadata-service socket leak** ([#87](https://github.com/lollonet/snapMULTI/pull/87)) — Fixed file descriptor leak in `_create_socket()` when `connect()` fails; socket is now closed in the error path
-- **Metadata-service poll loop resilience** ([#87](https://github.com/lollonet/snapMULTY/pull/87)) — Added consecutive error counter (30 threshold) to `poll_loop()` so the service exits instead of spinning forever on persistent failures; Docker's restart policy then recovers it
+- **Metadata-service poll loop resilience** ([#87](https://github.com/lollonet/snapMULTI/pull/87)) — Added consecutive error counter (30 threshold) to `poll_loop()` so the service exits instead of spinning forever on persistent failures; Docker's restart policy then recovers it
 
 ### Security
 - **Container vulnerability scanning** ([#36](https://github.com/lollonet/snapMULTI/issues/36)) — [Trivy](https://trivy.dev/) scans all Docker images for CRITICAL and HIGH CVEs. Results uploaded to GitHub Security tab (SARIF). Runs after every image build, weekly on Monday, and on manual dispatch
@@ -388,8 +388,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Maintenance
 - **CI: all workflows on self-hosted runner** — Claude Code Review and Claude Code helper workflows moved from `ubuntu-latest` to `snapcast-runner` for consistent CI environment
-- **CI: actions/setup-python 5.6.0 → 6.2.0** ([#81](https://github.com/lollonet/snapMULTY/pull/81)) — Node.js 22 runtime, improved caching
-- **Snapweb builder: Node 22 → Node 24 LTS** ([#85](https://github.com/lollonet/snapMULTY/pull/85)) — Active LTS (Oct 2025–Apr 2028), same Alpine base
+- **CI: actions/setup-python 5.6.0 → 6.2.0** ([#81](https://github.com/lollonet/snapMULTI/pull/81)) — Node.js 22 runtime, improved caching
+- **Snapweb builder: Node 22 → Node 24 LTS** ([#85](https://github.com/lollonet/snapMULTI/pull/85)) — Active LTS (Oct 2025–Apr 2028), same Alpine base
 
 ## [0.2.0] — 2026-02-19
 

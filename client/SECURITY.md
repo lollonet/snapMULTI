@@ -21,7 +21,7 @@ We will acknowledge receipt within 48 hours and aim to release a fix within 7 da
 
 This policy covers:
 - The snapMULTI client (lives at `client/` in the [snapMULTI](https://github.com/lollonet/snapMULTI) monorepo)
-- Docker images published under `lollonet/snapclient-pi*`
+- Docker images published under `lollonet/snapclient-pi-*`
 - Install scripts (`setup.sh`, `discover-server.sh`, `display-detect.sh`)
 
 ## Security Model
