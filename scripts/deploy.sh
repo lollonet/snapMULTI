@@ -928,7 +928,7 @@ start_services() {
 
     # Pre-flight: check key ports are available (host networking)
     local _port_conflict=false
-    for port in 1704 1705 1780 6600 8180; do
+    for port in 1704 1705 1780 6600 8082 8083 8180; do
         if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
             local _holder
             _holder=$(ss -tlnp 2>/dev/null | grep ":${port} " | awk '{print $NF}' | head -1)
