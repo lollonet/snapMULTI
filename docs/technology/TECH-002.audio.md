@@ -23,7 +23,7 @@ All audio streams use a consistent format:
 
 | Component | Version | Source |
 |-----------|---------|--------|
-| Snapcast | develop branch | badaix/snapcast upstream (Dockerfile.snapserver builds from latest HEAD) |
+| Snapcast | v0.35.0 (pinned) | badaix/snapcast upstream (Dockerfile.snapserver builds from pinned tag; santcasp fork available via workflow_dispatch) |
 | MPD | 0.24.x | Alpine packages (Dockerfile.mpd) |
 | go-librespot | v0.7.0 | Upstream image (ghcr.io/devgianlu/go-librespot) |
 | Shairport-sync | 4.x | Built from source (Dockerfile.shairport-sync) |

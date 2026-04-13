@@ -350,6 +350,19 @@ If a node connects to an AV receiver or home theatre system via optical cable, u
 | Client × 3 | Pi Zero 2 W + HiFiBerry DAC+ Zero + accessories each | ~$67 × 3 = $201 |
 | Network | 5-port managed switch ([TP-Link TL-SG105E](https://www.amazon.com/TP-LINK-TL-SG105E-5-Port-Gigabit-Version/dp/B00N0OHEMA)) | ~$25 |
 
+## Tested Combinations
+
+These hardware combinations have been verified in real deployments:
+
+| Pi Model | Audio HAT | Mode | Music Source | Status |
+|----------|-----------|------|-------------|--------|
+| Pi 4 | HiFiBerry DAC+ | Server + Client | NFS, USB | Working |
+| Pi 4 | HiFiBerry Digi+ | Server + Client | NFS, USB | Working |
+| Pi 4 | InnoMaker DAC | Client | — | Working |
+| Pi 4 | None (HDMI/3.5mm) | Server | NFS, USB | Working |
+| Pi 3 | InnoMaker DAC | Client | — | Working |
+| Pi Zero 2 W | InnoMaker DAC | Client (headless) | — | Working |
+
 ## Known Limitations
 
 | Limitation | Details |

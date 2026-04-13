@@ -132,7 +132,7 @@ The setup script installs Docker CE, automatically configures your audio HAT and
 ## Project Structure
 
 ```
-snapclient-pi/
+client/                           # Part of the snapMULTI monorepo
 ├── install/
 │   └── snapclient.conf         # Config defaults (AUDIO_HAT=auto)
 │
@@ -145,18 +145,13 @@ snapclient-pi/
 │   │   └── ro-mode.sh          # Read-only filesystem management
 │   ├── docker-compose.yml      # Docker services (snapclient, visualizer, fb-display)
 │   ├── .env.example            # Environment template
-│   ├── audio-hats/             # Audio HAT configurations (16 files)
+│   ├── audio-hats/             # Audio HAT configurations (17 files)
 │   └── docker/
 │       ├── snapclient/         # Snapclient Docker image
 │       ├── audio-visualizer/   # Spectrum analyzer (dBFS)
 │       └── fb-display/         # Framebuffer display renderer
 │
-├── dev/                        # Development tooling
-│   └── install-hooks.sh        # Git hooks installer
-│
-├── tests/                      # Test and validation scripts
-│
-└── .github/workflows/          # CI/CD pipelines
+└── tests/                      # Test and validation scripts
 ```
 
 > **Note**: This is the `client/` directory of the [snapMULTI](https://github.com/lollonet/snapMULTI) monorepo. The server's `prepare-sd.sh` copies the necessary files to the SD card; the server's `firstboot.sh` runs `setup.sh --auto` during first boot.

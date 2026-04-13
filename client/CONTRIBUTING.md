@@ -1,20 +1,21 @@
-# Contributing to snapclient-pi
+# Contributing to snapMULTI Client
+
+> The client lives at `client/` in the [snapMULTI](https://github.com/lollonet/snapMULTI) monorepo.
 
 ## Quick Start
 
-1. Fork and clone the repo
+1. Fork and clone the monorepo: `git clone git@github.com:lollonet/snapMULTI.git`
 2. Create a feature branch: `git checkout -b feature/my-change`
 3. Make changes, commit with [Conventional Commits](https://www.conventionalcommits.org/)
-4. Push and open a PR
+4. Push and open a PR against `main`
 
 ## Development
 
 ```bash
-# Run pre-push checks locally
-./dev/git-hooks/pre-push
-
 # Run tests
-pytest tests/ -v
+bash client/tests/test_resource_profiles.sh
+bash client/tests/test_pull_hardening.sh
+bash client/tests/test_hat_configs.sh
 ```
 
 ## Code Style
@@ -26,7 +27,7 @@ pytest tests/ -v
 
 ## Architecture
 
-snapclient-pi is part of the [snapMULTI](https://github.com/lollonet/snapMULTI) project. See `CLAUDE.md` for detailed conventions.
+The client is part of the [snapMULTI](https://github.com/lollonet/snapMULTI) monorepo. See `CLAUDE.md` for detailed conventions.
 
 ## Reporting Issues
 

@@ -81,11 +81,9 @@ Native builds on self-hosted runners using Docker buildx with platform emulation
 |--------|------------------|------|------------------|
 | snapmulti-runner | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
 | snapmulti-runner-2 | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
-| rpi-runner-1 | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
-| rpi-runner-2 | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
-| snapctrl-runner | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
+| mac-arm64-runner | arm64 | Mac (Apple Silicon) | Native (GitHub runner app) |
 
-**Total: 5 runners** running as Docker containers on a single amd64 host. Multi-arch builds use Docker buildx with QEMU platform emulation on the amd64 host.
+**Total: 3 runners** — 2 Docker containers on amd64 host (raspy) + 1 native macOS arm64 runner. Server images build on amd64 runners, client images build natively on Mac arm64 runner.
 
 ## Quality Gates
 

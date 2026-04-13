@@ -359,6 +359,9 @@ Il nuovo speaker appare nell'interfaccia web Snapcast a `http://snapvideo.local:
 | `prepare-sd.sh`: partizione boot non trovata | SD non reinserita dopo Imager | Rimuovi SD, reinserisci, esegui di nuovo lo script |
 | Windows: script non si avvia | Execution policy | Esegui prima `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
 | HAT audio non rilevato (client) | Scheda senza EEPROM | Collegati via SSH ed esegui `sudo bash /opt/snapclient/common/scripts/setup.sh` per selezionare il tuo HAT manualmente |
+| `no matching manifest for linux/arm/v7` | OS 32-bit flashato invece del 64-bit | Riflasha con **Raspberry Pi OS Lite (64-bit)** — tutti i modelli Pi incluso Zero 2 W lo supportano |
+| Pi Zero 2 W: WiFi non si connette | SSID 5 GHz configurato ma Pi Zero ha solo 2,4 GHz | Riflasha con il tuo SSID 2,4 GHz nelle impostazioni WiFi di Imager |
+| Pi Zero 2 W: HAT audio non rilevato | `otg_mode=1` o `dr_mode=host` in config.txt | `prepare-sd.sh` lo corregge automaticamente. Per installazioni manuali: commenta `otg_mode=1` e rimuovi `dr_mode=host` dall'overlay dwc2 |
 
 Per problemi post-installazione vedi [Risoluzione problemi in USAGE.it.md](USAGE.it.md#risoluzione-problemi).
 

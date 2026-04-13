@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Dynamic tmpfs sizing** ([#221](https://github.com/lollonet/snapMULTI/pull/221)) — overlayroot tmpfs sized to 25% of RAM (floor 256MB, cap 2048MB) with monitoring at 70%/90% thresholds
+
+### Fixed
+- **Health check logic** ([#220](https://github.com/lollonet/snapMULTY/pull/220)) — require running AND healthy (was OR, could pass with 0 healthy containers)
+- **fuse-overlayfs broken binary** ([#220](https://github.com/lollonet/snapMULTY/pull/220)) — setup-docker.sh now returns error (was silently succeeding)
+- **Shell injection in _image_exists** ([#219](https://github.com/lollonet/snapMULTY/pull/219)) — pass service name via env var instead of string interpolation
+
+## [0.4.1] — 2026-04-13
+
+### Fixed
+- **EXIT trap clobber** — pull-images.sh uses RETURN trap only (not EXIT) to avoid clobbering caller's _setup_failure_dump trap. Fixed unbound variable crash on v0.4.0
+
+## [0.4.0] — 2026-04-13
+
+### Added
 - **Diagnostic log persistence** — saves dmesg audio errors, docker logs, ALSA state, and system health to boot partition every 30 minutes. Survives overlayroot reboots. Keeps last 3 snapshots at `/boot/firmware/diagnostics/`
 - **Pi Zero 2 W support** — documented in HARDWARE.md (64-bit required, 2.4 GHz only, headless audio)
 - **Install checkpoints** — per-phase markers (deps, docker, deploy, setup) enable resume after power loss or crash without full reinstall
@@ -16,15 +31,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docker Compose v2+ enforcement** — validates version at startup with actionable error
 - **Diagnostic dump on failure** — trap collects memory, disk, docker status, and dmesg into install log
 - **Install duration logging** — total elapsed time shown at completion
+- **Shared modules** ([#217](https://github.com/lollonet/snapMULTI/pull/217)) — extracted `pull-images.sh` and `resource-detect.sh` from setup.sh/deploy.sh
+- **Skip existing images** ([#218](https://github.com/lollonet/snapMULTI/pull/218)) — pull-images.sh skips already-pulled images, detects Docker Hub rate limit (429)
 
 ### Changed
-- **Monorepo** — merged `snapclient-pi` into `snapMULTI` as `client/` directory (was git submodule). One repo, one branch, one CI pipeline
-- **Single-branch CI** — develop branch eliminated; `:dev` images (santcasp fork) built on-demand via `workflow_dispatch` checkbox
+- **Monorepo** ([#212](https://github.com/lollonet/snapMULTI/pull/212)) — merged `snapclient-pi` into `snapMULTI` as `client/` directory (was git submodule). One repo, one branch, one CI pipeline
+- **Single-branch CI** ([#211](https://github.com/lollonet/snapMULTI/pull/211)) — develop branch eliminated; `:dev` images (santcasp fork) built on-demand via `workflow_dispatch` checkbox
+- **Snapcast pinned to v0.35.0** — stable release, no longer tracking develop branch
 - **Modular firstboot** — rewritten as orchestrator with 4 extracted modules (unified-log, mount-music, install-docker, readonly-fs)
 - **Silent Docker pulls** — progress output suppressed on success, surfaced on failure (fixes 500+ line log spam from Docker Compose v5)
 - **Unified logging for setup.sh** — output filtered through unified logger instead of raw dump to install log
+- **Unified version format** — always `v0.x.x` (no more stripping `v` prefix)
 
 ### Fixed
+- **badaix/snapcast restored on main** ([#210](https://github.com/lollonet/snapMULTI/pull/210)) — santcasp fork accidentally leaked via merge; reverted
 - **IMAGE_TAG not persisted** — `deploy.sh` now writes `IMAGE_TAG` to `.env` (previously lost after reboot)
 - **LOG_SOURCE not reset** — module calls no longer leak source labels into subsequent log lines
 - **--no-readonly flag** — positioned before positional config file argument

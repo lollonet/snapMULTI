@@ -69,6 +69,16 @@ I client Snapcast sono leggeri — ricevono audio e lo riproducono attraverso gl
 | **Vecchio telefono Android** | Gratis | Altoparlante integrato | Batteria | Tramite [app Snapcast Android](https://github.com/badaix/snapdroid) |
 | **Qualsiasi PC Linux** | Varia | Audio integrato | Varia | `apt install snapclient` |
 
+### Note Pi Zero 2 W
+
+Il Pi Zero 2 W è l'opzione client più economica ma ha requisiti specifici:
+
+- **OS 64-bit obbligatorio** — Imager propone 32-bit come predefinito per questo modello. Seleziona esplicitamente "Raspberry Pi OS Lite (64-bit)"
+- **Solo WiFi 2,4 GHz** — niente 5 GHz. Usa il tuo SSID 2,4 GHz quando configuri il WiFi in Imager
+- **512 MB RAM** — solo audio headless (senza display). Non può eseguire fb-display o server
+- **Compatibilità HAT I2S** — funziona con HAT basati su PCM5122 (HiFiBerry DAC+, InnoMaker Mini). L'impostazione USB `otg_mode=1` di Imager interferisce con I2S — `prepare-sd.sh` e `setup.sh` lo correggono automaticamente
+- **Modalità gadget USB** — per debug senza WiFi, collegare la porta USB dati al computer. Richiede `dtoverlay=dwc2` sotto `[all]` in config.txt (non sotto `[cm5]`)
+
 ### Qualità dell'Uscita Audio
 
 | Metodo di Uscita | Qualità | Costo | Note |
@@ -310,6 +320,19 @@ Se un nodo è collegato a un ricevitore AV o sistema home theatre via cavo ottic
 | Server | Intel NUC o mini PC (x86_64) | ~€150+ |
 | Client × 3 | Pi Zero 2 W + HiFiBerry DAC+ Zero + accessori ciascuno | ~€65 × 3 = €195 |
 | Rete | Switch gestito ([TP-Link TL-SG105E](https://www.amazon.it/s?k=tp-link+tl-sg105e)) | ~€25 |
+
+## Combinazioni Testate
+
+Queste combinazioni hardware sono state verificate in installazioni reali:
+
+| Modello Pi | HAT Audio | Modalità | Sorgente Musica | Stato |
+|------------|-----------|----------|----------------|-------|
+| Pi 4 | HiFiBerry DAC+ | Server + Client | NFS, USB | Funzionante |
+| Pi 4 | HiFiBerry Digi+ | Server + Client | NFS, USB | Funzionante |
+| Pi 4 | InnoMaker DAC | Client | — | Funzionante |
+| Pi 4 | Nessuno (HDMI/3.5mm) | Server | NFS, USB | Funzionante |
+| Pi 3 | InnoMaker DAC | Client | — | Funzionante |
+| Pi Zero 2 W | InnoMaker DAC | Client (headless) | — | Funzionante |
 
 ## Limitazioni Note
 
