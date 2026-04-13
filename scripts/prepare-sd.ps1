@@ -435,7 +435,7 @@ switch ($InstallType) {
 }
 
 # ── Write version files ──────────────────────────────────────────
-# Server: bare semver (e.g. "0.3.26"), Client: prefixed (e.g. "v0.3.26")
+# Both use the same version tag from the monorepo (with "v" prefix)
 try {
     $gitVersion = & git -C $ProjectDir describe --tags --abbrev=0 2>$null
     if (-not $gitVersion) { $gitVersion = 'dev' }
@@ -443,8 +443,7 @@ try {
     $gitVersion = 'dev'
 }
 if ($InstallType -in @('server', 'both')) {
-    $serverVersion = $gitVersion -replace '^v', ''
-    [System.IO.File]::WriteAllText((Join-Path $Dest 'server/.version'), $serverVersion)
+    [System.IO.File]::WriteAllText((Join-Path $Dest 'server/.version'), $gitVersion)
 }
 if ($InstallType -in @('client', 'both')) {
     [System.IO.File]::WriteAllText((Join-Path $Dest 'client/VERSION'), $gitVersion)

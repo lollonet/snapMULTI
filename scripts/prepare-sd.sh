@@ -487,16 +487,13 @@ esac
 
 # Bake version files so installer scripts can set version vars without a git repo on device.
 # Format difference is intentional: server strips "v" (deploy.sh + metadata-service expect
-# bare semver, displayed as "srv 0.3.x"), client keeps "v" (APP_VERSION shown as "v0.2.x"
-# in fb-display status bar — see fb_display.py comment on APP_VERSION).
+# Both use the same version tag from the monorepo (with "v" prefix).
+VERSION=$(git -C "$PROJECT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
 if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
-    SERVER_VERSION=$(git -C "$PROJECT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
-    echo "${SERVER_VERSION#v}" > "$DEST/server/.version"
+    echo "$VERSION" > "$DEST/server/.version"
 fi
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
-    # Client is part of the monorepo — use project-level git tags
-    CLIENT_VERSION=$(git -C "$PROJECT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
-    echo "$CLIENT_VERSION" > "$DEST/client/VERSION"
+    echo "$VERSION" > "$DEST/client/VERSION"
 fi
 
 echo "  Copied $(du -sh "$DEST" | cut -f1) to boot partition."

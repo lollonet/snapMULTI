@@ -1072,7 +1072,6 @@ _detect_version() {
     local version=""
     if command -v git >/dev/null 2>&1 && git -C "$PROJECT_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
         version=$(git -C "$PROJECT_ROOT" describe --tags --abbrev=0 2>/dev/null || true)
-        version="${version#v}"
     fi
     if [[ -z "$version" ]] && [[ -f "$PROJECT_ROOT/.version" ]]; then
         version=$(cat "$PROJECT_ROOT/.version")
