@@ -428,13 +428,14 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         fi
     done
     deploy_rc=${PIPESTATUS[0]}
-    set -eo pipefail
 
     if [[ "$deploy_rc" -ne 0 ]]; then
+        set -eo pipefail
         log_error "Server deployment failed"
         log_error "Troubleshoot: sudo cat $UNIFIED_LOG | tail -50"
         exit 1
     fi
+    set -eo pipefail
     milestone "$CURRENT_STEP" "Server deploy complete" 2 2>/dev/null || true
 
     # Verify server containers
@@ -445,15 +446,19 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     local_healthy=false
     local_compose=(-f "$SERVER_DIR/docker-compose.yml")
     local_total=$(docker compose "${local_compose[@]}" config --services 2>/dev/null | wc -l)
+    # Count services with healthcheck defined (only those report "healthy")
+    local_hc_total=$(docker compose "${local_compose[@]}" config --format json 2>/dev/null \
+        | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; print(sum(1 for s in c.values() if 'healthcheck' in s))" 2>/dev/null) || local_hc_total=0
     for attempt in $(seq 1 18); do
         local_up=$(docker compose "${local_compose[@]}" ps --status running -q 2>/dev/null | wc -l)
         local_health=$(docker compose "${local_compose[@]}" ps --status healthy -q 2>/dev/null | wc -l)
-        if [[ "$local_up" -ge "$local_total" ]] || [[ "$local_health" -ge "$local_total" ]]; then
-            log_info "All $local_total server containers healthy"
+        # All containers running AND all healthcheck-enabled containers healthy
+        if [[ "$local_up" -ge "$local_total" ]] && { [[ "$local_hc_total" -eq 0 ]] || [[ "$local_health" -ge "$local_hc_total" ]]; }; then
+            log_info "All $local_total server containers running ($local_health healthy)"
             local_healthy=true
             break
         fi
-        log_info "Attempt $attempt/18: $local_up running, $local_health healthy (need $local_total)..."
+        log_info "Attempt $attempt/18: $local_up/$local_total running, $local_health/$local_hc_total healthy..."
         sleep 10
     done
 
@@ -555,13 +560,14 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
         fi
     done
     setup_rc=${PIPESTATUS[0]}
-    set -eo pipefail
 
     if [[ "$setup_rc" -ne 0 ]]; then
+        set -eo pipefail
         log_error "Client setup failed"
         log_error "Troubleshoot: sudo cat $UNIFIED_LOG | tail -50"
         exit 1
     fi
+    set -eo pipefail
     unset PROGRESS_MANAGED
     milestone "$CURRENT_STEP" "Client setup complete" 2 2>/dev/null || true
 
@@ -573,8 +579,8 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     for attempt in $(seq 1 12); do
         local_running=$(docker compose "${local_client_compose[@]}" ps --status running -q 2>/dev/null | wc -l)
         local_healthy=$(docker compose "${local_client_compose[@]}" ps --status healthy -q 2>/dev/null | wc -l)
-        if [[ "$local_running" -ge 1 ]] || [[ "$local_healthy" -ge 1 ]]; then
-            log_info "Client container running"
+        if [[ "$local_running" -ge 1 ]] && [[ "$local_healthy" -ge 1 ]]; then
+            log_info "Client container running and healthy"
             local_client_healthy=true
             break
         fi
