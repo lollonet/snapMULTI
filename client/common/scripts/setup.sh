@@ -1323,9 +1323,7 @@ echo ""
 }
 _setup_systemd_services
 
-# ============================================
-# Step 12: Configure Read-Only Filesystem (optional, before image pull)
-# ============================================
+_configure_readonly() {
 if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
     progress 9 "Configuring read-only filesystem..."
     log_progress "Installing fuse-overlayfs..."
@@ -1435,6 +1433,8 @@ else
     echo "Read-only filesystem: skipped (ENABLE_READONLY=false)"
 fi
 echo ""
+}
+_configure_readonly
 
 # ============================================
 # Step 13: Pull container images (once, after storage driver is final)
