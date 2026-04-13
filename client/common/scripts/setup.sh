@@ -94,13 +94,24 @@ fi
 
 # Source shared system tuning functions early (needed throughout the script)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for _tune_candidate in \
-    "$SCRIPT_DIR/common/system-tune.sh" \
-    "$SCRIPT_DIR/../scripts/common/system-tune.sh" \
-    "$(dirname "$0")/common/system-tune.sh"; do
-    # shellcheck source=common/system-tune.sh
-    [[ -f "$_tune_candidate" ]] && source "$_tune_candidate" && break
+COMMON_MODULE_DIR=""
+for _mod_candidate in \
+    "$SCRIPT_DIR/common" \
+    "$SCRIPT_DIR/../scripts/common" \
+    "$(dirname "$0")/common"; do
+    if [[ -d "$_mod_candidate" ]]; then
+        COMMON_MODULE_DIR="$_mod_candidate"
+        break
+    fi
 done
+if [[ -n "$COMMON_MODULE_DIR" ]]; then
+    # shellcheck source=common/system-tune.sh
+    [[ -f "$COMMON_MODULE_DIR/system-tune.sh" ]] && source "$COMMON_MODULE_DIR/system-tune.sh"
+    # shellcheck source=common/resource-detect.sh
+    [[ -f "$COMMON_MODULE_DIR/resource-detect.sh" ]] && source "$COMMON_MODULE_DIR/resource-detect.sh"
+    # shellcheck source=common/pull-images.sh
+    [[ -f "$COMMON_MODULE_DIR/pull-images.sh" ]] && source "$COMMON_MODULE_DIR/pull-images.sh"
+fi
 
 echo "========================================="
 echo "Raspberry Pi Snapclient Setup Script"
@@ -801,6 +812,7 @@ echo ""
 # Step 8: Configure Boot Settings (Idempotent)
 # ============================================
 progress 5 "Updating boot settings..."
+_apply_boot_config() {
 BOOT_CONFIG=""
 if [ -f /boot/firmware/config.txt ]; then
     BOOT_CONFIG="/boot/firmware/config.txt"
@@ -937,6 +949,8 @@ else
     exit 1
 fi
 echo ""
+}
+_apply_boot_config
 
 # ============================================
 # Step 9: Detect Hardware Profile & Configure Docker
@@ -965,30 +979,20 @@ detect_connection_type() {
     esac
 }
 
-# Detect hardware and set appropriate resource limits
+# Detect hardware and set appropriate resource profile.
+# Uses shared detect_hardware() from resource-detect.sh.
 detect_resource_profile() {
-    # Get total RAM in MB
-    local mem_mb
-    mem_mb=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
+    detect_hardware
+    local ram="${DETECTED_RAM_MB:-0}"
 
-    # Fallback to standard profile if detection failed (0 or very low = likely error)
-    if (( mem_mb < 256 )); then
-        echo "WARNING: Only ${mem_mb}MB RAM detected — client needs at least 256MB" >&2
+    # Fallback to standard profile if detection failed
+    if (( ram < 256 )); then
+        echo "WARNING: Only ${ram}MB RAM detected — client needs at least 256MB" >&2
         echo "standard"
         return
     fi
 
-    # Determine profile based on RAM
-    if (( mem_mb < 2048 )); then
-        # Pi Zero 2 W, Pi 3, <2GB RAM
-        echo "minimal"
-    elif (( mem_mb < 4096 )); then
-        # Pi 4 2GB, 2-4GB RAM
-        echo "standard"
-    else
-        # Pi 4 4GB+, Pi 5, 8GB+ RAM
-        echo "performance"
-    fi
+    detect_profile_from_hardware
 }
 
 # Set resource limits based on profile
@@ -1236,6 +1240,7 @@ echo ""
 # Step 11: Create Systemd Service for Docker
 # ============================================
 progress 8 "Creating systemd service..."
+_setup_systemd_services() {
 log_progress "Creating snapclient.service..."
 
 # Install mDNS discovery script (runs before Docker services start)
@@ -1315,6 +1320,8 @@ fi
 
 echo "Systemd services created and enabled"
 echo ""
+}
+_setup_systemd_services
 
 # ============================================
 # Step 12: Configure Read-Only Filesystem (optional, before image pull)
@@ -1437,91 +1444,14 @@ start_progress_animation 10 60 40  # Animate during long image pull
 
 cd "$INSTALL_DIR"
 
-# Pre-flight: ensure enough disk space for images (~1 GB needed)
-_avail_mb=$(df -BM --output=avail "$INSTALL_DIR" 2>/dev/null | tail -1 | tr -d ' M')
-if [[ -n "$_avail_mb" ]] && [[ "$_avail_mb" -lt 1024 ]]; then
+# Pull images using shared module (1 GB minimum for client)
+if ! pull_compose_images log_progress 1024; then
     stop_progress_animation
-    echo "ERROR: Only ${_avail_mb}MB free — need at least 1 GB for container images"
-    echo "  Free up space and re-run: docker compose pull"
-    exit 1
-fi
-
-# Pull images with retry (network hiccups common on Pi WiFi).
-# Pull 2 services at a time — balances network throughput vs SD I/O.
-_pull_tmp=$(mktemp -d)
-_pull_cleanup() {
-    _setup_failure_dump
-    rm -rf "$_pull_tmp" 2>/dev/null || true
-}
-trap _pull_cleanup EXIT
-mapfile -t _pull_services < <(docker compose config --services 2>/dev/null)
-if [[ ${#_pull_services[@]} -eq 0 ]]; then
-    stop_progress_animation
-    echo "ERROR: No services found in docker-compose.yml"
-    exit 1
-fi
-
-_pull_failed=()
-
-# Pull a single service with 3-attempt retry.
-# Output is suppressed on success and surfaced on failure.
-_pull_one() {
-    local svc="$1"
-    local log="$_pull_tmp/pull-$svc"
-    local delays=(0 10 30)  # retry after 10s, 30s
-    for i in 0 1 2; do
-        [[ ${delays[$i]} -gt 0 ]] && { log_progress "Retrying $svc in ${delays[$i]}s..."; sleep "${delays[$i]}"; }
-        if docker compose pull "$svc" >"$log" 2>&1; then
-            rm -f "$log"
-            return 0
-        fi
-    done
-    # Surface last attempt's output on failure
-    tail -5 "$log"
-    rm -f "$log"
-    return 1
-}
-
-# Pull in pairs: background first, foreground second, wait
-for ((i=0; i<${#_pull_services[@]}; i+=2)); do
-    svc1="${_pull_services[$i]}"
-    svc2="${_pull_services[$i+1]:-}"
-
-    # Pull svc2 in background (capture retry messages to avoid interleaving)
-    _bg_pid="" _bg_log=""
-    if [[ -n "$svc2" ]]; then
-        log_progress "Pulling $svc2..."
-        _bg_log="$_pull_tmp/bg-$svc2"
-        _pull_one "$svc2" >"$_bg_log" 2>&1 &
-        _bg_pid=$!
-    fi
-
-    # svc1 in foreground
-    log_progress "Pulling $svc1..."
-    if ! _pull_one "$svc1"; then
-        _pull_failed+=("$svc1")
-    fi
-
-    # Wait for background svc2
-    if [[ -n "$_bg_pid" ]]; then
-        if ! wait "$_bg_pid" 2>/dev/null; then
-            cat "$_bg_log"  # surface failure output
-            _pull_failed+=("$svc2")
-        fi
-        rm -f "$_bg_log"
-    fi
-done
-
-if [[ ${#_pull_failed[@]} -gt 0 ]]; then
-    stop_progress_animation
-    log_progress "ERROR: Failed to pull: ${_pull_failed[*]}"
     echo ""
-    echo "ERROR: Failed to pull container images: ${_pull_failed[*]}"
+    echo "ERROR: Failed to pull container images"
     echo "  Check network connectivity and try: docker compose pull"
     exit 1
 fi
-log_progress "All images pulled successfully"
-docker image prune -f >/dev/null 2>&1 || true
 echo ""
 
 # ============================================
@@ -1534,7 +1464,6 @@ if mountpoint -q /media/root-ro 2>/dev/null; then
     BAKE_DIR=$(mktemp -d /tmp/snapclient-bake-XXXXX)
     bake_cleanup() {
         _setup_failure_dump  # chain diagnostic dump on failure
-        rm -rf "$_pull_tmp" 2>/dev/null || true
         sudo umount "$BAKE_DIR" 2>/dev/null || true
         rmdir "$BAKE_DIR" 2>/dev/null || true
         sudo sync
