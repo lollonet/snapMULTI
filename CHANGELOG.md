@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Dynamic tmpfs sizing** ([#221](https://github.com/lollonet/snapMULTI/pull/221)) — overlayroot tmpfs sized to 25% of RAM (floor 256MB, cap 2048MB) with monitoring at 70%/90% thresholds
+- **FIFO health monitoring** ([#224](https://github.com/lollonet/snapMULTI/pull/224)) — `save-diagnostics.sh` records pipe status (reader count via `fuser`) and container restart counts to `audio-health.log`
 
 ### Fixed
 - **Health check logic** ([#220](https://github.com/lollonet/snapMULTI/pull/220)) — require running AND healthy (was OR, could pass with 0 healthy containers)
