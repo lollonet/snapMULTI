@@ -50,11 +50,14 @@ if mount | grep -q ' on / type overlay'; then
         # Floor at 256MB, cap at 2048MB
         [ "$target_mb" -lt 256 ] && target_mb=256
         [ "$target_mb" -gt 2048 ] && target_mb=2048
+        # Find the tmpfs backing the overlay upper dir (not / which is overlayfs)
+        tmpfs_mp=$(awk '$3 == "tmpfs" {print $2}' /proc/mounts | grep -E '^/overlay' | head -1)
+        [ -z "$tmpfs_mp" ] && tmpfs_mp="/overlay"  # Raspberry Pi OS default
         # Remount with explicit size (idempotent — safe to re-run)
-        if mount -o "remount,size=${target_mb}M" / 2>/dev/null; then
-            logger -t boot-tune "Overlayroot tmpfs sized to ${target_mb}MB (RAM: ${total_mb}MB)"
+        if mount -o "remount,size=${target_mb}M" "$tmpfs_mp" 2>/dev/null; then
+            logger -t boot-tune "Overlayroot tmpfs sized to ${target_mb}MB at $tmpfs_mp (RAM: ${total_mb}MB)"
         else
-            logger -t boot-tune -p warning "Failed to resize overlayroot tmpfs"
+            logger -t boot-tune -p warning "Failed to resize overlayroot tmpfs at $tmpfs_mp"
         fi
     fi
 
