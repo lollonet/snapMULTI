@@ -360,7 +360,8 @@ These hardware combinations have been verified in real deployments:
 | Pi 4 | HiFiBerry Digi+ | Server + Client | NFS, USB | Working |
 | Pi 4 | InnoMaker DAC | Client | — | Working |
 | Pi 4 | None (HDMI/3.5mm) | Server | NFS, USB | Working |
-| Pi 3 | InnoMaker DAC | Client | — | Working |
+| Pi 4 | None (HDMI) | Client (headless) | — | Working |
+| Pi 3 | InnoMaker DAC | Client (headless) | — | Working |
 | Pi Zero 2 W | InnoMaker DAC | Client (headless) | — | Working |
 
 ## Known Limitations

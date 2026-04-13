@@ -331,7 +331,8 @@ Queste combinazioni hardware sono state verificate in installazioni reali:
 | Pi 4 | HiFiBerry Digi+ | Server + Client | NFS, USB | Funzionante |
 | Pi 4 | InnoMaker DAC | Client | — | Funzionante |
 | Pi 4 | Nessuno (HDMI/3.5mm) | Server | NFS, USB | Funzionante |
-| Pi 3 | InnoMaker DAC | Client | — | Funzionante |
+| Pi 4 | Nessuno (HDMI) | Client (headless) | — | Funzionante |
+| Pi 3 | InnoMaker DAC | Client (headless) | — | Funzionante |
 | Pi Zero 2 W | InnoMaker DAC | Client (headless) | — | Funzionante |
 
 ## Limitazioni Note
