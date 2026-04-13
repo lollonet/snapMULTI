@@ -34,13 +34,15 @@ jobs:
 
       - name: Determine image label
         id: version
+        env:
+          USE_SANTCASP: ${{ inputs.use_santcasp }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             # Tagged release: push :latest + :version (badaix/snapcast)
             VERSION="${GITHUB_REF#refs/tags/v}"
             echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
             echo "label=latest" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ inputs.use_santcasp }}" == "true" ]]; then
+          elif [[ "$USE_SANTCASP" == "true" ]]; then
             # Manual dispatch with santcasp: push :dev (santcasp fork)
             echo "tag=" >> "$GITHUB_OUTPUT"
             echo "label=dev" >> "$GITHUB_OUTPUT"
@@ -52,8 +54,10 @@ jobs:
 
       - name: Determine snapcast source
         id: snapcast
+        env:
+          USE_SANTCASP: ${{ inputs.use_santcasp }}
         run: |
-          if [[ "${{ inputs.use_santcasp }}" == "true" ]]; then
+          if [[ "$USE_SANTCASP" == "true" ]]; then
             REPO="https://github.com/lollonet/santcasp.git"
             BRANCH="develop"
           else
@@ -163,12 +167,14 @@ jobs:
     steps:
       - name: Determine image label
         id: version
+        env:
+          USE_SANTCASP: ${{ inputs.use_santcasp }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
             echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
             echo "label=latest" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ inputs.use_santcasp }}" == "true" ]]; then
+          elif [[ "$USE_SANTCASP" == "true" ]]; then
             echo "tag=" >> "$GITHUB_OUTPUT"
             echo "label=dev" >> "$GITHUB_OUTPUT"
           else
