@@ -50,7 +50,7 @@ jobs:
             if ! shellcheck -x -S warning "$f"; then FAILED=1; fi
           done
           # Client scripts
-          for f in client/common/scripts/*.sh client/tests/*.sh; do
+          for f in client/common/scripts/*.sh client/tests/*.sh client/dev/*.sh client/dev/git-hooks/*; do
             [ -f "$f" ] || continue
             echo "  Checking $f"
             if ! shellcheck -x -S warning "$f"; then FAILED=1; fi
