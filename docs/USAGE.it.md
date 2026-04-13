@@ -464,7 +464,7 @@ Prepara una scheda SD che installa automaticamente snapMULTI al primo avvio. Nes
 
 2. Mantieni la SD montata ed esegui:
    ```bash
-   git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
+   git clone https://github.com/lollonet/snapMULTI.git
    ./snapMULTI/scripts/prepare-sd.sh
    ```
 
@@ -477,7 +477,7 @@ Prepara una scheda SD che installa automaticamente snapMULTI al primo avvio. Nes
 
 **Su Windows (PowerShell):**
 ```powershell
-git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
+git clone https://github.com/lollonet/snapMULTI.git
 .\snapMULTI\scripts\prepare-sd.ps1
 ```
 

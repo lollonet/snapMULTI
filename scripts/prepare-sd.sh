@@ -494,7 +494,8 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     echo "${SERVER_VERSION#v}" > "$DEST/server/.version"
 fi
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
-    CLIENT_VERSION=$(git -C "$CLIENT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
+    # Client is part of the monorepo — use project-level git tags
+    CLIENT_VERSION=$(git -C "$PROJECT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
     echo "$CLIENT_VERSION" > "$DEST/client/VERSION"
 fi
 

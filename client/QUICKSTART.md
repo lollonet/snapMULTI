@@ -43,8 +43,8 @@ See the [Supported Audio HATs](README.md#supported-audio-hats) table in the READ
 From your computer, clone the repo and copy files to the Pi:
 
 ```bash
-git clone https://github.com/lollonet/snapclient-pi.git
-scp -r snapclient-pi <username>@<hostname>.local:/home/<username>/
+git clone https://github.com/lollonet/snapMULTI.git
+scp -r snapMULTI/client <username>@<hostname>.local:/home/<username>/snapclient-pi
 ```
 
 Then SSH into the Pi:
