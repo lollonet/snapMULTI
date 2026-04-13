@@ -44,22 +44,11 @@ function Find-BootPartition {
     return $null
 }
 
-# ── Check client submodule ────────────────────────────────────────
-function Assert-ClientSubmodule {
-    # .git is a file (gitlink) in submodules, a directory in standalone clones
-    $gitMarker = Join-Path $ClientDir '.git'
-    if (-not (Test-Path $gitMarker)) {
-        if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-            throw "Git is not installed. Please install Git for Windows: https://git-scm.com/download/win"
-        }
-        Write-Host 'Client submodule not initialized. Fetching...'
-        & git -C $ProjectDir submodule update --init --recursive
-        if ($LASTEXITCODE -ne 0) {
-            throw "git submodule update failed (exit code $LASTEXITCODE). Is Git installed?"
-        }
-        if (-not (Test-Path $gitMarker)) {
-            throw 'client/ submodule is missing. Run: git submodule update --init --recursive'
-        }
+# ── Check client directory ────────────────────────────────────────
+function Assert-ClientDir {
+    $setupSh = Join-Path $ClientDir 'common' 'scripts' 'setup.sh'
+    if (-not (Test-Path $setupSh)) {
+        throw "client/ directory is missing or incomplete. Expected: $setupSh"
     }
 }
 
@@ -368,9 +357,9 @@ if (-not (Test-Path $configTxt) -and -not (Test-Path $cmdlineTxt)) {
 Show-Menu
 $InstallType = Get-InstallType
 
-# Check client submodule if needed
+# Check client directory if needed
 if ($InstallType -in @('client', 'both')) {
-    Assert-ClientSubmodule
+    Assert-ClientDir
 }
 
 Write-Host ''

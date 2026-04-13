@@ -20,21 +20,12 @@ CLIENT_DIR="$PROJECT_DIR/client"
 # shellcheck source=common/sanitize.sh
 source "$SCRIPT_DIR/common/sanitize.sh"
 
-# ── Preflight: check submodule ────────────────────────────────────
-check_client_submodule() {
-    # .git is a file (gitlink) in submodules, a directory in standalone clones
-    if [[ ! -d "$CLIENT_DIR/.git" ]] && [[ ! -f "$CLIENT_DIR/.git" ]]; then
-        echo "Client submodule not initialized. Fetching..."
-        if ! git -C "$PROJECT_DIR" submodule update --init --recursive; then
-            echo "ERROR: Failed to fetch client submodule (check network connection)"
-            echo "  Run manually: git submodule update --init --recursive"
-            exit 1
-        fi
-        if [[ ! -d "$CLIENT_DIR/.git" ]] && [[ ! -f "$CLIENT_DIR/.git" ]]; then
-            echo "ERROR: client/ submodule still missing after fetch"
-            echo "  Run: git submodule update --init --recursive"
-            exit 1
-        fi
+# ── Preflight: check client directory ─────────────────────────────
+check_client_dir() {
+    if [[ ! -d "$CLIENT_DIR/common/scripts" ]]; then
+        echo "ERROR: client/ directory is missing or incomplete."
+        echo "  Expected: $CLIENT_DIR/common/scripts/setup.sh"
+        exit 1
     fi
 }
 
@@ -398,9 +389,9 @@ fi
 show_menu
 INSTALL_TYPE=$(get_install_type)
 
-# Check client submodule if needed
+# Check client directory if needed
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
-    check_client_submodule
+    check_client_dir
 fi
 
 echo ""
