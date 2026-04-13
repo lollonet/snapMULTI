@@ -742,30 +742,43 @@ sudo bash /boot/firmware/snapmulti/firstboot.sh
 
 ## Aggiornamento
 
-snapMULTI ha due meccanismi di aggiornamento: **Watchtower** per aggiornamenti automatici delle immagini Docker e **update.sh** per aggiornamenti di configurazione e script.
+Il metodo consigliato è il **reflash della scheda SD**. snapMULTI è progettato come un elettrodomestico — tutta la configurazione è auto-rilevata, quindi una nuova installazione equivale a un aggiornamento senza rischi di bug da upgrade.
 
-> **Filesystem read-only (installazioni da SD):** Se il tuo Pi usa la modalità read-only (abilitata di default sulle installazioni client), devi disabilitarla prima di aggiornare:
-> ```bash
-> sudo ro-mode disable && sudo reboot
-> ```
-> Dopo l'aggiornamento, riabilita con `sudo ro-mode enable && sudo reboot`.
+### Reflash (Consigliato)
 
-### Aggiornamenti Automatici delle Immagini (Watchtower)
+L'unico dato da preservare tra un reflash e l'altro è il **database musicale MPD** (`mpd.db`). Senza di esso, MPD riscansiona l'intera libreria al primo avvio — operazione che può richiedere ore via NFS.
 
-Aggiornamenti automatici opt-in delle immagini Docker. Watchtower monitora i container in esecuzione e scarica nuove immagini `:latest` secondo una pianificazione.
+Un timer systemd sul Pi esegue automaticamente il backup di `mpd.db` sulla partizione di boot ogni giorno. Prima del reflash:
 
-**Abilitare:**
 ```bash
-# Aggiungi a /opt/snapmulti/.env:
+# 1. Rimuovi la SD dal Pi, inseriscila nel computer
+# 2. Estrai il backup del database MPD:
+./scripts/backup-from-sd.sh
+
+# 3. Flasha con Pi Imager (cancella la SD)
+# 4. Esegui prepare-sd.sh — include mpd.db automaticamente:
+./scripts/prepare-sd.sh
+
+# 5. Inserisci la SD, accendi → MPD scansiona in modo incrementale (secondi, non ore)
+```
+
+`backup-from-sd.sh` rileva automaticamente il punto di mount della SD e salva `mpd.db` nella cartella del progetto dove `prepare-sd.sh` lo trova.
+
+> **Nessun database MPD?** Se è una installazione nuova o usi solo sorgenti streaming (Spotify, AirPlay, Tidal), salta il passo 2 — non c'è nulla da salvare.
+
+### Aggiornamenti Automatici Immagini (Watchtower) — opt-in
+
+Per utenti avanzati che preferiscono aggiornamenti in-place delle immagini Docker senza reflash. Disabilitato di default.
+
+> **Non consigliato per installazioni read-only o client.** Watchtower scarica nuove immagini nello storage Docker. Sui sistemi overlayroot (client, Pi Zero), le immagini sono in tmpfs RAM e si perdono al riavvio. Usa il reflash.
+
+```bash
+# Abilitare: aggiungi a /opt/snapmulti/.env:
 AUTO_UPDATE=true
 
 # Riavvia con il profilo auto-update:
 COMPOSE_PROFILES=auto-update docker compose up -d
 ```
-
-Oppure riesegui `deploy.sh` — rileva `AUTO_UPDATE=true` e aggiunge `auto-update` a `COMPOSE_PROFILES` automaticamente.
-
-**Configurazione** (in `.env`):
 
 | Variabile | Default | Descrizione |
 |-----------|---------|-------------|
@@ -773,55 +786,22 @@ Oppure riesegui `deploy.sh` — rileva `AUTO_UPDATE=true` e aggiunge `auto-updat
 | `UPDATE_SCHEDULE` | `0 0 3 * * *` | Pianificazione cron (default: ogni giorno alle 3:00) |
 | `UPDATE_NOTIFY_URL` | (nessuno) | URL notifiche ([formato shoutrrr](https://containrrr.dev/shoutrrr/)) |
 
-**Cosa viene aggiornato:**
-- `lollonet/snapmulti-server`, `-airplay`, `-mpd`, `-metadata`, `-tidal` (immagini `:latest`)
+**Cosa aggiorna Watchtower:** immagini `lollonet/snapmulti-*` (solo tag `:latest`)
 
-**Cosa NON viene aggiornato:**
-- `go-librespot` (fissato a `v0.7.0`)
-- `mympd` (immagine di terze parti, fissata)
-- File di configurazione, script, docker-compose.yml (usa `update.sh` per quelli)
+**Cosa NON aggiorna:** immagini fissate (go-librespot, mympd), file di configurazione, script
 
-### Aggiornamenti Config e Script (update.sh)
+### Aggiornamenti Config e Script (update.sh) — avanzato
 
-Per aggiornare file di configurazione, script e docker-compose.yml dalle release GitHub. Funziona senza git — progettato per installazioni da SD card.
+Per aggiornare file di configurazione, script e docker-compose.yml dalle release GitHub via SSH. Funziona senza git.
 
 ```bash
 # Controlla aggiornamenti disponibili
 sudo /opt/snapmulti/scripts/update.sh --check
 
-# Applica aggiornamento (interattivo)
+# Applica aggiornamento
 sudo /opt/snapmulti/scripts/update.sh
-
-# Applica aggiornamento (non interattivo, es. da cron)
-sudo /opt/snapmulti/scripts/update.sh --force
 ```
 
 **Cosa viene aggiornato:** `config/`, `scripts/`, `docker-compose.yml`, `Dockerfile.*`, `.env.example`
 
 **Cosa NON viene MAI toccato:** `.env`, `audio/`, `artwork/`, `mpd/`, `mympd/`, `data/`
-
-**Sicurezza:** Rifiuta di attraversare i confini di versione maggiore (es. v0.x → v1.x). Gli aggiornamenti maggiori richiedono intervento manuale.
-
-### Aggiornamento Standard (con git)
-
-Se hai clonato il repo con git:
-
-```bash
-cd /opt/snapmulti
-git pull
-docker compose pull
-docker compose up -d
-```
-
-### Rollback
-
-Se un aggiornamento causa problemi:
-```bash
-# Usa una versione specifica dell'immagine
-docker pull lollonet/snapmulti-server:v0.3.5
-docker compose up -d
-
-# Oppure ripristina la configurazione dal backup
-cp -r config.backup/* config/
-docker compose up -d
-```
