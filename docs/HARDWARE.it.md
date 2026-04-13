@@ -263,63 +263,36 @@ Questo garantisce uno streaming audio consistente anche durante la congestione d
 
 ## Configurazioni Consigliate
 
-Prezzi indicativi (marzo 2026), mercato IT. Fonti: [Amazon IT](https://www.amazon.it), [hifiberry.com](https://www.hifiberry.com) (prezzi in EUR, spedizione dall'estero), [inno-maker.com](https://www.inno-maker.com).
+### Starter — 2 stanze
 
-### Configurazione HiFiBerry (~€200)
+| Nodo | Hardware | Uscita audio |
+|------|----------|-------------|
+| Server + Client | Pi 4 (4 GB) + HiFiBerry DAC2 Pro | RCA analogico |
+| Client (headless) | Pi Zero 2 W + HiFiBerry DAC+ Zero | RCA analogico |
 
-Due nodi: un server+client in co-locazione, un client solo audio in una seconda stanza.
+> Il Pi Zero 2 W richiede di saldare un header GPIO (oppure comprare la variante WH con header pre-saldato). **Solo WiFi** — nessuna porta Ethernet, solo 2,4 GHz.
 
-**Nodo 1 — Server + Client in co-locazione (Pi 4 4 GB)**
+### Budget — 2 stanze (tutto disponibile su Amazon)
 
-| Ruolo | Hardware | Costo |
-|-------|----------|-------|
-| Server + Client (Pi 4 4 GB + HiFiBerry DAC2 Pro) | Raspberry Pi 4 4 GB + HiFiBerry DAC2 Pro + accessori | ~€135 |
+| Nodo | Hardware | Uscita audio |
+|------|----------|-------------|
+| Server + Client | Pi 4 (2 GB) + InnoMaker HiFi DAC HAT (PCM5122) | RCA + 3.5mm |
+| Client (headless) | Pi 3 B+ + InnoMaker DAC Mini HAT (PCM5122) | RCA + 3.5mm |
 
-**Nodo 2 — Client minimale (Pi Zero 2 W) — solo audio, senza display**
+> Il Pi 4 2 GB è sufficiente per solo server (~309 MiB RAM a riposo). Per server + client con display, il modello 4 GB è preferito.
 
-| Ruolo | Hardware | Costo |
-|-------|----------|-------|
-| Client (Pi Zero 2 W + HiFiBerry DAC+ Zero) | Pi Zero 2 W + DAC+ Zero + accessori | ~€65 |
+### Entusiasta — 4+ stanze
 
-> Schede HiFiBerry ordinate direttamente da [hifiberry.com](https://www.hifiberry.com) (spedizione da Svizzera, 3–5 gg lavorativi in Italia).
+| Nodo | Hardware | Connessione |
+|------|----------|------------|
+| Server | Intel NUC o mini PC (x86_64) | Ethernet |
+| Client × 3+ | Pi Zero 2 W + HiFiBerry DAC+ Zero | WiFi (2,4 GHz) |
 
-**Sistema totale: ~€200**
+> I client Pi Zero si connettono via WiFi (nessuna porta Ethernet). Il server dovrebbe usare Ethernet per affidabilità. Uno switch gestito è utile se hai anche client cablati (Pi 3/4).
 
----
+### Alternativa: S/PDIF verso Ricevitore AV
 
-### Alternativa Budget — InnoMaker PCM5122 (~€175)
-
-Tutti i componenti disponibili su [Amazon IT](https://www.amazon.it) — nessun ordine internazionale necessario.
-
-| Ruolo | Hardware | Costo |
-|-------|----------|-------|
-| Server + Client (Pi 4 2 GB + InnoMaker HiFi DAC HAT) | Raspberry Pi 4 2 GB + [InnoMaker HiFi DAC HAT](https://www.amazon.it/s?k=innomaker+hifi+dac+hat+pcm5122) (PCM5122) + accessori | ~€100 |
-| Client (Pi 3B+ + InnoMaker DAC Mini HAT) | Raspberry Pi 3B+ + [InnoMaker DAC Mini HAT](https://www.amazon.it/s?k=innomaker+dac+mini+hat+pcm5122) (PCM5122) + accessori | ~€75 |
-
-> **Nota sul Pi 4 2 GB come server:** Tutti e sette i servizi server usano ~309 MiB di RAM a riposo (limiti 1.056M nel profilo standard). Il Pi 4 2 GB lascia ~792 MB di margine dopo i limiti — confortevole per solo server. Per server + client con display (limiti combinati 1.504M), il margine scende a ~344 MB — stretto, il modello 4 GB è preferito.
-
-**Sistema totale: ~€175**
-
----
-
-### Uscita Audio Alternativa — S/PDIF verso Ricevitore AV
-
-Se un nodo è collegato a un ricevitore AV o sistema home theatre via cavo ottico, usa [HiFiBerry Digi+](https://www.hifiberry.com/shop/boards/hifiberry-digi/) (€29,90) al posto del DAC HAT. Questo sposta la conversione D/A al tuo ricevitore.
-
-| Sostituisci | Con | Risparmio |
-|-------------|-----|-----------|
-| HiFiBerry DAC2 Pro (€44,90) | HiFiBerry Digi+ (€29,90) | −€15 per nodo |
-| InnoMaker HiFi DAC HAT (~€27) | HiFiBerry Digi+ (€29,90) | +~€3 per nodo (ma con uscita ottica) |
-
----
-
-### Configurazione Entusiasta (~€385+)
-
-| Ruolo | Hardware | Costo |
-|-------|----------|-------|
-| Server | Intel NUC o mini PC (x86_64) | ~€150+ |
-| Client × 3 | Pi Zero 2 W + HiFiBerry DAC+ Zero + accessori ciascuno | ~€65 × 3 = €195 |
-| Rete | Switch gestito ([TP-Link TL-SG105E](https://www.amazon.it/s?k=tp-link+tl-sg105e)) | ~€25 |
+Se un nodo è collegato a un ricevitore AV via cavo ottico, usa HiFiBerry Digi+ al posto del DAC HAT. Questo sposta la conversione D/A al tuo ricevitore — qualità migliore se il tuo ricevitore ha un buon DAC.
 
 ## Combinazioni Testate
 
