@@ -1,4 +1,4 @@
-# CLAUDE.md — snapclient-pi
+# CLAUDE.md — snapMULTI Client
 
 Raspberry Pi Snapcast client with auto-detection, Docker services, and framebuffer display.
 **Requires snapMULTI server** — lives at `client/` in the snapMULTI monorepo.

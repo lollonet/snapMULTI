@@ -1,4 +1,4 @@
-# SnapClient Pi
+# snapMULTI Client
 
 > Raspberry Pi Snapcast client with HiFiBerry support and cover display.
 
