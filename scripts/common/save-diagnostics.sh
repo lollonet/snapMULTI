@@ -73,7 +73,27 @@ if command -v aplay &>/dev/null; then
 fi
 cat /proc/asound/cards > "$SNAPSHOT/asound-cards.log" 2>/dev/null || true
 
-# 8. System state
+# 8. Audio FIFO health
+{
+    echo "=== FIFO status ==="
+    for fifo in /audio/*_fifo; do
+        [[ -e "$fifo" ]] || continue
+        name=$(basename "$fifo")
+        if [[ -p "$fifo" ]]; then
+            readers=$(fuser "$fifo" 2>/dev/null | wc -w) || readers=0
+            echo "$name: pipe exists, $readers process(es) attached"
+        else
+            echo "$name: NOT A PIPE (type: $(stat -c %F "$fifo" 2>/dev/null || echo unknown))"
+        fi
+    done
+    echo "=== container restarts ==="
+    docker ps --format '{{.Names}}\t{{.Status}}' 2>/dev/null | while IFS=$'\t' read -r name status; do
+        restarts=$(docker inspect --format '{{.RestartCount}}' "$name" 2>/dev/null) || restarts=0
+        [[ "$restarts" -gt 0 ]] && echo "WARNING: $name restarted $restarts times ($status)"
+    done
+} > "$SNAPSHOT/audio-health.log" 2>/dev/null || true
+
+# 9. System state
 {
     echo "=== uptime ==="
     uptime
@@ -92,7 +112,7 @@ cat /proc/asound/cards > "$SNAPSHOT/asound-cards.log" 2>/dev/null || true
     fi
 } > "$SNAPSHOT/system.log" 2>/dev/null || true
 
-# 9. Network state (brief)
+# 10. Network state (brief)
 {
     echo "=== interfaces ==="
     ip -brief addr 2>/dev/null
