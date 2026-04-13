@@ -21,8 +21,18 @@ if ! declare -F log_info &>/dev/null; then
     }
 fi
 
+# Check if a compose service image already exists locally.
+_image_exists() {
+    local svc="$1"
+    local image
+    image=$(docker compose config --format json 2>/dev/null \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['services']['$svc']['image'])" 2>/dev/null) || return 1
+    docker image inspect "$image" >/dev/null 2>&1
+}
+
 # Pull a single service with 3-attempt retry.
 # Output suppressed on success, last 5 lines surfaced on failure.
+# Detects rate limit (429) and fails fast.
 # Requires: _pi_tmp (temp directory set by pull_compose_images)
 _pull_one() {
     local svc="$1"
@@ -35,6 +45,13 @@ _pull_one() {
             rm -f "$log"
             return 0
         fi
+        # Detect Docker Hub rate limit — no point retrying
+        if grep -qi "too many requests\|rate limit\|429" "$log" 2>/dev/null; then
+            log_warn "Docker Hub rate limit hit — run 'sudo docker login' for higher limits"
+            tail -3 "$log"
+            rm -f "$log"
+            return 2  # special exit code: rate limited
+        fi
     done
     tail -5 "$log"
     rm -f "$log"
@@ -42,6 +59,7 @@ _pull_one() {
 }
 
 # Pull all compose services with parallel execution (2 at a time).
+# Skips services whose images already exist locally.
 # Args: log_fn min_disk_mb [pull_fail_callback]
 pull_compose_images() {
     local log_fn="${1:-echo}"
@@ -64,7 +82,22 @@ pull_compose_images() {
         return 1
     fi
 
-    local total=${#services[@]}
+    # Filter out services whose images already exist
+    local to_pull=()
+    for svc in "${services[@]}"; do
+        if _image_exists "$svc"; then
+            "$log_fn" "$svc: image exists, skipping pull"
+        else
+            to_pull+=("$svc")
+        fi
+    done
+
+    if [[ ${#to_pull[@]} -eq 0 ]]; then
+        "$log_fn" "All ${#services[@]} images already present"
+        return 0
+    fi
+
+    local total=${#to_pull[@]}
     local count=0
 
     # Temp directory for pull output (cleaned up on function return).
@@ -73,11 +106,14 @@ pull_compose_images() {
     trap 'rm -rf "$_pi_tmp"' RETURN
 
     local pull_failed=()
+    local rate_limited=false
 
     # Pull in pairs: background + foreground
-    for ((i=0; i<${#services[@]}; i+=2)); do
-        local svc1="${services[$i]}"
-        local svc2="${services[$i+1]:-}"
+    for ((i=0; i<${#to_pull[@]}; i+=2)); do
+        if [[ "$rate_limited" == "true" ]]; then break; fi
+
+        local svc1="${to_pull[$i]}"
+        local svc2="${to_pull[$i+1]:-}"
 
         count=$((count + 1))
         "$log_fn" "Pulling $svc1 ($count/$total)..."
@@ -93,7 +129,12 @@ pull_compose_images() {
         fi
 
         # svc1 in foreground
-        if ! _pull_one "$svc1" "$log_fn"; then
+        local rc=0
+        _pull_one "$svc1" "$log_fn" || rc=$?
+        if [[ $rc -eq 2 ]]; then
+            rate_limited=true
+            pull_failed+=("$svc1")
+        elif [[ $rc -ne 0 ]]; then
             if [[ -n "$fail_callback" ]] && "$fail_callback" "$svc1"; then
                 :  # callback handled it
             else
@@ -105,6 +146,9 @@ pull_compose_images() {
         if [[ -n "$bg_pid" ]]; then
             if ! wait "$bg_pid" 2>/dev/null; then
                 cat "$bg_log" 2>/dev/null
+                if grep -qi "too many requests\|rate limit\|429" "$bg_log" 2>/dev/null; then
+                    rate_limited=true
+                fi
                 if [[ -n "$fail_callback" ]] && "$fail_callback" "$svc2"; then
                     :  # callback handled it
                 else
@@ -117,6 +161,12 @@ pull_compose_images() {
 
     # Prune dangling images
     docker image prune -f >/dev/null 2>&1 || true
+
+    if [[ "$rate_limited" == "true" ]]; then
+        log_error "Docker Hub rate limit reached. Run 'sudo docker login' for higher limits."
+        log_error "Then retry: docker compose pull"
+        return 1
+    fi
 
     if [[ ${#pull_failed[@]} -gt 0 ]]; then
         log_error "Failed to pull after 3 attempts: ${pull_failed[*]}"
