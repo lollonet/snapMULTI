@@ -28,10 +28,15 @@ if [[ -f "$MARKER" ]]; then
     exit 0
 fi
 if [[ -f "$FAILED_MARKER" ]]; then
-    echo "Previous install failed. Check /var/log/snapmulti-install.log"
-    echo "Remove $FAILED_MARKER to retry."
-    exit 1
+    # Allow retry: remove failed marker and resume from last checkpoint
+    rm -f "$FAILED_MARKER"
+    echo "Retrying install from last checkpoint..."
 fi
+
+# Checkpoint helpers: skip completed phases on retry after power loss / crash.
+# Each checkpoint is a file in INSTALLER_STATE named after the phase.
+checkpoint_done()    { touch "$INSTALLER_STATE/.done-$1"; }
+checkpoint_reached() { [[ -f "$INSTALLER_STATE/.done-$1" ]]; }
 
 # Detect boot partition
 if [[ -d /boot/firmware ]]; then
@@ -341,9 +346,14 @@ fi
 set_module "deps"
 next_step "Installing git and dependencies..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-# shellcheck source=common/install-deps.sh
-source "$COMMON/install-deps.sh"
-install_dependencies
+if checkpoint_reached "deps"; then
+    log_info "Dependencies already installed (checkpoint), skipping"
+else
+    # shellcheck source=common/install-deps.sh
+    source "$COMMON/install-deps.sh"
+    install_dependencies
+    checkpoint_done "deps"
+fi
 milestone "$CURRENT_STEP" "System dependencies installed" 2 2>/dev/null || true
 
 # ══════════════════════════════════════════════════════════════════
@@ -352,15 +362,27 @@ milestone "$CURRENT_STEP" "System dependencies installed" 2 2>/dev/null || true
 set_module "docker"
 next_step "Installing Docker..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-# shellcheck source=common/setup-docker.sh
-source "$COMMON/setup-docker.sh"
-setup_docker
+if checkpoint_reached "docker"; then
+    log_info "Docker already installed (checkpoint), skipping"
+else
+    # shellcheck source=common/setup-docker.sh
+    source "$COMMON/setup-docker.sh"
+    setup_docker
+    checkpoint_done "docker"
+fi
 milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
 
 # ══════════════════════════════════════════════════════════════════
 # SERVER INSTALL
 # ══════════════════════════════════════════════════════════════════
 if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+  if checkpoint_reached "deploy"; then
+    set_module "deploy"
+    log_info "Server deploy already complete (checkpoint), skipping"
+    next_step "Deploy server (cached)..."
+    set_module "verify-server"
+    next_step "Verifying server (cached)..."
+  else
     set_module "deploy"
     next_step "Deploy server..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
@@ -441,12 +463,21 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
             log_warn "  $line"
         done
     fi
+    checkpoint_done "deploy"
+  fi  # checkpoint guard
 fi
 
 # ══════════════════════════════════════════════════════════════════
 # CLIENT INSTALL
 # ══════════════════════════════════════════════════════════════════
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+  if checkpoint_reached "setup"; then
+    set_module "setup"
+    log_info "Client setup already complete (checkpoint), skipping"
+    next_step "Setup client (cached)..."
+    set_module "verify-client"
+    next_step "Verifying client (cached)..."
+  else
     set_module "setup"
 
     DISPLAY_MODE="framebuffer"
@@ -555,6 +586,8 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
             log_warn "  $line"
         done
     fi
+    checkpoint_done "setup"
+  fi  # checkpoint guard
 fi
 
 # ══════════════════════════════════════════════════════════════════

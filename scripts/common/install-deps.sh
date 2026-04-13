@@ -28,12 +28,14 @@ fi
 
 # Wait for background apt (unattended-upgrades, cloud-init)
 _wait_for_apt_lock() {
-    local _apt_wait
-    for _apt_wait in $(seq 1 60); do
-        fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || return 0
+    local _apt_deadline=$(( SECONDS + 300 ))
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+        if [[ $SECONDS -ge $_apt_deadline ]]; then
+            log_warn "apt lock still held after 5 minutes — proceeding anyway"
+            return 0
+        fi
         sleep 5
     done
-    log_warn "apt lock still held after 5 minutes — proceeding anyway"
 }
 
 # Install with automatic recovery on failure
