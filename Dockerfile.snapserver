@@ -18,8 +18,8 @@ RUN --mount=type=cache,target=/var/cache/apk \
     soxr-dev
 
 WORKDIR /build
-# Build from upstream badaix/snapcast.
-# develop branch overrides SNAPCAST_REPO to lollonet/santcasp fork.
+# Build from upstream badaix/snapcast (default).
+# CI passes SNAPCAST_REPO=santcasp via workflow_dispatch for :dev builds.
 ARG SNAPCAST_REPO=https://github.com/badaix/snapcast.git
 ARG SNAPCAST_BRANCH=master
 ARG SNAPCAST_SHA=latest
