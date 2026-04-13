@@ -538,16 +538,19 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     next_step "Verifying client..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
     local_client_healthy=false
+    local_client_compose=(-f "$CLIENT_DIR/docker-compose.yml")
     for attempt in $(seq 1 12); do
-        if docker compose -f "$CLIENT_DIR/docker-compose.yml" ps --status healthy -q 2>/dev/null | grep -q .; then
-            log_info "Client container healthy"
+        local_running=$(docker compose "${local_client_compose[@]}" ps --status running -q 2>/dev/null | wc -l)
+        local_healthy=$(docker compose "${local_client_compose[@]}" ps --status healthy -q 2>/dev/null | wc -l)
+        if [[ "$local_running" -ge 1 ]] || [[ "$local_healthy" -ge 1 ]]; then
+            log_info "Client container running"
             local_client_healthy=true
             break
         fi
         sleep 5
     done
     if [[ "$local_client_healthy" == "false" ]]; then
-        log_warn "snapclient not healthy after 60s"
+        log_warn "snapclient not running after 60s"
         docker compose -f "$CLIENT_DIR/docker-compose.yml" ps --format 'table {{.Name}}\t{{.Status}}' 2>/dev/null | while read -r line; do
             log_warn "  $line"
         done
@@ -568,9 +571,9 @@ else
     if declare -F _wait_for_apt_lock &>/dev/null; then
         _wait_for_apt_lock
     fi
-    if ! apt-get update >/dev/null 2>&1; then
+    if ! apt-get update >>"$UNIFIED_LOG" 2>&1; then
         log_warn "Final apt-get update failed (non-fatal)"
-    elif ! apt-get upgrade -y >/dev/null 2>&1; then
+    elif ! apt-get upgrade -y >>"$UNIFIED_LOG" 2>&1; then
         log_warn "Final apt upgrade failed (non-fatal)"
     else
         log_info "Final package refresh complete"
