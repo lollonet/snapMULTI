@@ -873,7 +873,7 @@ pull_images() {
     local count=0
     local pull_tmp
     pull_tmp=$(mktemp -d)
-    trap 'rm -rf "$pull_tmp"' RETURN
+    trap 'rm -rf "$pull_tmp"' RETURN EXIT
 
     # Pull a single service with 3-attempt retry.
     # Output is suppressed on success and surfaced on failure.
