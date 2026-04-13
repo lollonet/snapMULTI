@@ -85,11 +85,11 @@ setup_docker() {
             return 1
         fi
 
-        # Council fix #2: verify binary works BEFORE wiping Docker storage
+        # Verify binary works BEFORE wiping Docker storage
         if ! fuse-overlayfs --version >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
             log_error "fuse-overlayfs installed but binary is broken"
-            log_warn "Keeping current Docker storage driver to avoid data loss"
-            return 0
+            log_error "Read-only mode cannot be configured — aborting storage switch"
+            return 1
         fi
 
         log_info "Verified fuse-overlayfs binary"
