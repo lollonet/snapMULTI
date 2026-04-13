@@ -1,0 +1,167 @@
+# snapclient-pi Docker Compose
+# Resource profiles auto-detected by setup.sh: minimal | standard | performance
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-security: &default-security
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  snapclient:
+    image: lollonet/snapclient-pi:${IMAGE_TAG:-latest}
+    container_name: snapclient
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+    user: "${PUID:-1000}:${PGID:-1000}"
+    group_add:
+      - "29"           # audio — access /dev/snd/*
+    devices:
+      - /dev/snd:/dev/snd
+    volumes:
+      - /var/run/dbus:/var/run/dbus
+      - /var/run/avahi-daemon/socket:/var/run/avahi-daemon/socket
+      - /etc/asound.conf:/etc/asound.conf:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - ./docker/snapclient/entrypoint.sh:/entrypoint.sh:ro
+    environment:
+      - SNAPSERVER_HOST=${SNAPSERVER_HOST:-}
+      - SNAPSERVER_PORT=${SNAPSERVER_PORT:-1704}
+      - TZ=${TZ:-Europe/Rome}
+      - HOST_ID=${CLIENT_ID:?CLIENT_ID not set in .env}
+      - SOUNDCARD=${SOUNDCARD:-default}
+      - ALSA_BUFFER_TIME=${ALSA_BUFFER_TIME:-150}
+      - ALSA_FRAGMENTS=${ALSA_FRAGMENTS:-4}
+      - MIXER=${MIXER:-software}
+    # Audio requires specific capabilities instead of full privileged mode
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_NICE       # Real-time audio scheduling
+      - IPC_LOCK       # Lock memory for low-latency audio
+      - SYS_RESOURCE   # Set resource limits for audio buffers
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pidof snapclient || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: ${SNAPCLIENT_MEM_LIMIT:-64M}
+          cpus: '${SNAPCLIENT_CPU_LIMIT:-0.5}'
+        reservations:
+          memory: ${SNAPCLIENT_MEM_RESERVE:-32M}
+
+  # Metadata is served by the snapMULTI server (ports 8082 WS, 8083 HTTP).
+  # fb-display derives METADATA_HOST from SNAPSERVER_HOST (same server).
+
+  audio-visualizer:
+    image: lollonet/snapclient-pi-visualizer:${IMAGE_TAG:-latest}
+    build: ./docker/audio-visualizer
+    container_name: audio-visualizer
+    profiles:
+      - framebuffer
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+    user: "${PUID:-1000}:${PGID:-1000}"
+    group_add:
+      - "29"           # audio — access /dev/snd/*
+    <<: *default-security
+    cap_add:
+      - SYS_NICE  # Audio priority
+    devices:
+      - /dev/snd:/dev/snd
+    volumes:
+      - ./docker/audio-visualizer/visualizer.py:/app/visualizer.py:ro
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      - VISUALIZER_WS_PORT=8081
+      - LOOPBACK_DEVICE=hw:Loopback,1,0
+      - SAMPLE_RATE=${SAMPLE_RATE:-44100}
+      - BAND_MODE=${BAND_MODE:-third-octave}
+    logging: *default-logging
+    healthcheck:
+      # Use process check - raw TCP connect spams websocket error logs
+      test: ["CMD-SHELL", "pidof python3 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      snapclient:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: ${VISUALIZER_MEM_LIMIT:-128M}
+          cpus: '${VISUALIZER_CPU_LIMIT:-1.0}'
+        reservations:
+          memory: ${VISUALIZER_MEM_RESERVE:-64M}
+
+  fb-display:
+    image: lollonet/snapclient-pi-fb-display:${IMAGE_TAG:-latest}
+    build: ./docker/fb-display
+    container_name: fb-display
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+    user: "${PUID:-1000}:${PGID:-1000}"
+    group_add:
+      - "44"           # video — access /dev/fb0
+    profiles:
+      - framebuffer
+    network_mode: host
+    <<: *default-security
+    devices:
+      - /dev/fb0:/dev/fb0
+    volumes:
+      - ./public:/app/public:ro
+      - ./docker/fb-display/fb_display.py:/app/fb_display.py:ro
+      - ./docker/fb-display/logo.png:/app/logo.png:ro
+      - ./docker/fb-display/snapforge-text.png:/app/snapforge-text.png:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      - DISPLAY_RESOLUTION=${DISPLAY_RESOLUTION:-}
+      - VISUALIZER_WS_PORT=8081
+      - METADATA_WS_PORT=8082
+      - METADATA_HOST=${SNAPSERVER_HOST:-localhost}
+      - METADATA_HTTP_PORT=8083
+      - CLIENT_ID=${CLIENT_ID:?CLIENT_ID not set in .env}
+      - APP_VERSION=${APP_VERSION:-}
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pidof python3 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      audio-visualizer:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: ${FBDISPLAY_MEM_LIMIT:-256M}
+          cpus: '${FBDISPLAY_CPU_LIMIT:-1.0}'
+        reservations:
+          memory: ${FBDISPLAY_MEM_RESERVE:-128M}
