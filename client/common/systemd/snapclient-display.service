@@ -1,0 +1,18 @@
+[Unit]
+Description=Snapclient display detection and container reconciliation
+After=docker.socket docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/snapclient/scripts/display-detect.sh
+WorkingDirectory=/opt/snapclient
+StandardOutput=journal
+StandardError=journal
+RemainAfterExit=yes
+# Retry if Docker daemon is slow at first boot (30s wait may expire)
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
