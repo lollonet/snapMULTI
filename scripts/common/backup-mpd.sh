@@ -48,7 +48,7 @@ fi
 
 # Remount boot partition read-write
 mount -o remount,rw "$BOOT" 2>/dev/null || true
-trap 'mount -o remount,ro "$BOOT" 2>/dev/null || true' EXIT
+trap '[[ "${MPD_DB:-}" == /tmp/* ]] && rm -f "$MPD_DB"; mount -o remount,ro "$BOOT" 2>/dev/null || true' EXIT
 
 mkdir -p "$BACKUP_DIR/mpd/data"
 
