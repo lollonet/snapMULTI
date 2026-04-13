@@ -61,7 +61,7 @@ jobs:
       - name: Get latest snapcast commit SHA
         id: snapcast
         run: |
-          SHA=$(git ls-remote https://github.com/lollonet/santcasp.git refs/heads/develop | cut -f1)
+          SHA=$(git ls-remote https://github.com/badaix/snapcast.git HEAD | cut -f1)
           if [[ -z "$SHA" ]]; then
             echo "ERROR: Failed to fetch snapcast HEAD commit"
             exit 1
