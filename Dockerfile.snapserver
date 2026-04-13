@@ -21,9 +21,11 @@ WORKDIR /build
 # Build from upstream badaix/snapcast (default).
 # CI passes SNAPCAST_REPO=santcasp via workflow_dispatch for :dev builds.
 ARG SNAPCAST_REPO=https://github.com/badaix/snapcast.git
+ARG SNAPCAST_TAG=v0.35.0
 ARG SNAPCAST_BRANCH=master
 ARG SNAPCAST_SHA=latest
-RUN git clone --branch "$SNAPCAST_BRANCH" "$SNAPCAST_REPO" . && \
+RUN echo "snapcast: $SNAPCAST_REPO ${SNAPCAST_TAG:-$SNAPCAST_BRANCH} sha:$SNAPCAST_SHA" && \
+    git clone --depth 1 --branch "${SNAPCAST_TAG:-$SNAPCAST_BRANCH}" "$SNAPCAST_REPO" . && \
     mkdir build && cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
           -DBUILD_CLIENT=OFF ..

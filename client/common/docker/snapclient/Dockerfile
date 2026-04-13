@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # CI passes SNAPCAST_REPO=lollonet/santcasp.git via workflow_dispatch for :dev builds.
 ARG SNAPCAST_REPO=https://github.com/badaix/snapcast.git
 ARG SNAPCAST_BRANCH=master
-ARG SNAPCAST_TAG=
+ARG SNAPCAST_TAG=v0.35.0
 ARG SNAPCAST_SHA=latest
 WORKDIR /build
 RUN echo "snapcast repo: $SNAPCAST_REPO branch: ${SNAPCAST_TAG:-$SNAPCAST_BRANCH} sha: $SNAPCAST_SHA" && \
