@@ -188,6 +188,27 @@ cleanup_on_failure() {
         stop_progress_animation 2>/dev/null || true
         log_error "Installation FAILED in module: $CURRENT_MODULE (exit code: $exit_code)"
         log_error "Check log: $UNIFIED_LOG"
+
+        # Diagnostic snapshot — appended to install log for remote troubleshooting
+        {
+            echo ""
+            echo "=== DIAGNOSTIC DUMP (module: $CURRENT_MODULE, exit: $exit_code) ==="
+            echo "--- Memory ---"
+            free -m 2>/dev/null || true
+            echo "--- Disk ---"
+            df -h / /opt 2>/dev/null || true
+            echo "--- Docker ---"
+            docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null || true
+            echo "--- Docker logs (last 10 lines per container) ---"
+            for ctr in $(docker ps -aq 2>/dev/null); do
+                echo ">> $(docker inspect --format '{{.Name}}' "$ctr" 2>/dev/null)"
+                docker logs --tail 10 "$ctr" 2>&1 || true
+            done
+            echo "--- dmesg (last 20 lines) ---"
+            dmesg | tail -20 2>/dev/null || true
+            echo "=== END DIAGNOSTIC DUMP ==="
+        } >> "$UNIFIED_LOG" 2>/dev/null || true
+
         echo "" > /dev/tty1 2>/dev/null || true
         echo "  --- Installation FAILED (module: $CURRENT_MODULE) ---" > /dev/tty1 2>/dev/null || true
         echo "  Check log: $UNIFIED_LOG" > /dev/tty1 2>/dev/null || true
@@ -494,6 +515,10 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
                     ;;
                 *ERROR*|*FAIL*|*WARNING*)
                     log_msg WARN setup "$line"
+                    ;;
+                "Hardware profile:"*|"Detected:"*|"Setup Complete"*|\
+                "Audio HAT:"*|"Configuration Summary:"*|"  - "*)
+                    log_msg INFO setup "$line"
                     ;;
             esac
         fi

@@ -157,6 +157,10 @@ detect_hardware_profile() {
 
     info "Hardware: ${total_ram_mb}MB RAM, ${cpu_cores} CPU cores"
 
+    if [[ $total_ram_mb -lt 512 ]]; then
+        warn "Only ${total_ram_mb}MB RAM — server needs at least 512MB, expect OOM issues"
+    fi
+
     # Determine profile based on hardware
     if [[ -n "$pi_model" ]]; then
         case "$pi_model" in
