@@ -202,23 +202,19 @@ Per la risoluzione dettagliata (mDNS, log, diagnostica), vedi [Guida all'Uso](do
 
 ## Aggiornamento
 
-Collegati via SSH al Pi (dal tuo computer: `ssh <username>@<hostname>.local`), poi esegui:
+Il metodo consigliato è il **reflash della scheda SD** — tutta la configurazione è auto-rilevata, quindi una nuova installazione equivale a un aggiornamento.
 
 ```bash
-# Server
-cd /opt/snapmulti
-git pull
-docker compose pull
-docker compose up -d
+# 1. Estrai il database MPD dalla vecchia SD (preserva l'indice della libreria musicale):
+./scripts/backup-from-sd.sh
 
-# Client (se installato — disabilita prima la modalità read-only: sudo ro-mode disable && sudo reboot)
-cd /opt/snapclient
-git pull
-docker compose pull
-docker compose up -d
+# 2. Flasha con Pi Imager, poi:
+./scripts/prepare-sd.sh          # include il database MPD automaticamente
+
+# 3. Inserisci la SD e accendi — pronto in ~10 minuti
 ```
 
-Per aggiornamenti di versioni maggiori, controlla [CHANGELOG.md](CHANGELOG.md) per le modifiche incompatibili. Per dettagli su Watchtower (aggiornamenti automatici) e update.sh (aggiornamenti config), vedi [Guida all'Uso — Aggiornamento](docs/USAGE.it.md#aggiornamento).
+> **Utenti avanzati:** Watchtower (opt-in) e `update.sh` sono disponibili per aggiornamenti in-place via SSH. Vedi [Guida all'Uso — Aggiornamento](docs/USAGE.it.md#aggiornamento).
 
 ## Documentazione
 
