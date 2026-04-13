@@ -3,8 +3,8 @@
 set -euo pipefail
 
 # Test resource profile detection and limits
-# Sources detect_resource_profile() and set_resource_limits() from setup.sh
-# and detect_hardware()/detect_profile_from_hardware() from resource-detect.sh.
+# Sources detect_hardware()/detect_profile_from_hardware() from resource-detect.sh
+# and detect_resource_profile()/set_resource_limits() from setup.sh (extracted via sed).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SETUP_SH="$SCRIPT_DIR/../common/scripts/setup.sh"
@@ -24,7 +24,10 @@ if [[ -z "$MODULE_DIR" ]]; then
     exit 1
 fi
 
-# Extract set_resource_limits() from setup.sh (source of truth)
+# Source the shared module directly (detect_hardware, detect_profile_from_hardware)
+source "$MODULE_DIR/resource-detect.sh"
+
+# Extract set_resource_limits() from setup.sh (can't source full script — it runs installer logic)
 eval "$(sed -n '/^set_resource_limits()/,/^}/p' "$SETUP_SH")"
 
 pass=0
@@ -44,21 +47,18 @@ test_detect() {
     echo "MemTotal:       $((mem_mb * 1024)) kB" > "$mock_meminfo"
     trap 'rm -f "$mock_meminfo"' RETURN
 
-    # Build a self-contained script with:
-    # 1. The shared module functions (detect_hardware, detect_profile_from_hardware)
-    # 2. detect_resource_profile from setup.sh
-    # Both with /proc/meminfo replaced by mock
-    local module_fns
-    module_fns=$(sed -n '/^detect_hardware()/,/^}$/p; /^detect_profile_from_hardware()/,/^}$/p' "$MODULE_DIR/resource-detect.sh" \
-        | sed "s|/proc/meminfo|$mock_meminfo|g")
+    # Extract detect_resource_profile from setup.sh (calls detect_hardware + detect_profile_from_hardware)
+    # Run in a subshell with mocked /proc/meminfo
     local fn_body
-    fn_body=$(sed -n '/^detect_resource_profile()/,/^}/p' "$SETUP_SH" | sed "s|/proc/meminfo|$mock_meminfo|g")
+    fn_body=$(sed -n '/^detect_resource_profile()/,/^}/p' "$SETUP_SH")
 
     local profile
     profile=$(bash -c "
         log_info() { :; }
         log_warn() { :; }
-        $module_fns
+        source '$MODULE_DIR/resource-detect.sh'
+        # Override /proc/meminfo path in detect_hardware
+        eval \"\$(declare -f detect_hardware | sed 's|/proc/meminfo|$mock_meminfo|g')\"
         $fn_body
         detect_resource_profile
     " 2>/dev/null)
