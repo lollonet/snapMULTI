@@ -64,9 +64,9 @@ jobs:
             REPO="https://github.com/badaix/snapcast.git"
             BRANCH="master"
           fi
-          SHA=$(git ls-remote "$REPO" HEAD | cut -f1)
+          SHA=$(git ls-remote "$REPO" "refs/heads/$BRANCH" | cut -f1)
           if [[ -z "$SHA" ]]; then
-            echo "ERROR: Failed to fetch snapcast HEAD from $REPO"
+            echo "ERROR: Failed to fetch $BRANCH from $REPO"
             exit 1
           fi
           echo "repo=$REPO" >> "$GITHUB_OUTPUT"
