@@ -49,7 +49,9 @@ detect_hardware() {
 
 # Determine resource profile from detected hardware.
 # Call detect_hardware() first. Echoes: minimal|standard|performance
+# Args: [perf_threshold_mb] — RAM threshold for performance (default 4000, server uses 8000)
 detect_profile_from_hardware() {
+    local perf_threshold="${1:-4000}"
     local ram="${DETECTED_RAM_MB:-0}"
     local model="${DETECTED_PI_MODEL:-}"
 
@@ -68,7 +70,7 @@ detect_profile_from_hardware() {
     # Generic detection (non-Pi or unknown model)
     if [[ $ram -lt 2000 ]]; then
         echo "minimal"
-    elif [[ $ram -lt 4000 ]]; then
+    elif [[ $ram -lt "$perf_threshold" ]]; then
         echo "standard"
     else
         echo "performance"

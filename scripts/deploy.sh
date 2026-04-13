@@ -142,7 +142,7 @@ detect_hardware_profile() {
         warn "Only ${DETECTED_RAM_MB}MB RAM — server needs at least 512MB, expect OOM issues"
     fi
 
-    detect_profile_from_hardware
+    detect_profile_from_hardware 8000  # server: 8GB+ for performance (more services)
 }
 
 #######################################

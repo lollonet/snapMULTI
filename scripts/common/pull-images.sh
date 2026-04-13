@@ -67,9 +67,10 @@ pull_compose_images() {
     local total=${#services[@]}
     local count=0
 
-    # Temp directory for pull output (cleaned up on return or exit)
+    # Temp directory for pull output (cleaned up on function return).
+    # RETURN only — EXIT would clobber the caller's global EXIT trap.
     _pi_tmp=$(mktemp -d)
-    trap 'rm -rf "$_pi_tmp"' RETURN EXIT
+    trap 'rm -rf "$_pi_tmp"' RETURN
 
     local pull_failed=()
 
