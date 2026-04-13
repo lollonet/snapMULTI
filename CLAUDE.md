@@ -37,7 +37,7 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 
 ### Unified Installer
 
-snapMULTI is the umbrella project. The client repo (`snapclient-pi`) is included as a git submodule at `client/`.
+snapMULTI is a monorepo. The client (formerly `snapclient-pi`) lives at `client/`.
 
 `prepare-sd.sh` presents a 3-option menu:
 1. **Audio Player** (client) — snapclient + optional cover art display
@@ -83,7 +83,7 @@ Full-screen TUI on `/dev/tty1` (HDMI console), no-op when run via SSH.
 
 ```
 snapMULTI/
-  client/                    # Git submodule: snapclient-pi (audio player)
+  client/                    # Audio player (formerly snapclient-pi repo)
   config/
     snapserver.conf          # Snapcast server config (5 active + 4 commented sources)
     mpd.conf                 # MPD config (FIFO + HTTP outputs)

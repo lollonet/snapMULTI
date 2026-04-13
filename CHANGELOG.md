@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Install duration logging** — total elapsed time shown at completion
 
 ### Changed
+- **Monorepo** — merged `snapclient-pi` into `snapMULTI` as `client/` directory (was git submodule). One repo, one branch, one CI pipeline
+- **Single-branch CI** — develop branch eliminated; `:dev` images (santcasp fork) built on-demand via `workflow_dispatch` checkbox
 - **Modular firstboot** — rewritten as orchestrator with 4 extracted modules (unified-log, mount-music, install-docker, readonly-fs)
 - **Silent Docker pulls** — progress output suppressed on success, surfaced on failure (fixes 500+ line log spam from Docker Compose v5)
 - **Unified logging for setup.sh** — output filtered through unified logger instead of raw dump to install log

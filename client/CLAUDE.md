@@ -1,7 +1,7 @@
 # CLAUDE.md — snapclient-pi
 
 Raspberry Pi Snapcast client with auto-detection, Docker services, and framebuffer display.
-**Requires snapMULTI server** — included as a git submodule at `client/` in the server repo.
+**Requires snapMULTI server** — lives at `client/` in the snapMULTI monorepo.
 Installation is handled by the server's `prepare-sd.sh` → `firstboot.sh` → client `setup.sh`.
 
 ## Architecture
