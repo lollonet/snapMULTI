@@ -1,0 +1,7 @@
+[Unit]
+Description=Backup MPD database to boot partition
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/backup-mpd

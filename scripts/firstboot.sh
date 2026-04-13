@@ -640,6 +640,28 @@ if [[ -n "$DIAG_SCRIPT" ]]; then
     log_info "Diagnostic log persistence installed"
 fi
 
+# MPD database backup to boot partition (server installs only)
+if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+    BACKUP_SCRIPT=""
+    for _bk_candidate in \
+        "$COMMON/backup-mpd.sh" \
+        "$SERVER_DIR/scripts/common/backup-mpd.sh"; do
+        [[ -f "$_bk_candidate" ]] && BACKUP_SCRIPT="$_bk_candidate" && break
+    done
+    if [[ -n "$BACKUP_SCRIPT" ]]; then
+        install -m 755 "$BACKUP_SCRIPT" /usr/local/bin/backup-mpd
+        bk_dir="$(dirname "$BACKUP_SCRIPT")"
+        if [[ -f "$bk_dir/snapmulti-backup.service" && \
+              -f "$bk_dir/snapmulti-backup.timer" ]]; then
+            cp "$bk_dir/snapmulti-backup.service" /etc/systemd/system/
+            cp "$bk_dir/snapmulti-backup.timer" /etc/systemd/system/
+            systemctl daemon-reload
+            systemctl enable snapmulti-backup.timer
+        fi
+        log_info "MPD backup timer installed (daily to boot partition)"
+    fi
+fi
+
 # Read-only filesystem
 if [[ "${ENABLE_READONLY}" == "true" ]]; then
     log_info "Configuring read-only filesystem..."
