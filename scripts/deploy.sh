@@ -761,6 +761,8 @@ EOF
     # Tidal Connect is ARM-only
     if [[ "$IS_ARM" == "true" ]]; then
         ensure_profile "tidal"
+    else
+        info "Tidal Connect skipped (ARM-only, current arch: $(uname -m))"
     fi
 
     # Watchtower auto-update (opt-in)
@@ -836,6 +838,15 @@ pull_images() {
     step "Pulling Docker images"
     cd "$PROJECT_ROOT"
 
+    # Pre-flight: ensure enough disk space for images (~2 GB needed for server)
+    local avail_mb
+    avail_mb=$(df -BM --output=avail "$PROJECT_ROOT" 2>/dev/null | tail -1 | tr -d ' M')
+    if [[ -n "$avail_mb" ]] && [[ "$avail_mb" -lt 2048 ]]; then
+        error "Only ${avail_mb}MB free — need at least 2 GB for container images"
+        error "Free up space and re-run: docker compose pull"
+        exit 1
+    fi
+
     # COMPOSE_PROFILES in .env controls which services are active (e.g. tidal
     # profile on ARM). docker compose pull respects profiles automatically.
     local services
@@ -846,17 +857,26 @@ pull_images() {
     fi
     local total=${#services[@]}
     local count=0
+    local pull_tmp
+    pull_tmp=$(mktemp -d)
+    trap 'rm -rf "$pull_tmp"' RETURN
 
-    # Pull a single service with 3-attempt retry. Returns 0 on success.
+    # Pull a single service with 3-attempt retry.
+    # Output is suppressed on success and surfaced on failure.
     _pull_one() {
         local svc="$1"
+        local log="$pull_tmp/pull-$svc"
         local delays=(0 10 30)
         for delay in "${delays[@]}"; do
             [[ $delay -gt 0 ]] && { info "Retrying $svc in ${delay}s..."; sleep "$delay"; }
-            if docker compose pull "$svc" 2>&1 | tail -5; then
+            if docker compose pull "$svc" >"$log" 2>&1; then
+                rm -f "$log"
                 return 0
             fi
         done
+        # Surface last attempt's output on failure
+        tail -5 "$log"
+        rm -f "$log"
         return 1
     }
 
@@ -874,7 +894,7 @@ pull_images() {
         if [[ -n "$svc2" ]]; then
             count=$((count + 1))
             info "Pulling $svc2 ($count/$total)"
-            bg_log=$(mktemp)
+            bg_log="$pull_tmp/bg-$svc2"
             _pull_one "$svc2" >"$bg_log" 2>&1 &
             bg_pid=$!
         fi
@@ -909,6 +929,7 @@ pull_images() {
         exit 1
     fi
 
+    docker image prune -f >/dev/null 2>&1 || true
     ok "All $total images ready"
 }
 

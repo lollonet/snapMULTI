@@ -400,24 +400,23 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
     local_healthy=false
-    for attempt in $(seq 1 12); do
-        local_total=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps -q 2>/dev/null | wc -l)
-        local_running=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps --format '{{.State}}' 2>/dev/null | grep -c '^running' || true)
-        if [[ "$local_running" -eq 0 ]] && [[ "$local_total" -gt 0 ]]; then
-            local_running=$(docker compose -f "$SERVER_DIR/docker-compose.yml" ps 2>/dev/null | grep -c ' Up ' || true)
-        fi
-        if [[ "$local_total" -ge 6 ]] && [[ "$local_running" -eq "$local_total" ]]; then
-            log_info "All $local_total server containers running"
+    local_compose=(-f "$SERVER_DIR/docker-compose.yml")
+    local_total=$(docker compose "${local_compose[@]}" config --services 2>/dev/null | wc -l)
+    for attempt in $(seq 1 18); do
+        local_up=$(docker compose "${local_compose[@]}" ps --status running -q 2>/dev/null | wc -l)
+        local_health=$(docker compose "${local_compose[@]}" ps --status healthy -q 2>/dev/null | wc -l)
+        if [[ "$local_up" -ge "$local_total" ]] || [[ "$local_health" -ge "$local_total" ]]; then
+            log_info "All $local_total server containers healthy"
             local_healthy=true
             break
         fi
-        log_info "Attempt $attempt/12: $local_running/$local_total running..."
+        log_info "Attempt $attempt/18: $local_up running, $local_health healthy (need $local_total)..."
         sleep 10
     done
 
     if [[ "$local_healthy" == "false" ]]; then
-        log_warn "Not all server containers healthy after 2 minutes"
-        docker ps --format '{{.Names}}\t{{.Status}}' | while read -r line; do
+        log_warn "Not all server containers healthy after 3 minutes"
+        docker compose "${local_compose[@]}" ps --format 'table {{.Name}}\t{{.Status}}' 2>/dev/null | while read -r line; do
             log_warn "  $line"
         done
     fi
@@ -481,7 +480,28 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     [[ "$ENABLE_READONLY" != "true" ]] && setup_args+=(--no-readonly)
     [[ -n "$CONFIG_FILE" ]] && setup_args+=("$CONFIG_FILE")
 
-    if ! bash scripts/setup.sh "${setup_args[@]}" >> "$UNIFIED_LOG" 2>&1; then
+    # Run setup.sh — parse output through unified logger (same as deploy.sh)
+    set +eo pipefail
+    bash scripts/setup.sh "${setup_args[@]}" 2>&1 | while IFS= read -r line; do
+        if [[ "$VERBOSE_INSTALL" == "true" ]]; then
+            log_msg INFO setup "${line:0:200}"
+        else
+            case "$line" in
+                *"[INFO] "*|*"[OK] "*|*"==> "*)
+                    local_msg="${line#*] }"
+                    local_msg="${local_msg#==> }"
+                    log_msg INFO setup "$local_msg"
+                    ;;
+                *ERROR*|*FAIL*|*WARNING*)
+                    log_msg WARN setup "$line"
+                    ;;
+            esac
+        fi
+    done
+    setup_rc=${PIPESTATUS[0]}
+    set -eo pipefail
+
+    if [[ "$setup_rc" -ne 0 ]]; then
         log_error "Client setup failed"
         log_error "Troubleshoot: sudo cat $UNIFIED_LOG | tail -50"
         exit 1
@@ -492,12 +512,20 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     set_module "verify-client"
     next_step "Verifying client..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-    sleep 5
-    local_client_count=$(docker ps --format '{{.Names}}' | grep -c "snapclient" || true)
-    if [[ "$local_client_count" -ge 1 ]]; then
-        log_info "Client container running"
-    else
-        log_warn "snapclient container not running"
+    local_client_healthy=false
+    for attempt in $(seq 1 12); do
+        if docker compose -f "$CLIENT_DIR/docker-compose.yml" ps --status healthy -q 2>/dev/null | grep -q .; then
+            log_info "Client container healthy"
+            local_client_healthy=true
+            break
+        fi
+        sleep 5
+    done
+    if [[ "$local_client_healthy" == "false" ]]; then
+        log_warn "snapclient not healthy after 60s"
+        docker compose -f "$CLIENT_DIR/docker-compose.yml" ps --format 'table {{.Name}}\t{{.Status}}' 2>/dev/null | while read -r line; do
+            log_warn "  $line"
+        done
     fi
 fi
 
@@ -515,9 +543,9 @@ else
     if declare -F _wait_for_apt_lock &>/dev/null; then
         _wait_for_apt_lock
     fi
-    if ! apt-get update >> "$UNIFIED_LOG" 2>&1; then
+    if ! apt-get update >/dev/null 2>&1; then
         log_warn "Final apt-get update failed (non-fatal)"
-    elif ! apt-get upgrade -y >> "$UNIFIED_LOG" 2>&1; then
+    elif ! apt-get upgrade -y >/dev/null 2>&1; then
         log_warn "Final apt upgrade failed (non-fatal)"
     else
         log_info "Final package refresh complete"
@@ -577,6 +605,8 @@ IP_ADDR=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if
 # (log_info only writes to log + PROGRESS_LOG, not tty1 — use direct echo)
 _tty() { echo "$*" > /dev/tty1 2>/dev/null || true; log_info "$*"; }
 
+_elapsed="$((SECONDS / 60))m$((SECONDS % 60))s"
+log_info "Installation completed in $_elapsed"
 _tty ""
 _tty "  +--------------------------------------------+"
 _tty "  |       Installation complete!               |"
