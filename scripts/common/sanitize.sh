@@ -17,9 +17,14 @@ sanitize_airplay_name() {
 
 # Sanitize hostname/IP: alphanumeric, dots, hyphens only
 # Used for NFS servers, SMB servers, and any network hostname
+# Enforces RFC 1123: max 63 chars per label, 253 chars total
 # Usage: sanitize_hostname "nas.local"
 sanitize_hostname() {
-    printf '%s' "$1" | tr -cd 'A-Za-z0-9.-' | sed 's/^[.-]*//;s/[.-]*$//'
+    local cleaned
+    cleaned=$(printf '%s' "$1" | tr -cd 'A-Za-z0-9.-' | sed 's/^[.-]*//;s/[.-]*$//')
+    # Truncate to DNS max (253 chars total, 63 per label)
+    cleaned="${cleaned:0:253}"
+    printf '%s' "$cleaned"
 }
 
 # Semantic alias for NFS server validation

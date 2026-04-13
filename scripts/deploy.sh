@@ -422,14 +422,14 @@ install_dependencies() {
     if [[ ${#mon_pkgs[@]} -gt 0 ]]; then
         info "Installing monitoring tools: ${mon_pkgs[*]}..."
         # Wait for apt lock — firstboot may still be upgrading packages
-        local _apt_wait
-        for _apt_wait in $(seq 1 60); do
-            fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+        local _apt_deadline=$(( SECONDS + 300 ))
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+            if [[ $SECONDS -ge $_apt_deadline ]]; then
+                warn "apt lock still held after 5 minutes — proceeding anyway"
+                break
+            fi
             sleep 5
         done
-        if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
-            warn "apt lock still held after 5 minutes — proceeding anyway"
-        fi
         apt-get install -y -qq "${mon_pkgs[@]}" >/dev/null
         # Enable sysstat data collection (sar)
         if [[ -f /etc/default/sysstat ]]; then
@@ -512,9 +512,19 @@ install_docker() {
         ok "Docker installed: $(docker --version)"
     fi
 
-    # Check Docker Compose
+    # Check Docker Compose (v2+ required for profiles, --status, config --services)
     if docker compose version >/dev/null 2>&1; then
-        info "Docker Compose: $(docker compose version --short)"
+        local _compose_ver
+        _compose_ver=$(docker compose version --short 2>/dev/null)
+        info "Docker Compose: $_compose_ver"
+        # Strip leading 'v' and compare major version
+        local _compose_major="${_compose_ver#v}"
+        _compose_major="${_compose_major%%.*}"
+        if [[ "$_compose_major" -lt 2 ]]; then
+            error "Docker Compose v2+ required (found $_compose_ver)"
+            error "Update: sudo apt-get install docker-compose-plugin"
+            exit 1
+        fi
     else
         error "Docker Compose not found. Install Docker Compose v2."
         exit 1
@@ -915,6 +925,20 @@ pull_images() {
 start_services() {
     step "Starting services"
     cd "$PROJECT_ROOT"
+
+    # Pre-flight: check key ports are available (host networking)
+    local _port_conflict=false
+    for port in 1704 1705 1780 6600 8180; do
+        if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+            local _holder
+            _holder=$(ss -tlnp 2>/dev/null | grep ":${port} " | awk '{print $NF}' | head -1)
+            warn "Port $port already in use by $_holder"
+            _port_conflict=true
+        fi
+    done
+    if [[ "$_port_conflict" == "true" ]]; then
+        warn "Port conflicts detected — services may fail to start"
+    fi
 
     # COMPOSE_PROFILES in .env controls which services are active.
     # docker compose up -d starts all services matching active profiles.
