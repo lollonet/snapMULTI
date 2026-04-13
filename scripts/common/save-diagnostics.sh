@@ -76,7 +76,12 @@ cat /proc/asound/cards > "$SNAPSHOT/asound-cards.log" 2>/dev/null || true
 # 8. Audio FIFO health
 {
     echo "=== FIFO status ==="
-    for fifo in /audio/*_fifo; do
+    # FIFOs are in the audio volume — find host path from common locations
+    audio_dir=""
+    for _d in /opt/snapmulti/audio /opt/snapclient/audio; do
+        [[ -d "$_d" ]] && audio_dir="$_d" && break
+    done
+    for fifo in "${audio_dir:-.}"/*_fifo; do
         [[ -e "$fifo" ]] || continue
         name=$(basename "$fifo")
         if [[ -p "$fifo" ]]; then
