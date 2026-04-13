@@ -52,13 +52,8 @@ trap '[[ "${MPD_DB:-}" == /tmp/* ]] && rm -f "$MPD_DB"; mount -o remount,ro "$BO
 
 mkdir -p "$BACKUP_DIR/mpd/data"
 
-# Copy MPD database
+# Copy MPD database (temp file cleaned up by EXIT trap)
 cp "$MPD_DB" "$BACKUP_DIR/mpd/data/mpd.db"
-
-# Clean up temp file if we used docker cp
-if [[ "$MPD_DB" == /tmp/* ]]; then
-    rm -f "$MPD_DB"
-fi
 
 # Optional: myMPD playlists
 if [[ -d "$INSTALL_DIR/mympd/workdir/state" ]]; then
