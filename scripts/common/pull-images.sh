@@ -26,7 +26,7 @@ _image_exists() {
     local svc="$1"
     local image
     image=$(docker compose config --format json 2>/dev/null \
-        | python3 -c "import sys,json; print(json.load(sys.stdin)['services']['$svc']['image'])" 2>/dev/null) || return 1
+        | SVC="$svc" python3 -c "import sys,json,os; print(json.load(sys.stdin)['services'][os.environ['SVC']]['image'])" 2>/dev/null) || return 1
     docker image inspect "$image" >/dev/null 2>&1
 }
 
