@@ -10,7 +10,7 @@ Questa guida ti porta da una scheda SD vuota a un sistema audio multiroom funzio
 
 | Elemento | Note |
 |----------|------|
-| Raspberry Pi 4 (2 GB+ RAM) | Pi 5 dovrebbe funzionare; Pi 3B+ è supportato e testato (profilo minimal) |
+| Raspberry Pi 4 o 5 (2 GB+ RAM) | Pi 5 completamente supportato; Pi 3B+ testato (profilo minimal) |
 | Scheda microSD (16 GB+) | Classe 10 / A1 o migliore. 32 GB consigliati |
 | Alimentatore | Ufficiale 15W USB-C per Pi 4 |
 | Un secondo computer | macOS, Linux o Windows — per preparare la scheda SD |

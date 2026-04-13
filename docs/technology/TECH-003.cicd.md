@@ -77,13 +77,13 @@ cd snapMULTI
 
 Native builds on self-hosted runners using Docker buildx with platform emulation:
 
-| Runner | Host Architecture | Host | Container Runtime |
-|--------|------------------|------|------------------|
-| snapmulti-runner | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
-| snapmulti-runner-2 | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
-| mac-arm64-runner | arm64 | Mac (Apple Silicon) | Native (GitHub runner app) |
+| Runner | Label | Host Architecture | Host | Container Runtime |
+|--------|-------|------------------|------|------------------|
+| snapmulti-runner | `snapcast-runner` | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
+| snapmulti-runner-2 | `snapcast-runner` | amd64 | raspy (amd64 machine) | `myoung34/github-runner:ubuntu-jammy` |
+| mac-arm64-runner | `ARM64` | arm64 | Mac (Apple Silicon) | Native (GitHub runner app) |
 
-**Total: 3 runners** — 2 Docker containers on amd64 host (raspy) + 1 native macOS arm64 runner. Server images build on amd64 runners, client images build natively on Mac arm64 runner.
+**Total: 3 runners** — 2 Docker containers on amd64 host (raspy, label `snapcast-runner`) + 1 native macOS arm64 runner (label `ARM64`). Server images build on amd64, client images build natively on Mac arm64.
 
 ## Quality Gates
 
