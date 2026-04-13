@@ -2,8 +2,7 @@
 
 > Raspberry Pi Snapcast client with HiFiBerry support and cover display.
 
-[![CI](https://github.com/lollonet/snapclient-pi/actions/workflows/ci.yml/badge.svg)](https://github.com/lollonet/snapclient-pi/actions/workflows/ci.yml)
-[![release](https://img.shields.io/github/v/release/lollonet/snapclient-pi?color=orange)](https://github.com/lollonet/snapclient-pi/releases/latest)
+[![CI](https://github.com/lollonet/snapMULTI/actions/workflows/validate.yml/badge.svg)](https://github.com/lollonet/snapMULTI/actions/workflows/validate.yml)
 [![downloads](https://img.shields.io/docker/pulls/lollonet/snapclient-pi?color=green)](https://hub.docker.com/r/lollonet/snapclient-pi)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-yellowgreen)](https://paypal.me/lolettic)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -160,7 +159,7 @@ snapclient-pi/
 └── .github/workflows/          # CI/CD pipelines
 ```
 
-> **Note**: This repo is included as a git submodule in [snapMULTI](https://github.com/lollonet/snapMULTI) at `client/`. The server's `prepare-sd.sh` copies the necessary files to the SD card; the server's `firstboot.sh` runs `setup.sh --auto` during first boot.
+> **Note**: This is the `client/` directory of the [snapMULTI](https://github.com/lollonet/snapMULTI) monorepo. The server's `prepare-sd.sh` copies the necessary files to the SD card; the server's `firstboot.sh` runs `setup.sh --auto` during first boot.
 
 ## Configuration
 

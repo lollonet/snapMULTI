@@ -54,7 +54,7 @@ Flash an SD card, run a short script, insert it, power on — done. You only nee
 #    - Click Next → Edit Settings → set hostname, user/password, WiFi, enable SSH
 
 # 2. Re-insert SD card, then run (requires Git — see docs/INSTALL.md Step 3 if not installed):
-git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
+git clone https://github.com/lollonet/snapMULTI.git
 ./snapMULTI/scripts/prepare-sd.sh
 
 # 3. Choose what to install when prompted:
@@ -69,7 +69,7 @@ git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
 ```powershell
 # Requires Git for Windows: https://git-scm.com/download/win
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
+git clone https://github.com/lollonet/snapMULTI.git
 .\snapMULTI\scripts\prepare-sd.ps1
 ```
 
@@ -232,10 +232,10 @@ For major version upgrades, check [CHANGELOG.md](CHANGELOG.md) for breaking chan
 
 ## snapMULTI Ecosystem
 
-| App | Platform | Description |
-|-----|----------|-------------|
-| [snapMULTI](https://github.com/lollonet/snapMULTI) | Raspberry Pi / Linux | Multiroom audio server (this project) |
-| [snapclient-pi](https://github.com/lollonet/snapclient-pi) | Raspberry Pi | Audio player with cover display |
+| Component | Path | Description |
+|-----------|------|-------------|
+| Server | `/` | Multiroom audio server (Snapcast, Spotify, AirPlay, MPD, Tidal) |
+| Client | `client/` | Audio player with cover display (snapclient + visualizer + fb-display) |
 
 ## Acknowledgments
 

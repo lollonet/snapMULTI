@@ -83,7 +83,7 @@ I client Snapcast sono leggeri — ricevono audio e lo riproducono attraverso gl
 
 ### Metodo di Installazione Client
 
-snapMULTI usa **Docker Compose per il deploy dei client** tramite il sottomodulo [`snapclient-pi`](../client/). Questo fornisce uno stack autocontenuto che include snapclient, display copertine e visualizzatore audio — tutto gestito insieme.
+snapMULTI usa **Docker Compose per il deploy dei client** tramite la directory [client](../client/). Questo fornisce uno stack autocontenuto che include snapclient, display copertine e visualizzatore audio — tutto gestito insieme.
 
 Lo stack Docker client esegue tre container:
 - `lollonet/snapclient-pi:latest` — Player audio Snapcast
@@ -92,7 +92,7 @@ Lo stack Docker client esegue tre container:
 
 Vedi [README.md](../README.md) per la procedura di installazione completa (percorso SD card o manuale).
 
-Per configurazioni minimali o manuali senza il sottomodulo client completo, snapclient può essere installato nativamente:
+Per configurazioni minimali o manuali senza la directory client completa, snapclient può essere installato nativamente:
 
 ```bash
 sudo apt install snapclient
@@ -230,7 +230,7 @@ Questo garantisce uno streaming audio consistente anche durante la congestione d
 | `ghcr.io/jcorporation/mympd/mympd:latest` | ~30–50 MB |
 | `lollonet/snapmulti-tidal:latest` | ~200–300 MB |
 
-**Immagini client** (dal sottomodulo [`snapclient-pi`](../client/)):
+**Immagini client** (dalla directory [client](../client/)):
 
 | Immagine | Dimensione |
 |----------|------------|

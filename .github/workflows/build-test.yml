@@ -3,9 +3,11 @@ name: Test Docker Builds
 on:
   pull_request:
     paths:
-      # Dockerfiles
+      # Server Dockerfiles
       - 'Dockerfile.*'
-      # Files COPYed into images
+      # Client Dockerfiles and dependencies
+      - 'client/common/docker/**'
+      # Files COPYed into server images
       - 'scripts/mpd-entrypoint.sh'
       - 'scripts/airplay-entrypoint.sh'
       - 'scripts/meta_shairport.py'
@@ -38,6 +40,19 @@ jobs:
           - dockerfile: Dockerfile.tidal
             binary: bash
             arm_only: true
+          # Client images (ARM-only, built on Mac runner in build-push.yml)
+          - dockerfile: client/common/docker/snapclient/Dockerfile
+            context: client/common/docker/snapclient
+            binary: snapclient
+            arm_only: true
+          - dockerfile: client/common/docker/audio-visualizer/Dockerfile
+            context: client/common/docker/audio-visualizer
+            binary: python3
+            arm_only: true
+          - dockerfile: client/common/docker/fb-display/Dockerfile
+            context: client/common/docker/fb-display
+            binary: python3
+            arm_only: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -69,7 +84,7 @@ jobs:
             BUILD_ARGS="--build-arg SNAPCAST_SHA=${{ steps.snapcast.outputs.sha }}"
           fi
           docker build -f ${{ matrix.dockerfile }} $BUILD_ARGS \
-            --tag ${{ steps.vars.outputs.TAG }}:latest . || {
+            --tag ${{ steps.vars.outputs.TAG }}:latest ${{ matrix.context || '.' }} || {
             echo "ERROR: Docker build failed for ${{ matrix.dockerfile }}"
             exit 1
           }

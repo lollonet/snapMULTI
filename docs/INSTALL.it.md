@@ -106,11 +106,11 @@ sudo apt install git
 ### Clone
 
 ```bash
-git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
+git clone https://github.com/lollonet/snapMULTI.git
 cd snapMULTI
 ```
 
-> `--recurse-submodules` è richiesto — scarica anche il software client (speaker). Se lo dimentichi, lo script lo scaricherà automaticamente quando necessario.
+> Il repository include sia il software server che client in un unico monorepo.
 
 ---
 

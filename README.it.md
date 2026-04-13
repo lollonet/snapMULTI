@@ -54,7 +54,7 @@ Prepara una scheda SD, esegui un breve script, inseriscila, accendi — fatto. D
 #    - Configura: hostname, utente/password, WiFi, SSH
 
 # 2. Mantieni la SD montata, esegui (richiede Git — vedi docs/INSTALL.it.md Passo 3 se non installato):
-git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
+git clone https://github.com/lollonet/snapMULTI.git
 ./snapMULTI/scripts/prepare-sd.sh
 
 # 3. Scegli cosa installare:
@@ -67,7 +67,7 @@ git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
 
 **Su Windows (PowerShell):**
 ```powershell
-git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
+git clone https://github.com/lollonet/snapMULTI.git
 .\snapMULTI\scripts\prepare-sd.ps1
 ```
 
@@ -230,10 +230,10 @@ Per aggiornamenti di versioni maggiori, controlla [CHANGELOG.md](CHANGELOG.md) p
 
 ## Ecosistema snapMULTI
 
-| App | Piattaforma | Descrizione |
-|-----|-------------|-------------|
-| [snapMULTI](https://github.com/lollonet/snapMULTI) | Raspberry Pi / Linux | Server audio multiroom (questo progetto) |
-| [snapclient-pi](https://github.com/lollonet/snapclient-pi) | Raspberry Pi | Player audio con display copertine |
+| Componente | Percorso | Descrizione |
+|------------|----------|-------------|
+| Server | `/` | Server audio multiroom (Snapcast, Spotify, AirPlay, MPD, Tidal) |
+| Client | `client/` | Player audio con display copertine (snapclient + visualizer + fb-display) |
 
 ## Ringraziamenti
 

@@ -93,7 +93,7 @@ The Pi Zero 2 W is the cheapest client option but has specific requirements:
 
 ### Client Install Method
 
-snapMULTI uses **Docker Compose for client deployment** via the [`snapclient-pi`](../client/) submodule. This provides a self-contained stack including snapclient, cover art display, and audio visualizer — all managed together.
+snapMULTI uses **Docker Compose for client deployment** via the [client](../client/) directory. This provides a self-contained stack including snapclient, cover art display, and audio visualizer — all managed together.
 
 The client Docker stack runs three containers:
 - `lollonet/snapclient-pi:latest` — Snapcast audio player
@@ -102,7 +102,7 @@ The client Docker stack runs three containers:
 
 See [README.md](../README.md) for the full installation procedure (SD card path or manual).
 
-For minimal or manual setups without the full client submodule, snapclient can be installed natively:
+For minimal or manual setups without the full client directory, snapclient can be installed natively:
 
 ```bash
 sudo apt install snapclient
@@ -240,7 +240,7 @@ This ensures consistent audio streaming even during network congestion from file
 | `ghcr.io/jcorporation/mympd/mympd:latest` | ~30–50 MB |
 | `lollonet/snapmulti-tidal:latest` | ~200–300 MB |
 
-**Client images** (from [`snapclient-pi`](../client/) submodule):
+**Client images** (from [client](../client/) directory):
 
 | Image | Size |
 |-------|------|

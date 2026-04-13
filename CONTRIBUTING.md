@@ -101,8 +101,8 @@ Follow the [Single Source of Truth](CLAUDE.md) principle — each topic has ONE 
 ## Development Setup
 
 ```bash
-# Clone with submodules (includes client repo)
-git clone --recurse-submodules https://github.com/lollonet/snapMULTI.git
+# Clone the monorepo (includes server + client)
+git clone https://github.com/lollonet/snapMULTI.git
 cd snapMULTI
 
 # Copy environment template

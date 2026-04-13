@@ -434,6 +434,22 @@ switch ($InstallType) {
     'both'   { Copy-ServerFiles -Dest $Dest; Copy-ClientFiles -Dest $Dest }
 }
 
+# ── Write version files ──────────────────────────────────────────
+# Server: bare semver (e.g. "0.3.26"), Client: prefixed (e.g. "v0.3.26")
+try {
+    $gitVersion = & git -C $ProjectDir describe --tags --abbrev=0 2>$null
+    if (-not $gitVersion) { $gitVersion = 'dev' }
+} catch {
+    $gitVersion = 'dev'
+}
+if ($InstallType -in @('server', 'both')) {
+    $serverVersion = $gitVersion -replace '^v', ''
+    [System.IO.File]::WriteAllText((Join-Path $Dest 'server/.version'), $serverVersion)
+}
+if ($InstallType -in @('client', 'both')) {
+    [System.IO.File]::WriteAllText((Join-Path $Dest 'client/VERSION'), $gitVersion)
+}
+
 $size = (Get-ChildItem $Dest -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
 Write-Host ("  Copied {0:N1} MB to boot partition." -f $size)
 
