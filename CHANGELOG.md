@@ -10,16 +10,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Diagnostic log persistence** — saves dmesg audio errors, docker logs, ALSA state, and system health to boot partition every 30 minutes. Survives overlayroot reboots. Keeps last 3 snapshots at `/boot/firmware/diagnostics/`
 - **Pi Zero 2 W support** — documented in HARDWARE.md (64-bit required, 2.4 GHz only, headless audio)
+- **Install checkpoints** — per-phase markers (deps, docker, deploy, setup) enable resume after power loss or crash without full reinstall
+- **Disk space pre-flight** — checks free space before Docker image pull (2 GB server, 1 GB client)
+- **Port availability check** — warns if key ports (1704, 1705, 1780, 6600, 8082, 8083, 8180) are in use before starting services
+- **Docker Compose v2+ enforcement** — validates version at startup with actionable error
+- **Diagnostic dump on failure** — trap collects memory, disk, docker status, and dmesg into install log
+- **Install duration logging** — total elapsed time shown at completion
 
 ### Changed
 - **Modular firstboot** — rewritten as orchestrator with 4 extracted modules (unified-log, mount-music, install-docker, readonly-fs)
+- **Silent Docker pulls** — progress output suppressed on success, surfaced on failure (fixes 500+ line log spam from Docker Compose v5)
+- **Unified logging for setup.sh** — output filtered through unified logger instead of raw dump to install log
 
 ### Fixed
 - **IMAGE_TAG not persisted** — `deploy.sh` now writes `IMAGE_TAG` to `.env` (previously lost after reboot)
 - **LOG_SOURCE not reset** — module calls no longer leak source labels into subsequent log lines
 - **--no-readonly flag** — positioned before positional config file argument
 - **display.sh validation** — restored display-detect.sh validation checks
-- **apt lock race** — explicit `_wait_for_apt_lock` prevents concurrent apt failures
+- **apt lock race** — explicit `_wait_for_apt_lock` with SECONDS-based 5-min deadline
+- **Health verification** — uses `docker compose ps --status healthy/running` instead of grep -c counting; client polls instead of fixed sleep
+- **Hostname sanitization** — enforces RFC 1123 max 253 chars
+- **prepare-sd.sh sed validation** — verifies boot script patches took effect, fails early if not
+- **prepare-sd.sh submodule error** — checks git exit code with clear network error message
 - **install.conf parsing** — `_rc` helper no longer crashes on missing keys with `set -e`
 - **USB/I2S HAT conflict** — `prepare-sd.sh` and `setup.sh` now strip `otg_mode=1` and `dr_mode=host` from config.txt (Imager sets these, they block GPIO I2S/I2C communication with audio HATs)
 - **CAKE QoS on clients** — `boot-tune.sh` skips CAKE/DSCP on client-only systems (server-side only feature; `tc qdisc replace` hangs on Pi Zero when WiFi is DOWN)

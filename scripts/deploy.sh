@@ -157,6 +157,10 @@ detect_hardware_profile() {
 
     info "Hardware: ${total_ram_mb}MB RAM, ${cpu_cores} CPU cores"
 
+    if [[ $total_ram_mb -lt 512 ]]; then
+        warn "Only ${total_ram_mb}MB RAM — server needs at least 512MB, expect OOM issues"
+    fi
+
     # Determine profile based on hardware
     if [[ -n "$pi_model" ]]; then
         case "$pi_model" in
@@ -422,14 +426,14 @@ install_dependencies() {
     if [[ ${#mon_pkgs[@]} -gt 0 ]]; then
         info "Installing monitoring tools: ${mon_pkgs[*]}..."
         # Wait for apt lock — firstboot may still be upgrading packages
-        local _apt_wait
-        for _apt_wait in $(seq 1 60); do
-            fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+        local _apt_deadline=$(( SECONDS + 300 ))
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+            if [[ $SECONDS -ge $_apt_deadline ]]; then
+                warn "apt lock still held after 5 minutes — proceeding anyway"
+                break
+            fi
             sleep 5
         done
-        if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
-            warn "apt lock still held after 5 minutes — proceeding anyway"
-        fi
         apt-get install -y -qq "${mon_pkgs[@]}" >/dev/null
         # Enable sysstat data collection (sar)
         if [[ -f /etc/default/sysstat ]]; then
@@ -512,9 +516,19 @@ install_docker() {
         ok "Docker installed: $(docker --version)"
     fi
 
-    # Check Docker Compose
+    # Check Docker Compose (v2+ required for profiles, --status, config --services)
     if docker compose version >/dev/null 2>&1; then
-        info "Docker Compose: $(docker compose version --short)"
+        local _compose_ver
+        _compose_ver=$(docker compose version --short 2>/dev/null)
+        info "Docker Compose: $_compose_ver"
+        # Strip leading 'v' and compare major version
+        local _compose_major="${_compose_ver#v}"
+        _compose_major="${_compose_major%%.*}"
+        if [[ "$_compose_major" -lt 2 ]]; then
+            error "Docker Compose v2+ required (found $_compose_ver)"
+            error "Update: sudo apt-get install docker-compose-plugin"
+            exit 1
+        fi
     else
         error "Docker Compose not found. Install Docker Compose v2."
         exit 1
@@ -761,6 +775,8 @@ EOF
     # Tidal Connect is ARM-only
     if [[ "$IS_ARM" == "true" ]]; then
         ensure_profile "tidal"
+    else
+        info "Tidal Connect skipped (ARM-only, current arch: $(uname -m))"
     fi
 
     # Watchtower auto-update (opt-in)
@@ -836,6 +852,15 @@ pull_images() {
     step "Pulling Docker images"
     cd "$PROJECT_ROOT"
 
+    # Pre-flight: ensure enough disk space for images (~2 GB needed for server)
+    local avail_mb
+    avail_mb=$(df -BM --output=avail "$PROJECT_ROOT" 2>/dev/null | tail -1 | tr -d ' M')
+    if [[ -n "$avail_mb" ]] && [[ "$avail_mb" -lt 2048 ]]; then
+        error "Only ${avail_mb}MB free — need at least 2 GB for container images"
+        error "Free up space and re-run: docker compose pull"
+        exit 1
+    fi
+
     # COMPOSE_PROFILES in .env controls which services are active (e.g. tidal
     # profile on ARM). docker compose pull respects profiles automatically.
     local services
@@ -846,17 +871,26 @@ pull_images() {
     fi
     local total=${#services[@]}
     local count=0
+    local pull_tmp
+    pull_tmp=$(mktemp -d)
+    trap 'rm -rf "$pull_tmp"' RETURN EXIT
 
-    # Pull a single service with 3-attempt retry. Returns 0 on success.
+    # Pull a single service with 3-attempt retry.
+    # Output is suppressed on success and surfaced on failure.
     _pull_one() {
         local svc="$1"
+        local log="$pull_tmp/pull-$svc"
         local delays=(0 10 30)
         for delay in "${delays[@]}"; do
             [[ $delay -gt 0 ]] && { info "Retrying $svc in ${delay}s..."; sleep "$delay"; }
-            if docker compose pull "$svc" 2>&1 | tail -5; then
+            if docker compose pull "$svc" >"$log" 2>&1; then
+                rm -f "$log"
                 return 0
             fi
         done
+        # Surface last attempt's output on failure
+        tail -5 "$log"
+        rm -f "$log"
         return 1
     }
 
@@ -874,7 +908,7 @@ pull_images() {
         if [[ -n "$svc2" ]]; then
             count=$((count + 1))
             info "Pulling $svc2 ($count/$total)"
-            bg_log=$(mktemp)
+            bg_log="$pull_tmp/bg-$svc2"
             _pull_one "$svc2" >"$bg_log" 2>&1 &
             bg_pid=$!
         fi
@@ -909,12 +943,27 @@ pull_images() {
         exit 1
     fi
 
+    docker image prune -f >/dev/null 2>&1 || true
     ok "All $total images ready"
 }
 
 start_services() {
     step "Starting services"
     cd "$PROJECT_ROOT"
+
+    # Pre-flight: check key ports are available (host networking)
+    local _port_conflict=false
+    for port in 1704 1705 1780 6600 8082 8083 8180; do
+        if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+            local _holder
+            _holder=$(ss -tlnp 2>/dev/null | grep ":${port} " | awk '{print $NF}' | head -1)
+            warn "Port $port already in use by $_holder"
+            _port_conflict=true
+        fi
+    done
+    if [[ "$_port_conflict" == "true" ]]; then
+        warn "Port conflicts detected — services may fail to start"
+    fi
 
     # COMPOSE_PROFILES in .env controls which services are active.
     # docker compose up -d starts all services matching active profiles.

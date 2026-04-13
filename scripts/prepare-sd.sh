@@ -25,9 +25,13 @@ check_client_submodule() {
     # .git is a file (gitlink) in submodules, a directory in standalone clones
     if [[ ! -d "$CLIENT_DIR/.git" ]] && [[ ! -f "$CLIENT_DIR/.git" ]]; then
         echo "Client submodule not initialized. Fetching..."
-        git -C "$PROJECT_DIR" submodule update --init --recursive
+        if ! git -C "$PROJECT_DIR" submodule update --init --recursive; then
+            echo "ERROR: Failed to fetch client submodule (check network connection)"
+            echo "  Run manually: git submodule update --init --recursive"
+            exit 1
+        fi
         if [[ ! -d "$CLIENT_DIR/.git" ]] && [[ ! -f "$CLIENT_DIR/.git" ]]; then
-            echo "ERROR: client/ submodule is missing."
+            echo "ERROR: client/ submodule still missing after fetch"
             echo "  Run: git submodule update --init --recursive"
             exit 1
         fi
@@ -532,7 +536,11 @@ SETUP_VIDEO="video=HDMI-A-1:800x600@60"
 if [[ -f "$CMDLINE" ]] && ! grep -qF "video=HDMI-A-1:" "$CMDLINE"; then
     sed -i.bak "1s/$/ $SETUP_VIDEO/" "$CMDLINE"
     rm -f "${CMDLINE}.bak"
-    echo "  Set temporary setup resolution (800x600) in cmdline.txt"
+    if grep -qF "$SETUP_VIDEO" "$CMDLINE"; then
+        echo "  Set temporary setup resolution (800x600) in cmdline.txt"
+    else
+        echo "  WARNING: Failed to patch cmdline.txt — display may not work during install"
+    fi
 fi
 
 # ── Patch boot scripts ────────────────────────────────────────────
@@ -562,7 +570,12 @@ if [[ -f "$FIRSTRUN" ]]; then
 ' "$FIRSTRUN"
             rm -f "${FIRSTRUN}.bak"
         fi
-        echo "  firstrun.sh patched."
+        if grep -qF "snapmulti/firstboot.sh" "$FIRSTRUN"; then
+            echo "  firstrun.sh patched."
+        else
+            echo "  ERROR: firstrun.sh patch failed — auto-install will NOT run on first boot"
+            exit 1
+        fi
     fi
 elif [[ -f "$USERDATA" ]]; then
     # Modern Pi Imager (Bookworm+): boot partition is /boot/firmware
@@ -583,7 +596,12 @@ $RUNCMD_ENTRY" "$USERDATA"
             # Add runcmd section
             printf '\nruncmd:\n%s\n' "$RUNCMD_ENTRY" >> "$USERDATA"
         fi
-        echo "  user-data patched."
+        if grep -qF "snapmulti/firstboot.sh" "$USERDATA"; then
+            echo "  user-data patched."
+        else
+            echo "  ERROR: user-data patch failed — auto-install will NOT run on first boot"
+            exit 1
+        fi
     fi
 else
     echo ""
