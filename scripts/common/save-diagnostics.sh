@@ -92,7 +92,7 @@ cat /proc/asound/cards > "$SNAPSHOT/asound-cards.log" 2>/dev/null || true
         fi
     done
     echo "=== container restarts ==="
-    docker ps --format '{{.Names}}\t{{.Status}}' 2>/dev/null | while IFS=$'\t' read -r name status; do
+    docker ps --format '{{.Names}}|{{.Status}}' 2>/dev/null | while IFS='|' read -r name status; do
         restarts=$(docker inspect --format '{{.RestartCount}}' "$name" 2>/dev/null) || restarts=0
         [[ "$restarts" -gt 0 ]] && echo "WARNING: $name restarted $restarts times ($status)"
     done
