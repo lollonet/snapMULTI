@@ -13,6 +13,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common/logging.sh"
 # shellcheck source=common/system-tune.sh
 source "$SCRIPT_DIR/common/system-tune.sh"
+# shellcheck source=common/resource-detect.sh
+source "$SCRIPT_DIR/common/resource-detect.sh"
+# shellcheck source=common/pull-images.sh
+source "$SCRIPT_DIR/common/pull-images.sh"
 
 # Global: set by preflight_checks based on architecture
 IS_ARM=false
@@ -128,74 +132,17 @@ detect_music_library() {
 #######################################
 
 detect_hardware_profile() {
-    local total_ram_mb cpu_cores profile pi_model
+    # Use shared hardware detection (resource-detect.sh)
+    detect_hardware
 
-    # Detect RAM (in MB)
-    if [[ -f /proc/meminfo ]]; then
-        total_ram_mb=$(awk '/MemTotal/ {printf "%.0f", $2/1024}' /proc/meminfo)
-    else
-        total_ram_mb=$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.0f", $1/1024/1024}') || total_ram_mb=4096
+    [[ -n "$DETECTED_PI_MODEL" ]] && info "Detected: $DETECTED_PI_MODEL"
+    info "Hardware: ${DETECTED_RAM_MB}MB RAM, ${DETECTED_CPU_CORES} CPU cores"
+
+    if [[ $DETECTED_RAM_MB -lt 512 ]]; then
+        warn "Only ${DETECTED_RAM_MB}MB RAM — server needs at least 512MB, expect OOM issues"
     fi
 
-    # Detect CPU cores
-    if [[ -f /proc/cpuinfo ]]; then
-        cpu_cores=$(grep -c ^processor /proc/cpuinfo)
-    else
-        cpu_cores=$(sysctl -n hw.ncpu 2>/dev/null) || cpu_cores=4
-    fi
-
-    # Detect Raspberry Pi model
-    if [[ -f /proc/device-tree/model ]]; then
-        pi_model=$(tr -d '\0' < /proc/device-tree/model)
-        info "Detected: $pi_model"
-    elif [[ -f /proc/cpuinfo ]] && grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null; then
-        pi_model=$(grep "Model" /proc/cpuinfo | cut -d: -f2 | xargs)
-        info "Detected: $pi_model"
-    else
-        pi_model=""
-    fi
-
-    info "Hardware: ${total_ram_mb}MB RAM, ${cpu_cores} CPU cores"
-
-    if [[ $total_ram_mb -lt 512 ]]; then
-        warn "Only ${total_ram_mb}MB RAM — server needs at least 512MB, expect OOM issues"
-    fi
-
-    # Determine profile based on hardware
-    if [[ -n "$pi_model" ]]; then
-        case "$pi_model" in
-            *"Zero 2"*) profile="minimal" ;;
-            *"Pi 3"*)   profile="minimal" ;;
-            *"Pi 4"*)
-                if [[ $total_ram_mb -ge 4000 ]]; then
-                    profile="performance"
-                else
-                    profile="standard"
-                fi
-                ;;
-            *"Pi 5"*)   profile="performance" ;;
-            *)
-                if [[ $total_ram_mb -lt 1500 ]]; then
-                    profile="minimal"
-                elif [[ $total_ram_mb -lt 4000 ]]; then
-                    profile="standard"
-                else
-                    profile="performance"
-                fi
-                ;;
-        esac
-    else
-        # Non-Pi hardware (x86, etc.)
-        if [[ $total_ram_mb -lt 2000 ]]; then
-            profile="minimal"
-        elif [[ $total_ram_mb -lt 8000 ]]; then
-            profile="standard"
-        else
-            profile="performance"
-        fi
-    fi
-
-    echo "$profile"
+    detect_profile_from_hardware 8000  # server: 8GB+ for performance (more services)
 }
 
 #######################################
@@ -852,99 +799,22 @@ pull_images() {
     step "Pulling Docker images"
     cd "$PROJECT_ROOT"
 
-    # Pre-flight: ensure enough disk space for images (~2 GB needed for server)
-    local avail_mb
-    avail_mb=$(df -BM --output=avail "$PROJECT_ROOT" 2>/dev/null | tail -1 | tr -d ' M')
-    if [[ -n "$avail_mb" ]] && [[ "$avail_mb" -lt 2048 ]]; then
-        error "Only ${avail_mb}MB free — need at least 2 GB for container images"
-        error "Free up space and re-run: docker compose pull"
-        exit 1
-    fi
-
-    # COMPOSE_PROFILES in .env controls which services are active (e.g. tidal
-    # profile on ARM). docker compose pull respects profiles automatically.
-    local services
-    mapfile -t services < <(docker compose config --services)
-    if [[ ${#services[@]} -eq 0 ]]; then
-        error "No services returned from docker compose config — check compose file"
-        exit 1
-    fi
-    local total=${#services[@]}
-    local count=0
-    local pull_tmp
-    pull_tmp=$(mktemp -d)
-    trap 'rm -rf "$pull_tmp"' RETURN EXIT
-
-    # Pull a single service with 3-attempt retry.
-    # Output is suppressed on success and surfaced on failure.
-    _pull_one() {
+    # Metadata build fallback: if pull fails for metadata service, build locally
+    _metadata_fallback() {
         local svc="$1"
-        local log="$pull_tmp/pull-$svc"
-        local delays=(0 10 30)
-        for delay in "${delays[@]}"; do
-            [[ $delay -gt 0 ]] && { info "Retrying $svc in ${delay}s..."; sleep "$delay"; }
-            if docker compose pull "$svc" >"$log" 2>&1; then
-                rm -f "$log"
-                return 0
-            fi
-        done
-        # Surface last attempt's output on failure
-        tail -5 "$log"
-        rm -f "$log"
+        if [[ "$svc" == "metadata" ]]; then
+            info "Building metadata locally (not yet on registry)"
+            docker compose build metadata || { error "Failed to build metadata"; exit 1; }
+            return 0
+        fi
         return 1
     }
 
-    # Pull 2 services at a time — balances network throughput vs SD I/O
-    local pull_failed=()
-    for ((i=0; i<${#services[@]}; i+=2)); do
-        local svc1="${services[$i]}"
-        local svc2="${services[$i+1]:-}"
-
-        count=$((count + 1))
-        info "Pulling $svc1 ($count/$total)"
-
-        # Start svc2 in background if it exists (output to temp file to avoid interleaving)
-        local bg_pid="" bg_log=""
-        if [[ -n "$svc2" ]]; then
-            count=$((count + 1))
-            info "Pulling $svc2 ($count/$total)"
-            bg_log="$pull_tmp/bg-$svc2"
-            _pull_one "$svc2" >"$bg_log" 2>&1 &
-            bg_pid=$!
-        fi
-
-        # Pull svc1 in foreground with retry
-        if ! _pull_one "$svc1"; then
-            if [[ "$svc1" == "metadata" ]]; then
-                info "Building metadata locally (not yet on registry)"
-                docker compose build metadata || { error "Failed to build metadata"; exit 1; }
-            else
-                pull_failed+=("$svc1")
-            fi
-        fi
-
-        # Wait for background svc2 (already retried 3x in background)
-        if [[ -n "$bg_pid" ]]; then
-            if ! wait "$bg_pid" 2>/dev/null; then
-                cat "$bg_log"  # surface output on failure
-                if [[ "$svc2" == "metadata" ]]; then
-                    info "Building metadata locally (not yet on registry)"
-                    docker compose build metadata || { error "Failed to build metadata"; exit 1; }
-                else
-                    pull_failed+=("$svc2")
-                fi
-            fi
-            rm -f "$bg_log"
-        fi
-    done
-
-    if [[ ${#pull_failed[@]} -gt 0 ]]; then
-        error "Failed to pull after 3 attempts: ${pull_failed[*]}"
+    # Use shared pull module (2 GB minimum for server)
+    if ! pull_compose_images info 2048 _metadata_fallback; then
         exit 1
     fi
-
-    docker image prune -f >/dev/null 2>&1 || true
-    ok "All $total images ready"
+    ok "All images ready"
 }
 
 start_services() {

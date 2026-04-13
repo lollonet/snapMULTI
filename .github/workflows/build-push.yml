@@ -60,17 +60,22 @@ jobs:
           if [[ "$USE_SANTCASP" == "true" ]]; then
             REPO="https://github.com/lollonet/santcasp.git"
             BRANCH="develop"
+            TAG=""  # santcasp uses branch, not tag
+            REF="refs/heads/$BRANCH"
           else
             REPO="https://github.com/badaix/snapcast.git"
             BRANCH="master"
+            TAG="v0.35.0"  # pin stable release
+            REF="refs/tags/$TAG"
           fi
-          SHA=$(git ls-remote "$REPO" "refs/heads/$BRANCH" | cut -f1)
+          SHA=$(git ls-remote "$REPO" "$REF" | cut -f1)
           if [[ -z "$SHA" ]]; then
-            echo "ERROR: Failed to fetch $BRANCH from $REPO"
+            echo "ERROR: Failed to fetch $REF from $REPO"
             exit 1
           fi
           echo "repo=$REPO" >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "snapcast: $REPO ($BRANCH) SHA: $SHA"
 
@@ -96,6 +101,7 @@ jobs:
           push: true
           build-args: |
             SNAPCAST_REPO=${{ steps.snapcast.outputs.repo }}
+            SNAPCAST_TAG=${{ steps.snapcast.outputs.tag }}
             SNAPCAST_BRANCH=${{ steps.snapcast.outputs.branch }}
             SNAPCAST_SHA=${{ steps.snapcast.outputs.sha }}
           tags: |
@@ -205,12 +211,17 @@ jobs:
           if [[ "$USE_SANTCASP" == "true" ]]; then
             REPO="https://github.com/lollonet/santcasp.git"
             BRANCH="develop"
+            TAG=""
+            REF="refs/heads/$BRANCH"
           else
             REPO="https://github.com/badaix/snapcast.git"
             BRANCH="master"
+            TAG="v0.35.0"
+            REF="refs/tags/$TAG"
           fi
-          SHA=$(git ls-remote "$REPO" "refs/heads/$BRANCH" | cut -f1)
+          SHA=$(git ls-remote "$REPO" "$REF" | cut -f1)
           echo "repo=$REPO" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       - name: Build and push snapclient
@@ -221,6 +232,7 @@ jobs:
           push: true
           build-args: |
             SNAPCAST_REPO=${{ steps.snapcast.outputs.repo }}
+            SNAPCAST_TAG=${{ steps.snapcast.outputs.tag }}
             SNAPCAST_SHA=${{ steps.snapcast.outputs.sha }}
           tags: |
             lollonet/snapclient-pi:${{ steps.version.outputs.label }}

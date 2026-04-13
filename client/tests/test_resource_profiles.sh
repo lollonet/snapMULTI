@@ -4,10 +4,25 @@ set -euo pipefail
 
 # Test resource profile detection and limits
 # Sources detect_resource_profile() and set_resource_limits() from setup.sh
-# to catch regressions when thresholds or limits change.
+# and detect_hardware()/detect_profile_from_hardware() from resource-detect.sh.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SETUP_SH="$SCRIPT_DIR/../common/scripts/setup.sh"
+
+# Find the shared module (same search as setup.sh)
+MODULE_DIR=""
+for _d in \
+    "$SCRIPT_DIR/../common/scripts/common" \
+    "$SCRIPT_DIR/../../scripts/common"; do
+    if [[ -f "$_d/resource-detect.sh" ]]; then
+        MODULE_DIR="$_d"
+        break
+    fi
+done
+if [[ -z "$MODULE_DIR" ]]; then
+    echo "ERROR: Cannot find scripts/common/resource-detect.sh"
+    exit 1
+fi
 
 # Extract set_resource_limits() from setup.sh (source of truth)
 eval "$(sed -n '/^set_resource_limits()/,/^}/p' "$SETUP_SH")"
@@ -17,8 +32,8 @@ fail=0
 
 echo "Testing detect_resource_profile()..."
 
-# detect_resource_profile() reads /proc/meminfo directly, so we extract it
-# and replace the path with our mock file for testability.
+# detect_resource_profile() calls detect_hardware() from resource-detect.sh,
+# which reads /proc/meminfo. We extract both and mock /proc/meminfo.
 test_detect() {
     local mem_mb="$1"
     local expected="$2"
@@ -29,11 +44,24 @@ test_detect() {
     echo "MemTotal:       $((mem_mb * 1024)) kB" > "$mock_meminfo"
     trap 'rm -f "$mock_meminfo"' RETURN
 
-    # Extract detect_resource_profile from setup.sh, replacing /proc/meminfo
+    # Build a self-contained script with:
+    # 1. The shared module functions (detect_hardware, detect_profile_from_hardware)
+    # 2. detect_resource_profile from setup.sh
+    # Both with /proc/meminfo replaced by mock
+    local module_fns
+    module_fns=$(sed -n '/^detect_hardware()/,/^}$/p; /^detect_profile_from_hardware()/,/^}$/p' "$MODULE_DIR/resource-detect.sh" \
+        | sed "s|/proc/meminfo|$mock_meminfo|g")
     local fn_body
     fn_body=$(sed -n '/^detect_resource_profile()/,/^}/p' "$SETUP_SH" | sed "s|/proc/meminfo|$mock_meminfo|g")
+
     local profile
-    profile=$(bash -c "$fn_body; detect_resource_profile")
+    profile=$(bash -c "
+        log_info() { :; }
+        log_warn() { :; }
+        $module_fns
+        $fn_body
+        detect_resource_profile
+    " 2>/dev/null)
 
     if [[ "$profile" == "$expected" ]]; then
         echo "  PASS: $desc (${mem_mb}MB -> ${profile})"
