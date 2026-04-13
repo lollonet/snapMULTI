@@ -720,30 +720,43 @@ sudo bash /boot/firmware/snapmulti/firstboot.sh
 
 ## Updating
 
-snapMULTI has two update mechanisms: **Watchtower** for automatic Docker image updates and **update.sh** for config/script updates.
+The recommended update method is **reflashing the SD card**. snapMULTI is designed as an appliance — all configuration is auto-detected, so a fresh install is equivalent to an update with zero risk of upgrade-path bugs.
 
-> **Read-only filesystem (SD card installs):** If your Pi uses read-only mode (enabled by default on client installs), you must disable it before updating:
-> ```bash
-> sudo ro-mode disable && sudo reboot
-> ```
-> After updating, re-enable with `sudo ro-mode enable && sudo reboot`.
+### Reflash (Recommended)
 
-### Automatic Image Updates (Watchtower)
+The only data worth preserving across reflashes is the **MPD music database** (`mpd.db`). Without it, MPD rescans your entire music library on first boot — which can take hours over NFS.
 
-Opt-in automatic Docker image updates. Watchtower monitors running containers and pulls new `:latest` images on a schedule.
+A systemd timer on the Pi automatically backs up `mpd.db` to the boot partition daily. Before reflashing:
 
-**Enable:**
 ```bash
-# Add to /opt/snapmulti/.env:
+# 1. Remove SD card from Pi, insert in your computer
+# 2. Extract the MPD database backup:
+./scripts/backup-from-sd.sh
+
+# 3. Flash with Pi Imager (this erases the SD card)
+# 4. Run prepare-sd.sh — it includes mpd.db automatically:
+./scripts/prepare-sd.sh
+
+# 5. Insert SD, boot → MPD scans incrementally (seconds, not hours)
+```
+
+`backup-from-sd.sh` auto-detects the SD card mount point and saves `mpd.db` to the project directory where `prepare-sd.sh` picks it up.
+
+> **No MPD database?** If this is a fresh install or you only use streaming sources (Spotify, AirPlay, Tidal), skip step 2 — there's nothing to back up.
+
+### Automatic Image Updates (Watchtower) — opt-in
+
+For advanced users who prefer in-place Docker image updates without reflashing. Disabled by default.
+
+> **Not recommended for read-only or client installs.** Watchtower pulls new images into Docker storage. On overlayroot systems (clients, Pi Zero), images are stored in RAM tmpfs and lost on reboot. Use reflash instead.
+
+```bash
+# Enable: add to /opt/snapmulti/.env:
 AUTO_UPDATE=true
 
 # Restart with the auto-update profile:
 COMPOSE_PROFILES=auto-update docker compose up -d
 ```
-
-Or re-run `deploy.sh` — it detects `AUTO_UPDATE=true` and adds `auto-update` to `COMPOSE_PROFILES` automatically.
-
-**Configuration** (in `.env`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -751,55 +764,22 @@ Or re-run `deploy.sh` — it detects `AUTO_UPDATE=true` and adds `auto-update` t
 | `UPDATE_SCHEDULE` | `0 0 3 * * *` | Cron schedule (default: daily 3 AM) |
 | `UPDATE_NOTIFY_URL` | (none) | Notification URL ([shoutrrr format](https://containrrr.dev/shoutrrr/)) |
 
-**What gets updated:**
-- `lollonet/snapmulti-server`, `-airplay`, `-mpd`, `-metadata`, `-tidal` (`:latest` images)
+**What Watchtower updates:** `lollonet/snapmulti-*` images (`:latest` tag only)
 
-**What does NOT get updated:**
-- `go-librespot` (pinned to `v0.7.0`)
-- `mympd` (third-party image, pinned)
-- Config files, scripts, docker-compose.yml (use `update.sh` for those)
+**What it does NOT update:** pinned images (go-librespot, mympd), config files, scripts
 
-### Config & Script Updates (update.sh)
+### Config & Script Updates (update.sh) — advanced
 
-For updating config files, scripts, and docker-compose.yml from GitHub releases. Works without git — designed for SD-card installs.
+For updating config files, scripts, and docker-compose.yml from GitHub releases via SSH. Works without git.
 
 ```bash
 # Check for updates
 sudo /opt/snapmulti/scripts/update.sh --check
 
-# Apply update (interactive)
+# Apply update
 sudo /opt/snapmulti/scripts/update.sh
-
-# Apply update (non-interactive, e.g. from cron)
-sudo /opt/snapmulti/scripts/update.sh --force
 ```
 
 **What gets updated:** `config/`, `scripts/`, `docker-compose.yml`, `Dockerfile.*`, `.env.example`
 
 **What is NEVER touched:** `.env`, `audio/`, `artwork/`, `mpd/`, `mympd/`, `data/`
-
-**Safety:** Refuses to cross major version boundaries (e.g., v0.x to v1.x). Major upgrades require manual intervention.
-
-### Standard Update (with git)
-
-If you cloned the repo with git:
-
-```bash
-cd /opt/snapmulti
-git pull
-docker compose pull
-docker compose up -d
-```
-
-### Rollback
-
-If an update breaks things:
-```bash
-# Use a specific image version
-docker pull lollonet/snapmulti-server:v0.3.5
-docker compose up -d
-
-# Or restore config from backup
-cp -r config.backup/* config/
-docker compose up -d
-```

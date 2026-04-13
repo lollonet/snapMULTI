@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic MPD database backup to boot partition
+
+[Timer]
+# Backup daily at 4 AM and on boot (after containers are up)
+OnBootSec=5min
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
