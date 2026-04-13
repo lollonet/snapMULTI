@@ -377,9 +377,10 @@ milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
 # ══════════════════════════════════════════════════════════════════
 if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
   if checkpoint_reached "deploy"; then
+    set_module "deploy"
     log_info "Server deploy already complete (checkpoint), skipping"
-    # Still advance step counters so progress display stays correct
     next_step "Deploy server (cached)..."
+    set_module "verify-server"
     next_step "Verifying server (cached)..."
   else
     set_module "deploy"
@@ -471,8 +472,10 @@ fi
 # ══════════════════════════════════════════════════════════════════
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
   if checkpoint_reached "setup"; then
+    set_module "setup"
     log_info "Client setup already complete (checkpoint), skipping"
     next_step "Setup client (cached)..."
+    set_module "verify-client"
     next_step "Verifying client (cached)..."
   else
     set_module "setup"
