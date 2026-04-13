@@ -39,12 +39,33 @@ modprobe bcm2835_wdt 2>/dev/null || true
 # ── Artwork cache cleanup: remove files older than 30 days ────────
 find /opt/snapmulti/artwork -type f -mtime +30 -delete 2>/dev/null || true
 
-# ── Tmpfs usage warning (overlayroot writes to RAM) ────────────────
-# Alert via syslog if tmpfs is >80% full — system will crash if it fills up
+# ── Overlayroot tmpfs sizing + monitoring ──────────────────────────
+# Default tmpfs is 50% of RAM. On 2GB Pi that's 1GB — tight for Docker
+# runtime state + logs. Size to 25% of RAM (Docker images are baked to
+# the lower layer, so tmpfs only holds runtime writes).
 if mount | grep -q ' on / type overlay'; then
+    total_mb=$(awk '/MemTotal/ {printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null) || total_mb=0
+    if [ "$total_mb" -gt 0 ] 2>/dev/null; then
+        target_mb=$((total_mb / 4))
+        # Floor at 256MB, cap at 2048MB
+        [ "$target_mb" -lt 256 ] && target_mb=256
+        [ "$target_mb" -gt 2048 ] && target_mb=2048
+        # Remount with explicit size (idempotent — safe to re-run)
+        if mount -o "remount,size=${target_mb}M" / 2>/dev/null; then
+            logger -t boot-tune "Overlayroot tmpfs sized to ${target_mb}MB (RAM: ${total_mb}MB)"
+        else
+            logger -t boot-tune -p warning "Failed to resize overlayroot tmpfs"
+        fi
+    fi
+
+    # Monitor usage — warn early so user can act before system crashes
     usage=$(df / --output=pcent 2>/dev/null | tail -1 | tr -cd '0-9')
-    if [ -n "$usage" ] && [ "$usage" -gt 80 ] 2>/dev/null; then
-        logger -t boot-tune -p warning "WARNING: root tmpfs ${usage}% full — system may crash. Run: sudo ro-mode disable && sudo reboot"
+    if [ -n "$usage" ] 2>/dev/null; then
+        if [ "$usage" -gt 90 ]; then
+            logger -t boot-tune -p crit "CRITICAL: root tmpfs ${usage}% full — reboot imminent. Run: sudo ro-mode disable && sudo reboot"
+        elif [ "$usage" -gt 70 ]; then
+            logger -t boot-tune -p warning "WARNING: root tmpfs ${usage}% full. Run: sudo ro-mode disable && sudo reboot"
+        fi
     fi
 fi
 
