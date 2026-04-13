@@ -163,7 +163,7 @@ Metadati: `tidal-meta-bridge.sh` estrae i metadati dalla TUI tmux di `speaker_co
 | 8000 | HTTP | Stream audio (accesso diretto) |
 
 **Configurazione**: `config/mpd.conf`
-- Output: FIFO verso `/audio/snapcast_fifo`
+- Output: FIFO verso `/audio/mpd_fifo`
 - Directory musicale: `/music` (mappata a `MUSIC_PATH` sull'host)
 - Database: `/data/mpd.db`
 

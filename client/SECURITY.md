@@ -9,7 +9,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in snapclient-pi, please report it responsibly:
+If you discover a security vulnerability in the snapMULTI client, please report it responsibly:
 
 1. **Do NOT open a public GitHub issue**
 2. Use [GitHub Security Advisories](https://github.com/lollonet/snapMULTI/security/advisories/new)
@@ -20,15 +20,13 @@ We will acknowledge receipt within 48 hours and aim to release a fix within 7 da
 ## Scope
 
 This policy covers:
-- The snapclient-pi project (`lollonet/snapclient-pi`)
-- Docker images published under `lollonet/snapclient-pi*`
+- The snapMULTI client (lives at `client/` in the [snapMULTI](https://github.com/lollonet/snapMULTI) monorepo)
+- Docker images published under `lollonet/snapclient-pi-*`
 - Install scripts (`setup.sh`, `discover-server.sh`, `display-detect.sh`)
-
-For server-side issues, report to [snapMULTI](https://github.com/lollonet/snapMULTI/security/advisories/new).
 
 ## Security Model
 
-snapclient-pi runs on home networks behind a firewall:
+The snapMULTI client runs on home networks behind a firewall:
 
 - **Containers**: `cap_drop: ALL`, `read_only: true`, `no-new-privileges`
 - **Network**: Host networking for low-latency audio; not designed for public-facing deployment

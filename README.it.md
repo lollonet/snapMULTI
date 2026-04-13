@@ -67,6 +67,8 @@ git clone https://github.com/lollonet/snapMULTI.git
 
 **Su Windows (PowerShell):**
 ```powershell
+# Richiede Git per Windows: https://git-scm.com/download/win
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 git clone https://github.com/lollonet/snapMULTI.git
 .\snapMULTI\scripts\prepare-sd.ps1
 ```

@@ -142,5 +142,7 @@ source_of_truth: true
 | v0.3.1 | MPD connection resilience | Done |
 | v0.3.2 | First-boot reliability, per-image pull progress | Done |
 | v0.3.3 | Performance optimizations (CPU -73% tidal, -79% metadata) | Done |
-| v0.4.0 | Monitoring & observability (Prometheus, notifications) | Planned |
+| v0.4.0 | Monorepo, single-branch CI, install hardening, shared modules | Done |
+| v0.4.1 | EXIT trap fix, pull-images.sh rate limit detection | Done |
+| v0.5.0 | Monitoring & observability (Prometheus, notifications) | Planned |
 | v1.0.0 | Production ready, community launch | Planned |

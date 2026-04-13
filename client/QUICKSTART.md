@@ -40,11 +40,11 @@ See the [Supported Audio HATs](README.md#supported-audio-hats) table in the READ
 
 ## Step 3: Copy Project Files
 
-From your computer, clone the repo and copy files to the Pi:
+From your computer, clone the monorepo and copy client files to the Pi:
 
 ```bash
 git clone https://github.com/lollonet/snapMULTI.git
-scp -r snapMULTI/client <username>@<hostname>.local:/home/<username>/snapclient-pi
+scp -r snapMULTI/client <username>@<hostname>.local:/home/<username>/snapclient
 ```
 
 Then SSH into the Pi:
@@ -58,7 +58,7 @@ ssh <username>@<hostname>.local
 On the Raspberry Pi:
 
 ```bash
-cd ~/snapclient-pi
+cd ~/snapclient
 sudo bash common/scripts/setup.sh
 ```
 
