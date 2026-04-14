@@ -17,18 +17,31 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image:
-          - lollonet/snapmulti-server
-          - lollonet/snapmulti-airplay
-          - lollonet/snapmulti-mpd
-          - lollonet/snapmulti-metadata
+        include:
+          - image: lollonet/snapmulti-server
+          - image: lollonet/snapmulti-airplay
+          - image: lollonet/snapmulti-mpd
+          - image: lollonet/snapmulti-metadata
+          - image: lollonet/snapmulti-tidal
+            platform: linux/arm64
+          - image: lollonet/snapclient-pi
+            platform: linux/arm64
+          - image: lollonet/snapclient-pi-visualizer
+            platform: linux/arm64
+          - image: lollonet/snapclient-pi-fb-display
+            platform: linux/arm64
           # go-librespot: upstream image scanned separately below
-          # tidal: ARM-only image, cannot pull on amd64 runner
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Pull image (cross-platform if needed)
+        env:
+          IMAGE: ${{ matrix.image }}
+          PLATFORM: ${{ matrix.platform || 'linux/amd64' }}
+        run: docker pull --platform "$PLATFORM" "$IMAGE:latest"
+
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0 # v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: '${{ matrix.image }}:latest'
           format: 'sarif'
