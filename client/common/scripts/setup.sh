@@ -1448,9 +1448,16 @@ cd "$INSTALL_DIR"
 if ! pull_compose_images log_progress 1024; then
     stop_progress_animation
     echo ""
-    echo "ERROR: Failed to pull container images"
-    echo "  Check network connectivity and try: docker compose pull"
-    exit 1
+    echo "WARNING: Failed to pull some container images"
+    echo "  firstboot will retry on next boot, or run manually:"
+    echo "  cd $INSTALL_DIR && docker compose pull"
+    # Don't exit 1 — let firstboot retry. After a Docker storage driver
+    # switch (readonly mode), images were wiped and the pull may fail
+    # due to rate limits or network issues. On next boot, fuse-overlayfs
+    # is already configured so no wipe happens, and the pull retries.
+    PULL_FAILED=true
+else
+    PULL_FAILED=false
 fi
 echo ""
 
@@ -1459,7 +1466,9 @@ echo ""
 # First-boot: overlayroot not active yet -> harmless no-op.
 # Re-runs on overlayroot: persists images so tmpfs doesn't fill on next boot.
 # ============================================
-if mountpoint -q /media/root-ro 2>/dev/null; then
+if [[ "$PULL_FAILED" == "true" ]]; then
+    echo "Skipping bake — images incomplete (will retry on next boot)"
+elif mountpoint -q /media/root-ro 2>/dev/null; then
     log_progress "Baking Docker images to SD card..."
     BAKE_DIR=$(mktemp -d /tmp/snapclient-bake-XXXXX)
     bake_cleanup() {
@@ -1556,5 +1565,12 @@ if [[ "$NEEDS_REBOOT" == "true" ]]; then
 echo ""
 echo "NOTE: Boot configuration was modified."
 echo "  A reboot is required for changes to take effect."
+fi
+
+# Exit with error if pull failed — firstboot won't mark .done-setup,
+# so it retries on next boot (fuse-overlayfs already configured, no wipe)
+if [[ "${PULL_FAILED:-false}" == "true" ]]; then
+    echo "WARNING: Setup completed but image pull failed — will retry on next boot"
+    exit 1
 fi
 echo ""

@@ -100,10 +100,10 @@ pull_compose_images() {
     local total=${#to_pull[@]}
     local count=0
 
-    # Temp directory for pull output (cleaned up on function return).
-    # RETURN only — EXIT would clobber the caller's global EXIT trap.
+    # Temp directory for pull output.
+    # Cleaned up explicitly at the end — NOT via RETURN trap, because
+    # background jobs still reference files in this directory.
     _pi_tmp=$(mktemp -d)
-    trap 'rm -rf "$_pi_tmp"' RETURN
 
     local pull_failed=()
     local rate_limited=false
@@ -142,9 +142,11 @@ pull_compose_images() {
             fi
         fi
 
-        # Wait for background svc2
+        # Always wait for background svc2 before next pair
         if [[ -n "$bg_pid" ]]; then
-            if ! wait "$bg_pid" 2>/dev/null; then
+            local bg_rc=0
+            wait "$bg_pid" 2>/dev/null || bg_rc=$?
+            if [[ $bg_rc -ne 0 ]]; then
                 cat "$bg_log" 2>/dev/null
                 if grep -qi "too many requests\|rate limit\|429" "$bg_log" 2>/dev/null; then
                     rate_limited=true
@@ -158,6 +160,9 @@ pull_compose_images() {
             rm -f "$bg_log"
         fi
     done
+
+    # Clean up temp directory (safe — all background jobs have been waited on)
+    rm -rf "$_pi_tmp"
 
     # Prune dangling images
     docker image prune -f >/dev/null 2>&1 || true
