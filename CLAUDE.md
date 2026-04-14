@@ -10,7 +10,7 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 | Audio sources, params, schema, JSON-RPC API | `docs/SOURCES.md` |
 | Architecture, services, ports, mDNS, CI/CD | `docs/USAGE.md` |
 | Hardware, network, recommended setups | `docs/HARDWARE.md` |
-| User quickstart, client basic setup | `README.md` |
+| User quickstart, client basic setup | `QUICKSTART.md` + `README.md` |
 | Changelog | `CHANGELOG.md` |
 | Source config (inline comments) | `config/snapserver.conf` |
 | Quality gates (tools, paths, thresholds) | `CONTROL.yaml` |

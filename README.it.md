@@ -18,7 +18,7 @@ Riproduci musica in sincronia in ogni stanza. Streaming da Spotify, AirPlay, la 
 | **AirPlay** | Icona AirPlay → seleziona "*hostname* AirPlay" |
 | **Tidal** | Apri l'app → cast su "*hostname* Tidal" (solo ARM/Pi) |
 | **Libreria musicale** | Naviga su `http://hostname.local:8180` |
-| **Qualsiasi app** | Stream sulla porta 4953 ([dettagli](docs/SOURCES.it.md#5-tcp-input-server-tcp)) |
+| **Qualsiasi app** | Stream sulla porta 4953 ([dettagli](docs/SOURCES.it.md#5-ingresso-tcp-tcp-server)) |
 
 Gestisci gli altoparlanti su `http://hostname.local:1780`
 
