@@ -28,6 +28,18 @@ for ctrl in /sys/bus/usb/devices/*/power/autosuspend; do
     [ -f "$ctrl" ] && echo -1 > "$ctrl" 2>/dev/null || true
 done
 
+# ── WiFi auto-disable when Ethernet is connected ─────────────────
+# Avoids dual mDNS announcements (clients might connect to the wrong IP).
+# If Ethernet is unplugged, WiFi stays active as fallback.
+if command -v nmcli &>/dev/null && ip link show eth0 2>/dev/null | grep -q 'state UP'; then
+    nmcli radio wifi off 2>/dev/null \
+        && logger -t boot-tune "Ethernet UP — WiFi disabled (single mDNS announcement)" \
+        || logger -t boot-tune -p warning "Failed to disable WiFi"
+elif command -v nmcli &>/dev/null && ! ip link show eth0 2>/dev/null | grep -q 'state UP'; then
+    # Ensure WiFi is on if Ethernet is not connected (recovery after cable removal)
+    nmcli radio wifi on 2>/dev/null || true
+fi
+
 # ── Memory tuning: reduce swappiness for audio workloads ──────────
 # Default 60 is too aggressive — audio buffers should stay in RAM
 echo 10 > /proc/sys/vm/swappiness 2>/dev/null || true
