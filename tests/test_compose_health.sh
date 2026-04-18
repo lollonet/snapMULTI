@@ -77,12 +77,14 @@ for fifo in audio/mpd_fifo audio/spotify_fifo audio/airplay_fifo audio/tidal_fif
     [[ -p "$fifo" ]] || mkfifo "$fifo" 2>/dev/null || true
 done
 
-# Start server (exclude tidal on non-ARM — ARM-only image won't pull on amd64)
+# Skip tidal-connect on non-ARM (ARM-only image won't pull on amd64)
 ARCH=$(uname -m)
-if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
-    docker compose up -d 2>&1 | tail -5
-else
+SKIP_SVC=""
+if [[ "$ARCH" != "aarch64" && "$ARCH" != "arm64" ]]; then
+    SKIP_SVC="tidal-connect"
     docker compose up -d --scale tidal-connect=0 2>&1 | tail -5
+else
+    docker compose up -d 2>&1 | tail -5
 fi
 
 # Wait for health checks (max 90s)
@@ -95,7 +97,8 @@ while [[ $elapsed -lt $MAX_WAIT ]]; do
     sleep $INTERVAL
     elapsed=$((elapsed + INTERVAL))
 
-    total=$(docker compose ps --services 2>/dev/null | wc -l)
+    # Exclude skipped services from counts
+    total=$(docker compose ps --services 2>/dev/null | grep -v "${SKIP_SVC:-^$}" | wc -l)
     running=$(docker compose ps --status running -q 2>/dev/null | wc -l)
     healthy=$(docker compose ps --status healthy -q 2>/dev/null | wc -l)
 
@@ -106,11 +109,11 @@ while [[ $elapsed -lt $MAX_WAIT ]]; do
     fi
 done
 
-# Verify each service
+# Verify each service (skip tidal on amd64)
 echo ""
 echo "=== Service health ==="
 
-for svc in $(docker compose ps --services 2>/dev/null); do
+for svc in $(docker compose ps --services 2>/dev/null | grep -v "${SKIP_SVC:-^$}"); do
     status=$(docker compose ps "$svc" --format '{{.Status}}' 2>/dev/null)
     if echo "$status" | grep -qi "healthy"; then
         ok "$svc: $status"
@@ -144,6 +147,13 @@ if curl -sf --max-time 5 http://127.0.0.1:8083/health >/dev/null 2>&1; then
     ok "Metadata (:8083/health) responds"
 else
     fail "Metadata (:8083/health) not responding"
+fi
+
+# Metadata version
+if curl -sf --max-time 10 http://127.0.0.1:8083/version 2>/dev/null | grep -q "current"; then
+    ok "Metadata (:8083/version) responds"
+else
+    fail "Metadata (:8083/version) not responding"
 fi
 
 # Snapserver JSON-RPC
