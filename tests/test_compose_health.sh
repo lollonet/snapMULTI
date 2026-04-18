@@ -100,15 +100,9 @@ for fifo in audio/mpd_fifo audio/spotify_fifo audio/airplay_fifo audio/tidal_fif
     [[ -p "$fifo" ]] || mkfifo "$fifo" 2>/dev/null || true
 done
 
-# Skip tidal-connect on non-ARM (ARM-only image won't pull on amd64)
-ARCH=$(uname -m)
-SKIP_SVC=""
-if [[ "$ARCH" != "aarch64" && "$ARCH" != "arm64" ]]; then
-    SKIP_SVC="tidal-connect"
-    docker compose up -d --scale tidal-connect=0 2>&1 | tail -5
-else
-    docker compose up -d 2>&1 | tail -5
-fi
+# Start services. Tidal-connect is in the "tidal" profile — it only starts
+# when COMPOSE_PROFILES includes "tidal" (ARM installs). No need to exclude it.
+docker compose up -d 2>&1 | tail -5
 
 # Wait for health checks (max 90s)
 echo "Waiting for services to become healthy..."
@@ -121,7 +115,7 @@ while [[ $elapsed -lt $MAX_WAIT ]]; do
     elapsed=$((elapsed + INTERVAL))
 
     # Exclude skipped services from counts
-    total=$(docker compose ps --services 2>/dev/null | grep -v "${SKIP_SVC:-^$}" | wc -l)
+    total=$(docker compose ps --services 2>/dev/null | wc -l)
     running=$(docker compose ps --status running -q 2>/dev/null | wc -l)
     healthy=$(docker compose ps --status healthy -q 2>/dev/null | wc -l)
 
