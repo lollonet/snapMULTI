@@ -1983,7 +1983,9 @@ async def handle_version(request: web.Request) -> web.Response:
                         latest = data.get("tag_name", "").lstrip("v")
                         _latest_version_cache["version"] = latest
                     else:
-                        logger.debug("GitHub API returned %d for version check", resp.status)
+                        logger.debug(
+                            "GitHub API returned %d for version check", resp.status
+                        )
         except Exception as exc:
             logger.debug("Version check failed: %s", exc)
             _latest_version_cache["checked_at"] = 0.0  # reset so next call retries
