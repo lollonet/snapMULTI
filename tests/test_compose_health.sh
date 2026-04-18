@@ -56,6 +56,16 @@ if ! docker info &>/dev/null 2>&1; then
     exit 1
 fi
 
+# Docker Desktop (macOS/Windows) uses a Linux VM — host networking doesn't
+# expose ports on localhost. This test requires native Docker (Linux).
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    echo ""
+    echo "SKIP: Docker Desktop on macOS does not support host networking."
+    echo "      This test requires native Linux Docker (Pi, CI runner, VM)."
+    echo "      Containers use network_mode: host — ports aren't reachable on Mac."
+    exit 0
+fi
+
 # ── Server compose ───────────────────────────────────────────────
 echo ""
 echo "=== Server compose up ==="
@@ -90,16 +100,9 @@ for fifo in audio/mpd_fifo audio/spotify_fifo audio/airplay_fifo audio/tidal_fif
     [[ -p "$fifo" ]] || mkfifo "$fifo" 2>/dev/null || true
 done
 
-# Detect platform limitations
+# Skip tidal-connect on non-ARM (ARM-only image won't pull on amd64)
 ARCH=$(uname -m)
 SKIP_SVC=""
-# On macOS Docker Desktop, FIFOs don't work reliably on bind mounts (virtiofs).
-# librespot and shairport-sync will restart-loop because their FIFOs fail.
-PLATFORM_TOLERANT=false
-if [[ "$(uname -s)" == "Darwin" ]]; then
-    PLATFORM_TOLERANT=true
-    warn "macOS detected — tolerating FIFO-dependent service restarts (librespot, shairport-sync)"
-fi
 if [[ "$ARCH" != "aarch64" && "$ARCH" != "arm64" ]]; then
     SKIP_SVC="tidal-connect"
     docker compose up -d --scale tidal-connect=0 2>&1 | tail -5
@@ -127,12 +130,6 @@ while [[ $elapsed -lt $MAX_WAIT ]]; do
     if [[ "$running" -ge "$total" ]] && [[ "$healthy" -ge "$total" ]]; then
         break
     fi
-    # On macOS, some services will never become healthy (FIFO issues).
-    # Break early if at least core services (snapserver, metadata, mympd) are healthy.
-    if [[ "$PLATFORM_TOLERANT" == "true" ]] && [[ "$healthy" -ge 3 ]]; then
-        echo "  macOS: $healthy core services healthy — proceeding"
-        break
-    fi
 done
 
 # Verify each service (skip tidal on amd64)
@@ -145,9 +142,6 @@ for svc in $(docker compose ps --services 2>/dev/null | grep -v "${SKIP_SVC:-^$}
         ok "$svc: $status"
     elif echo "$status" | grep -qi "running\|starting"; then
         warn "$svc: running but not healthy yet ($status)"
-    elif [[ "$PLATFORM_TOLERANT" == "true" ]] && echo "$status" | grep -qi "restarting"; then
-        # On macOS, FIFO-dependent services (librespot, shairport-sync) restart-loop
-        warn "$svc: restarting (expected on macOS — FIFO limitation)"
     else
         fail "$svc: $status"
     fi
