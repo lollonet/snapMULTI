@@ -1952,6 +1952,51 @@ async def handle_health(request: web.Request) -> web.Response:
     )
 
 
+# Cache latest version for 24h to avoid hammering GitHub API
+_latest_version_cache: dict[str, str | float] = {"version": "", "checked_at": 0.0}
+
+
+async def handle_version(request: web.Request) -> web.Response:
+    """Version check endpoint — returns current and latest version."""
+    import time
+
+    current = os.environ.get("SNAPMULTI_VERSION", "unknown")
+    cache_ttl = 86400  # 24 hours
+
+    # Check GitHub for latest release (cached)
+    latest = _latest_version_cache.get("version", "")
+    checked_at = float(_latest_version_cache.get("checked_at", 0))
+
+    if time.time() - checked_at > cache_ttl:
+        try:
+            import aiohttp as _aiohttp
+
+            async with _aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://api.github.com/repos/lollonet/snapMULTI/releases/latest",
+                    timeout=_aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        latest = data.get("tag_name", "").lstrip("v")
+                        _latest_version_cache["version"] = latest
+                        _latest_version_cache["checked_at"] = time.time()
+        except Exception:
+            pass  # keep stale cache or empty — non-critical
+
+    current_clean = current.lstrip("v")
+    update_available = bool(latest and latest != current_clean)
+
+    return web.json_response(
+        {
+            "current": current,
+            "latest": latest or current,
+            "update_available": update_available,
+        },
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
 # ──────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────
@@ -1997,6 +2042,7 @@ async def main() -> None:
     app.router.add_get("/defaults/{filename}", handle_defaults)
     app.router.add_get("/metadata.json", handle_metadata)
     app.router.add_get("/health", handle_health)
+    app.router.add_get("/version", handle_version)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", HTTP_PORT)
