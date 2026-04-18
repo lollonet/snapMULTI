@@ -39,6 +39,7 @@ cleanup() {
     if [[ -f "$PROJECT_DIR/.env.test-backup" ]]; then
         mv "$PROJECT_DIR/.env.test-backup" "$PROJECT_DIR/.env"
     fi
+    rm -f "$PROJECT_DIR/.env.bak"
     rm -rf "${TEST_MUSIC_DIR:-}" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -134,7 +135,7 @@ for svc in $(docker compose ps --services 2>/dev/null | grep -v "${SKIP_SVC:-^$}
     status=$(docker compose ps "$svc" --format '{{.Status}}' 2>/dev/null)
     if echo "$status" | grep -qi "healthy"; then
         ok "$svc: $status"
-    elif echo "$status" | grep -qi "running\|starting"; then
+    elif echo "$status" | grep -Eqi "running|starting"; then
         warn "$svc: running but not healthy yet ($status)"
     else
         fail "$svc: $status"
