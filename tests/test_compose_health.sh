@@ -35,6 +35,11 @@ cleanup() {
         docker compose down --timeout 10 >/dev/null 2>&1 || true
         docker compose -f client/common/docker-compose.yml down --timeout 10 >/dev/null 2>&1 || true
     fi
+    # Restore original .env if we backed it up
+    if [[ -f "$PROJECT_DIR/.env.test-backup" ]]; then
+        mv "$PROJECT_DIR/.env.test-backup" "$PROJECT_DIR/.env"
+    fi
+    rm -rf "${TEST_MUSIC_DIR:-}" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -57,16 +62,20 @@ echo "=== Server compose up ==="
 
 cd "$PROJECT_DIR"
 
-# Create minimal .env if not present
-if [[ ! -f .env ]]; then
-    cp .env.example .env 2>/dev/null || {
-        cat > .env <<EOF
-MUSIC_PATH=/tmp/test-music
+# Create test-safe .env (override MUSIC_PATH to avoid Docker mount errors)
+TEST_MUSIC_DIR=$(mktemp -d)
+if [[ -f .env ]]; then
+    # Backup existing .env, restore on exit
+    cp .env .env.test-backup
+    sed -i.bak "s|^MUSIC_PATH=.*|MUSIC_PATH=$TEST_MUSIC_DIR|" .env
+    rm -f .env.bak
+else
+    cat > .env <<EOF
+MUSIC_PATH=$TEST_MUSIC_DIR
 TZ=UTC
 PUID=$(id -u)
 PGID=$(id -g)
 EOF
-    }
 fi
 
 # Create required directories
