@@ -77,13 +77,12 @@ for fifo in audio/mpd_fifo audio/spotify_fifo audio/airplay_fifo audio/tidal_fif
     [[ -p "$fifo" ]] || mkfifo "$fifo" 2>/dev/null || true
 done
 
-# Start server (exclude tidal on non-ARM)
+# Start server (exclude tidal on non-ARM — ARM-only image won't pull on amd64)
 ARCH=$(uname -m)
 if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
     docker compose up -d 2>&1 | tail -5
 else
-    # Filter out tidal profile on amd64
-    docker compose up -d 2>&1 | tail -5
+    docker compose up -d --scale tidal-connect=0 2>&1 | tail -5
 fi
 
 # Wait for health checks (max 90s)

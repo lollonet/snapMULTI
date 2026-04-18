@@ -1968,6 +1968,8 @@ async def handle_version(request: web.Request) -> web.Response:
     checked_at = float(_latest_version_cache.get("checked_at", 0))
 
     if time.time() - checked_at > cache_ttl:
+        # Claim the slot before await to prevent concurrent API calls (TOCTOU)
+        _latest_version_cache["checked_at"] = time.time()
         try:
             import aiohttp as _aiohttp
 
@@ -1980,9 +1982,11 @@ async def handle_version(request: web.Request) -> web.Response:
                         data = await resp.json()
                         latest = data.get("tag_name", "").lstrip("v")
                         _latest_version_cache["version"] = latest
-                        _latest_version_cache["checked_at"] = time.time()
-        except Exception:
-            pass  # keep stale cache or empty — non-critical
+                    else:
+                        logger.debug("GitHub API returned %d for version check", resp.status)
+        except Exception as exc:
+            logger.debug("Version check failed: %s", exc)
+            _latest_version_cache["checked_at"] = 0.0  # reset so next call retries
 
     current_clean = current.lstrip("v")
     update_available = bool(latest and latest != current_clean)
