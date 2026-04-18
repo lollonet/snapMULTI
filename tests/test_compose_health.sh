@@ -116,7 +116,6 @@ while [[ $elapsed -lt $MAX_WAIT ]]; do
     sleep $INTERVAL
     elapsed=$((elapsed + INTERVAL))
 
-    # Exclude skipped services from counts
     total=$(docker compose ps --services 2>/dev/null | wc -l)
     running=$(docker compose ps --status running -q 2>/dev/null | wc -l)
     healthy=$(docker compose ps --status healthy -q 2>/dev/null | wc -l)
@@ -132,7 +131,7 @@ done
 echo ""
 echo "=== Service health ==="
 
-for svc in $(docker compose ps --services 2>/dev/null | grep -v "${SKIP_SVC:-^$}"); do
+for svc in $(docker compose ps --services 2>/dev/null); do
     status=$(docker compose ps "$svc" --format '{{.Status}}' 2>/dev/null)
     if echo "$status" | grep -qi "healthy"; then
         ok "$svc: $status"
