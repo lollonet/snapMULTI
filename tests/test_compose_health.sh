@@ -92,9 +92,10 @@ fi
 # Create required directories
 mkdir -p audio data mpd/data mympd/workdir mympd/cachedir artwork
 
-# Create a dummy music file so MPD doesn't wait forever for content
+# Create a dummy music file so MPD entrypoint doesn't wait 120s for content.
+# The entrypoint looks for *.mp3 or *.flac files in /music.
 mkdir -p "$TEST_MUSIC_DIR"
-touch "$TEST_MUSIC_DIR/.keep"
+touch "$TEST_MUSIC_DIR/silence.mp3"
 
 # Create FIFOs if missing
 for fifo in audio/mpd_fifo audio/spotify_fifo audio/airplay_fifo audio/tidal_fifo; do
@@ -167,11 +168,11 @@ else
     fail "Metadata (:8083/health) not responding"
 fi
 
-# Metadata version
+# Metadata version (may not exist on older images — warn, don't fail)
 if curl -sf --max-time 10 http://127.0.0.1:8083/version 2>/dev/null | grep -q "current"; then
     ok "Metadata (:8083/version) responds"
 else
-    fail "Metadata (:8083/version) not responding"
+    warn "Metadata (:8083/version) not available (needs image rebuild)"
 fi
 
 # Snapserver JSON-RPC
