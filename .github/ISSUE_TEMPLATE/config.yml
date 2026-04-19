@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Quick Start Guide
+    url: https://github.com/lollonet/snapMULTI/blob/main/QUICKSTART.md
+    about: New to snapMULTI? Start here.
+  - name: Installation Guide
+    url: https://github.com/lollonet/snapMULTI/blob/main/docs/INSTALL.md
+    about: Step-by-step install with troubleshooting.
+  - name: Hardware Guide
+    url: https://github.com/lollonet/snapMULTI/blob/main/docs/HARDWARE.md
+    about: Supported hardware, audio HATs, network requirements.

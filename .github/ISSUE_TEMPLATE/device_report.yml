@@ -1,0 +1,100 @@
+name: Device Report
+description: Share your working hardware setup (helps others choose components)
+title: "[Device]: "
+labels: ["device-report", "documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share your working snapMULTI setup! This helps other users choose compatible hardware.
+        We'll add verified combinations to the [Hardware Guide](../../docs/HARDWARE.md#tested-combinations).
+
+  - type: dropdown
+    id: install-type
+    attributes:
+      label: Install type
+      options:
+        - Music Server
+        - Audio Player (client)
+        - Server + Player (both)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Pi model
+      options:
+        - Raspberry Pi 5 (8 GB)
+        - Raspberry Pi 5 (4 GB)
+        - Raspberry Pi 4 (8 GB)
+        - Raspberry Pi 4 (4 GB)
+        - Raspberry Pi 4 (2 GB)
+        - Raspberry Pi 3B+
+        - Raspberry Pi 3B
+        - Raspberry Pi Zero 2 W
+        - x86_64 (describe below)
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: audio-output
+    attributes:
+      label: Audio output
+      placeholder: "e.g., HiFiBerry DAC+ Pro, InnoMaker DAC, USB DAC, HDMI, 3.5mm"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: display
+    attributes:
+      label: Display
+      options:
+        - HDMI (with cover art)
+        - Headless (no display)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: network
+    attributes:
+      label: Network
+      options:
+        - Ethernet
+        - WiFi 5 GHz
+        - WiFi 2.4 GHz
+    validations:
+      required: true
+
+  - type: dropdown
+    id: music-source
+    attributes:
+      label: Music source
+      description: What do you primarily use?
+      multiple: true
+      options:
+        - Spotify Connect
+        - AirPlay
+        - Tidal Connect
+        - MPD (local/NFS/USB library)
+        - TCP input
+    validations:
+      required: true
+
+  - type: dropdown
+    id: status
+    attributes:
+      label: Status
+      options:
+        - Working perfectly
+        - Working with minor issues
+        - Partially working
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Any tips, issues, or observations for other users with this hardware?
