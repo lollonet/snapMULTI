@@ -128,40 +128,66 @@ download_and_extract() {
 
 apply_update() {
     local src_dir="$1"
+    local ts
+    ts=$(date +%Y%m%d-%H%M%S)
 
     info "Applying update..."
 
+    # Stage the update in a temporary copy so a failed cp doesn't leave
+    # the live install half-mutated. On success we swap; on failure we
+    # restore the backup.
+    local backup_root="$HOME/.claude-backups/update/$ts"
+    local staging_dir
+    staging_dir=$(mktemp -d "${INSTALL_DIR}.staging.XXXXXX")
+
+    # Snapshot current install into staging (hard-link where possible for speed)
+    cp -al "$INSTALL_DIR/." "$staging_dir/" 2>/dev/null \
+        || cp -a "$INSTALL_DIR/." "$staging_dir/"
+
+    # Apply changes to the staging copy
     for target in "${UPDATE_TARGETS[@]}"; do
         if [[ -e "$src_dir/$target" ]]; then
             if [[ -d "$src_dir/$target" ]]; then
-                # Directory: replace contents so files removed upstream don't linger.
-                # Backup removed files to ~/.claude-backups in case of rollback.
-                if [[ -d "$INSTALL_DIR/$target" ]]; then
-                    local backup_dir
-                    backup_dir="$HOME/.claude-backups/update/$(date +%Y%m%d-%H%M%S)/$target"
-                    mkdir -p "$backup_dir"
-                    # Identify files present locally but absent in new release
+                # Remove entries (files, symlinks, empty dirs) absent from new release
+                if [[ -d "$staging_dir/$target" ]]; then
                     while IFS= read -r rel_path; do
                         if [[ ! -e "$src_dir/$target/$rel_path" ]]; then
-                            local parent
-                            parent=$(dirname "$backup_dir/$rel_path")
-                            mkdir -p "$parent"
-                            mv "$INSTALL_DIR/$target/$rel_path" "$backup_dir/$rel_path"
+                            local dest="$staging_dir/$target/$rel_path"
+                            mkdir -p "$backup_root/$target/$(dirname "$rel_path")"
+                            mv "$dest" "$backup_root/$target/$rel_path" 2>/dev/null || true
                         fi
-                    done < <(cd "$INSTALL_DIR/$target" && find . -type f | sed 's|^\./||')
-                    rmdir "$backup_dir" 2>/dev/null || true  # clean up if empty
+                    done < <(cd "$staging_dir/$target" && find . \( -type f -o -type l \) | sed 's|^\./||')
+                    # Prune empty directories not present in new release
+                    (cd "$staging_dir/$target" && find . -depth -type d -empty -exec rmdir {} \; 2>/dev/null) || true
                 fi
-                cp -r "$src_dir/$target/." "$INSTALL_DIR/$target/"
+                mkdir -p "$staging_dir/$target"
+                cp -r "$src_dir/$target/." "$staging_dir/$target/"
             else
-                # File: overwrite
-                cp "$src_dir/$target" "$INSTALL_DIR/$target"
+                cp "$src_dir/$target" "$staging_dir/$target"
             fi
-            ok "Updated: $target"
         fi
     done
 
     # Ensure scripts are executable
-    chmod +x "$INSTALL_DIR/scripts/"*.sh 2>/dev/null || true
+    chmod +x "$staging_dir/scripts/"*.sh 2>/dev/null || true
+
+    # Atomic swap: move live → backup, staging → live
+    # If the swap fails, restore the backup.
+    local live_backup="${INSTALL_DIR}.pre-update.$ts"
+    if mv "$INSTALL_DIR" "$live_backup" && mv "$staging_dir" "$INSTALL_DIR"; then
+        rm -rf "$live_backup"
+        # Clean up empty backup dir
+        rmdir "$backup_root" 2>/dev/null || true
+        for target in "${UPDATE_TARGETS[@]}"; do
+            [[ -e "$src_dir/$target" ]] && ok "Updated: $target"
+        done
+    else
+        error "Swap failed — restoring previous install"
+        # Restore: put back whatever we moved
+        [[ -d "$live_backup" && ! -d "$INSTALL_DIR" ]] && mv "$live_backup" "$INSTALL_DIR"
+        rm -rf "$staging_dir"
+        exit 1
+    fi
 }
 
 pull_and_restart() {
