@@ -884,6 +884,11 @@ verify_services() {
     local max_attempts=$(( (start_period / wait_seconds) + 2 ))
     local attempt=1
 
+    # Count services with healthcheck defined (only those need to be "healthy")
+    local hc_total
+    hc_total=$(docker compose config --format json 2>/dev/null \
+        | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; print(sum(1 for s in c.values() if 'healthcheck' in s))" 2>/dev/null) || hc_total=0
+
     info "Checking services (up to ${start_period}s, ${wait_seconds}s interval)..."
 
     while [[ $attempt -le $max_attempts ]]; do
@@ -894,16 +899,17 @@ verify_services() {
             -q 2>/dev/null | wc -l)
         local total=${#expected_services[@]}
 
-        if [[ "$running" -ge "$total" ]] && [[ "$healthy" -ge "$total" ]]; then
+        # All services running AND all healthcheck-enabled services healthy
+        if [[ "$running" -ge "$total" ]] && { [[ "$hc_total" -eq 0 ]] || [[ "$healthy" -ge "$hc_total" ]]; }; then
             for service in "${expected_services[@]}"; do
-                ok "$service healthy"
+                ok "$service running"
             done
-            ok "All $total services running and healthy"
+            ok "All $total services running ($healthy/$hc_total healthy)"
             return 0
         fi
 
         if [[ $attempt -lt $max_attempts ]]; then
-            info "Attempt $attempt/$max_attempts: $running/$total running, $healthy/$total healthy, waiting ${wait_seconds}s..."
+            info "Attempt $attempt/$max_attempts: $running/$total running, $healthy/$hc_total healthy, waiting ${wait_seconds}s..."
             sleep "$wait_seconds"
         fi
 

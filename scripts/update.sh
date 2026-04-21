@@ -157,8 +157,11 @@ pull_and_restart() {
 verify_services() {
     info "Verifying services..."
     local max_attempts=6
-    local total
+    local total hc_total
     total=$(docker compose config --services 2>/dev/null | wc -l)
+    # Count services that define a healthcheck (only those report "healthy")
+    hc_total=$(docker compose config --format json 2>/dev/null \
+        | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; print(sum(1 for s in c.values() if 'healthcheck' in s))" 2>/dev/null) || hc_total=0
 
     sleep 5
 
@@ -169,13 +172,14 @@ verify_services() {
             --filter "label=com.docker.compose.project=$(basename "$PWD")" \
             -q 2>/dev/null | wc -l)
 
-        if [[ "$running" -ge "$total" ]] && [[ "$healthy" -ge "$total" ]]; then
-            ok "All $total services running and healthy"
+        # All services running AND all healthcheck-enabled services healthy
+        if [[ "$running" -ge "$total" ]] && { [[ "$hc_total" -eq 0 ]] || [[ "$healthy" -ge "$hc_total" ]]; }; then
+            ok "All $total services running ($healthy/$hc_total healthy)"
             return 0
         fi
 
         if [[ $attempt -lt $max_attempts ]]; then
-            info "Attempt $attempt/$max_attempts: $running/$total running, $healthy/$total healthy..."
+            info "Attempt $attempt/$max_attempts: $running/$total running, $healthy/$hc_total healthy..."
             sleep 10
         fi
     done

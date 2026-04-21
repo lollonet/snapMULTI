@@ -110,18 +110,13 @@ pull_compose_images() {
         | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; [print(f'{k}={v[\"image\"]}') for k,v in c.items()]" \
         > "$_svc_image_map" 2>/dev/null || true
 
-    # Filter out services whose images already exist
-    local to_pull=()
-    for svc in "${services[@]}"; do
-        if _image_exists "$svc"; then
-            "$log_fn" "$svc: image exists, skipping pull"
-        else
-            to_pull+=("$svc")
-        fi
-    done
+    # Always pull all services — docker compose pull is a no-op for up-to-date
+    # images (layer cache), but required to pick up :latest tag updates.
+    # _image_exists is kept for diagnostics but not used as a gate.
+    local to_pull=("${services[@]}")
 
     if [[ ${#to_pull[@]} -eq 0 ]]; then
-        "$log_fn" "All ${#services[@]} images already present"
+        "$log_fn" "No services to pull"
         return 0
     fi
 
