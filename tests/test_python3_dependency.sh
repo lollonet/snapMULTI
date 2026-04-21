@@ -26,9 +26,10 @@ echo "Testing host dependency coverage..."
 
 assert_contains "$common_body" "local pkgs=(curl ca-certificates python3 netcat-openbsd)" "shared install-deps always includes python3 and netcat"
 assert_contains "$deploy_body" "command -v python3" "deploy checks for python3 explicitly"
-assert_contains "$deploy_body" "apt-get install -y -qq python3" "deploy installs python3 when missing"
+assert_contains "$deploy_body" "extra_pkgs+=(python3)" "deploy adds python3 to package list when missing"
 assert_contains "$deploy_body" "command -v nc" "deploy checks for netcat explicitly"
-assert_contains "$deploy_body" "apt-get install -y -qq netcat-openbsd" "deploy installs netcat when missing"
+assert_contains "$deploy_body" 'extra_pkgs+=(netcat-openbsd)' "deploy adds netcat to package list when missing"
+assert_contains "$deploy_body" '"${extra_pkgs[@]}"' "deploy installs batched extra packages"
 
 echo ""
 if [[ "$fail" -gt 0 ]]; then
