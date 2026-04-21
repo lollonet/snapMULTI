@@ -37,12 +37,14 @@ log_msg() {
         >> "$UNIFIED_LOG" 2>/dev/null || true
 
     # Feed TUI progress display (progress.sh reads this file)
-    case "$level" in
-        INFO|OK)
-            [[ -n "${PROGRESS_LOG:-}" ]] && \
-                echo "$msg" >> "$PROGRESS_LOG" 2>/dev/null || true
-            ;;
-    esac
+    # All levels shown so warnings/errors are visible on the HDMI console
+    if [[ -n "${PROGRESS_LOG:-}" ]]; then
+        case "$level" in
+            WARN)  echo "[WARN] $msg" >> "$PROGRESS_LOG" 2>/dev/null || true ;;
+            ERROR) echo "[ERROR] $msg" >> "$PROGRESS_LOG" 2>/dev/null || true ;;
+            *)     echo "$msg" >> "$PROGRESS_LOG" 2>/dev/null || true ;;
+        esac
+    fi
 
     # Show errors and warnings on HDMI console
     case "$level" in

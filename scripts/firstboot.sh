@@ -131,24 +131,26 @@ source "$COMMON/unified-log.sh"
 # shellcheck disable=SC2034
 case "$INSTALL_TYPE" in
     client)
-        STEP_NAMES=("Network connectivity" "Copy project files"
-                    "Install git and dependencies" "Install Docker"
-                    "Setup audio player" "Verify containers")
+        STEP_NAMES=("Wait for network" "Copy project files"
+                    "Install system packages" "Install Docker engine"
+                    "Setup audio player (HAT detect, pull, configure)"
+                    "Verify services healthy")
         STEP_WEIGHTS=(5 2 10 30 48 5)
         PROGRESS_TITLE="snapMULTI Audio Player"
         ;;
     server)
-        STEP_NAMES=("Network connectivity" "Copy project files"
-                    "Install git and dependencies" "Install Docker"
-                    "Deploy server" "Verify containers")
+        STEP_NAMES=("Wait for network" "Copy project files"
+                    "Install system packages" "Install Docker engine"
+                    "Deploy server (config, pull, start)"
+                    "Verify services healthy")
         STEP_WEIGHTS=(5 2 8 30 45 10)
         PROGRESS_TITLE="snapMULTI Music Server"
         ;;
     both)
-        STEP_NAMES=("Network connectivity" "Copy project files"
-                    "Install git and dependencies" "Install Docker"
-                    "Deploy server" "Verify server"
-                    "Setup audio player" "Verify containers")
+        STEP_NAMES=("Wait for network" "Copy project files"
+                    "Install system packages" "Install Docker engine"
+                    "Deploy server (config, pull, start)" "Verify server"
+                    "Setup audio player (HAT detect, pull)" "Verify all services")
         STEP_WEIGHTS=(4 2 7 25 35 4 18 5)
         PROGRESS_TITLE="snapMULTI Server + Player"
         ;;
