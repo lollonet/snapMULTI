@@ -47,6 +47,8 @@ assert_contains "$readonly_body" 'tune_docker_daemon --live-restore --fuse-overl
 assert_not_contains "$readonly_body" 'rm -rf /var/lib/docker' "readonly config does not wipe Docker storage"
 assert_contains "$readonly_body" 'fuse-overlayfs --version' "readonly config verifies fuse-overlayfs binary"
 assert_contains "$readonly_body" 'activates after reboot' "readonly config defers driver switch to reboot"
+assert_contains "$readonly_body" 'tune_docker_daemon --live-restore' "readonly config rolls back to overlay2 on raspi-config failure"
+assert_contains "$readonly_body" 'FAILED' "readonly config shows failure message when overlayfs fails"
 
 echo ""
 if [[ "$fail" -gt 0 ]]; then

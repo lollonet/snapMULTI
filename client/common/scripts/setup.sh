@@ -1403,19 +1403,28 @@ SSHEOF
     log_progress "Enabling overlayfs..."
     if ! raspi-config nonint do_overlayfs 0; then
         log_progress "WARNING: raspi-config failed to enable overlayfs"
-        log_progress "         Read-only mode will NOT be active after reboot"
+        log_progress "         Reverting Docker config to overlay2"
+        # Roll back: remove fuse-overlayfs from daemon.json so Docker
+        # doesn't start with the wrong driver on a writable root.
+        tune_docker_daemon --live-restore
         ENABLE_READONLY=false
+        echo ""
+        echo "Read-only filesystem: FAILED"
+        echo "  - overlayfs could not be enabled (raspi-config error)"
+        echo "  - Docker storage driver: overlay2 (unchanged)"
+        echo "  - System will boot normally (writable root)"
+        echo ""
+    else
+        echo "Read-only filesystem configured"
+        echo "  - Docker storage driver: fuse-overlayfs (activates after reboot)"
+        echo "  - SSH host keys: persisted"
+        echo "  - Helper script: /usr/local/bin/ro-mode"
+        echo "  - Status: Will activate after reboot"
+        echo ""
+        echo "To temporarily disable for updates:"
+        echo "  sudo ro-mode disable && sudo reboot"
+        echo ""
     fi
-
-    echo "Read-only filesystem configured"
-    echo "  - Docker storage driver: fuse-overlayfs (activates after reboot)"
-    echo "  - SSH host keys: persisted"
-    echo "  - Helper script: /usr/local/bin/ro-mode"
-    echo "  - Status: Will activate after reboot"
-    echo ""
-    echo "To temporarily disable for updates:"
-    echo "  sudo ro-mode disable && sudo reboot"
-    echo ""
 else
     echo "Read-only filesystem: skipped (ENABLE_READONLY=false)"
 fi
