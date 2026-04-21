@@ -16,13 +16,13 @@ WATCH_MODE=false
 # "Both" mode: local snapserver always wins.
 # Detect via install.conf or server directory (robust — doesn't depend on container state).
 _is_both_mode() {
-    # Check install.conf (set by prepare-sd.sh)
+    # Check install.conf (set by prepare-sd.sh) — single source of truth.
+    # No filesystem fallback: /opt/snapmulti may survive from a previous
+    # server install, causing false-positive pinning on client-only reflash.
     local conf
     for conf in /boot/firmware/snapmulti/install.conf /boot/snapmulti/install.conf; do
         if grep -q '^INSTALL_TYPE=both' "$conf" 2>/dev/null; then return 0; fi
     done
-    # Fallback: server compose file exists alongside client
-    [[ -f /opt/snapmulti/docker-compose.yml ]] && return 0
     return 1
 }
 
