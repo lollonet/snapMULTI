@@ -25,8 +25,12 @@ MPD_PID=$!
 # timeout before sending SIGKILL and forcing an ungraceful MPD shutdown.
 trap 'kill -TERM "$MPD_PID"' TERM INT
 
-# Wait for MPD to accept connections
+# Wait for MPD to accept connections (check PID is still alive)
 until echo 'ping' | nc -w 1 127.0.0.1 6600 2>/dev/null | grep -q OK; do
+    if ! kill -0 "$MPD_PID" 2>/dev/null; then
+        echo "ERROR: MPD process died during startup"
+        exit 1
+    fi
     sleep 1
 done
 
