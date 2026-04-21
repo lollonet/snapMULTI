@@ -421,8 +421,10 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
                     local_msg="${local_msg#==> }"
                     log_msg INFO deploy "$local_msg"
                     ;;
-                *"Pulling "*|*"pulling "*|*"Downloaded"*|*"Pull complete"*)
-                    log_msg INFO deploy "$line"
+                *"Pulling "*|*"Pull complete"*)
+                    # Skip Docker Compose layer progress (floods log with hundreds
+                    # of lines). Important pull messages from pull-images.sh already
+                    # have [INFO] prefix and are caught by the pattern above.
                     ;;
             esac
         fi
