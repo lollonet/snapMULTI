@@ -251,46 +251,8 @@ cumulative_pct() {
     echo $(( weight_sum * 100 / total_weight ))
 }
 
-verify_compose_stack() {
-    local compose_file="$1"
-    local stack_name="$2"
-    local attempts="$3"
-    local delay="$4"
-    local compose_args=(-f "$compose_file")
-    local total hc_total running healthy attempt
-
-    total=$(docker compose "${compose_args[@]}" config --services 2>/dev/null | wc -l)
-    if [[ "$total" -eq 0 ]]; then
-        log_error "Could not determine ${stack_name} service count"
-        return 1
-    fi
-
-    hc_total=$(docker compose "${compose_args[@]}" config --format json 2>/dev/null \
-        | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; print(sum(1 for s in c.values() if 'healthcheck' in s))" 2>/dev/null) || hc_total=0
-
-    for attempt in $(seq 1 "$attempts"); do
-        running=$(docker compose "${compose_args[@]}" ps --status running -q 2>/dev/null | wc -l)
-        healthy=$(
-            docker compose "${compose_args[@]}" ps -q 2>/dev/null \
-                | xargs -r docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null \
-                | grep -c '^healthy$' || true
-        )
-
-        if [[ "$running" -ge "$total" ]] && { [[ "$hc_total" -eq 0 ]] || [[ "$healthy" -ge "$hc_total" ]]; }; then
-            log_info "All $total ${stack_name} services running ($healthy/$hc_total healthy)"
-            return 0
-        fi
-
-        log_info "Attempt $attempt/$attempts: $running/$total running, $healthy/$hc_total healthy..."
-        [[ "$attempt" -lt "$attempts" ]] && sleep "$delay"
-    done
-
-    log_error "$stack_name services not all healthy after $(( attempts * delay ))s"
-    docker compose "${compose_args[@]}" ps --format 'table {{.Name}}\t{{.Status}}' 2>/dev/null | while read -r line; do
-        log_error "  $line"
-    done
-    return 1
-}
+# shellcheck source=common/verify-compose.sh
+source "$COMMON/verify-compose.sh"
 
 # Headless detection (for client modes)
 has_display() {
