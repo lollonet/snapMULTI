@@ -581,6 +581,9 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     local_client_healthy=false
     local_client_compose=(-f "$CLIENT_DIR/docker-compose.yml")
     local_client_total=$(docker compose "${local_client_compose[@]}" config --services 2>/dev/null | wc -l)
+    if [[ "$local_client_total" -eq 0 ]]; then
+        log_warn "Could not determine client service count — skipping health check"
+    else
     local_client_hc=$(docker compose "${local_client_compose[@]}" config --format json 2>/dev/null \
         | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; print(sum(1 for s in c.values() if 'healthcheck' in s))" 2>/dev/null) || local_client_hc=0
     for attempt in $(seq 1 12); do
@@ -602,6 +605,7 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
             log_warn "  $line"
         done
     fi
+    fi  # local_client_total guard
     checkpoint_done "setup"
   fi  # checkpoint guard
 fi
