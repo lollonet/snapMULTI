@@ -129,7 +129,12 @@ tune_docker_daemon() {
     # Build desired config as Python dict literal
     local py_updates='cfg.setdefault("log-driver", "json-file"); cfg.setdefault("log-opts", {"max-size": "10m", "max-file": "3"})'
     [[ "$want_live_restore" == "true" ]] && py_updates="$py_updates; cfg['live-restore'] = True"
-    [[ "$want_fuse_overlayfs" == "true" ]] && py_updates="$py_updates; cfg['storage-driver'] = 'fuse-overlayfs'"
+    if [[ "$want_fuse_overlayfs" == "true" ]]; then
+        py_updates="$py_updates; cfg['storage-driver'] = 'fuse-overlayfs'"
+    else
+        # Remove storage-driver if present — reverts Docker to its default (overlay2)
+        py_updates="$py_updates; cfg.pop('storage-driver', None)"
+    fi
 
     if [[ -f /etc/docker/daemon.json ]]; then
         # Check if already configured
@@ -138,6 +143,10 @@ tune_docker_daemon() {
             needs_update=true
         fi
         if [[ "$want_fuse_overlayfs" == "true" ]] && ! grep -q '"fuse-overlayfs"' /etc/docker/daemon.json 2>/dev/null; then
+            needs_update=true
+        fi
+        # Also update if fuse-overlayfs is present but not wanted (rollback)
+        if [[ "$want_fuse_overlayfs" != "true" ]] && grep -q '"storage-driver"' /etc/docker/daemon.json 2>/dev/null; then
             needs_update=true
         fi
         if ! grep -q '"log-driver"' /etc/docker/daemon.json 2>/dev/null; then
