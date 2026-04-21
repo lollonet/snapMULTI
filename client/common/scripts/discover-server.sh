@@ -13,13 +13,25 @@ LAST_IP_FILE="/run/snapclient-server-ip"
 WATCH_MODE=false
 [[ "${1:-}" == "--watch" ]] && WATCH_MODE=true
 
-# "Both" mode: local snapserver always wins
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^snapserver$'; then
+# "Both" mode: local snapserver always wins.
+# Detect via install.conf or server directory (robust — doesn't depend on container state).
+_is_both_mode() {
+    # Check install.conf (set by prepare-sd.sh)
+    local conf
+    for conf in /boot/firmware/snapmulti/install.conf /boot/snapmulti/install.conf; do
+        if grep -q '^INSTALL_TYPE=both' "$conf" 2>/dev/null; then return 0; fi
+    done
+    # Fallback: server compose file exists alongside client
+    [[ -f /opt/snapmulti/docker-compose.yml ]] && return 0
+    return 1
+}
+
+if _is_both_mode; then
     current=$(grep "^SNAPSERVER_HOST=" "$ENV_FILE" 2>/dev/null | cut -d= -f2) || true
     if [[ "$current" != "127.0.0.1" ]]; then
         echo "snapclient-discover: local snapserver detected, switching to 127.0.0.1"
         if $WATCH_MODE; then
-            if cd /opt/snapclient && docker compose restart snapclient 2>/dev/null; then
+            if cd /opt/snapclient && docker compose restart 2>/dev/null; then
                 sed -i "s|^SNAPSERVER_HOST=.*|SNAPSERVER_HOST=127.0.0.1|" "$ENV_FILE" 2>/dev/null \
                     || echo "SNAPSERVER_HOST=127.0.0.1" >> "$ENV_FILE"
             else
@@ -63,8 +75,8 @@ _update_server() {
 host=$(_discover_ipv4) || true
 if [[ -n "$host" ]] && [[ "$host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     if _update_server "$host" && $WATCH_MODE; then
-        echo "snapclient-discover: restarting client for new server"
-        cd /opt/snapclient && docker compose restart snapclient 2>/dev/null || true
+        echo "snapclient-discover: restarting services for new server"
+        cd /opt/snapclient && docker compose restart 2>/dev/null || true
     fi
 else
     echo "snapclient-discover: no snapserver found via mDNS"
