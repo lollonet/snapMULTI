@@ -141,8 +141,9 @@ apply_update() {
     staging_dir=$(mktemp -d "${INSTALL_DIR}.staging.XXXXXX")
 
     # Snapshot current install into staging (hard-link where possible for speed)
-    cp -al "$INSTALL_DIR/." "$staging_dir/" 2>/dev/null \
-        || cp -a "$INSTALL_DIR/." "$staging_dir/"
+    # Full copy (not hard links) so staging is fully isolated from live install.
+    # Hard links would share inodes — cp overwrites would mutate INSTALL_DIR.
+    cp -a "$INSTALL_DIR/." "$staging_dir/"
 
     # Apply changes to the staging copy
     for target in "${UPDATE_TARGETS[@]}"; do
