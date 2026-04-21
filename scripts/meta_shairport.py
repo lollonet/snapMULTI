@@ -174,7 +174,7 @@ def parse_item(item_data: bytes) -> None:
                     "warning",
                     "Cannot determine reachable host IP — cover art URL omitted",
                 )
-                metadata["artUrl"] = ""
+                metadata.pop("artUrl", None)
         except Exception as e:
             log("warning", f"Cover art error: {e}")
     elif code == "astm" and isinstance(data, bytes) and len(data) >= 4:
