@@ -76,7 +76,7 @@ def send_metadata() -> None:
         artist_str = artist[0] if isinstance(artist, list) and artist else "?"
         log("info", f"Metadata: {artist_str} - {props.get('title', '?')}")
     else:
-        # Clear: send empty metadata so clients don't show stale info (e.g. after pend)
+        # Clear: send empty metadata so clients don't show stale info (e.g. after playback end)
         log("info", "Metadata cleared")
     # Always send — empty props clears stale metadata on clients
     send(

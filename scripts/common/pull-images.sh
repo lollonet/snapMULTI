@@ -39,8 +39,11 @@ _image_exists() {
     if [[ -n "${_svc_image_map:-}" ]] && [[ -f "$_svc_image_map" ]]; then
         local image
         image=$(grep "^${svc}=" "$_svc_image_map" 2>/dev/null | cut -d= -f2-)
-        [[ -n "$image" ]] && docker image inspect "$image" >/dev/null 2>&1
-        return $?
+        if [[ -n "$image" ]]; then
+            docker image inspect "$image" >/dev/null 2>&1
+            return $?
+        fi
+        # Service not in cache — fall through to slow path
     fi
     # Fallback: query per service (slower)
     local image
