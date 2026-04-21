@@ -165,7 +165,9 @@ verify_services() {
     for attempt in $(seq 1 "$max_attempts"); do
         local running healthy
         running=$(docker compose ps --status running -q 2>/dev/null | wc -l)
-        healthy=$(docker compose ps --status healthy -q 2>/dev/null | wc -l)
+        healthy=$(docker ps --filter "health=healthy" \
+            --filter "label=com.docker.compose.project=$(basename "$PWD")" \
+            -q 2>/dev/null | wc -l)
 
         if [[ "$running" -ge "$total" ]] && [[ "$healthy" -ge "$total" ]]; then
             ok "All $total services running and healthy"
@@ -173,7 +175,7 @@ verify_services() {
         fi
 
         if [[ $attempt -lt $max_attempts ]]; then
-            info "Attempt $attempt/$max_attempts: $running/$total running, $healthy healthy..."
+            info "Attempt $attempt/$max_attempts: $running/$total running, $healthy/$total healthy..."
             sleep 10
         fi
     done

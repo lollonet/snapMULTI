@@ -889,7 +889,9 @@ verify_services() {
     while [[ $attempt -le $max_attempts ]]; do
         local running healthy
         running=$(docker compose ps --status running -q 2>/dev/null | wc -l)
-        healthy=$(docker compose ps --status healthy -q 2>/dev/null | wc -l)
+        healthy=$(docker ps --filter "health=healthy" \
+            --filter "label=com.docker.compose.project=$(basename "$PWD")" \
+            -q 2>/dev/null | wc -l)
         local total=${#expected_services[@]}
 
         if [[ "$running" -ge "$total" ]] && [[ "$healthy" -ge "$total" ]]; then
