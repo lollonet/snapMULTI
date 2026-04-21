@@ -6,46 +6,93 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug! Please fill out the information below.
+        Thanks for reporting a bug! The more detail you provide, the faster we can help.
+
   - type: textarea
     id: description
     attributes:
-      label: Description
+      label: What happened?
       description: A clear description of the bug
     validations:
       required: true
+
   - type: textarea
     id: steps
     attributes:
-      label: Steps to Reproduce
+      label: Steps to reproduce
       description: How can we reproduce this issue?
       placeholder: |
-        1. Go to '...'
-        2. Click on '...'
+        1. ...
+        2. ...
         3. See error
     validations:
       required: true
+
   - type: textarea
     id: expected
     attributes:
-      label: Expected Behavior
-      description: What did you expect to happen?
+      label: What did you expect?
+      description: What should have happened instead?
     validations:
       required: true
-  - type: textarea
-    id: environment
+
+  - type: dropdown
+    id: install-type
     attributes:
-      label: Environment
-      description: Please provide your environment details
-      placeholder: |
-        - OS: [e.g., Raspberry Pi OS 64-bit]
-        - Hardware: [e.g., Pi 4 4GB + HiFiBerry DAC+]
-        - Version: [e.g., v1.0.0]
+      label: Install type
+      options:
+        - Music Server
+        - Audio Player (client)
+        - Server + Player (both)
     validations:
       required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Hardware
+      options:
+        - Raspberry Pi 5
+        - Raspberry Pi 4 (4+ GB)
+        - Raspberry Pi 4 (2 GB)
+        - Raspberry Pi 3B/3B+
+        - Raspberry Pi Zero 2 W
+        - x86_64 (NUC, laptop, VM)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: audio-hat
+    attributes:
+      label: Audio HAT (if any)
+      placeholder: "e.g., HiFiBerry DAC+, InnoMaker, USB DAC, HDMI, none"
+
+  - type: input
+    id: version
+    attributes:
+      label: snapMULTI version
+      placeholder: "e.g., v0.4.1 (check http://hostname.local:8083/health)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: network
+    attributes:
+      label: Network connection
+      options:
+        - Ethernet
+        - WiFi 5 GHz
+        - WiFi 2.4 GHz
+
   - type: textarea
     id: logs
     attributes:
-      label: Relevant Logs
-      description: Please paste any relevant log output
+      label: Logs
+      description: |
+        Paste relevant logs. On the Pi, run:
+        ```
+        docker compose logs --tail 50
+        ```
+        Or check `/boot/firmware/diagnostics/` for saved snapshots.
       render: shell
