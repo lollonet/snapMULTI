@@ -56,9 +56,39 @@ progress_init() {
             fi
         fi
     fi
+
+    # Detect size AFTER font change — setfont alters console geometry
+    _detect_tty_size
+}
+
+# Terminal dimensions — set by _detect_tty_size(), called from progress_init()
+# after font setup. Defaults are 800x600 @ 8x16 = 100x37.
+_tty_cols=100
+_tty_rows=37
+_box_width=96
+_inner_width=92
+
+_detect_tty_size() {
+    if [[ -c /dev/tty1 ]]; then
+        _tty_cols=$(stty -F /dev/tty1 size 2>/dev/null | awk '{print $2}') || _tty_cols=100
+        _tty_rows=$(stty -F /dev/tty1 size 2>/dev/null | awk '{print $1}') || _tty_rows=37
+        (( _tty_cols < 40 )) && _tty_cols=100
+        (( _tty_rows < 20 )) && _tty_rows=37
+    fi
+    # Layout constants (2-char margin each side)
+    _box_width=$(( _tty_cols - 4 ))
+    _inner_width=$(( _box_width - 4 ))
 }
 
 # Render progress display to tty1
+#
+# Layout (full width, dynamic log area):
+#   Row 1:    header box (title centered)
+#   Row 2:    elapsed + progress bar + percentage + spinner
+#   Row 3-N:  step checklist
+#   Row N+1:  separator
+#   Row N+2:  log lines (fills remaining rows)
+#   Last row: bottom border
 render_progress() {
     local step=$1 pct=$2 elapsed=$3 spinner=${4:-}
     local total=${#STEP_NAMES[@]}
@@ -69,30 +99,39 @@ render_progress() {
     (( pct < 0 )) && pct=0
     (( pct > 100 )) && pct=100
 
-    # Build progress bar (50 chars wide)
-    local bar_width=50
+    # Build progress bar (fills available width minus labels)
+    # "  [####----] 100% |" = 10 chars overhead
+    local bar_width=$(( _box_width - 14 ))
+    (( bar_width < 20 )) && bar_width=20
     local filled=$(( pct * bar_width / 100 ))
     local empty=$(( bar_width - filled ))
     local bar pad
     printf -v bar '%*s' "$filled" ''; bar="${bar// /#}"
     printf -v pad '%*s' "$empty" ''; bar+="${pad// /-}"
 
-    # Get last 8 lines of log for output area
+    # Calculate rows used by header + steps
+    # header(3) + elapsed+bar(1) + blank(1) + steps(total) + blank(1) + separator(1) + footer(1) = total+8
+    local fixed_rows=$(( total + 8 ))
+    local log_rows=$(( _tty_rows - fixed_rows ))
+    (( log_rows < 4 )) && log_rows=4
+
+    # Get last N lines of log for output area
     local log_lines=""
     if [[ -f "$PROGRESS_LOG" ]]; then
-        log_lines=$(tail -8 "$PROGRESS_LOG" 2>/dev/null | cut -c1-68 || true)
+        log_lines=$(tail -"$log_rows" "$PROGRESS_LOG" 2>/dev/null | cut -c1-"$_inner_width" || true)
     fi
+
+    local hline
+    printf -v hline '%*s' "$_box_width" ''; hline="${hline// /-}"
 
     {
         printf '\033[2J\033[H'
+        printf '  +%s+\n' "$hline"
+        printf '  | \033[1m%-*.*s\033[0m |\n' "$_inner_width" "$_inner_width" "$PROGRESS_TITLE"
+        printf '  +%s+\n' "$hline"
+        printf '  \033[36mElapsed: %02d:%02d\033[0m  \033[33m[%s]\033[0m %3d%% %s\n' \
+            $((elapsed/60)) $((elapsed%60)) "$bar" "$pct" "$spinner"
         printf '\n'
-        printf '  +----------------------------------------------------------------------+\n'
-        # Box interior = 70 chars: 21 leading spaces + 38 title field + 11 trailing spaces
-        printf '  |                     \033[1m%-38.38s\033[0m           |\n' "$PROGRESS_TITLE"
-        printf '  +----------------------------------------------------------------------+\n'
-        printf '\n'
-        printf '  \033[36mElapsed: %02d:%02d\033[0m\n\n' $((elapsed/60)) $((elapsed%60))
-        printf '  \033[33m[%s]\033[0m %3d%% %s\n\n' "$bar" "$pct" "$spinner"
         for i in $(seq 1 "$total"); do
             local name="${STEP_NAMES[$((i-1))]}"
             if (( i < step )); then   printf '  \033[32m[x]\033[0m %s\n' "$name"
@@ -101,18 +140,21 @@ render_progress() {
             fi
         done
         printf '\n'
-        printf '  +------------------------------- Output -------------------------------+\n'
+        local log_label="  Log  "
+        local log_lpad=$(( (_box_width - ${#log_label}) / 2 ))
+        local log_rpad=$(( _box_width - ${#log_label} - log_lpad ))
+        printf '  +%s%s%s+\n' "${hline:0:$log_lpad}" "$log_label" "${hline:0:$log_rpad}"
         if [[ -n "$log_lines" ]]; then
             while IFS= read -r line; do
-                printf '  | \033[90m%-68s\033[0m |\n' "$line"
+                printf '  | \033[90m%-*s\033[0m |\n' "$_inner_width" "$line"
             done <<< "$log_lines"
         fi
-        local line_count
-        line_count=$(printf '%s' "$log_lines" | grep -c '^' || true)
-        for ((i=line_count; i<8; i++)); do
-            printf '  | %-68s |\n' ""
+        local line_count=0
+        [[ -n "$log_lines" ]] && line_count=$(printf '%s' "$log_lines" | grep -c '^' || true)
+        for ((i=line_count; i<log_rows; i++)); do
+            printf '  | %-*s |\n' "$_inner_width" ""
         done
-        printf '  +----------------------------------------------------------------------+\n'
+        printf '  +%s+\n' "$hline"
     } > /dev/tty1
 }
 
@@ -234,8 +276,10 @@ progress_complete() {
 
     [[ -c /dev/tty1 ]] || return
 
+    local bar_width=$(( _box_width - 14 ))
+    (( bar_width < 20 )) && bar_width=20
     local bar
-    printf -v bar '%*s' 50 ''; bar="${bar// /#}"
+    printf -v bar '%*s' "$bar_width" ''; bar="${bar// /#}"
 
     # Collect running container names for the summary
     local services=""
@@ -243,35 +287,42 @@ progress_complete() {
         services=$(docker ps --format '{{.Names}}' 2>/dev/null | sort | tr '\n' ', ' | sed 's/,$//')
     fi
 
+    local hline
+    printf -v hline '%*s' "$_box_width" ''; hline="${hline// /-}"
+
     {
         printf '\033[2J\033[H'
+        printf '  +%s+\n' "$hline"
+        printf '  | \033[1m%-*.*s\033[0m |\n' "$_inner_width" "$_inner_width" "$PROGRESS_TITLE"
+        printf '  +%s+\n' "$hline"
+        printf '  \033[36mElapsed: %02d:%02d\033[0m  \033[32m[%s]\033[0m 100%%\n' \
+            $((elapsed/60)) $((elapsed%60)) "$bar"
         printf '\n'
-        printf '  +----------------------------------------------------------------------+\n'
-        printf '  |                     \033[1m%-38.38s\033[0m           |\n' "$PROGRESS_TITLE"
-        printf '  +----------------------------------------------------------------------+\n'
-        printf '\n'
-        printf '  \033[36mElapsed: %02d:%02d\033[0m\n\n' $((elapsed/60)) $((elapsed%60))
-        printf '  \033[32m[%s]\033[0m 100%%\n\n' "$bar"
         for i in $(seq 1 "$total"); do
             printf '  \033[32m[x]\033[0m %s\n' "${STEP_NAMES[$((i-1))]}"
         done
         printf '\n'
         printf '  \033[32m>>> Installation complete! <<<\033[0m\n'
         printf '\n'
-        printf '  +------------------------------- Summary -------------------------------+\n'
+        local sum_label="  Summary  "
+        local sum_lpad=$(( (_box_width - ${#sum_label}) / 2 ))
+        local sum_rpad=$(( _box_width - ${#sum_label} - sum_lpad ))
+        printf '  +%s%s%s+\n' "${hline:0:$sum_lpad}" "$sum_label" "${hline:0:$sum_rpad}"
+        local summary_rows=$(( _tty_rows - total - 10 ))
+        (( summary_rows < 6 )) && summary_rows=6
         local used_lines=0
-        printf '  | \033[32m%-68s\033[0m |\n' "All steps completed successfully"
+        printf '  | \033[32m%-*s\033[0m |\n' "$_inner_width" "All steps completed successfully"
         (( used_lines++ ))
         if [[ -n "$services" ]]; then
-            printf '  | %-68s |\n' ""
+            printf '  | %-*s |\n' "$_inner_width" ""
             (( used_lines++ ))
-            printf '  | \033[36m%-68s\033[0m |\n' "Running services:"
+            printf '  | \033[36m%-*s\033[0m |\n' "$_inner_width" "Running services:"
             (( used_lines++ ))
-            # Wrap service names to fit the box (68 chars per line)
             local line=""
+            local max_svc_width=$(( _inner_width - 2 ))
             for svc in ${services//,/ }; do
-                if [[ $(( ${#line} + ${#svc} + 2 )) -gt 64 ]]; then
-                    printf '  |   \033[36m%-66s\033[0m |\n' "$line"
+                if [[ $(( ${#line} + ${#svc} + 2 )) -gt $max_svc_width ]]; then
+                    printf '  |   \033[36m%-*s\033[0m |\n' "$(( _inner_width - 2 ))" "$line"
                     (( used_lines++ ))
                     line="$svc"
                 else
@@ -279,19 +330,18 @@ progress_complete() {
                 fi
             done
             if [[ -n "$line" ]]; then
-                printf '  |   \033[36m%-66s\033[0m |\n' "$line"
+                printf '  |   \033[36m%-*s\033[0m |\n' "$(( _inner_width - 2 ))" "$line"
                 (( used_lines++ ))
             fi
         fi
-        printf '  | %-68s |\n' ""
+        printf '  | %-*s |\n' "$_inner_width" ""
         (( used_lines++ ))
-        printf '  | \033[33m%-68s\033[0m |\n' "System will reboot shortly..."
+        printf '  | \033[33m%-*s\033[0m |\n' "$_inner_width" "System will reboot shortly..."
         (( used_lines++ ))
-        # Fill remaining lines to consistent box height
-        for ((i=used_lines; i<8; i++)); do
-            printf '  | %-68s |\n' ""
+        for ((i=used_lines; i<summary_rows; i++)); do
+            printf '  | %-*s |\n' "$_inner_width" ""
         done
-        printf '  +----------------------------------------------------------------------+\n'
+        printf '  +%s+\n' "$hline"
         printf '\n'
         printf '  \033[1;32m  snapMULTI ready\033[0m\n'
     } > /dev/tty1

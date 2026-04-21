@@ -131,60 +131,50 @@ pull_compose_images() {
     local pull_failed=()
     local rate_limited=false
 
-    # Pull in pairs: background + foreground
-    for ((i=0; i<${#to_pull[@]}; i+=2)); do
+    # Resolve image name for a service from the cached map
+    _svc_image_name() {
+        grep "^${1}=" "$_svc_image_map" 2>/dev/null | cut -d= -f2- || echo "$1"
+    }
+
+    local pull_start
+    pull_start=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
+
+    # Pull sequentially — parallel pulls cause IO contention on SD cards,
+    # producing high iowait and slower overall throughput.
+    for svc in "${to_pull[@]}"; do
         if [[ "$rate_limited" == "true" ]]; then break; fi
 
-        local svc1="${to_pull[$i]}"
-        local svc2="${to_pull[$i+1]:-}"
-
         count=$((count + 1))
-        "$log_fn" "Pulling $svc1 ($count/$total)..."
+        local image
+        image=$(_svc_image_name "$svc")
+        "$log_fn" "Pulling $svc ($count/$total) $image"
 
-        # Start svc2 in background
-        local bg_pid="" bg_log=""
-        if [[ -n "$svc2" ]]; then
-            count=$((count + 1))
-            "$log_fn" "Pulling $svc2 ($count/$total)..."
-            bg_log="$_pi_tmp/bg-$svc2"
-            _pull_one "$svc2" "$log_fn" >"$bg_log" 2>&1 &
-            bg_pid=$!
-        fi
+        local svc_start rc=0
+        svc_start=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
+        _pull_one "$svc" "$log_fn" || rc=$?
 
-        # svc1 in foreground
-        local rc=0
-        _pull_one "$svc1" "$log_fn" || rc=$?
+        local svc_end
+        svc_end=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
+        local svc_elapsed=$(( svc_end - svc_start ))
+
         if [[ $rc -eq 2 ]]; then
             rate_limited=true
-            pull_failed+=("$svc1")
-            # Kill background pull immediately — no point continuing
-            [[ -n "$bg_pid" ]] && kill "$bg_pid" 2>/dev/null || true
+            pull_failed+=("$svc")
         elif [[ $rc -ne 0 ]]; then
-            if [[ -n "$fail_callback" ]] && "$fail_callback" "$svc1"; then
-                :  # callback handled it
+            if [[ -n "$fail_callback" ]] && "$fail_callback" "$svc"; then
+                "$log_fn" "  $svc pull failed, fallback OK (${svc_elapsed}s)"
             else
-                pull_failed+=("$svc1")
+                "$log_fn" "  $svc FAILED after ${svc_elapsed}s"
+                pull_failed+=("$svc")
             fi
-        fi
-
-        # Always wait for background svc2 before next pair
-        if [[ -n "$bg_pid" ]]; then
-            local bg_rc=0
-            wait "$bg_pid" 2>/dev/null || bg_rc=$?
-            if [[ $bg_rc -ne 0 ]]; then
-                cat "$bg_log" 2>/dev/null
-                if grep -qi "too many requests\|rate limit\|429" "$bg_log" 2>/dev/null; then
-                    rate_limited=true
-                fi
-                if [[ -n "$fail_callback" ]] && "$fail_callback" "$svc2"; then
-                    :  # callback handled it
-                else
-                    pull_failed+=("$svc2")
-                fi
-            fi
-            rm -f "$bg_log"
+        else
+            "$log_fn" "  $svc OK (${svc_elapsed}s)"
         fi
     done
+
+    local pull_end
+    pull_end=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
+    local pull_elapsed=$(( pull_end - pull_start ))
 
     # Clean up temp directory and cache (safe — all background jobs have been waited on)
     rm -rf "$_pi_tmp"
@@ -204,6 +194,6 @@ pull_compose_images() {
         return 1
     fi
 
-    "$log_fn" "All $total images pulled successfully"
+    "$log_fn" "All $total images pulled (${pull_elapsed}s)"
     return 0
 }

@@ -82,7 +82,7 @@ install_dependencies() {
     fi
 
     # Build package list based on install type
-    local pkgs=(curl ca-certificates python3 netcat-openbsd)
+    local pkgs=(curl ca-certificates python3 netcat-openbsd locales)
 
     if ! command -v git &>/dev/null; then
         pkgs+=(git)
@@ -113,6 +113,37 @@ install_dependencies() {
     log_info "Installing: ${pkgs[*]}"
     if ! _apt_install_with_recovery "${pkgs[@]}"; then
         return 1
+    fi
+
+    # Generate locales (lightweight alternative to locales-all)
+    if command -v locale-gen &>/dev/null; then
+        local wanted_locales=(
+            it_IT.UTF-8
+            en_US.UTF-8
+            en_GB.UTF-8
+            fr_FR.UTF-8
+            de_DE.UTF-8
+            es_ES.UTF-8
+            pt_PT.UTF-8
+        )
+        local gen_file="/etc/locale.gen"
+        local needs_gen=false
+        for loc in "${wanted_locales[@]}"; do
+            if ! locale -a 2>/dev/null | grep -qi "^${loc/UTF-8/utf8}$"; then
+                # Uncomment or append in locale.gen
+                if [[ -f "$gen_file" ]]; then
+                    sed -i "s/^# *${loc} /${loc} /" "$gen_file" 2>/dev/null || true
+                fi
+                if ! grep -q "^${loc}" "$gen_file" 2>/dev/null; then
+                    echo "${loc} UTF-8" >> "$gen_file"
+                fi
+                needs_gen=true
+            fi
+        done
+        if [[ "$needs_gen" == "true" ]]; then
+            log_info "Generating locales: ${wanted_locales[*]}"
+            locale-gen >> "${UNIFIED_LOG:-/dev/null}" 2>&1 || log_warn "locale-gen failed"
+        fi
     fi
 
     # Enable avahi
