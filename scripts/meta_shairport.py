@@ -96,8 +96,12 @@ def hex_to_str(h: str) -> str:
         return h
 
 
-def get_host_ip() -> str:
-    """Get host IP address for cover art URL (reachable from clients)."""
+def get_host_ip() -> str | None:
+    """Get host IP address for cover art URL (reachable from clients).
+
+    Returns None if no reachable host can be determined — caller should
+    not publish an artUrl in that case.
+    """
     # First check explicit environment variable
     explicit_ip = os.environ.get("COVER_ART_HOST")
     if explicit_ip:
@@ -105,18 +109,15 @@ def get_host_ip() -> str:
 
     # Try to get actual IP by connecting to a known address
     try:
-        # Connect to public DNS to determine which interface is used
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             return s.getsockname()[0]
     except Exception:
         pass
 
-    # Fallback to hostname (works if mDNS is configured)
-    hostname = os.environ.get("HOSTNAME", "localhost")
-    if hostname != "localhost":
-        return f"{hostname}.local"  # mDNS suffix
-    return "localhost"
+    # No reachable IP found — don't fall back to localhost/hostname.local
+    # (unreachable from other devices on the network)
+    return None
 
 
 def parse_item(item_data: bytes) -> None:
@@ -165,7 +166,15 @@ def parse_item(item_data: bytes) -> None:
                 f.write(data)
             os.replace(tmp_path, cover_art_path)
             # Cache host IP on first use
-            metadata["artUrl"] = f"http://{get_host_ip()}:{COVER_ART_PORT}/cover.jpg"
+            host = get_host_ip()
+            if host:
+                metadata["artUrl"] = f"http://{host}:{COVER_ART_PORT}/cover.jpg"
+            else:
+                log(
+                    "warning",
+                    "Cannot determine reachable host IP — cover art URL omitted",
+                )
+                metadata.pop("artUrl", None)
         except Exception as e:
             log("warning", f"Cover art error: {e}")
     elif code == "astm" and isinstance(data, bytes) and len(data) >= 4:

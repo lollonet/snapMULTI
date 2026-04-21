@@ -48,7 +48,12 @@ progress_init() {
         local fb_width
         fb_width=$(cut -d, -f1 /sys/class/graphics/fb0/virtual_size 2>/dev/null || echo 0)
         if (( fb_width > 1000 )); then
-            setfont Uni3-TerminusBold28x14 -C /dev/tty1 2>/dev/null || true
+            # Use large font if available (not all Pi OS images include it)
+            if ls /usr/share/consolefonts/Uni3-TerminusBold28x14* &>/dev/null; then
+                setfont Uni3-TerminusBold28x14 -C /dev/tty1 2>/dev/null || true
+            elif ls /usr/share/consolefonts/Lat15-TerminusBold24x12* &>/dev/null; then
+                setfont Lat15-TerminusBold24x12 -C /dev/tty1 2>/dev/null || true
+            fi
         fi
     fi
 }

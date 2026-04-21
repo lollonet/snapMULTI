@@ -48,8 +48,17 @@ setup_music_source() {
                 mkdir -p "$usb_mount"
                 log_info "Mounting USB: $usb_dev → $usb_mount"
                 if mount "$usb_dev" "$usb_mount" -o ro; then
-                    if ! grep -qF "$usb_dev" /etc/fstab; then
-                        echo "$usb_dev $usb_mount auto ro,nofail 0 0" >> /etc/fstab
+                    # Use UUID in fstab (stable across port/device changes)
+                    local usb_uuid
+                    usb_uuid=$(blkid -s UUID -o value "$usb_dev" 2>/dev/null) || true
+                    local fstab_entry
+                    if [[ -n "$usb_uuid" ]]; then
+                        fstab_entry="UUID=$usb_uuid"
+                    else
+                        fstab_entry="$usb_dev"  # fallback if no UUID
+                    fi
+                    if ! grep -qF "$fstab_entry" /etc/fstab; then
+                        echo "$fstab_entry $usb_mount auto ro,nofail 0 0" >> /etc/fstab
                     fi
                     export MUSIC_PATH="$usb_mount"
                     log_info "USB mounted: $usb_dev at $usb_mount"

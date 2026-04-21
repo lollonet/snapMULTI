@@ -884,30 +884,32 @@ verify_services() {
     local max_attempts=$(( (start_period / wait_seconds) + 2 ))
     local attempt=1
 
+    # Count services with healthcheck defined (only those need to be "healthy")
+    local hc_total
+    hc_total=$(docker compose config --format json 2>/dev/null \
+        | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; print(sum(1 for s in c.values() if 'healthcheck' in s))" 2>/dev/null) || hc_total=0
+
     info "Checking services (up to ${start_period}s, ${wait_seconds}s interval)..."
 
     while [[ $attempt -le $max_attempts ]]; do
-        local failed=0
-        local running_services=()
+        local running healthy
+        running=$(docker compose ps --status running -q 2>/dev/null | wc -l)
+        healthy=$(docker ps --filter "health=healthy" \
+            --filter "label=com.docker.compose.project=$(basename "$PWD")" \
+            -q 2>/dev/null | wc -l)
+        local total=${#expected_services[@]}
 
-        for service in "${expected_services[@]}"; do
-            if docker ps --format '{{.Names}}' | grep -q "^${service}$"; then
-                running_services+=("$service")
-            else
-                failed=$((failed + 1))
-            fi
-        done
-
-        if [[ $failed -eq 0 ]]; then
+        # All services running AND all healthcheck-enabled services healthy
+        if [[ "$running" -ge "$total" ]] && { [[ "$hc_total" -eq 0 ]] || [[ "$healthy" -ge "$hc_total" ]]; }; then
             for service in "${expected_services[@]}"; do
                 ok "$service running"
             done
-            ok "All services running"
+            ok "All $total services running ($healthy/$hc_total healthy)"
             return 0
         fi
 
         if [[ $attempt -lt $max_attempts ]]; then
-            info "Attempt $attempt/$max_attempts: ${#running_services[@]}/${#expected_services[@]} running, waiting ${wait_seconds}s..."
+            info "Attempt $attempt/$max_attempts: $running/$total running, $healthy/$hc_total healthy, waiting ${wait_seconds}s..."
             sleep "$wait_seconds"
         fi
 

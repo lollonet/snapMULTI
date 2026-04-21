@@ -156,30 +156,39 @@ pull_and_restart() {
 
 verify_services() {
     info "Verifying services..."
-    local attempts=0
     local max_attempts=6
+    local total hc_total
+    total=$(docker compose config --services 2>/dev/null | wc -l)
+    # Count services that define a healthcheck (only those report "healthy")
+    hc_total=$(docker compose config --format json 2>/dev/null \
+        | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; print(sum(1 for s in c.values() if 'healthcheck' in s))" 2>/dev/null) || hc_total=0
 
-    # Brief initial wait — containers need a moment after 'up -d' before
-    # health status transitions from "starting" to "healthy"/"unhealthy"
     sleep 5
 
-    while [[ $attempts -lt $max_attempts ]]; do
-        local unhealthy
-        unhealthy=$(docker compose ps --format json 2>/dev/null \
-            | grep -c '"unhealthy"' || true)
+    for attempt in $(seq 1 "$max_attempts"); do
+        local running healthy
+        running=$(docker compose ps --status running -q 2>/dev/null | wc -l)
+        healthy=$(docker ps --filter "health=healthy" \
+            --filter "label=com.docker.compose.project=$(basename "$PWD")" \
+            -q 2>/dev/null | wc -l)
 
-        if [[ "$unhealthy" -eq 0 ]]; then
-            ok "All services healthy"
+        # All services running AND all healthcheck-enabled services healthy
+        if [[ "$running" -ge "$total" ]] && { [[ "$hc_total" -eq 0 ]] || [[ "$healthy" -ge "$hc_total" ]]; }; then
+            ok "All $total services running ($healthy/$hc_total healthy)"
             return 0
         fi
 
-        attempts=$((attempts + 1))
-        if [[ $attempts -lt $max_attempts ]]; then
+        if [[ $attempt -lt $max_attempts ]]; then
+            info "Attempt $attempt/$max_attempts: $running/$total running, $healthy/$hc_total healthy..."
             sleep 10
         fi
     done
 
-    warn "Some services may still be starting — check with: docker compose ps"
+    error "Not all services healthy after verification"
+    docker compose ps --format 'table {{.Name}}\t{{.Status}}' 2>/dev/null | while read -r line; do
+        error "  $line"
+    done
+    return 1
 }
 
 #######################################
@@ -269,9 +278,13 @@ main() {
 
     # Pull images and restart
     pull_and_restart
-    verify_services
+    if ! verify_services; then
+        error "Update applied but services are not healthy"
+        error "Run 'docker compose ps' to check status"
+        exit 1
+    fi
 
-    # Record new version
+    # Record new version (only on success)
     echo "$latest_clean" > "$VERSION_FILE"
 
     echo ""
