@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ADR-005** ([#257](https://github.com/lollonet/snapMULTI/pull/257)) — architecture decision record: reflash-only, systemd lifecycle, robustness-first
 - **device-smoke.sh** ([#257](https://github.com/lollonet/snapMULTI/pull/257)) — mode-aware acceptance gate (`--server`/`--client`/`--both`): root mount, Docker driver, systemd units, compose health, recent error logs
 
+### Removed
+- **In-place update** — `scripts/update.sh` decommissioned per ADR-005. Reflash is the only supported update method.
+
 ### Changed
 - **Full-width TUI** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — progress display uses full terminal width (auto-detect via `stty` after font change), dynamic log area fills remaining rows instead of fixed 8 lines, WARN/ERROR now visible in TUI output
 - **Serial image pull** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — removed paired background+foreground pull that caused counter bugs (210/7) and SD card IO contention; per-service timing and callback-aware status logging

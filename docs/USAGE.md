@@ -768,18 +768,6 @@ COMPOSE_PROFILES=auto-update docker compose up -d
 
 **What it does NOT update:** pinned images (go-librespot, mympd), config files, scripts
 
-### Config & Script Updates (update.sh) — advanced
+### Config & Script Updates
 
-For updating config files, scripts, and docker-compose.yml from GitHub releases via SSH. Works without git.
-
-```bash
-# Check for updates
-sudo /opt/snapmulti/scripts/update.sh --check
-
-# Apply update
-sudo /opt/snapmulti/scripts/update.sh
-```
-
-**What gets updated:** `config/`, `scripts/`, `docker-compose.yml`, `Dockerfile.*`, `.env.example`
-
-**What is NEVER touched:** `.env`, `audio/`, `artwork/`, `mpd/`, `mympd/`, `data/`
+In-place updates via `update.sh` are no longer supported (see [ADR-005](adr/ADR-005.reflash-systemd-robustness.md)). The recommended method is reflashing the SD card — all configuration is auto-detected, and the MPD database is backed up/restored automatically.
