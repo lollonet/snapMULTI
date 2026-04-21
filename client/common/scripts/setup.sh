@@ -1160,7 +1160,10 @@ declare -A env_vars=(
     ["IMAGE_TAG"]="${IMAGE_TAG:-latest}"
     # Version tag (for display) — prefer VERSION file baked by prepare-sd.sh,
     # fall back to git describe (dev clones), then short SHA, then "dev".
-    ["APP_VERSION"]="$(cat "$INSTALL_DIR/VERSION" 2>/dev/null || echo "dev")"
+    ["APP_VERSION"]="$(cat "$INSTALL_DIR/VERSION" 2>/dev/null \
+        || git -C "$INSTALL_DIR" describe --tags --always 2>/dev/null \
+        || git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null \
+        || echo "dev")"
 )
 
 for key in "${!env_vars[@]}"; do
@@ -1534,6 +1537,20 @@ fi
 progress_complete
 
 _elapsed="$((SECONDS / 60))m$((SECONDS % 60))s"
+
+# Exit early with clear error if pull failed — don't show success banner.
+# firstboot won't mark .done-setup, so it retries on next boot
+# (fuse-overlayfs already configured, no wipe)
+if [[ "${PULL_FAILED:-false}" == "true" ]]; then
+    echo "========================================="
+    echo "Setup Incomplete ($_elapsed)"
+    echo "========================================="
+    echo ""
+    echo "WARNING: Image pull failed — will retry on next boot"
+    echo "  To retry manually: cd $INSTALL_DIR && docker compose pull"
+    exit 1
+fi
+
 echo "========================================="
 echo "Setup Complete! ($_elapsed)"
 echo "========================================="
@@ -1573,12 +1590,5 @@ if [[ "$NEEDS_REBOOT" == "true" ]]; then
 echo ""
 echo "NOTE: Boot configuration was modified."
 echo "  A reboot is required for changes to take effect."
-fi
-
-# Exit with error if pull failed — firstboot won't mark .done-setup,
-# so it retries on next boot (fuse-overlayfs already configured, no wipe)
-if [[ "${PULL_FAILED:-false}" == "true" ]]; then
-    echo "WARNING: Setup completed but image pull failed — will retry on next boot"
-    exit 1
 fi
 echo ""

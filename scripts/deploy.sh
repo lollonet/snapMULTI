@@ -364,6 +364,18 @@ install_dependencies() {
         info "Git already installed"
     fi
 
+    local extra_pkgs=()
+    command -v python3 >/dev/null 2>&1 || extra_pkgs+=(python3)
+    command -v nc      >/dev/null 2>&1 || extra_pkgs+=(netcat-openbsd)
+    if [[ ${#extra_pkgs[@]} -gt 0 ]]; then
+        info "Installing ${extra_pkgs[*]}..."
+        apt-get update -qq
+        apt-get install -y -qq "${extra_pkgs[@]}" >/dev/null
+        ok "${extra_pkgs[*]} installed"
+    else
+        info "python3 and netcat already installed"
+    fi
+
     # Avahi is required for mDNS discovery (Spotify Connect, AirPlay)
     if ! command -v avahi-daemon >/dev/null 2>&1; then
         info "Installing Avahi for mDNS discovery..."
@@ -506,14 +518,10 @@ install_docker() {
         info "Added $real_user to docker group (re-login to take effect)"
     fi
 
-    # Install fuse-overlayfs (required for read-only FS support)
-    if ! command -v fuse-overlayfs &>/dev/null; then
-        apt-get install -y fuse-overlayfs >/dev/null 2>&1 \
-            || warn "fuse-overlayfs install failed — read-only mode may not work"
-    fi
-
-    # Docker daemon config (live-restore + fuse-overlayfs for read-only FS)
-    tune_docker_daemon --live-restore --fuse-overlayfs
+    # Generic server deploy keeps Docker's default storage driver.
+    # fuse-overlayfs is only required for overlayroot/read-only installs,
+    # which are handled in the dedicated firstboot/client flows.
+    tune_docker_daemon --live-restore
 
     # Enable and start Docker
     systemctl enable docker >/dev/null 2>&1 || true
@@ -894,9 +902,11 @@ verify_services() {
     while [[ $attempt -le $max_attempts ]]; do
         local running healthy
         running=$(docker compose ps --status running -q 2>/dev/null | wc -l)
-        healthy=$(docker ps --filter "health=healthy" \
-            --filter "label=com.docker.compose.project=$(basename "$PWD")" \
-            -q 2>/dev/null | wc -l)
+        healthy=$(
+            docker compose ps -q 2>/dev/null \
+                | xargs -r docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null \
+                | grep -c '^healthy$' || true
+        )
         local total=${#expected_services[@]}
 
         # All services running AND all healthcheck-enabled services healthy

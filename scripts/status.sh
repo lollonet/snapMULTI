@@ -19,20 +19,22 @@ source "${SCRIPT_DIR}/common/logging.sh"
 [[ -t 1 ]] || { GREEN=''; RED=''; YELLOW=''; CYAN=''; BOLD=''; NC=''; }
 
 # ---------------------------------------------------------------------------
-# Install detection
+# Install detection — prefer /opt install dirs; fall back to repo checkout
+# only if a .env file exists (indicates a configured deployment, not a bare
+# checkout).
 # ---------------------------------------------------------------------------
 SERVER_DIR=""
 CLIENT_DIR=""
 
 for path in /opt/snapmulti "${SCRIPT_DIR}/.."; do
-    if [[ -d "$path" && -f "${path}/docker-compose.yml" ]]; then
+    if [[ -d "$path" && -f "${path}/docker-compose.yml" && -f "${path}/.env" ]]; then
         SERVER_DIR="$(cd "$path" && pwd)"
         break
     fi
 done
 
 for path in /opt/snapclient "${SCRIPT_DIR}/../client/common"; do
-    if [[ -d "$path" && -f "${path}/docker-compose.yml" ]]; then
+    if [[ -d "$path" && -f "${path}/docker-compose.yml" && -f "${path}/.env" ]]; then
         CLIENT_DIR="$(cd "$path" && pwd)"
         break
     fi
@@ -40,7 +42,7 @@ done
 
 if [[ -z "$SERVER_DIR" && -z "$CLIENT_DIR" ]]; then
     error "No snapMULTI installation found"
-    error "Expected docker-compose.yml in /opt/snapmulti or /opt/snapclient"
+    error "Expected docker-compose.yml + .env in /opt/snapmulti or /opt/snapclient"
     exit 1
 fi
 
@@ -65,8 +67,21 @@ declare -A HEALTH=()
 HEALTHY=0
 TOTAL=0
 
-SERVER_CONTAINERS=(snapserver mpd shairport-sync librespot mympd metadata tidal-connect)
-CLIENT_CONTAINERS=(snapclient audio-visualizer fb-display)
+# Query actual services from docker compose (profile-aware) instead of
+# hardcoded lists — catches optional services like watchtower, tidal-connect.
+SERVER_CONTAINERS=()
+CLIENT_CONTAINERS=()
+
+if [[ -n "$SERVER_DIR" ]]; then
+    mapfile -t SERVER_CONTAINERS < <(
+        docker compose -f "$SERVER_DIR/docker-compose.yml" config --services 2>/dev/null || true
+    )
+fi
+if [[ -n "$CLIENT_DIR" ]]; then
+    mapfile -t CLIENT_CONTAINERS < <(
+        docker compose -f "$CLIENT_DIR/docker-compose.yml" config --services 2>/dev/null || true
+    )
+fi
 
 count_health() {
     local cname
@@ -85,8 +100,14 @@ count_health() {
     done
 }
 
-[[ -n "$SERVER_DIR" ]] && count_health "${SERVER_CONTAINERS[@]}"
-[[ -n "$CLIENT_DIR" ]] && count_health "${CLIENT_CONTAINERS[@]}"
+[[ ${#SERVER_CONTAINERS[@]} -gt 0 ]] && count_health "${SERVER_CONTAINERS[@]}"
+[[ ${#CLIENT_CONTAINERS[@]} -gt 0 ]] && count_health "${CLIENT_CONTAINERS[@]}"
+
+if [[ "$TOTAL" -eq 0 ]]; then
+    error "No running snapMULTI containers found"
+    error "Start the stack first with docker compose up -d"
+    exit 1
+fi
 
 show_container() {
     local cname="$1"

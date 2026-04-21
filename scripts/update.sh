@@ -39,7 +39,7 @@ error() { echo -e "\033[31m[ERROR]\033[0m $*" >&2; }
 
 check_dependencies() {
     local missing=()
-    for cmd in curl tar docker; do
+    for cmd in curl tar docker python3; do
         command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
     done
     if [[ ${#missing[@]} -gt 0 ]]; then
@@ -56,6 +56,13 @@ get_current_version() {
     fi
 }
 
+parse_latest_tag() {
+    local response="$1"
+    echo "$response" \
+        | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+        | head -n1
+}
+
 get_latest_release() {
     local response
     response=$(curl -sf --max-time 15 \
@@ -66,7 +73,7 @@ get_latest_release() {
 
     # Extract tag_name without jq dependency
     local tag
-    tag=$(echo "$response" | grep -o '"tag_name":"[^"]*"' | cut -d'"' -f4)
+    tag=$(parse_latest_tag "$response")
     if [[ -z "$tag" ]]; then
         error "Could not parse latest release tag"
         exit 1
@@ -76,6 +83,10 @@ get_latest_release() {
 
 compare_versions() {
     local current="$1" latest="$2"
+
+    if [[ -z "$current" ]] || [[ "$current" == "unknown" ]]; then
+        return 1  # unknown local version: allow update
+    fi
 
     # Strip leading 'v' for comparison
     local current_clean="${current#v}"
@@ -117,24 +128,67 @@ download_and_extract() {
 
 apply_update() {
     local src_dir="$1"
+    local ts
+    ts=$(date +%Y%m%d-%H%M%S)
 
     info "Applying update..."
 
+    # Stage the update in a temporary copy so a failed cp doesn't leave
+    # the live install half-mutated. On success we swap; on failure we
+    # restore the backup.
+    local backup_root="$HOME/.claude-backups/update/$ts"
+    local staging_dir
+    staging_dir=$(mktemp -d "${INSTALL_DIR}.staging.XXXXXX")
+
+    # Snapshot current install into staging (hard-link where possible for speed)
+    # Full copy (not hard links) so staging is fully isolated from live install.
+    # Hard links would share inodes — cp overwrites would mutate INSTALL_DIR.
+    cp -a "$INSTALL_DIR/." "$staging_dir/"
+
+    # Apply changes to the staging copy
     for target in "${UPDATE_TARGETS[@]}"; do
         if [[ -e "$src_dir/$target" ]]; then
             if [[ -d "$src_dir/$target" ]]; then
-                # Directory: sync contents (don't delete existing extra files)
-                cp -r "$src_dir/$target" "$INSTALL_DIR/"
+                # Remove entries (files, symlinks, empty dirs) absent from new release
+                if [[ -d "$staging_dir/$target" ]]; then
+                    while IFS= read -r rel_path; do
+                        if [[ ! -e "$src_dir/$target/$rel_path" ]]; then
+                            local dest="$staging_dir/$target/$rel_path"
+                            mkdir -p "$backup_root/$target/$(dirname "$rel_path")"
+                            mv "$dest" "$backup_root/$target/$rel_path" 2>/dev/null || true
+                        fi
+                    done < <(cd "$staging_dir/$target" && find . \( -type f -o -type l \) | sed 's|^\./||')
+                    # Prune empty directories not present in new release
+                    (cd "$staging_dir/$target" && find . -depth -type d -empty -exec rmdir {} \; 2>/dev/null) || true
+                fi
+                mkdir -p "$staging_dir/$target"
+                cp -r "$src_dir/$target/." "$staging_dir/$target/"
             else
-                # File: overwrite
-                cp "$src_dir/$target" "$INSTALL_DIR/$target"
+                cp "$src_dir/$target" "$staging_dir/$target"
             fi
-            ok "Updated: $target"
         fi
     done
 
     # Ensure scripts are executable
-    chmod +x "$INSTALL_DIR/scripts/"*.sh 2>/dev/null || true
+    chmod +x "$staging_dir/scripts/"*.sh 2>/dev/null || true
+
+    # Atomic swap: move live → backup, staging → live
+    # If the swap fails, restore the backup.
+    local live_backup="${INSTALL_DIR}.pre-update.$ts"
+    if mv "$INSTALL_DIR" "$live_backup" && mv "$staging_dir" "$INSTALL_DIR"; then
+        rm -rf "$live_backup"
+        # Clean up empty backup dir
+        rmdir "$backup_root" 2>/dev/null || true
+        for target in "${UPDATE_TARGETS[@]}"; do
+            [[ -e "$src_dir/$target" ]] && ok "Updated: $target"
+        done
+    else
+        error "Swap failed — restoring previous install"
+        # Restore: put back whatever we moved
+        [[ -d "$live_backup" && ! -d "$INSTALL_DIR" ]] && mv "$live_backup" "$INSTALL_DIR"
+        rm -rf "$staging_dir"
+        exit 1
+    fi
 }
 
 pull_and_restart() {
@@ -168,9 +222,11 @@ verify_services() {
     for attempt in $(seq 1 "$max_attempts"); do
         local running healthy
         running=$(docker compose ps --status running -q 2>/dev/null | wc -l)
-        healthy=$(docker ps --filter "health=healthy" \
-            --filter "label=com.docker.compose.project=$(basename "$PWD")" \
-            -q 2>/dev/null | wc -l)
+        healthy=$(
+            docker compose ps -q 2>/dev/null \
+                | xargs -r docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null \
+                | grep -c '^healthy$' || true
+        )
 
         # All services running AND all healthcheck-enabled services healthy
         if [[ "$running" -ge "$total" ]] && { [[ "$hc_total" -eq 0 ]] || [[ "$healthy" -ge "$hc_total" ]]; }; then
