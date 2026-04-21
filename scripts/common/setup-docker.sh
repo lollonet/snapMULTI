@@ -78,10 +78,11 @@ setup_docker() {
     # is required. But on a normal writable ext4 root, overlay2 is faster
     # (no FUSE userspace overhead).
     #
-    # Decision is based on /proc/mounts, not ENABLE_READONLY — the flag
-    # expresses intent (will be readonly after reboot), not current state.
-    # At this point in the install, overlayroot is never active yet.
-    if ! grep -q 'overlayroot' /proc/mounts 2>/dev/null; then
+    # Detection uses the same pattern as system-tune.sh:is_overlayroot()
+    # and ro-mode.sh: "on / type overlay" in mount output.
+    # NOT gated on ENABLE_READONLY — that flag expresses intent (will be
+    # readonly after reboot), not current state.
+    if ! mount 2>/dev/null | grep -q ' on / type overlay'; then
         log_info "Docker ready (overlay2, writable root filesystem)"
         return 0
     fi

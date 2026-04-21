@@ -1401,7 +1401,11 @@ SSHEOF
 
     # Enable overlayfs (takes effect after reboot)
     log_progress "Enabling overlayfs..."
-    raspi-config nonint do_overlayfs 0
+    if ! raspi-config nonint do_overlayfs 0; then
+        log_progress "WARNING: raspi-config failed to enable overlayfs"
+        log_progress "         Read-only mode will NOT be active after reboot"
+        ENABLE_READONLY=false
+    fi
 
     echo "Read-only filesystem configured"
     echo "  - Docker storage driver: fuse-overlayfs (activates after reboot)"
