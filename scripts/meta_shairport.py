@@ -119,14 +119,8 @@ def get_host_ip() -> str:
     return "localhost"
 
 
-# Cache the host IP at startup
-_host_ip: str | None = None
-
-
 def parse_item(item_data: bytes) -> None:
     """Parse a single metadata item from shairport-sync XML."""
-    global _host_ip
-
     try:
         item_xml = item_data.decode("utf-8", errors="replace")
     except Exception:
