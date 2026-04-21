@@ -171,9 +171,7 @@ def parse_item(item_data: bytes) -> None:
                 f.write(data)
             os.replace(tmp_path, cover_art_path)
             # Cache host IP on first use
-            if _host_ip is None:
-                _host_ip = get_host_ip()
-            metadata["artUrl"] = f"http://{_host_ip}:{COVER_ART_PORT}/cover.jpg"
+            metadata["artUrl"] = f"http://{get_host_ip()}:{COVER_ART_PORT}/cover.jpg"
         except Exception as e:
             log("warning", f"Cover art error: {e}")
     elif code == "astm" and isinstance(data, bytes) and len(data) >= 4:

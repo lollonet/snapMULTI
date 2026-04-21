@@ -45,4 +45,9 @@ else
     echo "Database has $song_count songs — auto_update handles incremental scan"
 fi
 wait $MPD_PID
-exit $?
+rc=$?
+# Signal termination (128+N) is normal during Docker stop — exit 0
+if [ "$rc" -gt 128 ]; then
+    exit 0
+fi
+exit $rc
