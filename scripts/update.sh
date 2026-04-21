@@ -134,8 +134,24 @@ apply_update() {
     for target in "${UPDATE_TARGETS[@]}"; do
         if [[ -e "$src_dir/$target" ]]; then
             if [[ -d "$src_dir/$target" ]]; then
-                # Directory: sync contents (don't delete existing extra files)
-                cp -r "$src_dir/$target" "$INSTALL_DIR/"
+                # Directory: replace contents so files removed upstream don't linger.
+                # Backup removed files to ~/.claude-backups in case of rollback.
+                if [[ -d "$INSTALL_DIR/$target" ]]; then
+                    local backup_dir
+                    backup_dir="$HOME/.claude-backups/update/$(date +%Y%m%d-%H%M%S)/$target"
+                    mkdir -p "$backup_dir"
+                    # Identify files present locally but absent in new release
+                    while IFS= read -r rel_path; do
+                        if [[ ! -e "$src_dir/$target/$rel_path" ]]; then
+                            local parent
+                            parent=$(dirname "$backup_dir/$rel_path")
+                            mkdir -p "$parent"
+                            mv "$INSTALL_DIR/$target/$rel_path" "$backup_dir/$rel_path"
+                        fi
+                    done < <(cd "$INSTALL_DIR/$target" && find . -type f | sed 's|^\./||')
+                    rmdir "$backup_dir" 2>/dev/null || true  # clean up if empty
+                fi
+                cp -r "$src_dir/$target/." "$INSTALL_DIR/$target/"
             else
                 # File: overwrite
                 cp "$src_dir/$target" "$INSTALL_DIR/$target"

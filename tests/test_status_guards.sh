@@ -24,6 +24,8 @@ echo "Testing status.sh safety guards..."
 
 assert_contains "$content" 'if [[ "$TOTAL" -eq 0 ]]; then' "status exits when no snapMULTI containers are found"
 assert_contains "$content" 'error "No running snapMULTI containers found"' "status emits explicit no-container error"
+assert_contains "$content" 'docker compose' "status uses docker compose config for service discovery"
+assert_contains "$content" '-f "${path}/.env"' "install detection requires .env (not bare checkout)"
 
 echo ""
 if [[ "$fail" -gt 0 ]]; then
