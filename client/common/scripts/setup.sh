@@ -594,18 +594,25 @@ echo ""
 INSTALL_DIR="/opt/snapclient"
 
 progress 1 "Installing system dependencies..."
-log_progress "apt-get update"
 start_progress_animation 1 0 12  # Animate during apt-get
 
 # Base packages (always needed)
 BASE_PACKAGES="ca-certificates curl alsa-utils avahi-daemon avahi-utils"
 
-apt-get update
-log_progress "apt-get install: ca-certificates curl..."
-log_progress "apt-get install: alsa-utils avahi-daemon avahi-utils..."
-# shellcheck disable=SC2086
-apt-get install -y $BASE_PACKAGES
-log_progress "System packages installed"
+# Skip apt-get if all base packages are already installed (firstboot did it)
+_missing_pkgs=""
+for _pkg in $BASE_PACKAGES; do
+    dpkg -s "$_pkg" &>/dev/null || _missing_pkgs="$_missing_pkgs $_pkg"
+done
+if [[ -n "$_missing_pkgs" ]]; then
+    log_progress "apt-get update + install:$_missing_pkgs"
+    apt-get update
+    # shellcheck disable=SC2086
+    apt-get install -y $_missing_pkgs
+    log_progress "System packages installed"
+else
+    log_progress "All base packages already installed, skipping apt-get"
+fi
 
 # Set system locale to C.UTF-8 — prevents warnings from apt and subprocesses.
 # C.UTF-8 is always available on Debian without running locale-gen.

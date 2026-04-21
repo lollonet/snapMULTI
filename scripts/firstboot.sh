@@ -580,22 +580,32 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
     local_client_healthy=false
     local_client_compose=(-f "$CLIENT_DIR/docker-compose.yml")
+    local_client_total=$(docker compose "${local_client_compose[@]}" config --services 2>/dev/null | wc -l)
+    if [[ "$local_client_total" -eq 0 ]]; then
+        log_warn "Could not determine client service count — skipping health check"
+    else
+    local_client_hc=$(docker compose "${local_client_compose[@]}" config --format json 2>/dev/null \
+        | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; print(sum(1 for s in c.values() if 'healthcheck' in s))" 2>/dev/null) || local_client_hc=0
     for attempt in $(seq 1 12); do
         local_running=$(docker compose "${local_client_compose[@]}" ps --status running -q 2>/dev/null | wc -l)
-        local_healthy=$(docker compose "${local_client_compose[@]}" ps --status healthy -q 2>/dev/null | wc -l)
-        if [[ "$local_running" -ge 1 ]] && [[ "$local_healthy" -ge 1 ]]; then
-            log_info "Client container running and healthy"
+        local_healthy=$(docker ps --filter "health=healthy" \
+            --filter "label=com.docker.compose.project=$(basename "$CLIENT_DIR")" \
+            -q 2>/dev/null | wc -l)
+        if [[ "$local_running" -ge "$local_client_total" ]] && { [[ "$local_client_hc" -eq 0 ]] || [[ "$local_healthy" -ge "$local_client_hc" ]]; }; then
+            log_info "All $local_client_total client services running ($local_healthy/$local_client_hc healthy)"
             local_client_healthy=true
             break
         fi
+        log_info "Attempt $attempt/12: $local_running/$local_client_total running, $local_healthy/$local_client_hc healthy..."
         sleep 5
     done
     if [[ "$local_client_healthy" == "false" ]]; then
-        log_warn "snapclient not running after 60s"
+        log_warn "Client services not all healthy after 60s"
         docker compose -f "$CLIENT_DIR/docker-compose.yml" ps --format 'table {{.Name}}\t{{.Status}}' 2>/dev/null | while read -r line; do
             log_warn "  $line"
         done
     fi
+    fi  # local_client_total guard
     checkpoint_done "setup"
   fi  # checkpoint guard
 fi
