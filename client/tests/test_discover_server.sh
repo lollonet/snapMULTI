@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DISCOVER_SH="$SCRIPT_DIR/../common/scripts/discover-server.sh"
-
 pass=0
 fail=0
 
