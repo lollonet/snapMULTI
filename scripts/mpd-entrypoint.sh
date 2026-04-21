@@ -46,8 +46,9 @@ else
 fi
 wait $MPD_PID
 rc=$?
-# Signal termination (128+N) is normal during Docker stop — exit 0
-if [ "$rc" -gt 128 ]; then
+# SIGTERM (143) and SIGKILL (137) are normal during Docker stop — exit clean.
+# Other signals (SIGSEGV=139, etc.) should propagate as failure.
+if [ "$rc" -eq 143 ] || [ "$rc" -eq 137 ]; then
     exit 0
 fi
 exit $rc
