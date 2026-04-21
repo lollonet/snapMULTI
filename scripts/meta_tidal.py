@@ -117,13 +117,10 @@ def apply_metadata(data: dict) -> bool:
         sys.stderr.flush()
 
     title = str(data.get("title", ""))
-    if title and title != metadata["title"]:
+    if title != metadata["title"]:
         metadata["title"] = title
         changed = True
 
-    # Artist clears to [] when empty (unlike title/album which preserve previous
-    # values). This is intentional: the bridge's STATUS_HASH includes ARTIST, so
-    # an empty artist only arrives on a genuine state transition, not mid-render.
     artist = data.get("artist", "")
     artist_list = [artist] if isinstance(artist, str) and artist else []
     if artist_list != metadata["artist"]:
@@ -131,16 +128,15 @@ def apply_metadata(data: dict) -> bool:
         changed = True
 
     album = str(data.get("album", ""))
-    if album and album != metadata["album"]:
+    if album != metadata["album"]:
         metadata["album"] = album
         changed = True
 
     duration = data.get("duration", 0)
-    if duration:
-        dur_f = float(duration)
-        if dur_f != metadata["duration"]:
-            metadata["duration"] = dur_f
-            changed = True
+    dur_f = float(duration) if duration else 0.0
+    if dur_f != metadata["duration"]:
+        metadata["duration"] = dur_f
+        changed = True
 
     # Map speaker_controller states to Snapcast states
     state_raw = str(data.get("state", "")).upper()

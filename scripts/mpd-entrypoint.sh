@@ -7,12 +7,12 @@ set -e
 # Check for actual files, not just directories — overlayroot upper layer can show
 # empty directory structure before NFS lower layer is fully mounted.
 wait=0
-while [ "$(find /music -maxdepth 3 -type f -name '*.mp3' -o -name '*.flac' 2>/dev/null | head -1 | wc -l)" -eq 0 ] && [ "$wait" -lt 120 ]; do
+while [ "$(find /music -maxdepth 3 -type f \( -name '*.mp3' -o -name '*.flac' -o -name '*.m4a' -o -name '*.ogg' -o -name '*.wav' -o -name '*.aac' -o -name '*.opus' -o -name '*.wma' \) 2>/dev/null | head -1 | wc -l)" -eq 0 ] && [ "$wait" -lt 120 ]; do
     echo "Waiting for music files to be accessible... (${wait}s)"
     sleep 5
     wait=$((wait + 5))
 done
-if [ "$(find /music -maxdepth 3 -type f -name '*.mp3' -o -name '*.flac' 2>/dev/null | head -1 | wc -l)" -eq 0 ]; then
+if [ "$(find /music -maxdepth 3 -type f \( -name '*.mp3' -o -name '*.flac' -o -name '*.m4a' -o -name '*.ogg' -o -name '*.wav' -o -name '*.aac' -o -name '*.opus' -o -name '*.wma' \) 2>/dev/null | head -1 | wc -l)" -eq 0 ]; then
     echo "WARNING: no music files found after 120s — MPD may do a full rescan later"
 fi
 

@@ -75,14 +75,17 @@ def send_metadata() -> None:
         artist = props.get("artist", ["?"])
         artist_str = artist[0] if isinstance(artist, list) and artist else "?"
         log("info", f"Metadata: {artist_str} - {props.get('title', '?')}")
-        # Use Plugin.Stream.Player.Properties with metadata key (same as meta_mpd.py)
-        send(
-            {
-                "jsonrpc": "2.0",
-                "method": "Plugin.Stream.Player.Properties",
-                "params": {"metadata": props},
-            }
-        )
+    else:
+        # Clear: send empty metadata so clients don't show stale info (e.g. after pend)
+        log("info", "Metadata cleared")
+    # Always send — empty props clears stale metadata on clients
+    send(
+        {
+            "jsonrpc": "2.0",
+            "method": "Plugin.Stream.Player.Properties",
+            "params": {"metadata": props},
+        }
+    )
 
 
 def hex_to_str(h: str) -> str:
