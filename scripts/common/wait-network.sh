@@ -82,8 +82,12 @@ _try_recover_network() {
         if ping -c1 -W2 1.1.1.1 &>/dev/null && ! getent hosts deb.debian.org &>/dev/null; then
             log_warn "DNS not working — trying fallback (1.1.1.1)..."
             if command -v resolvectl &>/dev/null; then
-                # systemd-resolved: set fallback DNS without touching resolv.conf
-                resolvectl dns 1.1.1.1 2>/dev/null || true
+                # systemd-resolved: set fallback DNS on default interface
+                local _iface
+                _iface=$(ip route show default 2>/dev/null | awk '/default/{print $5; exit}')
+                if [[ -n "$_iface" ]]; then
+                    resolvectl dns "$_iface" 1.1.1.1 2>/dev/null || true
+                fi
             elif [[ -f /etc/resolv.conf ]] && ! grep -q '1.1.1.1' /etc/resolv.conf; then
                 # Static resolv.conf: add temporarily, mark for cleanup
                 sed -i '1i nameserver 1.1.1.1  # snapmulti-fallback' /etc/resolv.conf 2>/dev/null || true

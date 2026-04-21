@@ -69,7 +69,13 @@ setup_docker() {
         return 1
     fi
 
-    # Switch to fuse-overlayfs (required for read-only filesystem)
+    # Switch to fuse-overlayfs only when read-only mode is enabled.
+    # Normal installs keep the default overlay2 driver (no wipe needed).
+    if [[ "${ENABLE_READONLY:-false}" != "true" ]]; then
+        log_info "Docker ready (overlay2, read-only mode disabled)"
+        return 0
+    fi
+
     local current_driver
     current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "none")
     if [[ "$current_driver" != "fuse-overlayfs" ]]; then

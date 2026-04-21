@@ -601,6 +601,7 @@ BASE_PACKAGES="ca-certificates curl alsa-utils avahi-daemon avahi-utils"
 
 # Skip apt-get if all base packages are already installed (firstboot did it)
 _missing_pkgs=""
+# shellcheck disable=SC2086
 for _pkg in $BASE_PACKAGES; do
     dpkg -s "$_pkg" &>/dev/null || _missing_pkgs="$_missing_pkgs $_pkg"
 done

@@ -578,8 +578,14 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     set_module "verify-client"
     next_step "Verifying client..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-    local_client_healthy=false
+
+    # Start client containers (setup.sh only enables the service, doesn't start it)
     local_client_compose=(-f "$CLIENT_DIR/docker-compose.yml")
+    log_info "Starting client containers..."
+    cd "$CLIENT_DIR"
+    docker compose "${local_client_compose[@]}" up -d 2>/dev/null || log_warn "docker compose up failed"
+
+    local_client_healthy=false
     local_client_total=$(docker compose "${local_client_compose[@]}" config --services 2>/dev/null | wc -l)
     if [[ "$local_client_total" -eq 0 ]]; then
         log_warn "Could not determine client service count — skipping health check"
@@ -600,10 +606,12 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
         sleep 5
     done
     if [[ "$local_client_healthy" == "false" ]]; then
-        log_warn "Client services not all healthy after 60s"
+        log_error "Client services not all healthy after 60s"
         docker compose -f "$CLIENT_DIR/docker-compose.yml" ps --format 'table {{.Name}}\t{{.Status}}' 2>/dev/null | while read -r line; do
-            log_warn "  $line"
+            log_error "  $line"
         done
+        log_error "Client verify failed — will retry on next boot"
+        exit 1
     fi
     fi  # local_client_total guard
     checkpoint_done "setup"
