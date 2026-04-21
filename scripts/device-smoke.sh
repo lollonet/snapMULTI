@@ -169,8 +169,13 @@ check_compose_stack() {
     fi
 
     for svc in "${expected[@]}"; do
-        local status
-        status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$svc" 2>/dev/null || echo "missing")
+        local cid status
+        cid=$(docker compose -f "$compose_file" ps -q "$svc" 2>/dev/null | head -1)
+        if [[ -n "$cid" ]]; then
+            status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid" 2>/dev/null || echo "unknown")
+        else
+            status="missing"
+        fi
         info "  $stack_name/$svc -> $status"
     done
 }

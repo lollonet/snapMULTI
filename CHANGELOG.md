@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **FIFO health monitoring** ([#224](https://github.com/lollonet/snapMULTI/pull/224)) — `save-diagnostics.sh` records pipe status (reader count via `fuser`) and container restart counts to `audio-health.log`
 - **MPD backup timer** ([#225](https://github.com/lollonet/snapMULTI/pull/225)) — daily backup of `mpd.db` to boot partition; `backup-from-sd.sh` extracts it before reflashing so MPD does fast incremental scan instead of hours-long rescan
 - **QUICKSTART.md** ([#226](https://github.com/lollonet/snapMULTI/pull/226)) — one-page quick start (60 lines); README slimmed from 245 to 72 lines
+- **ADR-005** ([#257](https://github.com/lollonet/snapMULTI/pull/257)) — architecture decision record: reflash-only, systemd lifecycle, robustness-first
+- **device-smoke.sh** ([#257](https://github.com/lollonet/snapMULTI/pull/257)) — mode-aware acceptance gate (`--server`/`--client`/`--both`): root mount, Docker driver, systemd units, compose health, recent error logs
 
 ### Changed
 - **Full-width TUI** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — progress display uses full terminal width (auto-detect via `stty` after font change), dynamic log area fills remaining rows instead of fixed 8 lines, WARN/ERROR now visible in TUI output
