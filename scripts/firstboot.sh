@@ -488,7 +488,6 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     next_step "Verifying server containers..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
-    local_compose=(-f "$SERVER_DIR/docker-compose.yml")
     if ! verify_compose_stack "$SERVER_DIR/docker-compose.yml" "server" 18 10; then
         log_error "Server verify failed — will retry on next boot"
         exit 1
