@@ -821,7 +821,10 @@ pull_images() {
         local svc="$1"
         if [[ "$svc" == "metadata" ]]; then
             info "Building metadata locally (not yet on registry)"
-            docker compose build metadata || { error "Failed to build metadata"; exit 1; }
+            if ! docker compose build metadata; then
+                error "Failed to build metadata"
+                return 1
+            fi
             return 0
         fi
         return 1

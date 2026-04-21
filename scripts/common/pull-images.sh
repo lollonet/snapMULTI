@@ -13,17 +13,39 @@
 
 # Source logger if not already available
 if ! declare -F log_info &>/dev/null; then
-    # shellcheck source=unified-log.sh
-    source "$(dirname "${BASH_SOURCE[0]}")/unified-log.sh" 2>/dev/null || {
-        log_info()  { echo "[INFO] $*"; }
-        log_warn()  { echo "[WARN] $*" >&2; }
-        log_error() { echo "[ERROR] $*" >&2; }
-    }
+    # Check if deploy.sh-style logging.sh functions are already defined
+    if declare -F info &>/dev/null && declare -F warn &>/dev/null; then
+        # deploy.sh context: create log_* wrappers to preserve stderr output
+        log_info()  { info "$@"; }
+        log_warn()  { warn "$@"; }
+        log_error() { error "$@"; }
+        log_ok()    { ok "$@"; }
+    else
+        # firstboot.sh or standalone context: use unified-log.sh
+        # shellcheck source=unified-log.sh
+        source "$(dirname "${BASH_SOURCE[0]}")/unified-log.sh" 2>/dev/null || {
+            log_info()  { echo "[INFO] $*"; }
+            log_warn()  { echo "[WARN] $*" >&2; }
+            log_error() { echo "[ERROR] $*" >&2; }
+        }
+    fi
 fi
 
 # Check if a compose service image already exists locally.
+# Uses a cached service→image map (built once per pull_compose_images call).
 _image_exists() {
     local svc="$1"
+    # Use cached map if available (set by pull_compose_images)
+    if [[ -n "${_svc_image_map:-}" ]] && [[ -f "$_svc_image_map" ]]; then
+        local image
+        image=$(grep "^${svc}=" "$_svc_image_map" 2>/dev/null | cut -d= -f2-)
+        if [[ -n "$image" ]]; then
+            docker image inspect "$image" >/dev/null 2>&1
+            return $?
+        fi
+        # Service not in cache — fall through to slow path
+    fi
+    # Fallback: query per service (slower)
     local image
     image=$(docker compose config --format json 2>/dev/null \
         | SVC="$svc" python3 -c "import sys,json,os; print(json.load(sys.stdin)['services'][os.environ['SVC']]['image'])" 2>/dev/null) || return 1
@@ -82,6 +104,12 @@ pull_compose_images() {
         return 1
     fi
 
+    # Build service→image map once (avoids repeated docker compose config calls)
+    _svc_image_map=$(mktemp)
+    docker compose config --format json 2>/dev/null \
+        | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; [print(f'{k}={v[\"image\"]}') for k,v in c.items()]" \
+        > "$_svc_image_map" 2>/dev/null || true
+
     # Filter out services whose images already exist
     local to_pull=()
     for svc in "${services[@]}"; do
@@ -134,6 +162,8 @@ pull_compose_images() {
         if [[ $rc -eq 2 ]]; then
             rate_limited=true
             pull_failed+=("$svc1")
+            # Kill background pull immediately — no point continuing
+            [[ -n "$bg_pid" ]] && kill "$bg_pid" 2>/dev/null || true
         elif [[ $rc -ne 0 ]]; then
             if [[ -n "$fail_callback" ]] && "$fail_callback" "$svc1"; then
                 :  # callback handled it
@@ -161,8 +191,9 @@ pull_compose_images() {
         fi
     done
 
-    # Clean up temp directory (safe — all background jobs have been waited on)
+    # Clean up temp directory and cache (safe — all background jobs have been waited on)
     rm -rf "$_pi_tmp"
+    rm -f "${_svc_image_map:-}"
 
     # Prune dangling images
     docker image prune -f >/dev/null 2>&1 || true
