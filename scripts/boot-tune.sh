@@ -30,14 +30,18 @@ done
 
 # ── WiFi auto-disable when Ethernet is connected ─────────────────
 # Avoids dual mDNS announcements (clients might connect to the wrong IP).
-# If Ethernet is unplugged, WiFi stays active as fallback.
-if command -v nmcli &>/dev/null && ip link show eth0 2>/dev/null | grep -q 'state UP'; then
-    nmcli radio wifi off 2>/dev/null \
-        && logger -t boot-tune "Ethernet UP — WiFi disabled (single mDNS announcement)" \
-        || logger -t boot-tune -p warning "Failed to disable WiFi"
-elif command -v nmcli &>/dev/null && ! ip link show eth0 2>/dev/null | grep -q 'state UP'; then
-    # Ensure WiFi is on if Ethernet is not connected (recovery after cable removal)
-    nmcli radio wifi on 2>/dev/null || true
+# If Ethernet is unplugged or has no IP, WiFi stays active as fallback.
+if command -v nmcli &>/dev/null; then
+    eth_ip=$(ip -4 addr show eth0 2>/dev/null | awk '/inet /{print $2; exit}')
+    if [[ -n "$eth_ip" ]]; then
+        # Ethernet has an IP — safe to disable WiFi
+        nmcli radio wifi off 2>/dev/null \
+            && logger -t boot-tune "Ethernet $eth_ip — WiFi disabled (single mDNS)" \
+            || logger -t boot-tune -p warning "Failed to disable WiFi"
+    else
+        # No Ethernet IP — ensure WiFi is on (recovery after cable removal)
+        nmcli radio wifi on 2>/dev/null || true
+    fi
 fi
 
 # ── Memory tuning: reduce swappiness for audio workloads ──────────

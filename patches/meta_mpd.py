@@ -470,8 +470,9 @@ class MPDWrapper(object):
                                                          "message": "Method not found"}, "id": id})
             send({"jsonrpc": "2.0", "result": "ok", "id": id})
         except Exception as e:
+            req_id = locals().get('id')
             send({"jsonrpc": "2.0", "error": {
-                 "code": -32700, "message": "Parse error", "data": str(e)}, "id": id})
+                 "code": -32700, "message": "Parse error", "data": str(e)}, "id": req_id})
 
     def io_callback(self, fd, event):
         try:

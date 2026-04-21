@@ -672,22 +672,21 @@ echo "  install.conf -> AUTO_UPDATE=$(grep '^AUTO_UPDATE=' "$DEST/install.conf" 
 echo "  install.conf -> VERBOSE_INSTALL=$(grep '^VERBOSE_INSTALL=' "$DEST/install.conf" | cut -d= -f2)"
 
 # Version files
-case "$INSTALL_TYPE" in
-    server|both)
-        if [[ -f "$DEST/server/.version" ]]; then
-            echo "  [OK] Server version: $(cat "$DEST/server/.version")"
-        else
-            echo "  [WARN] server/.version missing (version will show as 'unknown')"
-        fi
-        ;;&
-    client|both)
-        if [[ -f "$DEST/client/VERSION" ]]; then
-            echo "  [OK] Client version: $(cat "$DEST/client/VERSION")"
-        else
-            echo "  [WARN] client/VERSION missing"
-        fi
-        ;;
-esac
+# Check version files (avoid ;;& which requires Bash 4+, macOS has 3.2)
+if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+    if [[ -f "$DEST/server/.version" ]]; then
+        echo "  [OK] Server version: $(cat "$DEST/server/.version")"
+    else
+        echo "  [WARN] server/.version missing (version will show as 'unknown')"
+    fi
+fi
+if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+    if [[ -f "$DEST/client/VERSION" ]]; then
+        echo "  [OK] Client version: $(cat "$DEST/client/VERSION")"
+    else
+        echo "  [WARN] client/VERSION missing"
+    fi
+fi
 
 # -- OS configuration --
 echo ""

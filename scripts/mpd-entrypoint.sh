@@ -45,4 +45,10 @@ else
     echo "Database has $song_count songs — auto_update handles incremental scan"
 fi
 wait $MPD_PID
-exit $?
+rc=$?
+# SIGTERM (143) and SIGKILL (137) are normal during Docker stop — exit clean.
+# Other signals (SIGSEGV=139, etc.) should propagate as failure.
+if [ "$rc" -eq 143 ] || [ "$rc" -eq 137 ]; then
+    exit 0
+fi
+exit $rc
