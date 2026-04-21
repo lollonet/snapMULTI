@@ -66,7 +66,7 @@ progress_init() {
 _tty_cols=100
 _tty_rows=37
 _box_width=96
-_inner_width=92
+_inner_width=94
 
 _detect_tty_size() {
     if [[ -c /dev/tty1 ]]; then
@@ -77,7 +77,7 @@ _detect_tty_size() {
     fi
     # Layout constants (2-char margin each side)
     _box_width=$(( _tty_cols - 4 ))
-    _inner_width=$(( _box_width - 4 ))
+    _inner_width=$(( _box_width - 2 ))
 }
 
 # Render progress display to tty1

@@ -129,12 +129,13 @@ install_dependencies() {
         local gen_file="/etc/locale.gen"
         local needs_gen=false
         for loc in "${wanted_locales[@]}"; do
-            if ! locale -a 2>/dev/null | grep -qi "^${loc/UTF-8/utf8}$"; then
+            if ! locale -a 2>/dev/null | grep -qiF "${loc/UTF-8/utf8}"; then
                 # Uncomment or append in locale.gen
+                local loc_escaped="${loc//./\\.}"
                 if [[ -f "$gen_file" ]]; then
-                    sed -i "s/^# *${loc} /${loc} /" "$gen_file" 2>/dev/null || true
+                    sed -i "s/^# *${loc_escaped} /${loc} /" "$gen_file" 2>/dev/null || true
                 fi
-                if ! grep -q "^${loc}" "$gen_file" 2>/dev/null; then
+                if ! grep -qF "${loc}" "$gen_file" 2>/dev/null; then
                     echo "${loc} UTF-8" >> "$gen_file"
                 fi
                 needs_gen=true

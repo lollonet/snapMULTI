@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **QUICKSTART.md** ([#226](https://github.com/lollonet/snapMULTI/pull/226)) — one-page quick start (60 lines); README slimmed from 245 to 72 lines
 
 ### Changed
+- **Full-width TUI** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — progress display uses full terminal width (auto-detect via `stty` after font change), dynamic log area fills remaining rows instead of fixed 8 lines, WARN/ERROR now visible in TUI output
+- **Serial image pull** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — removed paired background+foreground pull that caused counter bugs (210/7) and SD card IO contention; per-service timing and callback-aware status logging
+- **Locale setup** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — replaced `locales-all` (236MB) with `locales` (~3MB) + `locale-gen` for IT, EN_US, EN_GB, FR, DE, ES, PT
 - **Docker driver selection** ([#245](https://github.com/lollonet/snapMULTI/pull/245)) — fuse-overlayfs now gated on actual overlayroot state (`mount | grep ' on / type overlay'`), not `ENABLE_READONLY` flag. Writable systems keep overlay2 (faster kernel-native driver). `_configure_readonly()` no longer wipes `/var/lib/docker` during install — writes daemon.json for next boot instead. `tune_docker_daemon` can now remove `storage-driver` key on rollback
 
 ### Fixed
