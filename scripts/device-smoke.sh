@@ -75,7 +75,7 @@ detect_dir() {
     fi
     local candidate
     for candidate in "$@"; do
-        if [[ -d "$candidate" && -f "$candidate/docker-compose.yml" ]]; then
+        if [[ -d "$candidate" && -f "$candidate/docker-compose.yml" && -f "$candidate/.env" ]]; then
             printf '%s\n' "$candidate"
             return 0
         fi
