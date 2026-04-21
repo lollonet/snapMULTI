@@ -47,7 +47,15 @@ assert_contains "$readonly_body" 'tune_docker_daemon --live-restore --fuse-overl
 assert_not_contains "$readonly_body" 'rm -rf /var/lib/docker' "readonly config does not wipe Docker storage"
 assert_contains "$readonly_body" 'fuse-overlayfs --version' "readonly config verifies fuse-overlayfs binary"
 assert_contains "$readonly_body" 'activates after reboot' "readonly config defers driver switch to reboot"
-assert_contains "$readonly_body" 'tune_docker_daemon --live-restore' "readonly config rolls back to overlay2 on raspi-config failure"
+# Rollback needs a second --live-restore call (the first is --live-restore --fuse-overlayfs)
+tune_lr_count=$(grep -cF 'tune_docker_daemon --live-restore' <<<"$readonly_body" || true)
+if [[ "$tune_lr_count" -ge 2 ]]; then
+    echo "  PASS: readonly config rolls back to overlay2 on raspi-config failure"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: readonly config rollback call missing (only $tune_lr_count occurrence(s))"
+    fail=$((fail + 1))
+fi
 assert_contains "$readonly_body" 'FAILED' "readonly config shows failure message when overlayfs fails"
 
 echo ""
