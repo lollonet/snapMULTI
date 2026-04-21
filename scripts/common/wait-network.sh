@@ -77,14 +77,17 @@ _try_recover_network() {
         fi
     fi
 
-    # Stage 3 (90s): Add fallback DNS
+    # Stage 3 (90s): Add fallback DNS (non-destructive)
     if (( i == 45 )); then
         if ping -c1 -W2 1.1.1.1 &>/dev/null && ! getent hosts deb.debian.org &>/dev/null; then
-            log_warn "Adding fallback DNS (1.1.1.1)..."
-            if [[ -f /etc/resolv.conf ]]; then
-                sed -i '1i nameserver 1.1.1.1' /etc/resolv.conf 2>/dev/null || true
-            else
-                echo "nameserver 1.1.1.1" > /etc/resolv.conf
+            log_warn "DNS not working — trying fallback (1.1.1.1)..."
+            if command -v resolvectl &>/dev/null; then
+                # systemd-resolved: set fallback DNS without touching resolv.conf
+                resolvectl dns 1.1.1.1 2>/dev/null || true
+            elif [[ -f /etc/resolv.conf ]] && ! grep -q '1.1.1.1' /etc/resolv.conf; then
+                # Static resolv.conf: add temporarily, mark for cleanup
+                sed -i '1i nameserver 1.1.1.1  # snapmulti-fallback' /etc/resolv.conf 2>/dev/null || true
+                _DNS_FALLBACK_ADDED=true
             fi
         fi
     fi
@@ -123,6 +126,11 @@ wait_for_network() {
             if getent hosts deb.debian.org &>/dev/null; then
                 log_info "Network ready"
                 network_ready=true
+                # Clean up fallback DNS entry if we added one
+                if [[ "${_DNS_FALLBACK_ADDED:-false}" == "true" ]]; then
+                    sed -i '/snapmulti-fallback/d' /etc/resolv.conf 2>/dev/null || true
+                    log_info "Removed fallback DNS entry"
+                fi
                 break
             fi
             _try_recover_network "$i" dns-only
