@@ -270,7 +270,7 @@ verify_compose_stack() {
         running=$(docker compose "${compose_args[@]}" ps --status running -q 2>/dev/null | wc -l)
         healthy=$(
             docker compose "${compose_args[@]}" ps -q 2>/dev/null \
-                | xargs docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null \
+                | xargs -r docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null \
                 | grep -c '^healthy$' || true
         )
 
