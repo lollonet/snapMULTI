@@ -887,27 +887,21 @@ verify_services() {
     info "Checking services (up to ${start_period}s, ${wait_seconds}s interval)..."
 
     while [[ $attempt -le $max_attempts ]]; do
-        local failed=0
-        local running_services=()
+        local running healthy
+        running=$(docker compose ps --status running -q 2>/dev/null | wc -l)
+        healthy=$(docker compose ps --status healthy -q 2>/dev/null | wc -l)
+        local total=${#expected_services[@]}
 
-        for service in "${expected_services[@]}"; do
-            if docker ps --format '{{.Names}}' | grep -q "^${service}$"; then
-                running_services+=("$service")
-            else
-                failed=$((failed + 1))
-            fi
-        done
-
-        if [[ $failed -eq 0 ]]; then
+        if [[ "$running" -ge "$total" ]] && [[ "$healthy" -ge "$total" ]]; then
             for service in "${expected_services[@]}"; do
-                ok "$service running"
+                ok "$service healthy"
             done
-            ok "All services running"
+            ok "All $total services running and healthy"
             return 0
         fi
 
         if [[ $attempt -lt $max_attempts ]]; then
-            info "Attempt $attempt/$max_attempts: ${#running_services[@]}/${#expected_services[@]} running, waiting ${wait_seconds}s..."
+            info "Attempt $attempt/$max_attempts: $running/$total running, $healthy/$total healthy, waiting ${wait_seconds}s..."
             sleep "$wait_seconds"
         fi
 
