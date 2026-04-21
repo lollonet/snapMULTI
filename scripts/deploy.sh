@@ -876,13 +876,6 @@ start_services() {
 verify_services() {
     step "Verifying services"
 
-    # Derive expected services from active compose config (respects profiles)
-    local expected_services
-    mapfile -t expected_services < <(docker compose config --services)
-    if [[ ${#expected_services[@]} -eq 0 ]]; then
-        error "No services returned from docker compose config — check compose file"
-        exit 1
-    fi
     # Use MPD_START_PERIOD from .env (default 30s) to set verification timeout.
     # NFS mounts may need 300s for MPD to become healthy.
     local start_period
@@ -890,53 +883,12 @@ verify_services() {
     start_period=${start_period:-30}
     local wait_seconds=15
     local max_attempts=$(( (start_period / wait_seconds) + 2 ))
-    local attempt=1
-
-    # Count services with healthcheck defined (only those need to be "healthy")
-    local hc_total
-    hc_total=$(docker compose config --format json 2>/dev/null \
-        | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; print(sum(1 for s in c.values() if 'healthcheck' in s))" 2>/dev/null) || hc_total=0
 
     info "Checking services (up to ${start_period}s, ${wait_seconds}s interval)..."
 
-    while [[ $attempt -le $max_attempts ]]; do
-        local running healthy
-        running=$(docker compose ps --status running -q 2>/dev/null | wc -l)
-        healthy=$(
-            docker compose ps -q 2>/dev/null \
-                | xargs -r docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null \
-                | grep -c '^healthy$' || true
-        )
-        local total=${#expected_services[@]}
-
-        # All services running AND all healthcheck-enabled services healthy
-        if [[ "$running" -ge "$total" ]] && { [[ "$hc_total" -eq 0 ]] || [[ "$healthy" -ge "$hc_total" ]]; }; then
-            for service in "${expected_services[@]}"; do
-                ok "$service running"
-            done
-            ok "All $total services running ($healthy/$hc_total healthy)"
-            return 0
-        fi
-
-        if [[ $attempt -lt $max_attempts ]]; then
-            info "Attempt $attempt/$max_attempts: $running/$total running, $healthy/$hc_total healthy, waiting ${wait_seconds}s..."
-            sleep "$wait_seconds"
-        fi
-
-        attempt=$((attempt + 1))
-    done
-
-    # Final report
-    warn "Service verification incomplete after $max_attempts attempts"
-    for service in "${expected_services[@]}"; do
-        if docker ps --format '{{.Names}}' | grep -q "^${service}$"; then
-            ok "$service running"
-        else
-            error "$service not running"
-        fi
-    done
-    warn "Check logs: docker compose logs"
-    return 1
+    # shellcheck source=common/verify-compose.sh
+    source "$SCRIPT_DIR/common/verify-compose.sh"
+    verify_compose_stack "$PROJECT_ROOT/docker-compose.yml" "server" "$max_attempts" "$wait_seconds"
 }
 
 show_status() {

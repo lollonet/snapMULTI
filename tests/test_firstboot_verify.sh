@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FIRSTBOOT_SH="$SCRIPT_DIR/../scripts/firstboot.sh"
+VERIFY_SH="$SCRIPT_DIR/../scripts/common/verify-compose.sh"
 
 pass=0
 fail=0
@@ -18,8 +18,9 @@ assert_eq() {
     fi
 }
 
-# Extract the production function from firstboot.sh rather than maintaining a copy
-eval "$(sed -n '/^verify_compose_stack()/,/^}/p' "$FIRSTBOOT_SH")"
+# Source the shared verify module directly
+# shellcheck source=../scripts/common/verify-compose.sh
+source "$VERIFY_SH"
 
 # Create mock docker script on PATH so xargs can invoke it
 MOCK_BIN=$(mktemp -d)
