@@ -38,7 +38,7 @@ fi
 
 # Shellcheck
 if command -v shellcheck &> /dev/null; then
-    run_check "Shellcheck (scripts)" "shellcheck -x -S warning scripts/*.sh scripts/**/*.sh"
+    run_check "Shellcheck (scripts)" "shellcheck -x -S warning scripts/*.sh scripts/**/*.sh client/common/scripts/*.sh client/tests/*.sh"
 else
     printf "${YELLOW}  shellcheck not installed - skipping${NC}\n"
 fi
