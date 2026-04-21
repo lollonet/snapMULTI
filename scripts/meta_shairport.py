@@ -170,7 +170,10 @@ def parse_item(item_data: bytes) -> None:
             if host:
                 metadata["artUrl"] = f"http://{host}:{COVER_ART_PORT}/cover.jpg"
             else:
-                log("warning", "Cannot determine reachable host IP — cover art URL omitted")
+                log(
+                    "warning",
+                    "Cannot determine reachable host IP — cover art URL omitted",
+                )
                 metadata["artUrl"] = ""
         except Exception as e:
             log("warning", f"Cover art error: {e}")
