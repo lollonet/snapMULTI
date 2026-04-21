@@ -606,10 +606,12 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
         sleep 5
     done
     if [[ "$local_client_healthy" == "false" ]]; then
-        log_warn "Client services not all healthy after 60s"
+        log_error "Client services not all healthy after 60s"
         docker compose -f "$CLIENT_DIR/docker-compose.yml" ps --format 'table {{.Name}}\t{{.Status}}' 2>/dev/null | while read -r line; do
-            log_warn "  $line"
+            log_error "  $line"
         done
+        log_error "Client verify failed — will retry on next boot"
+        exit 1
     fi
     fi  # local_client_total guard
     checkpoint_done "setup"
