@@ -9,8 +9,25 @@ set -euo pipefail
 #######################################
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# When run by firstboot, UNIFIED_LOG is set and firstboot handles logging
+# via pipe. Prevent unified-log.sh from writing directly to the log file
+# (which causes duplicate lines with [unknown] source).
+if [[ -n "${UNIFIED_LOG:-}" ]]; then
+    export LOG_SOURCE="deploy"
+    export UNIFIED_LOG="/dev/null"
+fi
+
 # shellcheck source=common/logging.sh
 source "$SCRIPT_DIR/common/logging.sh"
+
+# Prevent pull-images.sh from sourcing unified-log.sh (which would overwrite
+# logging.sh's info/warn/error with versions that don't write to stderr).
+# pull-images.sh checks `declare -F log_info` — provide it as a wrapper.
+log_info()  { info "$@"; }
+log_warn()  { warn "$@"; }
+log_error() { error "$@"; }
+
 # shellcheck source=common/system-tune.sh
 source "$SCRIPT_DIR/common/system-tune.sh"
 # shellcheck source=common/resource-detect.sh
