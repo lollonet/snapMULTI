@@ -1337,60 +1337,32 @@ _setup_systemd_services
 _configure_readonly() {
 if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
     progress 9 "Configuring read-only filesystem..."
+
+    # Install fuse-overlayfs package (needed after reboot when overlayroot is active)
     log_progress "Installing fuse-overlayfs..."
+    if ! apt-get install -y fuse-overlayfs; then
+        log_progress "ERROR: fuse-overlayfs not available — read-only mode will be skipped"
+        ENABLE_READONLY=false
+        return 0
+    fi
 
-    # Install fuse-overlayfs for Docker compatibility with overlayfs root
-    apt-get install -y fuse-overlayfs
+    # Verify binary works
+    if ! fuse-overlayfs --version >/dev/null 2>&1; then
+        log_progress "ERROR: fuse-overlayfs binary broken — read-only mode will be skipped"
+        ENABLE_READONLY=false
+        return 0
+    fi
 
-    # Wait for Docker to be fully ready after any previous restarts
-    log_progress "Waiting for Docker service..."
-    for i in {1..30}; do
-        if docker info >/dev/null 2>&1; then
-            break
-        fi
-        sleep 1
-    done
-
-    # Configure Docker daemon (live-restore + fuse-overlayfs for overlayroot)
+    # Write fuse-overlayfs to daemon.json for NEXT boot (when overlayroot is active).
+    # Do NOT switch the running driver or wipe /var/lib/docker — that would destroy
+    # images already pulled by deploy.sh (server) or earlier in this script.
+    # After reboot with overlayroot, Docker data lives on tmpfs overlay anyway,
+    # so images are re-pulled from the baked SD card layer.
+    log_progress "Configuring Docker for fuse-overlayfs (activates after reboot)..."
     tune_docker_daemon --live-restore --fuse-overlayfs
-
-    current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "none")
-    if [[ "$current_driver" != "fuse-overlayfs" ]]; then
-        # Verify fuse-overlayfs is available before wiping Docker data
-        if ! command -v fuse-overlayfs &>/dev/null; then
-            log_progress "Installing fuse-overlayfs..."
-            apt-get install -y -qq fuse-overlayfs >/dev/null 2>&1 || true
-        fi
-        if ! command -v fuse-overlayfs &>/dev/null; then
-            log_progress "ERROR: fuse-overlayfs not available — keeping current storage driver"
-            log_progress "       Read-only mode will be skipped to avoid frozen broken state"
-            ENABLE_READONLY=false
-        else
-            log_progress "Switching Docker storage driver to fuse-overlayfs..."
-            systemctl stop docker
-            rm -rf /var/lib/docker/*
-            systemctl start docker
-            for i in {1..60}; do
-                if docker info >/dev/null 2>&1; then
-                    new_driver=$(docker info --format '{{.Driver}}' 2>/dev/null)
-                    if [[ "$new_driver" == "fuse-overlayfs" ]]; then
-                        log_progress "Docker ready with fuse-overlayfs storage driver"
-                    else
-                        log_progress "WARNING: Docker started but driver is '$new_driver', not fuse-overlayfs"
-                        log_progress "         Read-only mode will be skipped"
-                        ENABLE_READONLY=false
-                    fi
-                    break
-                fi
-                sleep 1
-                if [[ $i -eq 60 ]]; then
-                    log_progress "ERROR: Docker failed to start after storage driver change"
-                    exit 1
-                fi
-            done
-        fi
-    else
-        log_progress "Docker already using fuse-overlayfs, skipping reconfiguration..."
+    if ! grep -q 'fuse-overlayfs' /etc/docker/daemon.json 2>/dev/null; then
+        log_progress "WARNING: Failed to write fuse-overlayfs to daemon.json"
+        log_progress "         Read-only mode may not work correctly after reboot"
     fi
 
     # Install ro-mode helper script
@@ -1432,7 +1404,7 @@ SSHEOF
     raspi-config nonint do_overlayfs 0
 
     echo "Read-only filesystem configured"
-    echo "  - Docker storage driver: fuse-overlayfs"
+    echo "  - Docker storage driver: fuse-overlayfs (activates after reboot)"
     echo "  - SSH host keys: persisted"
     echo "  - Helper script: /usr/local/bin/ro-mode"
     echo "  - Status: Will activate after reboot"

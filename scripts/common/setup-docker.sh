@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# Install Docker CE and configure fuse-overlayfs storage driver.
+# Install Docker CE and configure storage driver.
 #
-# Handles: Docker CE installation, daemon config, fuse-overlayfs
-# switch with safety verification (council fix #2: verify binary
-# before wiping Docker storage).
+# Uses overlay2 (kernel native) by default. Only switches to
+# fuse-overlayfs when overlayroot is actually active — kernel
+# overlay2 cannot work on an overlayfs root filesystem.
+#
+# Decision is based on actual filesystem state (/proc/mounts),
+# NOT the ENABLE_READONLY config flag (which expresses intent,
+# not current state).
 #
 # Expects:
 #   install-docker.sh sourced (provides install_docker_apt, tune_docker_daemon)
@@ -69,10 +73,16 @@ setup_docker() {
         return 1
     fi
 
-    # Switch to fuse-overlayfs only when read-only mode is enabled.
-    # Normal installs keep the default overlay2 driver (no wipe needed).
-    if [[ "${ENABLE_READONLY:-false}" != "true" ]]; then
-        log_info "Docker ready (overlay2, read-only mode disabled)"
+    # Switch to fuse-overlayfs ONLY when overlayroot is actually active.
+    # Kernel overlay2 cannot work on an overlayfs root, so fuse-overlayfs
+    # is required. But on a normal writable ext4 root, overlay2 is faster
+    # (no FUSE userspace overhead).
+    #
+    # Decision is based on /proc/mounts, not ENABLE_READONLY — the flag
+    # expresses intent (will be readonly after reboot), not current state.
+    # At this point in the install, overlayroot is never active yet.
+    if ! grep -q 'overlayroot' /proc/mounts 2>/dev/null; then
+        log_info "Docker ready (overlay2, writable root filesystem)"
         return 0
     fi
 
