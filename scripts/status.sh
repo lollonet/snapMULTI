@@ -88,6 +88,12 @@ count_health() {
 [[ -n "$SERVER_DIR" ]] && count_health "${SERVER_CONTAINERS[@]}"
 [[ -n "$CLIENT_DIR" ]] && count_health "${CLIENT_CONTAINERS[@]}"
 
+if [[ "$TOTAL" -eq 0 ]]; then
+    error "No running snapMULTI containers found"
+    error "Start the stack first with docker compose up -d"
+    exit 1
+fi
+
 show_container() {
     local cname="$1"
     local health="${HEALTH[$cname]:-}"

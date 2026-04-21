@@ -29,6 +29,45 @@ check_client_dir() {
     fi
 }
 
+patch_user_data_runcmd() {
+    local user_data="$1"
+    local hook_path="$2"
+    local tmp
+    tmp=$(mktemp)
+
+    if ! awk -v hook="$hook_path" '
+        BEGIN {
+            entry = "  - [bash, " hook "]"
+            patched = 0
+        }
+        /^[[:space:]]*runcmd:[[:space:]]*(\[\]|null|~)?[[:space:]]*$/ {
+            indent = ""
+            if (match($0, /^[[:space:]]*/)) {
+                indent = substr($0, 1, RLENGTH)
+            }
+            print indent "runcmd:"
+            print indent entry
+            patched = 1
+            next
+        }
+        {
+            print
+        }
+        END {
+            if (!patched) {
+                print ""
+                print "runcmd:"
+                print entry
+            }
+        }
+    ' "$user_data" > "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+
+    mv "$tmp" "$user_data"
+}
+
 # ── Auto-detect boot partition ────────────────────────────────────
 detect_boot() {
     local candidates=()
@@ -575,15 +614,9 @@ elif [[ -f "$USERDATA" ]]; then
         echo "Patching user-data to run installer on first boot ..."
         # Convert "bash /path/to/firstboot.sh" to YAML list "[bash, /path/to/firstboot.sh]"
         HOOK_PATH="${HOOK#bash }"
-        RUNCMD_ENTRY="  - [bash, $HOOK_PATH]"
-        if grep -q '^runcmd:' "$USERDATA"; then
-            # Append to existing runcmd section
-            sed -i.bak "/^runcmd:/a\\
-$RUNCMD_ENTRY" "$USERDATA"
-            rm -f "${USERDATA}.bak"
-        else
-            # Add runcmd section
-            printf '\nruncmd:\n%s\n' "$RUNCMD_ENTRY" >> "$USERDATA"
+        if ! patch_user_data_runcmd "$USERDATA" "$HOOK_PATH"; then
+            echo "  ERROR: failed to patch user-data runcmd"
+            exit 1
         fi
         if grep -qF "snapmulti/firstboot.sh" "$USERDATA"; then
             echo "  user-data patched."
@@ -608,7 +641,7 @@ VERIFY_ERRORS=0
 # -- snapMULTI files --
 echo ""
 echo "--- snapMULTI files ---"
-for f in install.conf firstboot.sh common/progress.sh common/logging.sh common/sanitize.sh common/system-tune.sh common/install-docker.sh; do
+for f in install.conf firstboot.sh common/progress.sh common/logging.sh common/unified-log.sh common/sanitize.sh common/system-tune.sh common/install-docker.sh common/install-deps.sh common/setup-docker.sh common/wait-network.sh common/mount-music.sh; do
     if [[ -f "$DEST/$f" ]]; then
         echo "  [OK] snapmulti/$f"
     else

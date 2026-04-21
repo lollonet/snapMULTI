@@ -82,7 +82,7 @@ install_dependencies() {
     fi
 
     # Build package list based on install type
-    local pkgs=(curl ca-certificates)
+    local pkgs=(curl ca-certificates python3 netcat-openbsd)
 
     if ! command -v git &>/dev/null; then
         pkgs+=(git)

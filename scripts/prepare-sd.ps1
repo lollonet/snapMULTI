@@ -52,6 +52,142 @@ function Assert-ClientDir {
     }
 }
 
+function Update-UserDataRuncmd {
+    param(
+        [string]$Content,
+        [string]$HookPath
+    )
+
+    $entry = "  - [bash, $HookPath]"
+    $lines = $Content -split "`r?`n"
+    $result = New-Object System.Collections.Generic.List[string]
+    $patched = $false
+
+    foreach ($line in $lines) {
+        if ((-not $patched) -and ($line -match '^(\s*)runcmd:\s*(\[\]|null|~)?\s*$')) {
+            $indent = $Matches[1]
+            $result.Add("${indent}runcmd:")
+            $result.Add("${indent}  - [bash, $HookPath]")
+            $patched = $true
+        } else {
+            $result.Add($line)
+        }
+    }
+
+    if (-not $patched) {
+        if ($result.Count -gt 0 -and $result[$result.Count - 1] -ne '') {
+            $result.Add('')
+        }
+        $result.Add('runcmd:')
+        $result.Add($entry)
+    }
+
+    return (($result -join "`n").TrimEnd("`r", "`n") + "`n")
+}
+
+function Assert-PreparedSdCard {
+    param(
+        [string]$Dest,
+        [string]$Boot,
+        [string]$InstallType
+    )
+
+    Write-Host ''
+    Write-Host '=== Verifying SD card ==='
+    $verifyErrors = 0
+
+    Write-Host ''
+    Write-Host '--- snapMULTI files ---'
+    $requiredBase = @(
+        'install.conf',
+        'firstboot.sh',
+        'common/progress.sh',
+        'common/logging.sh',
+        'common/unified-log.sh',
+        'common/sanitize.sh',
+        'common/system-tune.sh',
+        'common/install-docker.sh',
+        'common/install-deps.sh',
+        'common/setup-docker.sh',
+        'common/wait-network.sh',
+        'common/mount-music.sh'
+    )
+    foreach ($file in $requiredBase) {
+        $path = Join-Path $Dest $file
+        if (Test-Path $path) {
+            Write-Host "  [OK] snapmulti/$file"
+        } else {
+            Write-Host "  [MISSING] snapmulti/$file"
+            $verifyErrors++
+        }
+    }
+
+    if ($InstallType -in @('server', 'both')) {
+        foreach ($file in @(
+            'server/docker-compose.yml',
+            'server/deploy.sh',
+            'server/config/snapserver.conf',
+            'server/config/mpd.conf',
+            'server/config/shairport-sync.conf'
+        )) {
+            $path = Join-Path $Dest $file
+            if (Test-Path $path) {
+                Write-Host "  [OK] snapmulti/$file"
+            } else {
+                Write-Host "  [MISSING] snapmulti/$file"
+                $verifyErrors++
+            }
+        }
+    }
+
+    if ($InstallType -in @('client', 'both')) {
+        foreach ($file in @(
+            'client/docker-compose.yml',
+            'client/scripts/setup.sh',
+            'client/scripts/discover-server.sh',
+            'client/scripts/display.sh',
+            'client/scripts/display-detect.sh',
+            'client/snapclient.conf'
+        )) {
+            $path = Join-Path $Dest $file
+            if (Test-Path $path) {
+                Write-Host "  [OK] snapmulti/$file"
+            } else {
+                Write-Host "  [MISSING] snapmulti/$file"
+                $verifyErrors++
+            }
+        }
+    }
+
+    Write-Host ''
+    Write-Host '--- OS configuration ---'
+    $userData = Join-Path $Boot 'user-data'
+    $firstrun = Join-Path $Boot 'firstrun.sh'
+    if (Test-Path $userData) {
+        if (Select-String -Path $userData -SimpleMatch 'snapmulti/firstboot.sh' -Quiet) {
+            Write-Host '  [OK] user-data: runcmd hook present'
+        } else {
+            Write-Host '  [MISSING] user-data: runcmd hook for firstboot.sh'
+            $verifyErrors++
+        }
+    } elseif (Test-Path $firstrun) {
+        if (Select-String -Path $firstrun -SimpleMatch 'snapmulti/firstboot.sh' -Quiet) {
+            Write-Host '  [OK] firstrun.sh: hook present'
+        } else {
+            Write-Host '  [MISSING] firstrun.sh: hook for firstboot.sh'
+            $verifyErrors++
+        }
+    } else {
+        Write-Host '  [WARN] No firstrun.sh or user-data found (manual boot required)'
+    }
+
+    Write-Host ''
+    if ($verifyErrors -gt 0) {
+        throw "Verification failed: $verifyErrors issue(s) found on SD card."
+    }
+    Write-Host 'All checks passed.'
+}
+
 # ── Show install menu ─────────────────────────────────────────────
 function Show-Menu {
     Write-Host ''
@@ -157,6 +293,11 @@ function Sanitize-ShareName {
     return ($Value -replace '[^A-Za-z0-9._\-]', '')
 }
 
+function Sanitize-SmbUser {
+    param([string]$Value)
+    return ($Value -replace '[^A-Za-z0-9._@\-]', '')
+}
+
 function Get-NfsConfig {
     Write-Host ''
     Write-Host '  NFS Server Configuration'
@@ -209,7 +350,11 @@ function Get-SmbConfig {
     }
 
     Write-Host ''
-    $user = Read-Host '  Username (leave empty for guest)'
+    $rawUser = Read-Host '  Username (leave empty for guest)'
+    $user = Sanitize-SmbUser $rawUser
+    if ($rawUser -and $rawUser -ne $user) {
+        Write-Host "  Note: username adjusted to '$user' (unsupported characters removed)"
+    }
     $pass = ''
     if ($user) {
         $secPass = Read-Host '  Password' -AsSecureString
@@ -443,10 +588,10 @@ try {
     $gitVersion = 'dev'
 }
 if ($InstallType -in @('server', 'both')) {
-    [System.IO.File]::WriteAllText((Join-Path $Dest 'server/.version'), $gitVersion)
+    [System.IO.File]::WriteAllText((Join-Path $Dest 'server/.version'), $gitVersion, $Utf8NoBom)
 }
 if ($InstallType -in @('client', 'both')) {
-    [System.IO.File]::WriteAllText((Join-Path $Dest 'client/VERSION'), $gitVersion)
+    [System.IO.File]::WriteAllText((Join-Path $Dest 'client/VERSION'), $gitVersion, $Utf8NoBom)
 }
 
 $size = (Get-ChildItem $Dest -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
@@ -497,14 +642,8 @@ if (Test-Path $firstrun) {
         Write-Host 'user-data already patched, skipping.'
     } else {
         Write-Host 'Patching user-data to run installer on first boot ...'
-        # Derive runcmd YAML entry from $hook ("bash /path" -> "[bash, /path]")
         $hookPath = $hook -replace '^bash ', ''
-        $runcmdEntry = "  - [bash, $hookPath]"
-        if ($udContent -match '(?m)^runcmd:') {
-            $udContent = $udContent -replace '(?m)(^runcmd:)', "`$1`n$runcmdEntry"
-        } else {
-            $udContent += "`n`nruncmd:`n$runcmdEntry`n"
-        }
+        $udContent = Update-UserDataRuncmd -Content $udContent -HookPath $hookPath
         [System.IO.File]::WriteAllText($userData, $udContent, $Utf8NoBom)
         Write-Host '  user-data patched.'
     }
@@ -515,6 +654,9 @@ if (Test-Path $firstrun) {
     Write-Host '    sudo bash /boot/firmware/snapmulti/firstboot.sh'
     Write-Host ''
 }
+
+# ── Verify SD card contents ───────────────────────────────────────
+Assert-PreparedSdCard -Dest $Dest -Boot $Boot -InstallType $InstallType
 
 # ── Eject SD card ─────────────────────────────────────────────────
 Write-Host ''

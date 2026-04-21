@@ -105,6 +105,9 @@ setup_music_source() {
                 export MUSIC_PATH="$mount_point"
                 log_info "SMB mounted: $mount_point"
             else
+                if [[ -f "$creds_file" ]]; then
+                    rm -f "$creds_file" 2>/dev/null || true
+                fi
                 log_warn "SMB mount failed — falling back to auto-detect"
             fi
             ;;

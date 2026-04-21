@@ -39,7 +39,7 @@ error() { echo -e "\033[31m[ERROR]\033[0m $*" >&2; }
 
 check_dependencies() {
     local missing=()
-    for cmd in curl tar docker; do
+    for cmd in curl tar docker python3; do
         command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
     done
     if [[ ${#missing[@]} -gt 0 ]]; then
@@ -56,6 +56,13 @@ get_current_version() {
     fi
 }
 
+parse_latest_tag() {
+    local response="$1"
+    echo "$response" \
+        | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+        | head -n1
+}
+
 get_latest_release() {
     local response
     response=$(curl -sf --max-time 15 \
@@ -66,7 +73,7 @@ get_latest_release() {
 
     # Extract tag_name without jq dependency
     local tag
-    tag=$(echo "$response" | grep -o '"tag_name":"[^"]*"' | cut -d'"' -f4)
+    tag=$(parse_latest_tag "$response")
     if [[ -z "$tag" ]]; then
         error "Could not parse latest release tag"
         exit 1
@@ -76,6 +83,10 @@ get_latest_release() {
 
 compare_versions() {
     local current="$1" latest="$2"
+
+    if [[ -z "$current" ]] || [[ "$current" == "unknown" ]]; then
+        return 1  # unknown local version: allow update
+    fi
 
     # Strip leading 'v' for comparison
     local current_clean="${current#v}"
@@ -168,9 +179,11 @@ verify_services() {
     for attempt in $(seq 1 "$max_attempts"); do
         local running healthy
         running=$(docker compose ps --status running -q 2>/dev/null | wc -l)
-        healthy=$(docker ps --filter "health=healthy" \
-            --filter "label=com.docker.compose.project=$(basename "$PWD")" \
-            -q 2>/dev/null | wc -l)
+        healthy=$(
+            docker compose ps -q 2>/dev/null \
+                | xargs docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null \
+                | grep -c '^healthy$' || true
+        )
 
         # All services running AND all healthcheck-enabled services healthy
         if [[ "$running" -ge "$total" ]] && { [[ "$hc_total" -eq 0 ]] || [[ "$healthy" -ge "$hc_total" ]]; }; then

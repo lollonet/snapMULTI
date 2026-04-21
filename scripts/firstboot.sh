@@ -89,7 +89,7 @@ if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     NFS_EXPORT=$(sanitize_nfs_export "$(grep -m1 '^NFS_EXPORT=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
     SMB_SERVER=$(sanitize_hostname "$(grep -m1 '^SMB_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
     SMB_SHARE=$(sanitize_smb_share "$(grep -m1 '^SMB_SHARE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
-    SMB_USER=$(grep -m1 '^SMB_USER=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '[:space:]')
+    SMB_USER=$(sanitize_smb_user "$(grep -m1 '^SMB_USER=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '\r')")
     SMB_PASS=$(grep -m1 '^SMB_PASS=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '\r')
 fi
 
@@ -247,6 +247,47 @@ cumulative_pct() {
         weight_sum=$(( weight_sum + STEP_WEIGHTS[i] ))
     done
     echo $(( weight_sum * 100 / total_weight ))
+}
+
+verify_compose_stack() {
+    local compose_file="$1"
+    local stack_name="$2"
+    local attempts="$3"
+    local delay="$4"
+    local compose_args=(-f "$compose_file")
+    local total hc_total running healthy attempt
+
+    total=$(docker compose "${compose_args[@]}" config --services 2>/dev/null | wc -l)
+    if [[ "$total" -eq 0 ]]; then
+        log_error "Could not determine ${stack_name} service count"
+        return 1
+    fi
+
+    hc_total=$(docker compose "${compose_args[@]}" config --format json 2>/dev/null \
+        | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; print(sum(1 for s in c.values() if 'healthcheck' in s))" 2>/dev/null) || hc_total=0
+
+    for attempt in $(seq 1 "$attempts"); do
+        running=$(docker compose "${compose_args[@]}" ps --status running -q 2>/dev/null | wc -l)
+        healthy=$(
+            docker compose "${compose_args[@]}" ps -q 2>/dev/null \
+                | xargs docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null \
+                | grep -c '^healthy$' || true
+        )
+
+        if [[ "$running" -ge "$total" ]] && { [[ "$hc_total" -eq 0 ]] || [[ "$healthy" -ge "$hc_total" ]]; }; then
+            log_info "All $total ${stack_name} services running ($healthy/$hc_total healthy)"
+            return 0
+        fi
+
+        log_info "Attempt $attempt/$attempts: $running/$total running, $healthy/$hc_total healthy..."
+        [[ "$attempt" -lt "$attempts" ]] && sleep "$delay"
+    done
+
+    log_error "$stack_name services not all healthy after $(( attempts * delay ))s"
+    docker compose "${compose_args[@]}" ps --format 'table {{.Name}}\t{{.Status}}' 2>/dev/null | while read -r line; do
+        log_error "  $line"
+    done
+    return 1
 }
 
 # Headless detection (for client modes)
@@ -447,30 +488,10 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     next_step "Verifying server containers..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
-    local_healthy=false
     local_compose=(-f "$SERVER_DIR/docker-compose.yml")
-    local_total=$(docker compose "${local_compose[@]}" config --services 2>/dev/null | wc -l)
-    # Count services with healthcheck defined (only those report "healthy")
-    local_hc_total=$(docker compose "${local_compose[@]}" config --format json 2>/dev/null \
-        | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; print(sum(1 for s in c.values() if 'healthcheck' in s))" 2>/dev/null) || local_hc_total=0
-    for attempt in $(seq 1 18); do
-        local_up=$(docker compose "${local_compose[@]}" ps --status running -q 2>/dev/null | wc -l)
-        local_health=$(docker compose "${local_compose[@]}" ps --status healthy -q 2>/dev/null | wc -l)
-        # All containers running AND all healthcheck-enabled containers healthy
-        if [[ "$local_up" -ge "$local_total" ]] && { [[ "$local_hc_total" -eq 0 ]] || [[ "$local_health" -ge "$local_hc_total" ]]; }; then
-            log_info "All $local_total server containers running ($local_health healthy)"
-            local_healthy=true
-            break
-        fi
-        log_info "Attempt $attempt/18: $local_up/$local_total running, $local_health/$local_hc_total healthy..."
-        sleep 10
-    done
-
-    if [[ "$local_healthy" == "false" ]]; then
-        log_warn "Not all server containers healthy after 3 minutes"
-        docker compose "${local_compose[@]}" ps --format 'table {{.Name}}\t{{.Status}}' 2>/dev/null | while read -r line; do
-            log_warn "  $line"
-        done
+    if ! verify_compose_stack "$SERVER_DIR/docker-compose.yml" "server" 18 10; then
+        log_error "Server verify failed — will retry on next boot"
+        exit 1
     fi
     checkpoint_done "deploy"
   fi  # checkpoint guard
@@ -585,35 +606,10 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     cd "$CLIENT_DIR"
     docker compose "${local_client_compose[@]}" up -d 2>/dev/null || log_warn "docker compose up failed"
 
-    local_client_healthy=false
-    local_client_total=$(docker compose "${local_client_compose[@]}" config --services 2>/dev/null | wc -l)
-    if [[ "$local_client_total" -eq 0 ]]; then
-        log_warn "Could not determine client service count — skipping health check"
-    else
-    local_client_hc=$(docker compose "${local_client_compose[@]}" config --format json 2>/dev/null \
-        | python3 -c "import sys,json; c=json.load(sys.stdin)['services']; print(sum(1 for s in c.values() if 'healthcheck' in s))" 2>/dev/null) || local_client_hc=0
-    for attempt in $(seq 1 12); do
-        local_running=$(docker compose "${local_client_compose[@]}" ps --status running -q 2>/dev/null | wc -l)
-        local_healthy=$(docker ps --filter "health=healthy" \
-            --filter "label=com.docker.compose.project=$(basename "$CLIENT_DIR")" \
-            -q 2>/dev/null | wc -l)
-        if [[ "$local_running" -ge "$local_client_total" ]] && { [[ "$local_client_hc" -eq 0 ]] || [[ "$local_healthy" -ge "$local_client_hc" ]]; }; then
-            log_info "All $local_client_total client services running ($local_healthy/$local_client_hc healthy)"
-            local_client_healthy=true
-            break
-        fi
-        log_info "Attempt $attempt/12: $local_running/$local_client_total running, $local_healthy/$local_client_hc healthy..."
-        sleep 5
-    done
-    if [[ "$local_client_healthy" == "false" ]]; then
-        log_error "Client services not all healthy after 60s"
-        docker compose -f "$CLIENT_DIR/docker-compose.yml" ps --format 'table {{.Name}}\t{{.Status}}' 2>/dev/null | while read -r line; do
-            log_error "  $line"
-        done
+    if ! verify_compose_stack "$CLIENT_DIR/docker-compose.yml" "client" 12 5; then
         log_error "Client verify failed — will retry on next boot"
         exit 1
     fi
-    fi  # local_client_total guard
     checkpoint_done "setup"
   fi  # checkpoint guard
 fi
