@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **QUICKSTART.md** ([#226](https://github.com/lollonet/snapMULTI/pull/226)) — one-page quick start (60 lines); README slimmed from 245 to 72 lines
 
 ### Fixed
+- **Install log flood** ([#237](https://github.com/lollonet/snapMULTI/pull/237)) — suppress Docker Compose per-layer progress lines in install log (hundreds of "Pulling" lines that looked like an infinite loop)
 - **Health check logic** ([#220](https://github.com/lollonet/snapMULTI/pull/220)) — require running AND healthy (was OR, could pass with 0 healthy containers)
 - **fuse-overlayfs broken binary** ([#220](https://github.com/lollonet/snapMULTI/pull/220)) — setup-docker.sh now returns error (was silently succeeding)
 - **Shell injection in _image_exists** ([#219](https://github.com/lollonet/snapMULTI/pull/219)) — pass service name via env var instead of string interpolation
