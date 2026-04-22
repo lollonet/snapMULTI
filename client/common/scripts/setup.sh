@@ -1183,6 +1183,19 @@ SYSDEOF
         echo "  - Docker storage driver: overlay2 (unchanged)"
         echo "  - System will boot normally (writable root)"
         echo ""
+    elif ! persist_overlayroot_enabled; then
+        log_progress "WARNING: overlayroot persistence verification failed"
+        log_progress "         Reverting Docker config and systemd workaround"
+        tune_docker_daemon --live-restore
+        rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+        rm -f /etc/overlayroot.local.conf
+        ENABLE_READONLY=false
+        echo ""
+        echo "Read-only filesystem: FAILED"
+        echo "  - overlayroot persistence could not be verified"
+        echo "  - Docker storage driver: overlay2 (restored)"
+        echo "  - System will boot normally (writable root)"
+        echo ""
     else
         echo "Read-only filesystem configured"
         echo "  - Docker storage driver: fuse-overlayfs (activates after reboot)"

@@ -19,6 +19,58 @@ is_overlayroot() {
     mount 2>/dev/null | grep -q " on / type overlay"
 }
 
+overlayroot_cmdline_file() {
+    local candidate
+    for candidate in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
+        [[ -f "$candidate" ]] && { echo "$candidate"; return 0; }
+    done
+    return 1
+}
+
+persist_overlayroot_enabled() {
+    local cmdline
+    cmdline=$(overlayroot_cmdline_file) || {
+        warn "overlayroot: no cmdline.txt found"
+        return 1
+    }
+
+    if ! grep -q 'overlayroot=tmpfs' "$cmdline" 2>/dev/null; then
+        sed -i '1s#^#overlayroot=tmpfs #' "$cmdline" || {
+            warn "overlayroot: failed to patch $cmdline"
+            return 1
+        }
+    fi
+
+    if ! cat > /etc/overlayroot.local.conf <<'OREOF'
+overlayroot="tmpfs"
+overlayroot_cfgdisk="disabled"
+OREOF
+    then
+        warn "overlayroot: failed to write /etc/overlayroot.local.conf"
+        return 1
+    fi
+
+    ok "overlayroot persisted for next boot"
+}
+
+persist_overlayroot_disabled() {
+    local cmdline
+    cmdline=$(overlayroot_cmdline_file) || {
+        warn "overlayroot: no cmdline.txt found"
+        return 1
+    }
+
+    if grep -q 'overlayroot=tmpfs' "$cmdline" 2>/dev/null; then
+        sed -i 's/\(^\| \)overlayroot=tmpfs\($\| \)/ /g; s/^ //; s/  */ /g; s/ $//' "$cmdline" || {
+            warn "overlayroot: failed to unpatch $cmdline"
+            return 1
+        }
+    fi
+
+    rm -f /etc/overlayroot.local.conf
+    ok "overlayroot disabled for next boot"
+}
+
 # ── CPU governor ──────────────────────────────────────────────────
 # Sets all CPUs to 'performance' and persists via cpufrequtils.
 # Audio playback needs consistent CPU speed — ramp-up latency
@@ -293,7 +345,13 @@ SYSDEOF
     # Enable overlayfs via raspi-config (takes effect after reboot)
     if command -v raspi-config &>/dev/null; then
         if raspi-config nonint do_overlayfs 0; then
-            ok "Read-only filesystem enabled (activates after reboot)"
+            if persist_overlayroot_enabled; then
+                ok "Read-only filesystem enabled (activates after reboot)"
+            else
+                rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+                warn "overlayroot persistence failed — workaround rolled back"
+                return 1
+            fi
         else
             rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
             warn "raspi-config do_overlayfs failed — workaround rolled back"

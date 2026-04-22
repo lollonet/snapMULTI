@@ -47,6 +47,39 @@ get_status() {
     fi
 }
 
+cmdline_file() {
+    local candidate
+    for candidate in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
+        [[ -f "$candidate" ]] && { echo "$candidate"; return 0; }
+    done
+    return 1
+}
+
+persist_overlayroot_enabled() {
+    local cmdline
+    cmdline=$(cmdline_file) || return 1
+    if ! grep -q 'overlayroot=tmpfs' "$cmdline" 2>/dev/null; then
+        sed -i '1s#^#overlayroot=tmpfs #' "$cmdline" || return 1
+    fi
+    if ! cat > /etc/overlayroot.local.conf <<'OREOF'
+overlayroot="tmpfs"
+overlayroot_cfgdisk="disabled"
+OREOF
+    then
+        return 1
+    fi
+}
+
+persist_overlayroot_disabled() {
+    local root_prefix="${1:-}"
+    local cmdline
+    cmdline=$(cmdline_file) || return 1
+    if grep -q 'overlayroot=tmpfs' "$cmdline" 2>/dev/null; then
+        sed -i 's/\(^\| \)overlayroot=tmpfs\($\| \)/ /g; s/^ //; s/  */ /g; s/ $//' "$cmdline" || return 1
+    fi
+    rm -f "${root_prefix}/etc/overlayroot.local.conf"
+}
+
 case "${1:-}" in
     enable)
         check_root "enable"
@@ -64,6 +97,12 @@ SYSDEOF
             echo "Check that raspi-config is installed and has proper permissions."
             exit 1
         fi
+        if ! persist_overlayroot_enabled; then
+            rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+            rm -f /etc/overlayroot.local.conf
+            echo "ERROR: Failed to persist overlayroot configuration."
+            exit 1
+        fi
         echo "Read-only mode enabled. Reboot to activate:"
         echo "  sudo reboot"
         ;;
@@ -75,6 +114,8 @@ SYSDEOF
             echo "Check that raspi-config is installed and has proper permissions."
             exit 1
         fi
+        persist_overlayroot_disabled "" || true
+        persist_overlayroot_disabled "/media/root-ro" || true
         # Remove trixie workaround AFTER disable succeeds.
         # Delete from lower layer (/media/root-ro) so it persists after reboot.
         rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
