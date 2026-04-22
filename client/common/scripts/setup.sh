@@ -1157,14 +1157,25 @@ if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
     log_progress "Persisting SSH host keys..."
     prepare_readonly_helpers "$_ro_mode_script"
 
+    # Workaround: Debian trixie systemd-remount-fs fails with overlayroot
+    # because fsconfig() rejects overlay reconfigure (systemd/systemd#39558).
+    # LIBMOUNT_FORCE_MOUNT2=always forces the legacy mount(2) syscall.
+    local _systemd_override="/etc/systemd/system.conf.d"
+    mkdir -p "$_systemd_override"
+    cat > "$_systemd_override/overlayfs-workaround.conf" << 'SYSDEOF'
+[Manager]
+DefaultEnvironment="LIBMOUNT_FORCE_MOUNT2=always"
+SYSDEOF
+    log_progress "systemd overlayfs workaround installed (trixie remount fix)"
+
     # Enable overlayfs (takes effect after reboot)
     log_progress "Enabling overlayfs..."
     if ! raspi-config nonint do_overlayfs 0; then
         log_progress "WARNING: raspi-config failed to enable overlayfs"
-        log_progress "         Reverting Docker config to overlay2"
-        # Roll back: remove fuse-overlayfs from daemon.json so Docker
-        # doesn't start with the wrong driver on a writable root.
+        log_progress "         Reverting Docker config and systemd workaround"
+        # Roll back: remove fuse-overlayfs from daemon.json and systemd override
         tune_docker_daemon --live-restore
+        rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
         ENABLE_READONLY=false
         echo ""
         echo "Read-only filesystem: FAILED"

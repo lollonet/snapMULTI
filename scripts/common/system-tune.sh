@@ -282,12 +282,27 @@ setup_readonly_fs() {
 
     prepare_readonly_helpers "$ro_mode_script"
 
+    # Workaround: Debian trixie systemd-remount-fs fails with overlayroot
+    # because fsconfig() rejects overlay reconfigure (systemd/systemd#39558).
+    mkdir -p /etc/systemd/system.conf.d
+    cat > /etc/systemd/system.conf.d/overlayfs-workaround.conf << 'SYSDEOF'
+[Manager]
+DefaultEnvironment="LIBMOUNT_FORCE_MOUNT2=always"
+SYSDEOF
+
     # Enable overlayfs via raspi-config (takes effect after reboot)
     if command -v raspi-config &>/dev/null; then
-        raspi-config nonint do_overlayfs 0
-        ok "Read-only filesystem enabled (activates after reboot)"
+        if raspi-config nonint do_overlayfs 0; then
+            ok "Read-only filesystem enabled (activates after reboot)"
+        else
+            rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+            warn "raspi-config do_overlayfs failed — workaround rolled back"
+            return 1
+        fi
     else
+        rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
         warn "raspi-config not found — overlayroot not enabled"
+        return 1
     fi
 }
 

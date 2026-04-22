@@ -51,7 +51,15 @@ case "${1:-}" in
     enable)
         check_root "enable"
         echo "Enabling read-only mode..."
+        # Workaround: trixie systemd-remount-fs fails with overlayroot (systemd#39558)
+        mkdir -p /etc/systemd/system.conf.d
+        cat > /etc/systemd/system.conf.d/overlayfs-workaround.conf << 'SYSDEOF'
+[Manager]
+DefaultEnvironment="LIBMOUNT_FORCE_MOUNT2=always"
+SYSDEOF
         if ! raspi-config nonint do_overlayfs 0; then
+            # Roll back: remove override since overlayroot won't be active
+            rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
             echo "ERROR: Failed to enable read-only mode."
             echo "Check that raspi-config is installed and has proper permissions."
             exit 1
@@ -67,6 +75,10 @@ case "${1:-}" in
             echo "Check that raspi-config is installed and has proper permissions."
             exit 1
         fi
+        # Remove trixie workaround AFTER disable succeeds.
+        # Delete from lower layer (/media/root-ro) so it persists after reboot.
+        rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+        rm -f /media/root-ro/etc/systemd/system.conf.d/overlayfs-workaround.conf 2>/dev/null || true
         echo "Read-only mode disabled. Reboot to activate:"
         echo "  sudo reboot"
         ;;
