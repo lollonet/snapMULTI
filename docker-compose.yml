@@ -330,10 +330,9 @@ services:
         reservations:
           memory: ${TIDAL_MEM_RESERVE:-48M}
 
-  # Automatic image updates (opt-in: set AUTO_UPDATE=true in .env)
-  # Monitors lollonet/snapmulti-* containers for new :latest images
-  # and restarts them with zero-downtime rolling updates.
-  # Pinned images (librespot, mympd) are excluded via watchtower.enable=false label.
+  # Opt-in container image refresh (set AUTO_UPDATE=true in .env).
+  # Updates Docker images only — does not update host scripts, boot config, or systemd units.
+  # Use reflash for full system upgrades. Pinned images excluded via watchtower.enable=false.
   watchtower:
     image: containrrr/watchtower:latest
     container_name: watchtower

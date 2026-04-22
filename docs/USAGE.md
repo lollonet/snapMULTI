@@ -770,11 +770,15 @@ A systemd timer on the Pi automatically backs up `mpd.db` to the boot partition 
 
 > **No MPD database?** If this is a fresh install or you only use streaming sources (Spotify, AirPlay, Tidal), skip step 2 — there's nothing to back up.
 
+### Upgrade Model
+
+snapMULTI is **reflash-first**. Reflashing the SD card is the only supported path for full system upgrades — it applies install scripts, boot configuration, compose changes, systemd units, and readonly behavior in one step. All config is auto-detected on first boot.
+
 ### Automatic Image Updates (Watchtower) — opt-in
 
-For advanced users who prefer in-place Docker image updates without reflashing. Disabled by default.
+Watchtower is an **optional, opt-in container image refresh** mechanism. It updates Docker images only — it does **not** update host-side scripts, boot config, compose structure, or systemd units. It is not equivalent to a full upgrade.
 
-> **Not recommended for read-only or client installs.** Watchtower pulls new images into Docker storage. On overlayroot systems (clients, Pi Zero), images are stored in RAM tmpfs and lost on reboot. Use reflash instead.
+> **Not recommended for read-only installs.** On overlayroot systems, images are stored in RAM tmpfs and lost on reboot. Use reflash instead.
 
 ```bash
 # Enable: add to /opt/snapmulti/.env:
@@ -792,7 +796,7 @@ COMPOSE_PROFILES=auto-update docker compose up -d
 
 **What Watchtower updates:** `lollonet/snapmulti-*` images (`:latest` tag only)
 
-**What it does NOT update:** pinned images (go-librespot, mympd), config files, scripts
+**What it does NOT update:** pinned images (go-librespot, mympd), install scripts, boot config, systemd units
 
 ### Config & Script Updates
 
