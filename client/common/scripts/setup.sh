@@ -1266,7 +1266,12 @@ elif mountpoint -q /media/root-ro 2>/dev/null; then
     log_progress "Baking Docker images to SD card..."
     BAKE_DIR=$(mktemp -d /tmp/snapclient-bake-XXXXX)
     bake_cleanup() {
-        _setup_failure_dump  # chain diagnostic dump on failure
+        # Chain all prior cleanup: boot remount + diagnostic dump
+        if [[ -n "${_BOOT_REMOUNT_DIR:-}" ]]; then
+            mount -o remount,ro "$_BOOT_REMOUNT_DIR" 2>/dev/null || true
+            _BOOT_REMOUNT_DIR=""
+        fi
+        _setup_failure_dump
         sudo umount "$BAKE_DIR" 2>/dev/null || true
         rmdir "$BAKE_DIR" 2>/dev/null || true
         sudo sync
