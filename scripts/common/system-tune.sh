@@ -292,9 +292,14 @@ SYSDEOF
 
     # Enable overlayfs via raspi-config (takes effect after reboot)
     if command -v raspi-config &>/dev/null; then
-        raspi-config nonint do_overlayfs 0
-        ok "Read-only filesystem enabled (activates after reboot)"
+        if raspi-config nonint do_overlayfs 0; then
+            ok "Read-only filesystem enabled (activates after reboot)"
+        else
+            rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+            warn "raspi-config do_overlayfs failed — workaround rolled back"
+        fi
     else
+        rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
         warn "raspi-config not found — overlayroot not enabled"
     fi
 }

@@ -70,16 +70,15 @@ SYSDEOF
     disable)
         check_root "disable"
         echo "Disabling read-only mode..."
-        # Remove trixie workaround from BOTH overlay and lower layer.
-        # On overlayroot, /etc is tmpfs — rm only affects the overlay.
-        # The real root is at /media/root-ro; delete there to persist after reboot.
-        rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
-        rm -f /media/root-ro/etc/systemd/system.conf.d/overlayfs-workaround.conf 2>/dev/null || true
         if ! raspi-config nonint do_overlayfs 1; then
             echo "ERROR: Failed to disable read-only mode."
             echo "Check that raspi-config is installed and has proper permissions."
             exit 1
         fi
+        # Remove trixie workaround AFTER disable succeeds.
+        # Delete from lower layer (/media/root-ro) so it persists after reboot.
+        rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+        rm -f /media/root-ro/etc/systemd/system.conf.d/overlayfs-workaround.conf 2>/dev/null || true
         echo "Read-only mode disabled. Reboot to activate:"
         echo "  sudo reboot"
         ;;
