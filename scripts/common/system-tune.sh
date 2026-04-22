@@ -242,10 +242,9 @@ tune_avahi_daemon() {
 }
 
 # ── Read-only filesystem (overlayroot) ──────────────────────────
-# Configures overlayfs for SD card protection. Requires raspi-config.
-# Call from firstboot.sh/deploy.sh/setup.sh when ENABLE_READONLY=true.
-# Assumes fuse-overlayfs and Docker storage driver are already configured.
-setup_readonly_fs() {
+
+# Install ro-mode helper and persist SSH host keys for overlayroot.
+prepare_readonly_helpers() {
     local ro_mode_script="${1:-}"
 
     # Install ro-mode helper if available
@@ -275,6 +274,13 @@ SSHEOF
         systemctl enable ssh-keys-restore.service 2>/dev/null
         ok "SSH host keys persisted"
     fi
+}
+
+# Configure overlayfs for SD card protection. Requires raspi-config.
+setup_readonly_fs() {
+    local ro_mode_script="${1:-}"
+
+    prepare_readonly_helpers "$ro_mode_script"
 
     # Enable overlayfs via raspi-config (takes effect after reboot)
     if command -v raspi-config &>/dev/null; then

@@ -1361,39 +1361,15 @@ if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
         log_progress "         Read-only mode may not work correctly after reboot"
     fi
 
-    # Install ro-mode helper script
-    log_progress "Installing ro-mode helper..."
+    # ro-mode helper + SSH key persistence (raspi-config call below has rollback)
+    local _ro_mode_script=""
     if [[ -f "$COMMON_DIR/scripts/ro-mode.sh" ]]; then
-        install -m 755 "$COMMON_DIR/scripts/ro-mode.sh" /usr/local/bin/ro-mode
+        _ro_mode_script="$COMMON_DIR/scripts/ro-mode.sh"
     else
-        echo "Warning: ro-mode.sh not found, skipping helper install"
+        log_progress "WARNING: ro-mode.sh not found, helper will not be installed"
     fi
-
-    # Persist SSH host keys so they survive read-only reboots.
-    # Without this, overlayfs generates new keys on every boot,
-    # causing SSH "REMOTE HOST IDENTIFICATION HAS CHANGED" errors.
     log_progress "Persisting SSH host keys..."
-    if [[ -d /etc/ssh ]]; then
-        mkdir -p /etc/ssh/keys_permanent
-        cp -n /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub /etc/ssh/keys_permanent/ 2>/dev/null || true
-        # Create a service that restores keys from permanent storage on boot
-        cat > /etc/systemd/system/ssh-keys-restore.service << 'SSHEOF'
-[Unit]
-Description=Restore SSH host keys from permanent storage
-Before=ssh.service sshd.service
-ConditionPathExists=/etc/ssh/keys_permanent
-
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c 'cp /etc/ssh/keys_permanent/ssh_host_* /etc/ssh/ 2>/dev/null && chmod 600 /etc/ssh/ssh_host_*_key'
-
-[Install]
-WantedBy=multi-user.target
-SSHEOF
-        systemctl daemon-reload
-        systemctl enable ssh-keys-restore.service
-        echo "SSH host keys will persist across reboots"
-    fi
+    prepare_readonly_helpers "$_ro_mode_script"
 
     # Enable overlayfs (takes effect after reboot)
     log_progress "Enabling overlayfs..."
