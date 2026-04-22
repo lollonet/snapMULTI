@@ -615,7 +615,8 @@ if [[ -n "$_boot_dir" ]] && mount | grep -q "$_boot_dir.*\bro\b"; then
     mount -o remount,rw "$_boot_dir" 2>/dev/null || { echo "ERROR: Cannot remount $_boot_dir rw"; exit 1; }
     _BOOT_REMOUNT_DIR="$_boot_dir"
     # Chain with existing EXIT trap (_setup_failure_dump) instead of replacing it
-    trap 'if [[ -n "${_BOOT_REMOUNT_DIR:-}" ]]; then mount -o remount,ro "$_BOOT_REMOUNT_DIR" 2>/dev/null || true; fi; _setup_failure_dump' EXIT
+    # shellcheck disable=SC2154  # _rc assigned inside trap string
+    trap '_rc=$?; if [[ -n "${_BOOT_REMOUNT_DIR:-}" ]]; then mount -o remount,ro "$_BOOT_REMOUNT_DIR" 2>/dev/null || true; fi; (exit "$_rc"); _setup_failure_dump' EXIT
 fi
 
 if [ -n "$BOOT_CONFIG" ]; then
@@ -1266,11 +1267,13 @@ elif mountpoint -q /media/root-ro 2>/dev/null; then
     log_progress "Baking Docker images to SD card..."
     BAKE_DIR=$(mktemp -d /tmp/snapclient-bake-XXXXX)
     bake_cleanup() {
+        local _exit_rc=$?
         # Chain all prior cleanup: boot remount + diagnostic dump
         if [[ -n "${_BOOT_REMOUNT_DIR:-}" ]]; then
             mount -o remount,ro "$_BOOT_REMOUNT_DIR" 2>/dev/null || true
             _BOOT_REMOUNT_DIR=""
         fi
+        (exit "$_exit_rc")  # restore $? for _setup_failure_dump
         _setup_failure_dump
         sudo umount "$BAKE_DIR" 2>/dev/null || true
         rmdir "$BAKE_DIR" 2>/dev/null || true
