@@ -10,6 +10,9 @@
 
 Play music in sync across every room. Stream from Spotify, AirPlay, your music library, or any app — all speakers play together.
 
+![snapMULTI framebuffer display](docs/images/display-screenshot.png)
+*HDMI display: cover art, spectrum analyzer, network info — rendered directly to framebuffer*
+
 ## Sources
 
 | Source | How |
