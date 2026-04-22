@@ -63,6 +63,11 @@ _apt_install_with_recovery() {
 install_dependencies() {
     # Prerequisite: network ready, NTP synced
 
+    # Prevent interactive debconf prompts during apt installs
+    export DEBIAN_FRONTEND=noninteractive
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+
     log_info "Waiting for apt lock..."
     _wait_for_apt_lock
 
@@ -173,10 +178,7 @@ install_dependencies() {
         systemctl enable --now sysstat >> "${UNIFIED_LOG:-/dev/null}" 2>&1 || true
     fi
 
-    # Set system locale — prevents apt warnings in subprocesses
-    export DEBIAN_FRONTEND=noninteractive
-    export LANG=C.UTF-8
-    export LC_ALL=C.UTF-8
+    # Persist locale setting
     update-locale LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null || true
 
     log_info "System dependencies installed"

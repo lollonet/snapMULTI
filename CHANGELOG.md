@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **device-smoke.sh** ([#257](https://github.com/lollonet/snapMULTI/pull/257)) — mode-aware acceptance gate (`--server`/`--client`/`--both`): root mount, Docker driver, systemd units, compose health, recent error logs
 
 ### Changed
+- **Shared host bootstrap** ([#260](https://github.com/lollonet/snapMULTI/pull/260)) — `install-deps.sh` gains `INSTALL_ROLE` (server/client/both) for role-specific packages; deploy.sh and setup.sh delegate to shared module instead of inline installs
 - **Full-width TUI** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — progress display uses full terminal width (auto-detect via `stty` after font change), dynamic log area fills remaining rows instead of fixed 8 lines, WARN/ERROR now visible in TUI output
 - **Serial image pull** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — removed paired background+foreground pull that caused counter bugs (210/7) and SD card IO contention; per-service timing and callback-aware status logging
 - **Locale setup** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — replaced `locales-all` (236MB) with `locales` (~3MB) + `locale-gen` for IT, EN_US, EN_GB, FR, DE, ES, PT
