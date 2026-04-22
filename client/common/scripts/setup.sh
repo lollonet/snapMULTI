@@ -1152,12 +1152,11 @@ if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
         return 0
     fi
 
-    # Do NOT write fuse-overlayfs to daemon.json here.
-    # boot-tune.sh reconciles the Docker driver at boot time based on actual
-    # root filesystem state (overlayroot active → fuse-overlayfs, writable → overlay2).
-    # Writing it at install time caused Docker to use the wrong driver when
-    # overlayroot failed to activate on reboot.
-    log_progress "Docker driver will be set at boot time based on filesystem state"
+    # Create daemon.json with live-restore but WITHOUT fuse-overlayfs.
+    # The boot-time reconciliation service (docker-driver-reconcile.sh) sets
+    # the storage driver based on actual root mount state, not install intent.
+    log_progress "Ensuring daemon.json exists (driver set at boot time)..."
+    tune_docker_daemon --live-restore
 
     # ro-mode helper + SSH key persistence (raspi-config call below has rollback)
     local _ro_mode_script=""
