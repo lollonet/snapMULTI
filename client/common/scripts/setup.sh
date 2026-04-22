@@ -607,23 +607,12 @@ elif [ -f /boot/cmdline.txt ]; then
     CMDLINE="/boot/cmdline.txt"
 fi
 
-# On overlayroot, /boot/firmware is mounted read-only. Remount rw so
-# config.txt and cmdline.txt changes persist to the real SD card.
-local _boot_dir
-_boot_dir=$(dirname "$BOOT_CONFIG" 2>/dev/null || dirname "$CMDLINE" 2>/dev/null || echo "")
-local _remounted_boot=false
+# On overlayroot, /boot/firmware is read-only — remount rw to persist changes
+local _boot_dir _remounted_boot=false
+_boot_dir=$(dirname "${BOOT_CONFIG:-${CMDLINE:-}}" 2>/dev/null || echo "")
 if [[ -n "$_boot_dir" ]] && mount | grep -q "$_boot_dir.*\bro\b"; then
-    if mount -o remount,rw "$_boot_dir" 2>/dev/null; then
-        _remounted_boot=true
-    else
-        echo "ERROR: Cannot remount $_boot_dir read-write."
-        echo "  Boot config changes will not persist after reboot."
-        exit 1
-    fi
-fi
-
-# Ensure boot partition is restored to read-only on any exit
-if [[ "$_remounted_boot" == "true" ]]; then
+    mount -o remount,rw "$_boot_dir" 2>/dev/null || { echo "ERROR: Cannot remount $_boot_dir rw"; exit 1; }
+    _remounted_boot=true
     trap 'mount -o remount,ro "$_boot_dir" 2>/dev/null || true' RETURN
 fi
 
