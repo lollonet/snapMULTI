@@ -596,41 +596,35 @@ INSTALL_DIR="/opt/snapclient"
 progress 1 "Installing system dependencies..."
 start_progress_animation 1 0 12  # Animate during apt-get
 
-# Base packages (always needed)
-BASE_PACKAGES="ca-certificates curl alsa-utils avahi-daemon avahi-utils"
-
-# Skip apt-get if all base packages are already installed (firstboot did it)
-_missing_pkgs=""
-# shellcheck disable=SC2086
-for _pkg in $BASE_PACKAGES; do
-    dpkg -s "$_pkg" &>/dev/null || _missing_pkgs="$_missing_pkgs $_pkg"
+# Shared host bootstrap — packages, locale, avahi, monitoring
+for _deps_candidate in \
+    "$SCRIPT_DIR/common/install-deps.sh" \
+    "$SCRIPT_DIR/../scripts/common/install-deps.sh" \
+    "$(dirname "$0")/common/install-deps.sh"; do
+    # shellcheck source=common/install-deps.sh
+    [[ -f "$_deps_candidate" ]] && source "$_deps_candidate" && break
 done
-if [[ -n "$_missing_pkgs" ]]; then
-    log_progress "apt-get update + install:$_missing_pkgs"
-    apt-get update
-    # shellcheck disable=SC2086
-    apt-get install -y $_missing_pkgs
-    log_progress "System packages installed"
-else
-    log_progress "All base packages already installed, skipping apt-get"
-fi
 
-# Set system locale to C.UTF-8 — prevents warnings from apt and subprocesses.
-# C.UTF-8 is always available on Debian without running locale-gen.
-update-locale LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null || true
+if declare -F install_dependencies &>/dev/null; then
+    # Skip apt upgrade — only firstboot does full upgrade on first install.
+    # Standalone setup.sh and firstboot-delegated runs both skip.
+    INSTALL_ROLE=client SKIP_UPGRADE=true install_dependencies
+else
+    log_progress "WARNING: install-deps.sh not found, installing base packages inline"
+    apt-get update && apt-get install -y ca-certificates curl alsa-utils avahi-daemon avahi-utils
+fi
 
 progress 2 "Installing Docker CE..."
 log_progress "Checking Docker installation..."
 start_progress_animation 2 12 35  # Animate during long Docker install
 
-# Install Docker CE — use shared install-docker.sh (single source of truth)
+# Docker CE — use shared setup-docker.sh or install-docker.sh
 if command -v docker &> /dev/null && docker --version | grep -q "Docker version"; then
     log_progress "Docker CE already installed, skipping"
 else
     log_progress "Removing conflicting packages..."
     apt-get remove -y docker.io docker-compose docker-buildx containerd runc 2>/dev/null || true
 
-    # Source shared Docker installer (same as server's firstboot.sh)
     for _docker_candidate in \
         "$SCRIPT_DIR/common/install-docker.sh" \
         "$SCRIPT_DIR/../scripts/common/install-docker.sh" \
@@ -652,14 +646,6 @@ log_progress "systemctl enable docker"
 systemctl enable docker
 systemctl start docker
 
-log_progress "systemctl enable avahi-daemon"
-systemctl enable avahi-daemon
-systemctl start avahi-daemon
-
-# Harden avahi: pin hostname, restrict to physical interfaces
-tune_avahi_daemon "$(hostname)"
-
-log_progress "timedatectl set-ntp true"
 timedatectl set-ntp true 2>/dev/null || true
 
 log_progress "Docker and system services ready"

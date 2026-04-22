@@ -344,82 +344,16 @@ preflight_checks() {
 # System Dependencies
 #######################################
 
-install_dependencies() {
+setup_server_host() {
     step "System dependencies"
 
-    # Set system locale to C.UTF-8 — always available on Debian, no locale-gen needed.
-    # Prevents apt warnings and locale errors in subprocesses.
-    export DEBIAN_FRONTEND=noninteractive
-    export LANG=C.UTF-8
-    export LC_ALL=C.UTF-8
-    update-locale LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null || true
+    # Shared host bootstrap — packages, locale, avahi, monitoring
+    # Skip apt upgrade in standalone deploy (only firstboot does full upgrade)
+    # shellcheck source=common/install-deps.sh
+    source "$SCRIPT_DIR/common/install-deps.sh"
+    INSTALL_ROLE=server SKIP_UPGRADE=true install_dependencies
 
-    # Git for updates (git pull)
-    if ! command -v git >/dev/null 2>&1; then
-        info "Installing git..."
-        apt-get update -qq
-        apt-get install -y -qq git >/dev/null
-        ok "Git installed"
-    else
-        info "Git already installed"
-    fi
-
-    local extra_pkgs=()
-    command -v python3 >/dev/null 2>&1 || extra_pkgs+=(python3)
-    command -v nc      >/dev/null 2>&1 || extra_pkgs+=(netcat-openbsd)
-    if [[ ${#extra_pkgs[@]} -gt 0 ]]; then
-        info "Installing ${extra_pkgs[*]}..."
-        apt-get update -qq
-        apt-get install -y -qq "${extra_pkgs[@]}" >/dev/null
-        ok "${extra_pkgs[*]} installed"
-    else
-        info "python3 and netcat already installed"
-    fi
-
-    # Avahi is required for mDNS discovery (Spotify Connect, AirPlay)
-    if ! command -v avahi-daemon >/dev/null 2>&1; then
-        info "Installing Avahi for mDNS discovery..."
-        apt-get update -qq
-        apt-get install -y -qq avahi-daemon avahi-utils >/dev/null
-        systemctl enable --now avahi-daemon >/dev/null 2>&1
-        ok "Avahi installed"
-    else
-        info "Avahi already installed"
-        # Ensure it's running
-        if ! systemctl is-active --quiet avahi-daemon; then
-            systemctl start avahi-daemon
-        fi
-    fi
-
-    # Harden avahi: pin hostname and restrict to physical interfaces
-    tune_avahi_daemon "$(tr -d '[:space:]' < /etc/hostname)"
-
-    # Lightweight monitoring tools (sar, iotop, dstat)
-    local mon_pkgs=()
-    command -v sar >/dev/null 2>&1 || mon_pkgs+=(sysstat)
-    command -v iotop >/dev/null 2>&1 || mon_pkgs+=(iotop-c)
-    command -v dstat >/dev/null 2>&1 || mon_pkgs+=(dstat)
-    if [[ ${#mon_pkgs[@]} -gt 0 ]]; then
-        info "Installing monitoring tools: ${mon_pkgs[*]}..."
-        # Wait for apt lock — firstboot may still be upgrading packages
-        local _apt_deadline=$(( SECONDS + 300 ))
-        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-            if [[ $SECONDS -ge $_apt_deadline ]]; then
-                warn "apt lock still held after 5 minutes — proceeding anyway"
-                break
-            fi
-            sleep 5
-        done
-        apt-get install -y -qq "${mon_pkgs[@]}" >/dev/null
-        # Enable sysstat data collection (sar)
-        if [[ -f /etc/default/sysstat ]]; then
-            sed -i 's/^ENABLED="false"/ENABLED="true"/' /etc/default/sysstat
-            systemctl enable --now sysstat >/dev/null 2>&1 || true
-        fi
-        ok "Monitoring tools installed"
-    fi
-
-    # Audio performance tuning (system-tune.sh sourced at top of file)
+    # Server-specific tuning (not package management)
     tune_cpu_governor
     tune_usb_autosuspend
 
@@ -1019,7 +953,7 @@ main() {
 
     # Run deployment steps
     preflight_checks
-    install_dependencies
+    setup_server_host
     install_docker
     create_directories
 

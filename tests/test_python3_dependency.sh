@@ -20,16 +20,19 @@ assert_contains() {
 }
 
 common_body="$(sed -n '/^install_dependencies()/,/^}/p' "$COMMON_DEPS")"
-deploy_body="$(sed -n '/^install_dependencies()/,/^}/p' "$DEPLOY_SH")"
+deploy_body="$(cat "$DEPLOY_SH")"
 
 echo "Testing host dependency coverage..."
 
-assert_contains "$common_body" "local pkgs=(curl ca-certificates python3 netcat-openbsd)" "shared install-deps always includes python3 and netcat"
-assert_contains "$deploy_body" "command -v python3" "deploy checks for python3 explicitly"
-assert_contains "$deploy_body" "extra_pkgs+=(python3)" "deploy adds python3 to package list when missing"
-assert_contains "$deploy_body" "command -v nc" "deploy checks for netcat explicitly"
-assert_contains "$deploy_body" 'extra_pkgs+=(netcat-openbsd)' "deploy adds netcat to package list when missing"
-assert_contains "$deploy_body" '"${extra_pkgs[@]}"' "deploy installs batched extra packages"
+# Shared module has python3 and netcat in base packages
+assert_contains "$common_body" "python3" "shared install-deps includes python3"
+assert_contains "$common_body" "netcat-openbsd" "shared install-deps includes netcat"
+assert_contains "$common_body" "avahi-daemon" "shared install-deps includes avahi-daemon"
+assert_contains "$common_body" "avahi-browse" "shared install-deps checks avahi-browse (avahi-utils)"
+
+# deploy.sh delegates to shared module instead of inline installs
+assert_contains "$deploy_body" 'common/install-deps.sh' "deploy sources shared install-deps"
+assert_contains "$deploy_body" "INSTALL_ROLE=server" "deploy sets server role"
 
 echo ""
 if [[ "$fail" -gt 0 ]]; then

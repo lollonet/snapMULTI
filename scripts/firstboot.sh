@@ -356,7 +356,7 @@ if checkpoint_reached "deps"; then
 else
     # shellcheck source=common/install-deps.sh
     source "$COMMON/install-deps.sh"
-    install_dependencies
+    INSTALL_ROLE="$INSTALL_TYPE" install_dependencies
     checkpoint_done "deps"
 fi
 milestone "$CURRENT_STEP" "System dependencies installed" 2 2>/dev/null || true
