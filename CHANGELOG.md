@@ -7,39 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- **Dynamic tmpfs sizing** ([#221](https://github.com/lollonet/snapMULTI/pull/221)) — overlayroot tmpfs sized to 25% of RAM (floor 256MB, cap 2048MB) with monitoring at 70%/90% thresholds
-- **FIFO health monitoring** ([#224](https://github.com/lollonet/snapMULTI/pull/224)) — `save-diagnostics.sh` records pipe status (reader count via `fuser`) and container restart counts to `audio-health.log`
-- **MPD backup timer** ([#225](https://github.com/lollonet/snapMULTI/pull/225)) — daily backup of `mpd.db` to boot partition; `backup-from-sd.sh` extracts it before reflashing so MPD does fast incremental scan instead of hours-long rescan
-- **QUICKSTART.md** ([#226](https://github.com/lollonet/snapMULTI/pull/226)) — one-page quick start (60 lines); README slimmed from 245 to 72 lines
-- **ADR-005** ([#257](https://github.com/lollonet/snapMULTI/pull/257)) — architecture decision record: reflash-only, systemd lifecycle, robustness-first
-- **device-smoke.sh** ([#257](https://github.com/lollonet/snapMULTI/pull/257)) — mode-aware acceptance gate (`--server`/`--client`/`--both`): root mount, Docker driver, systemd units, compose health, recent error logs
-- **Release gate process** — every tag requires `device-smoke.sh --both` green; documented in ADR-005 and CLAUDE.md
+## [0.6.0] — 2026-04-22
 
-### Removed
-- **In-place update** — `scripts/update.sh` decommissioned per ADR-005. Reflash is the only supported update method.
+### Added
+- **Real-device acceptance gate** — `device-smoke.sh` (`--server`/`--client`/`--both`) validates root mount, Docker driver, systemd units, compose health, and recent error logs. Every tagged release requires `--both` green on real Pi hardware
+- **Architecture decision record** — ADR-005 documents three product decisions: reflash-only updates, systemd lifecycle ownership, robustness-first
+- **MPD database backup** — daily backup to boot partition; restored automatically after reflash (no hours-long library rescan)
+- **QUICKSTART.md** — one-page getting started guide
 
 ### Changed
-- **systemd lifecycle owner** ([#261](https://github.com/lollonet/snapMULTI/pull/261)) — `snapmulti-server.service` created by deploy.sh with Docker readiness check; `snapclient.service` hardened with readiness + both-mode ordering; firstboot delegates to systemctl
-- **Shared host bootstrap** ([#260](https://github.com/lollonet/snapMULTI/pull/260)) — `install-deps.sh` gains `INSTALL_ROLE` (server/client/both) for role-specific packages; deploy.sh and setup.sh delegate to shared module instead of inline installs
-- **Full-width TUI** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — progress display uses full terminal width (auto-detect via `stty` after font change), dynamic log area fills remaining rows instead of fixed 8 lines, WARN/ERROR now visible in TUI output
-- **Serial image pull** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — removed paired background+foreground pull that caused counter bugs (210/7) and SD card IO contention; per-service timing and callback-aware status logging
-- **Locale setup** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — replaced `locales-all` (236MB) with `locales` (~3MB) + `locale-gen` for IT, EN_US, EN_GB, FR, DE, ES, PT
-- **Docker driver selection** ([#245](https://github.com/lollonet/snapMULTI/pull/245)) — fuse-overlayfs now gated on actual overlayroot state (`mount | grep ' on / type overlay'`), not `ENABLE_READONLY` flag. Writable systems keep overlay2 (faster kernel-native driver). `_configure_readonly()` no longer wipes `/var/lib/docker` during install — writes daemon.json for next boot instead. `tune_docker_daemon` can now remove `storage-driver` key on rollback
+- **Post-install lifecycle unified under systemd** — `snapmulti-server.service` and `snapclient.service` with Docker readiness checks and both-mode ordering. firstboot delegates to `systemctl start` instead of imperative `docker compose up`
+- **Shared host bootstrap** — single `install-deps.sh` with role-based packages replaces inline installs in deploy.sh and setup.sh
+- **Shared compose verification** — single `verify-compose.sh` replaces three duplicated health-check implementations
+- **Docker storage driver follows filesystem state** — overlay2 on writable root, fuse-overlayfs only when overlayroot is actually active (was incorrectly gated on config flag)
+- **Install progress display** — full terminal width, dynamic log area, WARN/ERROR visible on HDMI console
+- **Serial image pull** — sequential pulls replace paired background+foreground (fixes SD card IO contention and counter overflow)
+- **Locale setup** — lightweight `locale-gen` for 7 locales replaces 236MB `locales-all` package
+
+### Removed
+- **In-place update path** — reflash is now the only supported upgrade method
 
 ### Fixed
-- **Debian trixie overlayroot boot** ([#266](https://github.com/lollonet/snapMULTI/pull/266)) — install systemd override `LIBMOUNT_FORCE_MOUNT2=always` before enabling overlayroot, fixing `systemd-remount-fs` failure on trixie ([systemd#39558](https://github.com/systemd/systemd/issues/39558)). Cleaned up on disable/rollback.
-- **fuse-overlayfs on writable root** ([#245](https://github.com/lollonet/snapMULTI/pull/245)) — Pi installs with `ENABLE_READONLY=true` (default) incorrectly forced fuse-overlayfs on writable ext4, adding ~20-40% IO overhead to Docker pulls. Root cause: `setup_docker()` checked config flag intent instead of filesystem state
-- **Healthcheck verification** ([#244](https://github.com/lollonet/snapMULTI/pull/244)) — replace `docker ps --filter "health=healthy"` with `docker inspect` (label filter was unreliable); extract `verify_compose_stack()` helper; add `xargs -r` to skip empty input; batch python3+netcat install
-- **setup.sh false success** ([#244](https://github.com/lollonet/snapMULTI/pull/244)) — exit early with "Setup Incomplete" banner when image pull fails instead of printing success message
-- **status.sh profile-aware** ([#244](https://github.com/lollonet/snapMULTI/pull/244)) — query `docker compose config --services` instead of hardcoded container lists; require `.env` for install detection
-- **update.sh transactional** ([#244](https://github.com/lollonet/snapMULTI/pull/244)) — stage changes in temp copy and atomic-swap; remove stale files/symlinks/dirs absent from new release; add `parse_latest_tag()` helper; handle unknown local version
-- **Pre-push hook scope** ([#244](https://github.com/lollonet/snapMULTI/pull/244)) — shellcheck now covers `client/tests/*.sh` (was missing, caused local-passes-but-CI-fails)
-- **Client verify + start** ([#243](https://github.com/lollonet/snapMULTI/pull/243)) — start client containers before verify, block checkpoint on failure, detect "both" mode via install.conf, restart all services on server change, gate fuse-overlayfs on ENABLE_READONLY, fix resolvectl interface arg
-- **Install log flood** ([#237](https://github.com/lollonet/snapMULTI/pull/237)) — suppress Docker Compose per-layer progress lines in install log (hundreds of "Pulling" lines that looked like an infinite loop)
-- **Health check logic** ([#220](https://github.com/lollonet/snapMULTI/pull/220)) — require running AND healthy (was OR, could pass with 0 healthy containers)
-- **fuse-overlayfs broken binary** ([#220](https://github.com/lollonet/snapMULTI/pull/220)) — setup-docker.sh now returns error (was silently succeeding)
-- **Shell injection in _image_exists** ([#219](https://github.com/lollonet/snapMULTI/pull/219)) — pass service name via env var instead of string interpolation
+- **Debian trixie overlayroot boot failure** — systemd-remount-fs workaround for `fsconfig()` overlay reconfigure rejection ([systemd#39558](https://github.com/systemd/systemd/issues/39558))
+- **Overlayroot persistence** — reliable activation via cmdline.txt + overlayroot.local.conf
+- **Writable-root systems on fuse-overlayfs** — Docker driver selection now checks actual mount state
+- **Install false-success** — setup exits with failure banner when image pull fails
+- **Container health verification** — uses `docker inspect` instead of unreliable label filter
+- **Install log flood** — suppressed Docker Compose per-layer progress output
+- **Health check logic** — requires running AND healthy (was OR)
+- **Shell injection** — service name passed via env var instead of string interpolation
 
 ## [0.4.1] — 2026-04-13
 
