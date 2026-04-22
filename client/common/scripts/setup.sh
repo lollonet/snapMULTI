@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Diagnostic dump on failure (standalone mode only — firstboot has its own trap)
 _setup_failure_dump() {
-    local rc=$?
+    local rc="${1:-$?}"
     [[ $rc -eq 0 ]] && return
     stop_progress_animation 2>/dev/null || true
     echo ""
@@ -616,7 +616,7 @@ if [[ -n "$_boot_dir" ]] && mount | grep -q "$_boot_dir.*\bro\b"; then
     _BOOT_REMOUNT_DIR="$_boot_dir"
     # Chain with existing EXIT trap (_setup_failure_dump) instead of replacing it
     # shellcheck disable=SC2154  # _rc assigned inside trap string
-    trap '_rc=$?; if [[ -n "${_BOOT_REMOUNT_DIR:-}" ]]; then mount -o remount,ro "$_BOOT_REMOUNT_DIR" 2>/dev/null || true; fi; (exit "$_rc"); _setup_failure_dump' EXIT
+    trap '_rc=$?; if [[ -n "${_BOOT_REMOUNT_DIR:-}" ]]; then mount -o remount,ro "$_BOOT_REMOUNT_DIR" 2>/dev/null || true; fi; _setup_failure_dump "$_rc"' EXIT
 fi
 
 if [ -n "$BOOT_CONFIG" ]; then
@@ -1273,8 +1273,7 @@ elif mountpoint -q /media/root-ro 2>/dev/null; then
             mount -o remount,ro "$_BOOT_REMOUNT_DIR" 2>/dev/null || true
             _BOOT_REMOUNT_DIR=""
         fi
-        (exit "$_exit_rc")  # restore $? for _setup_failure_dump
-        _setup_failure_dump
+        _setup_failure_dump "$_exit_rc"
         sudo umount "$BAKE_DIR" 2>/dev/null || true
         rmdir "$BAKE_DIR" 2>/dev/null || true
         sudo sync
