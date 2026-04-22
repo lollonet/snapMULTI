@@ -15,6 +15,8 @@ path = '/etc/docker/daemon.json'
 cfg = json.load(open(path)) if os.path.exists(path) else {}
 cfg['storage-driver'] = 'fuse-overlayfs'
 cfg.setdefault('live-restore', True)
+cfg.setdefault('log-driver', 'json-file')
+cfg.setdefault('log-opts', {'max-size': '10m', 'max-file': '3'})
 with open(path, 'w') as f: json.dump(cfg, f, indent=2); f.write('\n')
 " 2>/dev/null && logger -t docker-driver "Set fuse-overlayfs (overlayroot active)"
     fi
