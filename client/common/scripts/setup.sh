@@ -613,7 +613,18 @@ local _boot_dir
 _boot_dir=$(dirname "$BOOT_CONFIG" 2>/dev/null || dirname "$CMDLINE" 2>/dev/null || echo "")
 local _remounted_boot=false
 if [[ -n "$_boot_dir" ]] && mount | grep -q "$_boot_dir.*\bro\b"; then
-    mount -o remount,rw "$_boot_dir" 2>/dev/null && _remounted_boot=true
+    if mount -o remount,rw "$_boot_dir" 2>/dev/null; then
+        _remounted_boot=true
+    else
+        echo "ERROR: Cannot remount $_boot_dir read-write."
+        echo "  Boot config changes will not persist after reboot."
+        exit 1
+    fi
+fi
+
+# Ensure boot partition is restored to read-only on any exit
+if [[ "$_remounted_boot" == "true" ]]; then
+    trap 'mount -o remount,ro "$_boot_dir" 2>/dev/null || true' RETURN
 fi
 
 if [ -n "$BOOT_CONFIG" ]; then
@@ -737,11 +748,7 @@ else
     echo "  Expected /boot/firmware/config.txt or /boot/config.txt"
     exit 1
 fi
-
-# Restore boot partition to read-only if we remounted it
-if [[ "$_remounted_boot" == "true" ]]; then
-    mount -o remount,ro "$_boot_dir" 2>/dev/null || true
-fi
+# Boot partition restored to read-only by RETURN trap above
 echo ""
 }
 _apply_boot_config
