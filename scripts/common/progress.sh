@@ -184,6 +184,8 @@ render_progress() {
 
 log_progress() {
     echo "$*" >> "$PROGRESS_LOG"
+    # Also echo to stdout so firstboot's pipe filter can capture it for the install log
+    echo "[INFO] $*"
 }
 
 # Display a key milestone message with a brief pause so users can read it.
