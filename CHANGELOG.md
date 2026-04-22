@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **QUICKSTART.md** ([#226](https://github.com/lollonet/snapMULTI/pull/226)) — one-page quick start (60 lines); README slimmed from 245 to 72 lines
 - **ADR-005** ([#257](https://github.com/lollonet/snapMULTI/pull/257)) — architecture decision record: reflash-only, systemd lifecycle, robustness-first
 - **device-smoke.sh** ([#257](https://github.com/lollonet/snapMULTI/pull/257)) — mode-aware acceptance gate (`--server`/`--client`/`--both`): root mount, Docker driver, systemd units, compose health, recent error logs
+- **Release gate process** — every tag requires `device-smoke.sh --both` green; documented in ADR-005 and CLAUDE.md
 
 ### Removed
 - **In-place update** — `scripts/update.sh` decommissioned per ADR-005. Reflash is the only supported update method.
