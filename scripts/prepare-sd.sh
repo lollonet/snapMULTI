@@ -680,6 +680,7 @@ esac
 case "$INSTALL_TYPE" in
     client|both)
         for f in client/docker-compose.yml client/scripts/setup.sh \
+                 client/scripts/audio-hat-detect.sh \
                  client/scripts/boot-tune.sh client/scripts/ro-mode.sh \
                  client/scripts/discover-server.sh \
                  client/scripts/display.sh client/scripts/display-detect.sh \
