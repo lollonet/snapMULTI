@@ -1157,6 +1157,17 @@ if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
     log_progress "Persisting SSH host keys..."
     prepare_readonly_helpers "$_ro_mode_script"
 
+    # Workaround: Debian trixie systemd-remount-fs fails with overlayroot
+    # because fsconfig() rejects overlay reconfigure (systemd/systemd#39558).
+    # LIBMOUNT_FORCE_MOUNT2=always forces the legacy mount(2) syscall.
+    local _systemd_override="/etc/systemd/system.conf.d"
+    mkdir -p "$_systemd_override"
+    cat > "$_systemd_override/overlayfs-workaround.conf" << 'SYSDEOF'
+[Manager]
+DefaultEnvironment="LIBMOUNT_FORCE_MOUNT2=always"
+SYSDEOF
+    log_progress "systemd overlayfs workaround installed (trixie remount fix)"
+
     # Enable overlayfs (takes effect after reboot)
     log_progress "Enabling overlayfs..."
     if ! raspi-config nonint do_overlayfs 0; then

@@ -51,6 +51,12 @@ case "${1:-}" in
     enable)
         check_root "enable"
         echo "Enabling read-only mode..."
+        # Workaround: trixie systemd-remount-fs fails with overlayroot (systemd#39558)
+        mkdir -p /etc/systemd/system.conf.d
+        cat > /etc/systemd/system.conf.d/overlayfs-workaround.conf << 'SYSDEOF'
+[Manager]
+DefaultEnvironment="LIBMOUNT_FORCE_MOUNT2=always"
+SYSDEOF
         if ! raspi-config nonint do_overlayfs 0; then
             echo "ERROR: Failed to enable read-only mode."
             echo "Check that raspi-config is installed and has proper permissions."
