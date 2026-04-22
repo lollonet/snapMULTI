@@ -1248,21 +1248,31 @@ else
 fi
 
 # Docker Compose profiles are handled via COMPOSE_PROFILES in .env
+# In both mode (server + client on same Pi), order client after server
+_after_units="docker.service avahi-daemon.service network-online.target"
+if systemctl list-unit-files snapmulti-server.service &>/dev/null \
+    || [[ -f /etc/systemd/system/snapmulti-server.service ]]; then
+    _after_units="$_after_units snapmulti-server.service"
+fi
+
 cat > /etc/systemd/system/snapclient.service << EOF
 [Unit]
 Description=Snapclient Docker Compose Service
 Requires=docker.service avahi-daemon.service
-After=docker.service avahi-daemon.service network-online.target
+After=${_after_units}
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=${INSTALL_DIR}
+ExecStartPre=/bin/bash -c 'for i in \$(seq 1 60); do docker info >/dev/null 2>&1 && exit 0; sleep 2; done; exit 1'
 ExecStartPre=-/usr/local/bin/snapclient-discover
 ExecStart=/usr/bin/docker compose up -d
 ExecStop=/usr/bin/docker compose down
-TimeoutStartSec=0
+TimeoutStartSec=180
+Restart=on-failure
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target

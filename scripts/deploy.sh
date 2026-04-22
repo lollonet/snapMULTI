@@ -852,6 +852,43 @@ show_status() {
 }
 
 #######################################
+# Systemd Service
+#######################################
+
+install_systemd_service() {
+    step "Installing systemd service"
+
+    cat > /etc/systemd/system/snapmulti-server.service <<EOF
+[Unit]
+Description=snapMULTI Docker Compose Server
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=${PROJECT_ROOT}
+ExecStartPre=/bin/bash -c 'for i in \$(seq 1 60); do docker info >/dev/null 2>&1 && exit 0; sleep 2; done; exit 1'
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
+TimeoutStartSec=180
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    if systemctl enable snapmulti-server.service >/dev/null 2>&1; then
+        ok "snapmulti-server.service enabled"
+    else
+        warn "snapmulti-server.service could not be enabled"
+    fi
+}
+
+#######################################
 # Version Tracking
 #######################################
 
@@ -970,6 +1007,7 @@ main() {
     pull_images
     start_services
     verify_services
+    install_systemd_service
     write_version
 
     show_status
