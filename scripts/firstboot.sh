@@ -563,11 +563,10 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     next_step "Verifying client..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
-    # Start client containers (setup.sh only enables the service, doesn't start it)
-    local_client_compose=(-f "$CLIENT_DIR/docker-compose.yml")
-    log_info "Starting client containers..."
+    # Start client via systemd — the lifecycle owner post-install (ADR-005)
+    log_info "Starting client via systemd..."
     cd "$CLIENT_DIR"
-    docker compose "${local_client_compose[@]}" up -d 2>/dev/null || log_warn "docker compose up failed"
+    systemctl start snapclient.service 2>/dev/null || log_warn "systemctl start snapclient failed"
 
     if ! verify_compose_stack "$CLIENT_DIR/docker-compose.yml" "client" 12 5; then
         log_error "Client verify failed — will retry on next boot"
