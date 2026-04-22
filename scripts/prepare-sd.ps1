@@ -144,6 +144,7 @@ function Assert-PreparedSdCard {
         foreach ($file in @(
             'client/docker-compose.yml',
             'client/scripts/setup.sh',
+            'client/scripts/audio-hat-detect.sh',
             'client/scripts/discover-server.sh',
             'client/scripts/display.sh',
             'client/scripts/display-detect.sh',
@@ -432,6 +433,22 @@ function Copy-ClientFiles {
     $scriptsDest = Join-Path $clientDest 'scripts'
     New-Item -ItemType Directory -Path $scriptsDest -Force | Out-Null
     Copy-Item (Join-Path $ClientDir 'common\scripts\setup.sh') -Destination $scriptsDest
+
+    # Audio HAT detection module (required by setup.sh)
+    $hatDetect = Join-Path $ClientDir 'common\scripts\audio-hat-detect.sh'
+    if (Test-Path $hatDetect) {
+        Copy-Item $hatDetect -Destination $scriptsDest
+    }
+
+    # Shared modules from server scripts/common/
+    $commonDest = Join-Path $scriptsDest 'common'
+    New-Item -ItemType Directory -Path $commonDest -Force | Out-Null
+    foreach ($shared in @('install-deps.sh', 'install-docker.sh', 'system-tune.sh', 'unified-log.sh', 'logging.sh', 'sanitize.sh')) {
+        $sharedPath = Join-Path $ScriptDir "common\$shared"
+        if (Test-Path $sharedPath) {
+            Copy-Item $sharedPath -Destination $commonDest
+        }
+    }
 
     # boot-tune.sh is a server script but client also needs it for boot-time tuning
     $bootTune = Join-Path $ScriptDir 'boot-tune.sh'
