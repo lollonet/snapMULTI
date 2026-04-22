@@ -150,11 +150,13 @@ detect_hat() {
     [[ -z "$modprobe_bin" && -x /usr/sbin/modprobe ]] && modprobe_bin=/usr/sbin/modprobe
 
     if [[ -z "$i2cdetect_bin" ]]; then
+        # stdout to stderr: detect_hat() stdout is captured by callers for HAT name
         apt-get install -y -q i2c-tools >&2 || true
         i2cdetect_bin=$(command -v i2cdetect 2>/dev/null || true)
         [[ -z "$i2cdetect_bin" && -x /usr/sbin/i2cdetect ]] && i2cdetect_bin=/usr/sbin/i2cdetect
     fi
     if [[ -z "$modprobe_bin" ]]; then
+        # stdout to stderr: same reason as above
         apt-get install -y -q kmod >&2 || true
         modprobe_bin=$(command -v modprobe 2>/dev/null || true)
         [[ -z "$modprobe_bin" && -x /usr/sbin/modprobe ]] && modprobe_bin=/usr/sbin/modprobe
