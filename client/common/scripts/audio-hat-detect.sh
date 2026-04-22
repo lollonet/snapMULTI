@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034  # HAT_DETECTION_SOURCE set here, used by callers
+set -euo pipefail
 # audio-hat-detect.sh — Audio HAT detection and menu for Raspberry Pi
 #
 # Detects audio HATs via: EEPROM -> ALSA -> I2C -> USB -> internal fallback.
@@ -19,7 +21,6 @@
 #   AUDIO_HAT=$(detect_hat 2>/dev/null)
 #   echo "Detected: $AUDIO_HAT via $HAT_DETECTION_SOURCE"
 
-# shellcheck disable=SC2034  # used by callers after sourcing
 HAT_DETECTION_SOURCE="none"
 
 show_hat_options() {
@@ -111,11 +112,21 @@ detect_hat() {
         local cards
         cards=$(aplay -l 2>/dev/null || true)
         case "$cards" in
+            # NOTE: sndrpihifiberry is shared by hifiberry-dac, hifiberry-amp2, and
+            # hifiberry-dacplusadc. Without EEPROM, use hifiberry-dacplus-std (Pi as
+            # clock master) to avoid DAC+ Pro misdetection on clone boards with floating
+            # GPIO3. AMP2 boards without EEPROM also work in std mode (no oscillator).
+            # HiFiBerry boards ship with EEPROM so this path is rarely reached.
             *sndrpihifiberry*)  echo "hifiberry-dac-std"  ; return ;;
+            # IQaudio DAC+ and DigiAMP+ both surface IQaudIODAC in ALSA. Preserve
+            # exact identity via EEPROM when present; ALSA fallback resolves to the
+            # compatible DAC profile only.
             *IQaudIODAC*)       echo "iqaudio-dac"        ; return ;;
             *IQaudIOCODEC*)     echo "iqaudio-codec"      ; return ;;
             *BossDAC*)          echo "allo-boss"          ; return ;;
             *sndallodigione*)   echo "allo-digione"       ; return ;;
+            # JustBoom DAC and Digi share sndrpijustboomd in ALSA. Exact board
+            # identity requires EEPROM; ALSA fallback resolves to the DAC profile.
             *sndrpijustboom*)   echo "justboom-dac"       ; return ;;
             *Katana*)           echo "innomaker-dac-pro"  ; return ;;
             *wm8960soundcard*)  echo "waveshare-wm8960"   ; return ;;
@@ -152,7 +163,7 @@ detect_hat() {
             echo "I2C bus $bus scan complete" >&2
             for addr in 4c 4d 4e 4f; do
                 if echo "$scan" | grep -qE "(^[[:space:]]*[0-9a-f]0:[[:space:]]|[[:space:]])${addr}([[:space:]]|$)"; then
-                    echo "I2C: PCM5122 at 0x${addr} on bus ${bus}" >&2
+                    echo "I2C: PCM5122 at 0x${addr} on bus ${bus} → hifiberry-dac-std" >&2
                     result="hifiberry-dac-std"; break 2
                 fi
             done

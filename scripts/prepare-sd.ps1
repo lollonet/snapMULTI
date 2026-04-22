@@ -148,6 +148,8 @@ function Assert-PreparedSdCard {
             'client/scripts/discover-server.sh',
             'client/scripts/display.sh',
             'client/scripts/display-detect.sh',
+            'client/scripts/common/install-deps.sh',
+            'client/scripts/common/install-docker.sh',
             'client/snapclient.conf'
         )) {
             $path = Join-Path $Dest $file
