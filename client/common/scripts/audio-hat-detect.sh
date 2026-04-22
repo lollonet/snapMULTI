@@ -161,6 +161,8 @@ detect_hat() {
         modprobe_bin=$(command -v modprobe 2>/dev/null || true)
         [[ -z "$modprobe_bin" && -x /usr/sbin/modprobe ]] && modprobe_bin=/usr/sbin/modprobe
     fi
+    # Enable i2c_arm at runtime: on first boot config.txt may not yet have the
+    # overlay written. dtparam applies immediately; modprobe i2c-dev exposes /dev/i2c-*.
     dtparam i2c_arm=on &>/dev/null || true
     [[ -n "$modprobe_bin" ]] && "$modprobe_bin" i2c-dev &>/dev/null || true
     if [[ -n "$i2cdetect_bin" ]]; then
