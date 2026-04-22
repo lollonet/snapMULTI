@@ -68,6 +68,8 @@ SYSDEOF
     disable)
         check_root "disable"
         echo "Disabling read-only mode..."
+        # Remove trixie workaround — no longer needed without overlayroot
+        rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
         if ! raspi-config nonint do_overlayfs 1; then
             echo "ERROR: Failed to disable read-only mode."
             echo "Check that raspi-config is installed and has proper permissions."

@@ -1172,10 +1172,10 @@ SYSDEOF
     log_progress "Enabling overlayfs..."
     if ! raspi-config nonint do_overlayfs 0; then
         log_progress "WARNING: raspi-config failed to enable overlayfs"
-        log_progress "         Reverting Docker config to overlay2"
-        # Roll back: remove fuse-overlayfs from daemon.json so Docker
-        # doesn't start with the wrong driver on a writable root.
+        log_progress "         Reverting Docker config and systemd workaround"
+        # Roll back: remove fuse-overlayfs from daemon.json and systemd override
         tune_docker_daemon --live-restore
+        rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
         ENABLE_READONLY=false
         echo ""
         echo "Read-only filesystem: FAILED"
