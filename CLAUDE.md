@@ -165,8 +165,9 @@ ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian 
 - **Multi-arch**: linux/amd64 (studio) + linux/arm64 (raspy), native builds on self-hosted runners
 - **Config paths**: all config in `config/`, all scripts in `scripts/`, shared libs in `scripts/common/`
 - **Deployment**: tag push (`v*`) triggers build → manifest → deploy
+- **Release gate**: every tag requires `device-smoke.sh --both` green on real Pi (ADR-005)
 - **Git workflow**: always use PRs, never push directly to main unless explicitly requested
 - **Audio format**: 44100:16:2 (44.1kHz, 16-bit, stereo) across all sources
-- **CI gates**: shellcheck on all `scripts/**/*.sh`, docker-compose syntax validation
+- **CI gates**: shellcheck on all `scripts/**/*.sh`, docker-compose syntax, server+client bash tests
 - **Debian support**: bookworm (primary) + trixie (Docker repo falls back to bookworm)
 - **Console display**: ASCII-only for `/dev/tty1` output — PSF fonts lack Unicode symbols (✓▶○⠋). Use `[x]`/`[>]`/`[ ]` and `|/-\` spinner
