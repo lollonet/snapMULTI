@@ -1183,9 +1183,7 @@ SYSDEOF
     log_progress "Enabling overlayfs..."
     if ! raspi-config nonint do_overlayfs 0; then
         log_progress "WARNING: raspi-config failed to enable overlayfs"
-        log_progress "         Reverting Docker config and systemd workaround"
-        # Roll back: remove fuse-overlayfs from daemon.json and systemd override
-        tune_docker_daemon --live-restore
+        log_progress "         Reverting systemd workaround"
         rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
         ENABLE_READONLY=false
         echo ""

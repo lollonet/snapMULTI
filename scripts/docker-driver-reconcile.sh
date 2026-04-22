@@ -12,7 +12,9 @@ if mount 2>/dev/null | grep -q ' on / type overlay'; then
         python3 -c "
 import json, os
 path = '/etc/docker/daemon.json'
-cfg = json.load(open(path)) if os.path.exists(path) else {}
+cfg = {}
+if os.path.exists(path):
+    with open(path) as f: cfg = json.load(f)
 cfg['storage-driver'] = 'fuse-overlayfs'
 cfg.setdefault('live-restore', True)
 cfg.setdefault('log-driver', 'json-file')
