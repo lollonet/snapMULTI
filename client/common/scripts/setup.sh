@@ -1361,9 +1361,7 @@ if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
         log_progress "         Read-only mode may not work correctly after reboot"
     fi
 
-    # Shared readonly helpers: ro-mode script + SSH key persistence
-    # Uses system-tune.sh:prepare_readonly_helpers() to avoid duplication.
-    # raspi-config call stays here (setup.sh has rollback logic).
+    # ro-mode helper + SSH key persistence (raspi-config call below has rollback)
     local _ro_mode_script=""
     [[ -f "$COMMON_DIR/scripts/ro-mode.sh" ]] && _ro_mode_script="$COMMON_DIR/scripts/ro-mode.sh"
     log_progress "Installing ro-mode helper + persisting SSH keys..."
