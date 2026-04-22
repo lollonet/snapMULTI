@@ -297,10 +297,12 @@ SYSDEOF
         else
             rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
             warn "raspi-config do_overlayfs failed — workaround rolled back"
+            return 1
         fi
     else
         rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
         warn "raspi-config not found — overlayroot not enabled"
+        return 1
     fi
 }
 
