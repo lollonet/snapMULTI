@@ -68,7 +68,7 @@ HEALTHY=0
 TOTAL=0
 
 # Query actual services from docker compose (profile-aware) instead of
-# hardcoded lists — catches optional services like watchtower, tidal-connect.
+# hardcoded lists — catches optional services like tidal-connect.
 SERVER_CONTAINERS=()
 CLIENT_CONTAINERS=()
 

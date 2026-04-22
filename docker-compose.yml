@@ -28,8 +28,6 @@ services:
     container_name: snapserver
     hostname: snapmulti
     restart: unless-stopped
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
     network_mode: host
     <<: *fifo-security
     read_only: true
@@ -65,8 +63,6 @@ services:
     image: lollonet/snapmulti-airplay:${IMAGE_TAG:-latest}
     container_name: shairport-sync
     restart: unless-stopped
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
     network_mode: host
     <<: *fifo-security
     read_only: true
@@ -106,8 +102,6 @@ services:
     image: ghcr.io/devgianlu/go-librespot:v0.7.0
     container_name: librespot
     restart: unless-stopped
-    labels:
-      - "com.centurylinklabs.watchtower.enable=false"
     network_mode: host
     <<: *fifo-security
     read_only: true
@@ -156,8 +150,6 @@ services:
     image: ghcr.io/jcorporation/mympd/mympd:latest
     container_name: mympd
     restart: unless-stopped
-    labels:
-      - "com.centurylinklabs.watchtower.enable=false"
     network_mode: host
     security_opt:
       - no-new-privileges:true
@@ -201,8 +193,6 @@ services:
     image: lollonet/snapmulti-mpd:${IMAGE_TAG:-latest}
     container_name: mpd
     restart: unless-stopped
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
     network_mode: host
     security_opt:
       - no-new-privileges:true
@@ -244,8 +234,6 @@ services:
   metadata:
     image: lollonet/snapmulti-metadata:${IMAGE_TAG:-latest}
     container_name: metadata
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
     restart: unless-stopped
     network_mode: host
     security_opt:
@@ -288,8 +276,6 @@ services:
     container_name: tidal-connect
     profiles:
       - tidal
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
     network_mode: host
     restart: unless-stopped
     read_only: true
@@ -329,36 +315,3 @@ services:
           cpus: '${TIDAL_CPU_LIMIT:-0.5}'
         reservations:
           memory: ${TIDAL_MEM_RESERVE:-48M}
-
-  # Opt-in container image refresh (set AUTO_UPDATE=true in .env).
-  # Updates Docker images only — does not update host scripts, boot config, or systemd units.
-  # Use reflash for full system upgrades. Pinned images excluded via watchtower.enable=false.
-  watchtower:
-    image: containrrr/watchtower:latest
-    container_name: watchtower
-    restart: unless-stopped
-    profiles:
-      - auto-update
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    read_only: true
-    tmpfs:
-      - /tmp:size=16M
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - TZ=${TZ:-Europe/Berlin}
-      - WATCHTOWER_SCHEDULE=${UPDATE_SCHEDULE:-0 0 3 * * *}
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_LABEL_ENABLE=true
-      - WATCHTOWER_NOTIFICATION_URL=${UPDATE_NOTIFY_URL:-}
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 64M
-          cpus: '0.25'
-        reservations:
-          memory: 32M

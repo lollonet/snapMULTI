@@ -33,7 +33,7 @@ snapMULTI is designed for **home/prosumer networks** behind a firewall:
 - **Network**: Host networking for low-latency audio; not designed for public-facing deployment
 - **Filesystem**: Optional read-only root via overlayroot (protects SD card from corruption)
 - **Secrets**: SMB credentials stored locally in `/etc/fstab`; NFS uses host-based auth
-- **Updates**: Docker images signed and built in CI; Watchtower available for auto-updates
+- **Updates**: Docker images are signed and built in CI; full upgrades use the reflash path
 
 ## Known Limitations
 

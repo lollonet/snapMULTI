@@ -685,11 +685,6 @@ EOF
         info "Tidal Connect skipped (ARM-only, current arch: $(uname -m))"
     fi
 
-    # Watchtower auto-update (opt-in)
-    if grep -q '^AUTO_UPDATE=true' "$ENV_FILE" 2>/dev/null || [[ "${AUTO_UPDATE:-}" == "true" ]]; then
-        ensure_profile "auto-update"
-    fi
-
     # Persist IMAGE_TAG (covers both new and existing .env)
     if [[ "${IMAGE_TAG:-latest}" != "latest" ]]; then
         if grep -q '^IMAGE_TAG=' "$ENV_FILE" 2>/dev/null; then

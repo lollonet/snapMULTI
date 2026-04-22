@@ -41,11 +41,6 @@ SKIP_UPGRADE=false
 #   0.4.0-dev.1      -- Dev/pre-release images
 IMAGE_TAG=latest
 #
-# AUTO_UPDATE: Enable Watchtower for automatic Docker image updates.
-#   (empty, default) -- Disabled
-#   true             -- Watchtower checks for updates daily at 3 AM
-AUTO_UPDATE=
-#
 # VERBOSE_INSTALL: Show all output on HDMI during install.
 #   false (default) -- Only milestones and key events
 #   true            -- Full apt/docker output (useful for debugging)

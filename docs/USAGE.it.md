@@ -587,7 +587,7 @@ Vedi la scheda GitHub Actions per lo stato dei workflow e i log.
 
 Definisce tutti i servizi con immagini pre-compilate e rete host per mDNS. Ogni sorgente audio gira nel proprio container, comunicando tramite named pipe nel volume condiviso `/audio`:
 
-**Caratteristiche di sicurezza**: Tutti i container usano `cap_drop: ALL`, filesystem `read_only: true`, `no-new-privileges: true`, e girano come utenti non-root (`PUID:PGID`) eccetto tidal-connect e watchtower (binario proprietario e accesso al socket Docker rispettivamente). Vedi [Architettura di Sicurezza](architecture/ARC-004.security.md) per dettagli completi.
+**Caratteristiche di sicurezza**: Tutti i container usano `cap_drop: ALL`, filesystem `read_only: true`, `no-new-privileges: true`, e girano come utenti non-root (`PUID:PGID`) eccetto tidal-connect (requisito del binario proprietario). Vedi [Architettura di Sicurezza](architecture/ARC-004.security.md) per dettagli completi.
 
 ```yaml
 services:
@@ -796,29 +796,7 @@ Un timer systemd sul Pi esegue automaticamente il backup di `mpd.db` sulla parti
 
 snapMULTI segue un modello **reflash-first**. Il reflash della scheda SD e' l'unico metodo supportato per aggiornamenti completi — applica script, configurazione boot, compose, unit systemd e comportamento readonly in un solo passo. Tutta la configurazione viene rilevata automaticamente al primo avvio.
 
-### Aggiornamenti Automatici Immagini (Watchtower) — opt-in
-
-Watchtower e' un meccanismo **opzionale** di refresh delle immagini container. Aggiorna solo le immagini Docker — **non** aggiorna script, configurazione boot, struttura compose o unit systemd. Non equivale a un aggiornamento completo.
-
-> **Non consigliato per installazioni read-only.** Sui sistemi overlayroot, le immagini sono in tmpfs RAM e si perdono al riavvio. Usa il reflash.
-
-```bash
-# Abilitare: aggiungi a /opt/snapmulti/.env:
-AUTO_UPDATE=true
-
-# Riavvia con il profilo auto-update:
-COMPOSE_PROFILES=auto-update docker compose up -d
-```
-
-| Variabile | Default | Descrizione |
-|-----------|---------|-------------|
-| `AUTO_UPDATE` | (disabilitato) | Imposta a `true` per abilitare Watchtower |
-| `UPDATE_SCHEDULE` | `0 0 3 * * *` | Pianificazione cron (default: ogni giorno alle 3:00) |
-| `UPDATE_NOTIFY_URL` | (nessuno) | URL notifiche ([formato shoutrrr](https://containrrr.dev/shoutrrr/)) |
-
-**Cosa aggiorna Watchtower:** immagini `lollonet/snapmulti-*` (solo tag `:latest`)
-
-**Cosa NON aggiorna:** immagini fissate (go-librespot, mympd), script, configurazione boot, unit systemd
+Non esiste un percorso di auto-update in-place. Il reflash resta l'unico metodo supportato per gli aggiornamenti.
 
 ### Aggiornamenti Config e Script
 

@@ -97,14 +97,12 @@ fi
 ENABLE_READONLY="true"
 SKIP_UPGRADE="false"
 IMAGE_TAG="latest"
-AUTO_UPDATE=""
 VERBOSE_INSTALL="false"
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     _rc() { grep -m1 "^$1=" "$SNAP_BOOT/install.conf" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true; }
     local_val=$(_rc ENABLE_READONLY); [[ -n "$local_val" ]] && ENABLE_READONLY="$local_val"
     local_val=$(_rc SKIP_UPGRADE);    [[ -n "$local_val" ]] && SKIP_UPGRADE="$local_val"
     local_val=$(_rc IMAGE_TAG);       [[ -n "$local_val" ]] && IMAGE_TAG="$local_val"
-    local_val=$(_rc AUTO_UPDATE);     [[ -n "$local_val" ]] && AUTO_UPDATE="$local_val"
     local_val=$(_rc VERBOSE_INSTALL); [[ -n "$local_val" ]] && VERBOSE_INSTALL="$local_val"
     unset -f _rc
     unset local_val
@@ -399,14 +397,10 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     setup_music_source
     scrub_credentials
 
-    # Export IMAGE_TAG + AUTO_UPDATE for deploy.sh
+    # Export IMAGE_TAG for deploy.sh
     if [[ "$IMAGE_TAG" != "latest" ]]; then
         export IMAGE_TAG
         log_info "Using image tag: $IMAGE_TAG"
-    fi
-    if [[ "$AUTO_UPDATE" == "true" ]]; then
-        export AUTO_UPDATE
-        log_info "Auto-update: enabled"
     fi
 
     if [[ ! -d "$SERVER_DIR" ]]; then

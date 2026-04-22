@@ -170,7 +170,6 @@ get_music_source() {
 ADV_READONLY="true"
 ADV_SKIP_UPGRADE="false"
 ADV_IMAGE_TAG="latest"
-ADV_AUTO_UPDATE=""
 ADV_VERBOSE_INSTALL="false"
 
 show_advanced_menu() {
@@ -212,16 +211,7 @@ show_advanced_menu() {
         echo "    -> Image tag: latest (default)"
     fi
 
-    # 4. Auto-update (Watchtower)
-    read -rp "  Enable auto-update (Watchtower)? [y/N]: " choice
-    if [[ "$choice" =~ ^[yY] ]]; then
-        ADV_AUTO_UPDATE="true"
-        echo "    -> Auto-update: ENABLED"
-    else
-        echo "    -> Auto-update: disabled (default)"
-    fi
-
-    # 5. Verbose install
+    # 4. Verbose install
     read -rp "  Verbose install output on HDMI? [y/N]: " choice
     if [[ "$choice" =~ ^[yY] ]]; then
         ADV_VERBOSE_INSTALL="true"
@@ -237,7 +227,6 @@ apply_dev_defaults() {
     ADV_READONLY="false"
     ADV_SKIP_UPGRADE="true"
     ADV_IMAGE_TAG="dev"
-    ADV_AUTO_UPDATE=""
     ADV_VERBOSE_INSTALL="true"
     echo ""
     echo "  Dev mode enabled:"
@@ -506,7 +495,6 @@ SMB_SHARE=$SMB_SHARE
 ENABLE_READONLY=$ADV_READONLY
 SKIP_UPGRADE=$ADV_SKIP_UPGRADE
 IMAGE_TAG=$ADV_IMAGE_TAG
-AUTO_UPDATE=$ADV_AUTO_UPDATE
 VERBOSE_INSTALL=$ADV_VERBOSE_INSTALL
 EOF
 # Write credentials outside heredoc — unquoted <<EOF expands $, backticks,
@@ -711,7 +699,6 @@ echo "  install.conf -> MUSIC_SOURCE=$(grep '^MUSIC_SOURCE=' "$DEST/install.conf
 echo "  install.conf -> ENABLE_READONLY=$(grep '^ENABLE_READONLY=' "$DEST/install.conf" | cut -d= -f2)"
 echo "  install.conf -> SKIP_UPGRADE=$(grep '^SKIP_UPGRADE=' "$DEST/install.conf" | cut -d= -f2)"
 echo "  install.conf -> IMAGE_TAG=$(grep '^IMAGE_TAG=' "$DEST/install.conf" | cut -d= -f2)"
-echo "  install.conf -> AUTO_UPDATE=$(grep '^AUTO_UPDATE=' "$DEST/install.conf" | cut -d= -f2)"
 echo "  install.conf -> VERBOSE_INSTALL=$(grep '^VERBOSE_INSTALL=' "$DEST/install.conf" | cut -d= -f2)"
 
 # Version files

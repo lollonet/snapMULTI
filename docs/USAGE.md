@@ -565,7 +565,7 @@ See GitHub Actions tab for workflow status and logs.
 
 Defines all services with pre-built images and host networking for mDNS. Each audio source runs in its own container, communicating via named pipes in the shared `/audio` volume:
 
-**Security features**: All containers use `cap_drop: ALL`, `read_only: true` filesystems, `no-new-privileges: true`, and run as non-root (`PUID:PGID`) except for tidal-connect and watchtower (proprietary binary and Docker socket access respectively). See [Security Architecture](architecture/ARC-004.security.md) for complete details.
+**Security features**: All containers use `cap_drop: ALL`, `read_only: true` filesystems, `no-new-privileges: true`, and run as non-root (`PUID:PGID`) except for tidal-connect (proprietary binary requirement). See [Security Architecture](architecture/ARC-004.security.md) for complete details.
 
 ```yaml
 services:
@@ -774,30 +774,4 @@ A systemd timer on the Pi automatically backs up `mpd.db` to the boot partition 
 
 snapMULTI is **reflash-first**. Reflashing the SD card is the only supported path for full system upgrades — it applies install scripts, boot configuration, compose changes, systemd units, and readonly behavior in one step. All config is auto-detected on first boot.
 
-### Automatic Image Updates (Watchtower) — opt-in
-
-Watchtower is an **optional, opt-in container image refresh** mechanism. It updates Docker images only — it does **not** update host-side scripts, boot config, compose structure, or systemd units. It is not equivalent to a full upgrade.
-
-> **Not recommended for read-only installs.** On overlayroot systems, images are stored in RAM tmpfs and lost on reboot. Use reflash instead.
-
-```bash
-# Enable: add to /opt/snapmulti/.env:
-AUTO_UPDATE=true
-
-# Restart with the auto-update profile:
-COMPOSE_PROFILES=auto-update docker compose up -d
-```
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AUTO_UPDATE` | (disabled) | Set to `true` to enable Watchtower |
-| `UPDATE_SCHEDULE` | `0 0 3 * * *` | Cron schedule (default: daily 3 AM) |
-| `UPDATE_NOTIFY_URL` | (none) | Notification URL ([shoutrrr format](https://containrrr.dev/shoutrrr/)) |
-
-**What Watchtower updates:** `lollonet/snapmulti-*` images (`:latest` tag only)
-
-**What it does NOT update:** pinned images (go-librespot, mympd), install scripts, boot config, systemd units
-
-### Config & Script Updates
-
-In-place updates via `update.sh` are no longer supported (see [ADR-005](adr/ADR-005.reflash-systemd-robustness.md)). The recommended method is reflashing the SD card — all configuration is auto-detected, and the MPD database is backed up/restored automatically.
+There is no in-place auto-update path. Reflash is the only supported upgrade method.
