@@ -1363,8 +1363,12 @@ if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
 
     # ro-mode helper + SSH key persistence (raspi-config call below has rollback)
     local _ro_mode_script=""
-    [[ -f "$COMMON_DIR/scripts/ro-mode.sh" ]] && _ro_mode_script="$COMMON_DIR/scripts/ro-mode.sh"
-    log_progress "Installing ro-mode helper + persisting SSH keys..."
+    if [[ -f "$COMMON_DIR/scripts/ro-mode.sh" ]]; then
+        _ro_mode_script="$COMMON_DIR/scripts/ro-mode.sh"
+    else
+        log_progress "WARNING: ro-mode.sh not found, helper will not be installed"
+    fi
+    log_progress "Persisting SSH host keys..."
     prepare_readonly_helpers "$_ro_mode_script"
 
     # Enable overlayfs (takes effect after reboot)
