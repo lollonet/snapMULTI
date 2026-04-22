@@ -88,6 +88,8 @@ detect_hat() {
         hat_product=$(tr -d '\0' < /proc/device-tree/hat/product)
         HAT_DETECTION_SOURCE="eeprom"
         echo "EEPROM product: '$hat_product'" >&2
+        # Match EEPROM strings — patterns based on Volumio dacs.json and real devices.
+        # Order matters: more specific patterns first (AMP2/DAC+ADC before generic DAC+).
         case "$hat_product" in
             *DAC*2*HD*)                                  echo "hifiberry-dac2hd"     ; return ;;
             Digi+*|*Digi\ +*|*HiFiBerry*Digi*)          echo "hifiberry-digi"        ; return ;;
@@ -174,16 +176,20 @@ detect_hat() {
             local scan
             scan=$("$i2cdetect_bin" -y "$bus" 2>/dev/null) || continue
             echo "I2C bus $bus scan complete" >&2
+            # PCM5122 at 0x4C/0x4D/0x4E/0x4F → PCM5122-based DAC
             for addr in 4c 4d 4e 4f; do
                 if echo "$scan" | grep -qE "(^[[:space:]]*[0-9a-f]0:[[:space:]]|[[:space:]])${addr}([[:space:]]|$)"; then
                     echo "I2C: PCM5122 at 0x${addr} on bus ${bus} → hifiberry-dac-std" >&2
                     result="hifiberry-dac-std"; break 2
                 fi
             done
+            # WM8960 at 0x1A → Waveshare WM8960
             if echo "$scan" | grep -qE "(^[[:space:]]*10:[[:space:]]|[[:space:]])1a([[:space:]]|$)"; then
                 echo "I2C: WM8960 at 0x1a on bus ${bus}" >&2
                 result="waveshare-wm8960"; break
             fi
+            # WM8804 at 0x3B → generic digital HAT profile.
+            # I2C alone cannot distinguish Digi-class boards that share WM8804.
             if echo "$scan" | grep -qE "(^[[:space:]]*30:[[:space:]]|[[:space:]])3b([[:space:]]|$)"; then
                 echo "I2C: WM8804 at 0x3b on bus ${bus}" >&2
                 result="hifiberry-digi"; break
@@ -216,6 +222,7 @@ detect_hat() {
         return
     fi
 
+    # Nothing found — default to internal (safer than USB which may not exist)
     echo "WARNING: No audio device detected, defaulting to internal audio" >&2
     HAT_DETECTION_SOURCE="internal"
     echo "internal-audio"
