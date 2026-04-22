@@ -384,7 +384,7 @@ WEOF
     cat > /etc/systemd/system/snapmulti-boot-tune.service <<'SEOF'
 [Unit]
 Description=snapMULTI boot-time system tuning
-After=docker.service
+Before=docker.service
 
 [Service]
 Type=oneshot

@@ -52,6 +52,33 @@ echo 10 > /proc/sys/vm/swappiness 2>/dev/null || true
 # Pi's bcm2835_wdt triggers reboot if systemd stops petting it
 modprobe bcm2835_wdt 2>/dev/null || true
 
+# ── Docker storage driver reconciliation ──────────────────────────
+# Ensure daemon.json matches actual root filesystem state.
+# Runs BEFORE docker.service so Docker starts with the correct driver.
+if [[ -f /etc/docker/daemon.json ]] && command -v python3 &>/dev/null; then
+    if mount 2>/dev/null | grep -q ' on / type overlay'; then
+        # Overlayroot active: Docker needs fuse-overlayfs
+        if ! grep -q '"fuse-overlayfs"' /etc/docker/daemon.json 2>/dev/null; then
+            python3 -c "
+import json
+with open('/etc/docker/daemon.json') as f: cfg = json.load(f)
+cfg['storage-driver'] = 'fuse-overlayfs'
+with open('/etc/docker/daemon.json', 'w') as f: json.dump(cfg, f, indent=2); f.write('\n')
+" 2>/dev/null && logger -t boot-tune "Docker driver set to fuse-overlayfs (overlayroot active)"
+        fi
+    else
+        # Writable root: remove forced storage-driver (Docker defaults to overlay2)
+        if grep -q '"storage-driver"' /etc/docker/daemon.json 2>/dev/null; then
+            python3 -c "
+import json
+with open('/etc/docker/daemon.json') as f: cfg = json.load(f)
+cfg.pop('storage-driver', None)
+with open('/etc/docker/daemon.json', 'w') as f: json.dump(cfg, f, indent=2); f.write('\n')
+" 2>/dev/null && logger -t boot-tune "Docker driver reset to default (writable root)"
+        fi
+    fi
+fi
+
 # ── Artwork cache cleanup: remove files older than 30 days ────────
 find /opt/snapmulti/artwork -type f -mtime +30 -delete 2>/dev/null || true
 

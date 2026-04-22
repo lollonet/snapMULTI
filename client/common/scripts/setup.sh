@@ -1152,17 +1152,12 @@ if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
         return 0
     fi
 
-    # Write fuse-overlayfs to daemon.json for NEXT boot (when overlayroot is active).
-    # Do NOT switch the running driver or wipe /var/lib/docker — that would destroy
-    # images already pulled by deploy.sh (server) or earlier in this script.
-    # After reboot with overlayroot, Docker data lives on tmpfs overlay anyway,
-    # so images are re-pulled from the baked SD card layer.
-    log_progress "Configuring Docker for fuse-overlayfs (activates after reboot)..."
-    tune_docker_daemon --live-restore --fuse-overlayfs
-    if ! grep -q 'fuse-overlayfs' /etc/docker/daemon.json 2>/dev/null; then
-        log_progress "WARNING: Failed to write fuse-overlayfs to daemon.json"
-        log_progress "         Read-only mode may not work correctly after reboot"
-    fi
+    # Do NOT write fuse-overlayfs to daemon.json here.
+    # boot-tune.sh reconciles the Docker driver at boot time based on actual
+    # root filesystem state (overlayroot active → fuse-overlayfs, writable → overlay2).
+    # Writing it at install time caused Docker to use the wrong driver when
+    # overlayroot failed to activate on reboot.
+    log_progress "Docker driver will be set at boot time based on filesystem state"
 
     # ro-mode helper + SSH key persistence (raspi-config call below has rollback)
     local _ro_mode_script=""
