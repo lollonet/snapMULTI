@@ -1250,7 +1250,7 @@ fi
 # Docker Compose profiles are handled via COMPOSE_PROFILES in .env
 # In both mode (server + client on same Pi), order client after server
 _after_units="docker.service avahi-daemon.service network-online.target"
-if systemctl list-unit-files snapmulti-server.service &>/dev/null 2>&1 \
+if systemctl list-unit-files snapmulti-server.service &>/dev/null \
     || [[ -f /etc/systemd/system/snapmulti-server.service ]]; then
     _after_units="$_after_units snapmulti-server.service"
 fi
