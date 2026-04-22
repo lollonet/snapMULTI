@@ -382,6 +382,7 @@ copy_client_files() {
     done
     # boot-tune.sh is a server script but client also needs it for boot-time tuning
     [[ -f "$SCRIPT_DIR/boot-tune.sh" ]] && cp "$SCRIPT_DIR/boot-tune.sh" "$dest/scripts/"
+    [[ -f "$CLIENT_DIR/common/scripts/audio-hat-detect.sh" ]] && cp "$CLIENT_DIR/common/scripts/audio-hat-detect.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/discover-server.sh" ]] && cp "$CLIENT_DIR/common/scripts/discover-server.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/display.sh" ]] && cp "$CLIENT_DIR/common/scripts/display.sh" "$dest/scripts/"
@@ -679,6 +680,7 @@ esac
 case "$INSTALL_TYPE" in
     client|both)
         for f in client/docker-compose.yml client/scripts/setup.sh \
+                 client/scripts/audio-hat-detect.sh \
                  client/scripts/boot-tune.sh client/scripts/ro-mode.sh \
                  client/scripts/discover-server.sh \
                  client/scripts/display.sh client/scripts/display-detect.sh \
