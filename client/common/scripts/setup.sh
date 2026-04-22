@@ -607,6 +607,15 @@ elif [ -f /boot/cmdline.txt ]; then
     CMDLINE="/boot/cmdline.txt"
 fi
 
+# On overlayroot, /boot/firmware is mounted read-only. Remount rw so
+# config.txt and cmdline.txt changes persist to the real SD card.
+local _boot_dir
+_boot_dir=$(dirname "$BOOT_CONFIG" 2>/dev/null || dirname "$CMDLINE" 2>/dev/null || echo "")
+local _remounted_boot=false
+if [[ -n "$_boot_dir" ]] && mount | grep -q "$_boot_dir.*\bro\b"; then
+    mount -o remount,rw "$_boot_dir" 2>/dev/null && _remounted_boot=true
+fi
+
 if [ -n "$BOOT_CONFIG" ]; then
     # Backup original config (only once per day)
     BACKUP_FILE="${BOOT_CONFIG}.backup.$(date +%Y%m%d)"
@@ -727,6 +736,11 @@ else
     echo "  Audio HAT overlay and display settings cannot be applied."
     echo "  Expected /boot/firmware/config.txt or /boot/config.txt"
     exit 1
+fi
+
+# Restore boot partition to read-only if we remounted it
+if [[ "$_remounted_boot" == "true" ]]; then
+    mount -o remount,ro "$_boot_dir" 2>/dev/null || true
 fi
 echo ""
 }
