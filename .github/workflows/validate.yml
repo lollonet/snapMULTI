@@ -144,6 +144,24 @@ jobs:
           pip install numpy==2.4.3 Pillow==11.1.0 requests==2.32.3 websockets==14.1
           pytest client/tests/ -v --tb=short
 
+      - name: Server bash tests
+        run: |
+          echo "Running server shell tests..."
+          FAILED=0
+          for f in tests/test_*.sh; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              tests/test_compose_health.sh|tests/test_device_smoke.sh) continue ;;
+            esac
+            echo "  Running $f"
+            if ! bash "$f"; then FAILED=1; fi
+          done
+          if [ "$FAILED" -eq 1 ]; then
+            echo "ERROR: server bash tests failed"
+            exit 1
+          fi
+          echo "All server bash tests passed"
+
       - name: Client bash tests
         run: |
           bash -n client/common/scripts/setup.sh
