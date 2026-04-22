@@ -37,6 +37,8 @@ _func_body=$(python3 -c "
 with open('$TUNE_SH') as f:
     content = f.read()
 start = content.find('tune_docker_daemon()')
+if start == -1:
+    raise SystemExit('ERROR: tune_docker_daemon() not found in $TUNE_SH')
 brace = content.index('{', start)
 depth = 0
 i = brace
