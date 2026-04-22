@@ -263,6 +263,32 @@ Per deployment multi-istanza, la rete macvlan assegna a ogni container un indiri
 
 La modalità host è consigliata per deployment con un singolo server.
 
+## Unit Systemd
+
+Dopo l'installazione, systemd gestisce il ciclo di vita dei container (ADR-005). La policy Docker `restart: unless-stopped` gestisce i crash dei singoli container; systemd gestisce l'avvio al boot.
+
+| Unit | Tipo installazione | Scopo |
+|------|-------------------|-------|
+| `snapmulti-server.service` | server, both | Avvia lo stack Docker Compose server al boot |
+| `snapclient.service` | client, both | Avvia lo stack Docker Compose client al boot |
+| `snapclient-discover.timer` | client, both | Riscopre il server via mDNS ogni 5 min |
+| `snapclient-display.service` | client (display) | Rileva HDMI e riconcilia i container display |
+| `snapmulti-boot-tune.service` | tutti | CPU governor, USB autosuspend, WiFi power save |
+
+```bash
+# Controlla stato
+systemctl status snapmulti-server.service
+systemctl status snapclient.service
+
+# Riavvia stack server
+sudo systemctl restart snapmulti-server.service
+
+# Visualizza log
+journalctl -u snapmulti-server.service --since "10 min ago"
+```
+
+In modalita **both**, `snapclient.service` si avvia dopo `snapmulti-server.service` per assicurarsi che il server sia pronto prima che il client si connetta.
+
 ## Interfacce di Controllo
 
 snapMULTI ha tre interfacce di controllo, ognuna per uno scopo diverso:

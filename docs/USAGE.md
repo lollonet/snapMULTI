@@ -263,6 +263,32 @@ Metadata: `tidal-meta-bridge.sh` scrapes `speaker_controller_application`'s tmux
 - Music directory: `/music` (mapped to `MUSIC_PATH` on host)
 - Database: `/data/mpd.db`
 
+## Systemd Units
+
+After installation, systemd owns the container lifecycle (ADR-005). Docker's `restart: unless-stopped` handles individual container crashes; systemd handles boot-time bring-up.
+
+| Unit | Install type | Purpose |
+|------|-------------|---------|
+| `snapmulti-server.service` | server, both | Starts server Docker Compose stack on boot |
+| `snapclient.service` | client, both | Starts client Docker Compose stack on boot |
+| `snapclient-discover.timer` | client, both | Re-discovers server via mDNS every 5 min |
+| `snapclient-display.service` | client (display) | Detects HDMI and reconciles display containers |
+| `snapmulti-boot-tune.service` | all | CPU governor, USB autosuspend, WiFi power save |
+
+```bash
+# Check status
+systemctl status snapmulti-server.service
+systemctl status snapclient.service
+
+# Restart server stack
+sudo systemctl restart snapmulti-server.service
+
+# View logs
+journalctl -u snapmulti-server.service --since "10 min ago"
+```
+
+In **both** mode, `snapclient.service` starts after `snapmulti-server.service` to ensure the server is ready before the client connects.
+
 ## Control Interfaces
 
 snapMULTI has three control interfaces, each for a different purpose:
