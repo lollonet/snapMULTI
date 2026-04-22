@@ -333,6 +333,7 @@ copy_server_files() {
     cp "$SCRIPT_DIR/boot-tune.sh" "$dest/" 2>/dev/null || true
     cp "$SCRIPT_DIR/status.sh" "$dest/" 2>/dev/null || true
     cp "$SCRIPT_DIR/device-smoke.sh" "$dest/" 2>/dev/null || true
+    cp "$SCRIPT_DIR/docker-driver-reconcile.sh" "$dest/" 2>/dev/null || true
     # ro-mode helper (client has its own copy, server needs one too)
     [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/"
     cp -r "$PROJECT_DIR/config" "$dest/"

@@ -384,7 +384,7 @@ WEOF
     cat > /etc/systemd/system/snapmulti-boot-tune.service <<'SEOF'
 [Unit]
 Description=snapMULTI boot-time system tuning
-Before=docker.service
+After=docker.service
 
 [Service]
 Type=oneshot
@@ -394,7 +394,28 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 SEOF
+    # Docker driver reconciliation — runs Before=docker.service
+    local driver_script
+    driver_script=$(dirname "$boot_tune_script")/docker-driver-reconcile.sh
+    if [[ -f "$driver_script" ]]; then
+        install -m 755 "$driver_script" /usr/local/bin/snapmulti-docker-driver.sh
+        cat > /etc/systemd/system/snapmulti-docker-driver.service <<'DEOF'
+[Unit]
+Description=snapMULTI Docker storage driver reconciliation
+Before=docker.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/snapmulti-docker-driver.sh
+
+[Install]
+WantedBy=multi-user.target
+DEOF
+    fi
+
     systemctl daemon-reload
     systemctl enable snapmulti-boot-tune.service 2>/dev/null
+    systemctl enable snapmulti-docker-driver.service 2>/dev/null || true
     ok "Boot tuning service installed (CPU, USB, CAKE persist across reboots)"
 }
