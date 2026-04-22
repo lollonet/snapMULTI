@@ -386,6 +386,10 @@ function Copy-ServerFiles {
     if (Test-Path $statusSh) {
         Copy-Item $statusSh -Destination $serverDest
     }
+    $smokeSh = Join-Path $ScriptDir 'device-smoke.sh'
+    if (Test-Path $smokeSh) {
+        Copy-Item $smokeSh -Destination $serverDest
+    }
     Copy-Item (Join-Path $ProjectDir 'config') -Destination $serverDest -Recurse
     Copy-Item (Join-Path $ProjectDir 'docker-compose.yml') -Destination $serverDest
 
@@ -452,10 +456,14 @@ function Copy-ClientFiles {
         }
     }
 
-    # boot-tune.sh is a server script but client also needs it for boot-time tuning
+    # boot-tune.sh and device-smoke.sh are server scripts but client also needs them
     $bootTune = Join-Path $ScriptDir 'boot-tune.sh'
     if (Test-Path $bootTune) {
         Copy-Item $bootTune -Destination $scriptsDest
+    }
+    $smokeSh = Join-Path $ScriptDir 'device-smoke.sh'
+    if (Test-Path $smokeSh) {
+        Copy-Item $smokeSh -Destination $scriptsDest
     }
 
     $roMode = Join-Path $ClientDir 'common\scripts\ro-mode.sh'

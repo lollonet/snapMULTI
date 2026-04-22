@@ -343,6 +343,7 @@ copy_server_files() {
     cp "$SCRIPT_DIR/deploy.sh" "$dest/"
     cp "$SCRIPT_DIR/boot-tune.sh" "$dest/" 2>/dev/null || true
     cp "$SCRIPT_DIR/status.sh" "$dest/" 2>/dev/null || true
+    cp "$SCRIPT_DIR/device-smoke.sh" "$dest/" 2>/dev/null || true
     # ro-mode helper (client has its own copy, server needs one too)
     [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/"
     cp -r "$PROJECT_DIR/config" "$dest/"
@@ -382,6 +383,7 @@ copy_client_files() {
     done
     # boot-tune.sh is a server script but client also needs it for boot-time tuning
     [[ -f "$SCRIPT_DIR/boot-tune.sh" ]] && cp "$SCRIPT_DIR/boot-tune.sh" "$dest/scripts/"
+    [[ -f "$SCRIPT_DIR/device-smoke.sh" ]] && cp "$SCRIPT_DIR/device-smoke.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/audio-hat-detect.sh" ]] && cp "$CLIENT_DIR/common/scripts/audio-hat-detect.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/discover-server.sh" ]] && cp "$CLIENT_DIR/common/scripts/discover-server.sh" "$dest/scripts/"
