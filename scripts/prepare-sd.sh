@@ -373,9 +373,13 @@ copy_client_files() {
         fi
     done
 
-    # Setup scripts
-    mkdir -p "$dest/scripts"
+    # Setup scripts + shared modules
+    mkdir -p "$dest/scripts" "$dest/scripts/common"
     cp "$CLIENT_DIR/common/scripts/setup.sh" "$dest/scripts/"
+    # Shared modules from server scripts/common/ that setup.sh needs
+    for _shared in install-deps.sh install-docker.sh system-tune.sh unified-log.sh logging.sh sanitize.sh; do
+        [[ -f "$SCRIPT_DIR/common/$_shared" ]] && cp "$SCRIPT_DIR/common/$_shared" "$dest/scripts/common/"
+    done
     # boot-tune.sh is a server script but client also needs it for boot-time tuning
     [[ -f "$SCRIPT_DIR/boot-tune.sh" ]] && cp "$SCRIPT_DIR/boot-tune.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/scripts/"
@@ -678,6 +682,8 @@ case "$INSTALL_TYPE" in
                  client/scripts/boot-tune.sh client/scripts/ro-mode.sh \
                  client/scripts/discover-server.sh \
                  client/scripts/display.sh client/scripts/display-detect.sh \
+                 client/scripts/common/install-deps.sh \
+                 client/scripts/common/install-docker.sh \
                  client/snapclient.conf; do
             if [[ -f "$DEST/$f" ]]; then
                 echo "  [OK] snapmulti/$f"

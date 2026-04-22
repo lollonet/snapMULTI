@@ -81,25 +81,34 @@ install_dependencies() {
         fi
     fi
 
-    # Build package list based on install type
+    # INSTALL_ROLE controls role-specific packages (server/client/both)
+    # Falls back to INSTALL_TYPE for backward compatibility with firstboot.sh
+    local role="${INSTALL_ROLE:-${INSTALL_TYPE:-both}}"
+
+    # Build package list — base packages always installed
     local pkgs=(curl ca-certificates python3 netcat-openbsd locales)
 
     if ! command -v git &>/dev/null; then
         pkgs+=(git)
     fi
 
-    if ! command -v avahi-daemon &>/dev/null; then
-        pkgs+=(avahi-daemon)
+    # avahi-daemon for mDNS, avahi-utils for avahi-browse (client discovery)
+    # Always include avahi-utils — avahi-daemon may be preinstalled without it
+    command -v avahi-daemon &>/dev/null || pkgs+=(avahi-daemon)
+    command -v avahi-browse &>/dev/null || pkgs+=(avahi-utils)
+
+    # Server: monitoring tools for operational visibility
+    if [[ "$role" == "server" || "$role" == "both" ]]; then
+        command -v sar   &>/dev/null || pkgs+=(sysstat)
+        command -v iotop &>/dev/null || pkgs+=(iotop-c)
+        command -v dstat &>/dev/null || pkgs+=(dstat)
     fi
 
-    # Client needs I2C tools for HAT detection
-    if [[ "${INSTALL_TYPE:-}" == "client" || "${INSTALL_TYPE:-}" == "both" ]]; then
-        if ! command -v i2cdetect &>/dev/null; then
-            pkgs+=(i2c-tools)
-        fi
-        if ! command -v modprobe &>/dev/null; then
-            pkgs+=(kmod)
-        fi
+    # Client: audio + HAT detection tools
+    if [[ "$role" == "client" || "$role" == "both" ]]; then
+        command -v aplay     &>/dev/null || pkgs+=(alsa-utils)
+        command -v i2cdetect &>/dev/null || pkgs+=(i2c-tools)
+        command -v modprobe  &>/dev/null || pkgs+=(kmod)
     fi
 
     # Music source packages
@@ -147,12 +156,28 @@ install_dependencies() {
         fi
     fi
 
-    # Enable avahi
+    # Enable avahi + harden (pin hostname, restrict to physical interfaces)
     if command -v avahi-daemon &>/dev/null; then
         if ! systemctl enable --now avahi-daemon >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
             log_warn "avahi-daemon failed to start — mDNS autodiscovery may not work"
         fi
+        # Harden if tune_avahi_daemon is available (sourced by caller from system-tune.sh)
+        if declare -F tune_avahi_daemon &>/dev/null; then
+            tune_avahi_daemon "$(hostname)"
+        fi
     fi
+
+    # Enable sysstat data collection (server monitoring)
+    if [[ -f /etc/default/sysstat ]]; then
+        sed -i 's/^ENABLED="false"/ENABLED="true"/' /etc/default/sysstat
+        systemctl enable --now sysstat >> "${UNIFIED_LOG:-/dev/null}" 2>&1 || true
+    fi
+
+    # Set system locale — prevents apt warnings in subprocesses
+    export DEBIAN_FRONTEND=noninteractive
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+    update-locale LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null || true
 
     log_info "System dependencies installed"
 }
