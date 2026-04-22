@@ -70,10 +70,34 @@ _inner_width=94
 
 _detect_tty_size() {
     if [[ -c /dev/tty1 ]]; then
-        _tty_cols=$(stty -F /dev/tty1 size 2>/dev/null | awk '{print $2}') || _tty_cols=100
-        _tty_rows=$(stty -F /dev/tty1 size 2>/dev/null | awk '{print $1}') || _tty_rows=37
+        # Try stty first (works when called from tty1 directly)
+        _tty_cols=$(stty -F /dev/tty1 size 2>/dev/null | awk '{print $2}') || _tty_cols=0
+        _tty_rows=$(stty -F /dev/tty1 size 2>/dev/null | awk '{print $1}') || _tty_rows=0
+
+        # Fallback: compute from framebuffer size and console font metrics.
+        # stty returns empty when called via SSH or cloud-init (no controlling tty).
+        if (( _tty_cols < 40 || _tty_rows < 10 )); then
+            local fb_w fb_h font_w=8 font_h=16
+            fb_w=$(cut -d, -f1 /sys/class/graphics/fb0/virtual_size 2>/dev/null || echo 0)
+            fb_h=$(cut -d, -f2 /sys/class/graphics/fb0/virtual_size 2>/dev/null || echo 0)
+            # Detect active font size from setfont (28x14 or 24x12 if HD)
+            if (( fb_w > 1000 )); then
+                if ls /usr/share/consolefonts/Uni3-TerminusBold28x14* &>/dev/null; then
+                    font_w=14 font_h=28
+                elif ls /usr/share/consolefonts/Lat15-TerminusBold24x12* &>/dev/null; then
+                    font_w=12 font_h=24
+                fi
+            fi
+            if (( fb_w > 0 && fb_h > 0 )); then
+                _tty_cols=$(( fb_w / font_w ))
+                _tty_rows=$(( fb_h / font_h ))
+            fi
+        fi
+
+        # Final safety clamp + 2-col breathing room (avoid edge bleed)
         (( _tty_cols < 40 )) && _tty_cols=100
-        (( _tty_rows < 20 )) && _tty_rows=37
+        (( _tty_rows < 10 )) && _tty_rows=37
+        (( _tty_cols > 42 )) && _tty_cols=$(( _tty_cols - 2 ))
     fi
     # Layout constants (2-char margin each side)
     _box_width=$(( _tty_cols - 4 ))
