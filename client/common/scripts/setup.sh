@@ -23,6 +23,7 @@ trap _setup_failure_dump EXIT
 export DEBIAN_FRONTEND=noninteractive
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
+SECONDS=0
 
 # ============================================
 # Auto mode: --auto [config_file]
@@ -740,11 +741,6 @@ else
     echo "  Expected /boot/firmware/config.txt or /boot/config.txt"
     exit 1
 fi
-# Restore boot partition to read-only now; clear guard so EXIT trap is a no-op
-if [[ -n "${_BOOT_REMOUNT_DIR:-}" ]]; then
-    mount -o remount,ro "$_BOOT_REMOUNT_DIR" 2>/dev/null || true
-    _BOOT_REMOUNT_DIR=""
-fi
 echo ""
 }
 _apply_boot_config
@@ -1207,7 +1203,7 @@ SYSDEOF
         echo ""
     else
         echo "Read-only filesystem configured"
-        echo "  - Docker storage driver: fuse-overlayfs (activates after reboot)"
+        echo "  - Docker storage driver: reconciled at boot from actual root mount state"
         echo "  - SSH host keys: persisted"
         echo "  - Helper script: /usr/local/bin/ro-mode"
         echo "  - Status: Will activate after reboot"
