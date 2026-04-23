@@ -650,6 +650,7 @@ done
 case "$INSTALL_TYPE" in
     server|both)
         for f in server/docker-compose.yml server/deploy.sh server/boot-tune.sh \
+                 server/device-smoke.sh server/docker-driver-reconcile.sh \
                  server/config/snapserver.conf server/config/mpd.conf \
                  server/config/shairport-sync.conf server/config/go-librespot.yml \
                  server/config/tidal-asound.conf server/ro-mode.sh; do
@@ -674,10 +675,15 @@ case "$INSTALL_TYPE" in
         for f in client/docker-compose.yml client/scripts/setup.sh \
                  client/scripts/audio-hat-detect.sh \
                  client/scripts/boot-tune.sh client/scripts/ro-mode.sh \
+                 client/scripts/docker-driver-reconcile.sh \
                  client/scripts/discover-server.sh \
                  client/scripts/display.sh client/scripts/display-detect.sh \
                  client/scripts/common/install-deps.sh \
                  client/scripts/common/install-docker.sh \
+                 client/scripts/common/system-tune.sh \
+                 client/scripts/common/unified-log.sh \
+                 client/scripts/common/logging.sh \
+                 client/scripts/common/sanitize.sh \
                  client/snapclient.conf; do
             if [[ -f "$DEST/$f" ]]; then
                 echo "  [OK] snapmulti/$f"
