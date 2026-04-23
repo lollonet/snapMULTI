@@ -96,6 +96,7 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **Pull temp dir race** ([#230](https://github.com/lollonet/snapMULTI/pull/230)) — setup.sh retry on readonly pull failure
 - **Trivy arm64 scanning** ([#231](https://github.com/lollonet/snapMULTI/pull/231)) — tidal + client ARM images now scanned
 - **Integration test macOS fix** ([#233](https://github.com/lollonet/snapMULTI/pull/233))
+- **Shell injection** ([#219](https://github.com/lollonet/snapMULTI/pull/219)) — service name passed via env var instead of string interpolation
 
 ## [0.4.1] — 2026-04-13
 
@@ -115,6 +116,7 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **Advanced install options** — prepare-sd.sh advanced menu (readonly, skip-upgrade, image tag, verbose)
 - **Shared modules** ([#217](https://github.com/lollonet/snapMULTI/pull/217)) — extracted pull-images.sh and resource-detect.sh
 - **Unified logging** ([#200](https://github.com/lollonet/snapMULTI/pull/200)) — unified-log.sh with timestamps and source IDs
+- **Pi Zero 2 W support** — documented in HARDWARE.md (64-bit required, 2.4 GHz only, headless audio)
 
 ### Changed
 - **Monorepo** ([#212](https://github.com/lollonet/snapMULTI/pull/212)) — merged snapclient-pi into snapMULTI as client/ directory
