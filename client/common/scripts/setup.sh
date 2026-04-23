@@ -1148,11 +1148,15 @@ if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
         return 0
     fi
 
-    # Create daemon.json with live-restore but WITHOUT fuse-overlayfs.
-    # The boot-time reconciliation service (docker-driver-reconcile.sh) sets
-    # the storage driver based on actual root mount state, not install intent.
-    log_progress "Ensuring daemon.json exists (driver set at boot time)..."
-    tune_docker_daemon --live-restore
+    # Ensure daemon.json exists. Preserve fuse-overlayfs if already configured
+    # (firstboot pre-sets it for read-only installs so images land with the
+    # correct driver). docker-driver-reconcile.sh remains as boot-time safety net.
+    log_progress "Ensuring daemon.json exists..."
+    local _tune_args=(--live-restore)
+    if docker info --format '{{.Driver}}' 2>/dev/null | grep -q fuse-overlayfs; then
+        _tune_args+=(--fuse-overlayfs)
+    fi
+    tune_docker_daemon "${_tune_args[@]}"
 
     # ro-mode helper + SSH key persistence (raspi-config call below has rollback)
     local _ro_mode_script=""

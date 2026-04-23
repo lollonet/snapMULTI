@@ -42,13 +42,13 @@ assert_contains "$setup_docker_body" ' on / type overlay' "setup_docker detects 
 setup_docker_code=$(echo "$setup_docker_body" | grep -v '^\s*#')
 assert_not_contains "$setup_docker_code" 'ENABLE_READONLY' "setup_docker code does not use ENABLE_READONLY flag"
 
-# _configure_readonly() creates daemon.json but does NOT force fuse-overlayfs
-# (boot-time reconciliation handles the driver based on actual mount state)
-assert_contains "$readonly_body" 'tune_docker_daemon --live-restore' "readonly config creates daemon.json with live-restore"
-assert_not_contains "$readonly_body" '--fuse-overlayfs' "readonly config does NOT force fuse-overlayfs at install time"
+# _configure_readonly() creates daemon.json; preserves fuse-overlayfs if already
+# active (firstboot pre-configures it), docker-driver-reconcile.sh is safety net
+assert_contains "$readonly_body" 'tune_docker_daemon' "readonly config creates daemon.json"
+assert_contains "$readonly_body" '--live-restore' "readonly config sets live-restore"
+assert_contains "$readonly_body" 'fuse-overlayfs' "readonly config handles fuse-overlayfs detection"
 assert_not_contains "$readonly_body" 'rm -rf /var/lib/docker' "readonly config does not wipe Docker storage"
 assert_contains "$readonly_body" 'fuse-overlayfs --version' "readonly config verifies fuse-overlayfs binary"
-assert_contains "$readonly_body" 'boot time' "readonly config defers driver to boot-time reconciliation"
 assert_contains "$readonly_body" 'FAILED' "readonly config shows failure message when overlayfs fails"
 
 echo ""
