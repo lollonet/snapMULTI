@@ -138,6 +138,7 @@ render_progress() {
     local fixed_rows=$(( total + 8 ))
     local log_rows=$(( _tty_rows - fixed_rows ))
     (( log_rows < 4 )) && log_rows=4
+    (( log_rows > 8 )) && log_rows=8
 
     # Get last N lines of log for output area
     local log_lines=""
