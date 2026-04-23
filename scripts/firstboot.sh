@@ -379,6 +379,48 @@ else
 fi
 milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
 
+# ── Pre-configure fuse-overlayfs when readonly is planned ─────────
+# On first boot root is still writable ext4, so setup-docker.sh keeps
+# Docker's default overlay2 driver. But when ENABLE_READONLY=true,
+# overlayroot will activate after reboot — Docker must use fuse-overlayfs.
+#
+# If we defer the switch to boot-time (docker-driver-reconcile.sh),
+# overlay2 images from the first boot become invisible to Docker under
+# fuse-overlayfs. Docker re-pulls ~1.5 GB into the tmpfs upper layer,
+# filling it immediately and leaving no room for client images.
+#
+# Fix: switch to fuse-overlayfs NOW, before any images are pulled.
+# Images land on the writable SD card with the correct driver and
+# survive the overlayroot transition in the read-only lower layer.
+# docker-driver-reconcile.sh remains as a safety net for edge cases
+# (e.g. overlayroot fails to activate → reconciler reverts to overlay2).
+if [[ "${ENABLE_READONLY}" == "true" ]]; then
+    current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "unknown")
+    if [[ "$current_driver" != "fuse-overlayfs" ]]; then
+        log_info "Pre-configuring fuse-overlayfs for read-only mode..."
+        if ! fuse-overlayfs --version &>/dev/null; then
+            if declare -F _wait_for_apt_lock &>/dev/null; then
+                _wait_for_apt_lock
+            fi
+            apt-get install -y fuse-overlayfs >> "$UNIFIED_LOG" 2>&1 || true
+        fi
+        if fuse-overlayfs --version &>/dev/null; then
+            # Source system-tune for tune_docker_daemon if not already loaded
+            if ! declare -F tune_docker_daemon &>/dev/null; then
+                # shellcheck source=common/system-tune.sh
+                source "$COMMON/system-tune.sh"
+            fi
+            tune_docker_daemon --live-restore --fuse-overlayfs
+            systemctl stop docker
+            rm -rf /var/lib/docker/*
+            systemctl start docker
+            log_info "Docker switched to fuse-overlayfs (images will persist through overlayroot)"
+        else
+            log_warn "fuse-overlayfs not available — images will need re-pull after reboot"
+        fi
+    fi
+fi
+
 # ══════════════════════════════════════════════════════════════════
 # SERVER INSTALL
 # ══════════════════════════════════════════════════════════════════

@@ -66,9 +66,20 @@ if mount | grep -q ' on / type overlay'; then
         # Floor at 256MB, cap at 2048MB
         [ "$target_mb" -lt 256 ] && target_mb=256
         [ "$target_mb" -gt 2048 ] && target_mb=2048
-        # Find the tmpfs backing the overlay upper dir (not / which is overlayfs)
-        tmpfs_mp=$(awk '$3 == "tmpfs" {print $2}' /proc/mounts | grep -E '^/overlay' | head -1)
-        [ -z "$tmpfs_mp" ] && tmpfs_mp="/overlay"  # Raspberry Pi OS default
+        # Find the tmpfs backing the overlay upper dir.
+        # Raspberry Pi OS mounts it at /media/root-rw (not /overlay).
+        # Extract upperdir from the overlay mount, then walk up to the tmpfs.
+        tmpfs_mp=""
+        if command -v findmnt &>/dev/null; then
+            # upperdir=/media/root-rw/overlay → parent tmpfs at /media/root-rw
+            _upper=$(findmnt -n -o OPTIONS / 2>/dev/null | sed -n 's/.*upperdir=\([^,]*\).*/\1/p') || true
+            if [ -n "${_upper:-}" ]; then
+                # The tmpfs is the parent of the upperdir (e.g. /media/root-rw)
+                tmpfs_mp=$(findmnt -n -o TARGET -T "$(dirname "$_upper")" 2>/dev/null) || true
+            fi
+        fi
+        [ -z "$tmpfs_mp" ] && tmpfs_mp=$(awk '$3 == "tmpfs" && $2 ~ /root-rw|overlay/ {print $2; exit}' /proc/mounts)
+        [ -z "$tmpfs_mp" ] && tmpfs_mp="/media/root-rw"  # last resort default
         # Remount with explicit size (idempotent — safe to re-run)
         if mount -o "remount,size=${target_mb}M" "$tmpfs_mp" 2>/dev/null; then
             logger -t boot-tune "Overlayroot tmpfs sized to ${target_mb}MB at $tmpfs_mp (RAM: ${total_mb}MB)"

@@ -452,10 +452,14 @@ install_docker() {
         info "Added $real_user to docker group (re-login to take effect)"
     fi
 
-    # Generic server deploy keeps Docker's default storage driver.
-    # fuse-overlayfs is only required for overlayroot/read-only installs,
-    # which are handled in the dedicated firstboot/client flows.
-    tune_docker_daemon --live-restore
+    # Preserve fuse-overlayfs if already configured (firstboot pre-sets it
+    # for read-only installs so images land with the correct driver).
+    # Otherwise keep Docker's default overlay2.
+    local _tune_args=(--live-restore)
+    if docker info --format '{{.Driver}}' 2>/dev/null | grep -q fuse-overlayfs; then
+        _tune_args+=(--fuse-overlayfs)
+    fi
+    tune_docker_daemon "${_tune_args[@]}"
 
     # Enable and start Docker
     systemctl enable docker >/dev/null 2>&1 || true

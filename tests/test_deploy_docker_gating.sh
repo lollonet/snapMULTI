@@ -33,8 +33,10 @@ install_docker_body="$(sed -n '/^install_docker()/,/^}/p' "$DEPLOY_SH")"
 
 echo "Testing deploy.sh Docker driver gating..."
 
-assert_contains "$install_docker_body" "tune_docker_daemon --live-restore" "deploy configures live-restore"
-assert_not_contains "$install_docker_body" "--fuse-overlayfs" "deploy does not force fuse-overlayfs"
+assert_contains "$install_docker_body" "tune_docker_daemon" "deploy configures Docker daemon"
+assert_contains "$install_docker_body" "--live-restore" "deploy sets live-restore"
+# deploy preserves fuse-overlayfs if already active (set by firstboot), but does not force it unconditionally
+assert_contains "$install_docker_body" "fuse-overlayfs" "deploy preserves fuse-overlayfs when already active"
 assert_not_contains "$install_docker_body" "apt-get install -y fuse-overlayfs" "deploy does not install fuse-overlayfs eagerly"
 
 echo ""
