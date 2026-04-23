@@ -291,6 +291,10 @@ start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(
 # shellcheck source=common/wait-network.sh
 source "$COMMON/wait-network.sh"
 wait_for_network
+# Reset SECONDS after NTP sync — Bash SECONDS uses wall clock (not monotonic),
+# so an NTP time jump (Pi boots at epoch 0, sync to 2026) corrupts the counter.
+# Installation time is measured from here, excluding network wait.
+SECONDS=0
 milestone "$CURRENT_STEP" "Network ready" 2 2>/dev/null || true
 
 # ══════════════════════════════════════════════════════════════════
