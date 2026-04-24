@@ -73,14 +73,17 @@ setup_music_source() {
             local mount_point="/media/nfs-music"
             mkdir -p "$mount_point"
             log_info "Mounting NFS: ${NFS_SERVER:-}:${NFS_EXPORT:-}"
-            if mount -t nfs "${NFS_SERVER}:${NFS_EXPORT}" "$mount_point" -o ro,soft,timeo=50,rsize=32768,_netdev; then
-                if ! grep -qF "${NFS_SERVER}:${NFS_EXPORT}" /etc/fstab; then
-                    echo "${NFS_SERVER}:${NFS_EXPORT} $mount_point nfs ro,soft,timeo=50,rsize=32768,_netdev,nofail 0 0" >> /etc/fstab
-                fi
+            # Write fstab entry first — even if this mount fails (NAS not ready),
+            # systemd will retry on subsequent boots with nofail.
+            if ! grep -qF "${NFS_SERVER}:${NFS_EXPORT}" /etc/fstab; then
+                echo "${NFS_SERVER}:${NFS_EXPORT} $mount_point nfs ro,soft,timeo=50,rsize=32768,_netdev,nofail 0 0" >> /etc/fstab
+            fi
+            # Timeout prevents firstboot from hanging if NAS/DNS isn't ready yet.
+            if timeout 30 mount -t nfs "${NFS_SERVER}:${NFS_EXPORT}" "$mount_point" -o ro,soft,timeo=50,rsize=32768,_netdev; then
                 export MUSIC_PATH="$mount_point"
                 log_info "NFS mounted: $mount_point"
             else
-                log_warn "NFS mount failed — falling back to auto-detect"
+                log_warn "NFS mount timed out or failed — will retry on next boot (fstab configured)"
             fi
             ;;
         smb)
@@ -98,10 +101,11 @@ setup_music_source() {
                 mount_opts="${mount_opts},guest"
             fi
 
+            # Write fstab entry first — even if this mount fails, systemd retries with nofail.
+            if ! grep -qF "//${SMB_SERVER}/${SMB_SHARE}" /etc/fstab; then
+                echo "//${SMB_SERVER}/${SMB_SHARE} $mount_point cifs ${mount_opts},nofail 0 0" >> /etc/fstab
+            fi
             if timeout 60 mount -t cifs "//${SMB_SERVER}/${SMB_SHARE}" "$mount_point" -o "$mount_opts"; then
-                if ! grep -qF "//${SMB_SERVER}/${SMB_SHARE}" /etc/fstab; then
-                    echo "//${SMB_SERVER}/${SMB_SHARE} $mount_point cifs ${mount_opts},nofail 0 0" >> /etc/fstab
-                fi
                 export MUSIC_PATH="$mount_point"
                 log_info "SMB mounted: $mount_point"
             else
