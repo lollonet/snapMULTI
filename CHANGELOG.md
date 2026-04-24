@@ -15,9 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docker driver reconciliation** ([#268](https://github.com/lollonet/snapMULTI/pull/268)) — boot-time daemon.json creation handles missing file; includes log rotation defaults
 - **Boot partition kept writable during setup** ([#269](https://github.com/lollonet/snapMULTI/pull/269)) — remount-ro deferred to exit trap
 - **Verify lists aligned with deployed files** ([#270](https://github.com/lollonet/snapMULTI/pull/270)) — prepare-sd.sh and firstboot.sh verify/copy lists include all deployed files
-- **Display-detect no longer manages container lifecycle** — systemd owns it
-- **Docker driver reconciliation split into separate systemd service** — Before=docker.service
-- **Pull progress echoed to stdout for install log capture**
+- **Display-detect no longer manages container lifecycle** (`6cbba85`) — systemd owns it
+- **Docker driver reconciliation split into separate systemd service** (`620c8fc`) — Before=docker.service
+- **Pull progress echoed to stdout for install log capture** (`745b04c`)
 
 ## [0.6.2] — 2026-04-23
 
