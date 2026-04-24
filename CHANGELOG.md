@@ -54,7 +54,7 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 ### Fixed
 - **Debian trixie overlayroot boot failure** ([#266](https://github.com/lollonet/snapMULTI/pull/266)) — systemd-remount-fs workaround for fsconfig() overlay reconfigure rejection
 - **Overlayroot persistence** — reliable activation via cmdline.txt + overlayroot.local.conf
-- **TUI size on framebuffer** — compute from framebuffer dimensions when stty fails
+- **TUI size on framebuffer** (`cc0106e`) — compute from framebuffer dimensions when stty fails
 
 ## [0.5.2] — 2026-04-21
 
