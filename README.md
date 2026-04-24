@@ -12,8 +12,11 @@ License: `GPL-3.0-only`
 
 Play music in sync across every room. Stream from Spotify, AirPlay, your music library, or any app — all speakers play together.
 
-![snapMULTI framebuffer display](docs/images/display-screenshot.png)
-*HDMI display: cover art, spectrum analyzer, network info — rendered directly to framebuffer*
+<p align="center">
+  <img src="docs/images/display-playing.png" alt="snapMULTI playing Nirvana — cover art, spectrum analyzer, track info" width="720">
+  <br>
+  <em>HDMI display: cover art, spectrum analyzer, track metadata — rendered directly to framebuffer, no desktop needed</em>
+</p>
 
 ## Sources
 

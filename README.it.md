@@ -12,6 +12,12 @@ Licenza: `GPL-3.0-only`
 
 Riproduci musica in sincronia in ogni stanza. Streaming da Spotify, AirPlay, la tua libreria musicale o qualsiasi app — tutti gli altoparlanti suonano insieme.
 
+<p align="center">
+  <img src="docs/images/display-playing.png" alt="snapMULTI in riproduzione — copertina, analizzatore di spettro, info brano" width="720">
+  <br>
+  <em>Display HDMI: copertina, analizzatore di spettro, metadati brano — rendering diretto su framebuffer, nessun desktop</em>
+</p>
+
 ## Sorgenti
 
 | Sorgente | Come |
