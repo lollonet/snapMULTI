@@ -124,4 +124,4 @@ docker compose logs -f
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+By contributing, you agree that your contributions will be licensed under `GPL-3.0-only` (see [LICENSE](LICENSE)).

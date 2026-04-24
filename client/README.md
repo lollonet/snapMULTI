@@ -5,7 +5,9 @@
 [![CI](https://github.com/lollonet/snapMULTI/actions/workflows/validate.yml/badge.svg)](https://github.com/lollonet/snapMULTI/actions/workflows/validate.yml)
 [![downloads](https://img.shields.io/docker/pulls/lollonet/snapclient-pi?color=green)](https://hub.docker.com/r/lollonet/snapclient-pi)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-yellowgreen)](https://paypal.me/lolettic)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
+
+License: `GPL-3.0-only`
 
 > **Requires [snapMULTI](https://github.com/lollonet/snapMULTI) server.** This is the client component of the snapMULTI multiroom audio system. Install the server first — the unified installer handles both server and client setup.
 
@@ -341,7 +343,7 @@ Part of the [snapMULTI ecosystem](https://github.com/lollonet/snapMULTI#snapmult
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under `GPL-3.0-only` - see the [LICENSE](LICENSE) file for details.
 
 ## Notes
 
