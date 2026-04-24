@@ -7,16 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] — 2026-04-24
+
 ### Fixed
-- **Docker images lost after reboot on readonly installs** ([#271](https://github.com/lollonet/snapMULTI/pull/271)) — first boot now pre-configures fuse-overlayfs before image pulls when ENABLE_READONLY=true
-- **boot-tune.sh tmpfs detection** ([#271](https://github.com/lollonet/snapMULTI/pull/271)) — grep '^/overlay' never matched /media/root-rw, silently killing all boot tuning
-- **Docker driver reverted by deploy/setup** ([#271](https://github.com/lollonet/snapMULTI/pull/271)) — tune_docker_daemon --live-restore no longer pops fuse-overlayfs from daemon.json
-- **Install time corrupted by NTP sync** ([#272](https://github.com/lollonet/snapMULTI/pull/272)) — reset SECONDS after NTP jump (Pi without RTC boots at epoch 0)
-- **Docker driver reconciliation** ([#268](https://github.com/lollonet/snapMULTI/pull/268)) — boot-time daemon.json creation handles missing file; includes log rotation defaults
+- **Docker images lost after reboot on readonly installs** ([#271](https://github.com/lollonet/snapMULTI/pull/271)) — first boot now pre-configures fuse-overlayfs before image pulls when `ENABLE_READONLY=true`, so images survive the overlayroot transition in the read-only lower layer. Previously Docker re-pulled ~1.5 GB into tmpfs on every reboot
+- **boot-tune.sh tmpfs detection** ([#271](https://github.com/lollonet/snapMULTI/pull/271)) — grep `'^/overlay'` never matched Raspberry Pi OS mount at `/media/root-rw`, silently killing all boot tuning (CPU governor, WiFi auto-disable, CAKE QoS, tmpfs resize)
+- **Docker driver reverted by deploy/setup** ([#271](https://github.com/lollonet/snapMULTI/pull/271)) — `tune_docker_daemon --live-restore` no longer pops fuse-overlayfs from `daemon.json`
+- **Install time corrupted by NTP sync** ([#272](https://github.com/lollonet/snapMULTI/pull/272)) — reset `SECONDS` after NTP jump (Pi without RTC boots at epoch 0)
+- **Docker driver reconciliation** ([#268](https://github.com/lollonet/snapMULTI/pull/268)) — boot-time `daemon.json` creation handles missing file; includes log rotation defaults
 - **Boot partition kept writable during setup** ([#269](https://github.com/lollonet/snapMULTI/pull/269)) — remount-ro deferred to exit trap
-- **Verify lists aligned with deployed files** ([#270](https://github.com/lollonet/snapMULTI/pull/270)) — prepare-sd.sh and firstboot.sh verify/copy lists include all deployed files
+- **Verify lists aligned with deployed files** ([#270](https://github.com/lollonet/snapMULTI/pull/270)) — `prepare-sd.sh` and `firstboot.sh` verify/copy lists include all deployed files
+- **TUI log area too tall** ([#274](https://github.com/lollonet/snapMULTI/pull/274)) — capped log area to 8 lines; header, progress bar and step checklist now always visible on 800x600 framebuffer
 - **Display-detect no longer manages container lifecycle** (`6cbba85`) — systemd owns it
-- **Docker driver reconciliation split into separate systemd service** (`620c8fc`) — Before=docker.service
+- **Docker driver reconciliation split into separate systemd service** (`620c8fc`) — `Before=docker.service`
 - **Pull progress echoed to stdout for install log capture** (`745b04c`)
 
 ## [0.6.2] — 2026-04-23
