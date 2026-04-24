@@ -7,35 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.6.0] — 2026-04-22
+### Fixed
+- **Docker images lost after reboot on readonly installs** ([#271](https://github.com/lollonet/snapMULTI/pull/271)) — first boot now pre-configures fuse-overlayfs before image pulls when ENABLE_READONLY=true
+- **boot-tune.sh tmpfs detection** ([#271](https://github.com/lollonet/snapMULTI/pull/271)) — grep '^/overlay' never matched /media/root-rw, silently killing all boot tuning
+- **Docker driver reverted by deploy/setup** ([#271](https://github.com/lollonet/snapMULTI/pull/271)) — tune_docker_daemon --live-restore no longer pops fuse-overlayfs from daemon.json
+- **Install time corrupted by NTP sync** ([#272](https://github.com/lollonet/snapMULTI/pull/272)) — reset SECONDS after NTP jump (Pi without RTC boots at epoch 0)
+- **Docker driver reconciliation** ([#268](https://github.com/lollonet/snapMULTI/pull/268)) — boot-time daemon.json creation handles missing file; includes log rotation defaults
+- **Boot partition kept writable during setup** ([#269](https://github.com/lollonet/snapMULTI/pull/269)) — remount-ro deferred to exit trap
+- **Verify lists aligned with deployed files** ([#270](https://github.com/lollonet/snapMULTI/pull/270)) — prepare-sd.sh and firstboot.sh verify/copy lists include all deployed files
+- **Display-detect no longer manages container lifecycle** (`6cbba85`) — systemd owns it
+- **Docker driver reconciliation split into separate systemd service** (`620c8fc`) — Before=docker.service
+- **Pull progress echoed to stdout for install log capture** (`745b04c`)
 
-### Added
-- **Real-device acceptance gate** — `device-smoke.sh` (`--server`/`--client`/`--both`) validates root mount, Docker driver, systemd units, compose health, and recent error logs. Every tagged release requires `--both` green on real Pi hardware
-- **Architecture decision record** — ADR-005 documents three product decisions: reflash-only updates, systemd lifecycle ownership, robustness-first
-- **MPD database backup** — daily backup to boot partition; restored automatically after reflash (no hours-long library rescan)
-- **QUICKSTART.md** — one-page getting started guide
-
-### Changed
-- **Post-install lifecycle unified under systemd** — `snapmulti-server.service` and `snapclient.service` with Docker readiness checks and both-mode ordering. firstboot delegates to `systemctl start` instead of imperative `docker compose up`
-- **Shared host bootstrap** — single `install-deps.sh` with role-based packages replaces inline installs in deploy.sh and setup.sh
-- **Shared compose verification** — single `verify-compose.sh` replaces three duplicated health-check implementations
-- **Docker storage driver follows filesystem state** — overlay2 on writable root, fuse-overlayfs only when overlayroot is actually active (was incorrectly gated on config flag)
-- **Install progress display** — full terminal width, dynamic log area, WARN/ERROR visible on HDMI console
-- **Serial image pull** — sequential pulls replace paired background+foreground (fixes SD card IO contention and counter overflow)
-- **Locale setup** — lightweight `locale-gen` for 7 locales replaces 236MB `locales-all` package
+## [0.6.2] — 2026-04-23
 
 ### Removed
-- **In-place update path** — reflash is now the only supported upgrade method
+- **Watchtower removed completely** — from compose, .env.example, and documentation; reflash is the only supported update path
+
+## [0.6.1] — 2026-04-22
+
+### Added
+- **Framebuffer display screenshot in README**
 
 ### Fixed
-- **Debian trixie overlayroot boot failure** — systemd-remount-fs workaround for `fsconfig()` overlay reconfigure rejection ([systemd#39558](https://github.com/systemd/systemd/issues/39558))
+- **Boot partition remount safety** — chain of EXIT trap fixes for set -e compatibility: exit code preserved across cleanup, boot partition always restored to read-only
+
+## [0.6.0] — 2026-04-22
+
+Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmentation across server and client install paths.
+
+### Added
+- **Real-device acceptance gate** ([#257](https://github.com/lollonet/snapMULTI/pull/257)) — `device-smoke.sh` validates root mount, Docker driver, systemd units, compose health, and recent error logs. Every tagged release requires `--both` green on real Pi hardware
+- **Architecture decision record** ([#257](https://github.com/lollonet/snapMULTI/pull/257)) — ADR-005 documents three product decisions: reflash-only updates, systemd lifecycle ownership, robustness-first
+- **Behavioral daemon.json test** ([#263](https://github.com/lollonet/snapMULTI/pull/263)) — shell tests wired into CI validate tune_docker_daemon JSON mutation
+
+### Changed
+- **Post-install lifecycle unified under systemd** ([#261](https://github.com/lollonet/snapMULTI/pull/261)) — snapmulti-server.service and snapclient.service with Docker readiness checks and both-mode ordering
+- **Shared host bootstrap** ([#260](https://github.com/lollonet/snapMULTI/pull/260)) — single install-deps.sh with role-based packages replaces inline installs
+- **Shared compose verification** ([#258](https://github.com/lollonet/snapMULTI/pull/258)) — single verify-compose.sh replaces three duplicated health-check implementations
+- **Deduplicated readonly helpers** ([#262](https://github.com/lollonet/snapMULTI/pull/262)) — SSH key persistence + ro-mode shared between server and client
+- **Audio HAT detection extracted** ([#264](https://github.com/lollonet/snapMULTI/pull/264)) — reusable module for HAT auto-detection
+
+### Removed
+- **In-place update path** ([#259](https://github.com/lollonet/snapMULTI/pull/259)) — update.sh decommissioned; reflash is the only supported upgrade method
+
+### Fixed
+- **Debian trixie overlayroot boot failure** ([#266](https://github.com/lollonet/snapMULTI/pull/266)) — systemd-remount-fs workaround for fsconfig() overlay reconfigure rejection
 - **Overlayroot persistence** — reliable activation via cmdline.txt + overlayroot.local.conf
-- **Writable-root systems on fuse-overlayfs** — Docker driver selection now checks actual mount state
-- **Install false-success** — setup exits with failure banner when image pull fails
-- **Container health verification** — uses `docker inspect` instead of unreliable label filter
-- **Install log flood** — suppressed Docker Compose per-layer progress output
-- **Health check logic** — requires running AND healthy (was OR)
-- **Shell injection** — service name passed via env var instead of string interpolation
+- **TUI size on framebuffer** — compute from framebuffer dimensions when stty fails
+
+## [0.5.2] — 2026-04-21
+
+### Changed
+- **Full-width TUI progress display** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — full terminal width, dynamic log area, WARN/ERROR visible on HDMI console
+- **Serial image pull** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — sequential pulls replace paired background+foreground (fixes SD card IO contention)
+- **Locale setup** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — lightweight locale-gen for 7 locales replaces 236MB locales-all package
+
+### Fixed
+- **Docker storage driver follows filesystem state** ([#245](https://github.com/lollonet/snapMULTI/pull/245)) — overlay2 on writable root, fuse-overlayfs only when overlayroot is actually active (was incorrectly gated on ENABLE_READONLY flag, adding 20-40% IO overhead on writable systems)
+
+## [0.5.1] — 2026-04-19
+
+### Fixed
+- **Install log flood** ([#237](https://github.com/lollonet/snapMULTI/pull/237)) — suppressed Docker Compose per-layer progress output
+- **deploy.sh double-logging** ([#238](https://github.com/lollonet/snapMULTI/pull/238)) — info() override by unified-log.sh prevented
+- **Pull robustness** ([#239](https://github.com/lollonet/snapMULTI/pull/239)) — cached image map, rate limit kill, MPD PID guard, metadata callback fix
+- **Bug hunt** ([#240](https://github.com/lollonet/snapMULTI/pull/240)) — WiFi IP check, meta_mpd crash, cover art server IP, MPD exit handler, Bash 3.2 compat
+- **Strict service verification** ([#241](https://github.com/lollonet/snapMULTI/pull/241)) — USB UUID, font check, healthcheck-aware, always-pull policy
+- **Install sequence** ([#242](https://github.com/lollonet/snapMULTI/pull/242)) — client verify, idempotent setup, safe DNS
+- **Client containers** ([#243](https://github.com/lollonet/snapMULTI/pull/243)) — start via systemd, both-mode detect, fuse-overlayfs gate, client verify exit 1
+- **Health check logic** ([#244](https://github.com/lollonet/snapMULTI/pull/244)) — requires running AND healthy (was OR); script hardening
+
+## [0.5.0] — 2026-04-16
+
+### Added
+- **Skip existing images** ([#218](https://github.com/lollonet/snapMULTI/pull/218)) — pull-images.sh skips already-pulled images, detects Docker Hub rate limit (429)
+- **FIFO health monitoring** ([#224](https://github.com/lollonet/snapMULTI/pull/224)) — diagnostics check FIFO state
+- **MPD backup timer** ([#225](https://github.com/lollonet/snapMULTI/pull/225)) — daily backup to boot partition; restored automatically after reflash
+- **QUICKSTART.md** ([#226](https://github.com/lollonet/snapMULTI/pull/226)) — one-page getting started guide (README slimmed from 245 to 72 lines)
+- **Integration test** ([#232](https://github.com/lollonet/snapMULTI/pull/232)) — /version endpoint + compose validation
+- **Issue templates** ([#234](https://github.com/lollonet/snapMULTI/pull/234)) — bug report, feature request, device report
+
+### Changed
+- **Dynamic tmpfs sizing** ([#221](https://github.com/lollonet/snapMULTI/pull/221)) — 25% of RAM with 70%/90% monitoring thresholds
+
+### Fixed
+- **PIPESTATUS ordering** ([#220](https://github.com/lollonet/snapMULTI/pull/220)) — health checks AND not OR, fuse-overlayfs error handling
+- **Pull temp dir race** ([#230](https://github.com/lollonet/snapMULTI/pull/230)) — setup.sh retry on readonly pull failure
+- **Trivy arm64 scanning** ([#231](https://github.com/lollonet/snapMULTI/pull/231)) — tidal + client ARM images now scanned
+- **Integration test macOS fix** ([#233](https://github.com/lollonet/snapMULTI/pull/233))
+- **Shell injection** ([#219](https://github.com/lollonet/snapMULTI/pull/219)) — service name passed via env var instead of string interpolation
 
 ## [0.4.1] — 2026-04-13
 
@@ -45,41 +106,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.0] — 2026-04-13
 
 ### Added
-- **Diagnostic log persistence** — saves dmesg audio errors, docker logs, ALSA state, and system health to boot partition every 30 minutes. Survives overlayroot reboots. Keeps last 3 snapshots at `/boot/firmware/diagnostics/`
-- **Pi Zero 2 W support** — documented in HARDWARE.md (64-bit required, 2.4 GHz only, headless audio)
-- **Install checkpoints** — per-phase markers (deps, docker, deploy, setup) enable resume after power loss or crash without full reinstall
+- **Diagnostic log persistence** — saves dmesg, docker logs, ALSA state to boot partition every 30 min
+- **Install checkpoints** — per-phase markers (deps, docker, deploy, setup) enable resume after crash
 - **Disk space pre-flight** — checks free space before Docker image pull (2 GB server, 1 GB client)
-- **Port availability check** — warns if key ports (1704, 1705, 1780, 6600, 8082, 8083, 8180) are in use before starting services
+- **Port availability check** — warns if key ports are in use before starting services
 - **Docker Compose v2+ enforcement** — validates version at startup with actionable error
-- **Diagnostic dump on failure** — trap collects memory, disk, docker status, and dmesg into install log
+- **Diagnostic dump on failure** — trap collects memory, disk, docker status, dmesg on crash
 - **Install duration logging** — total elapsed time shown at completion
-- **Shared modules** ([#217](https://github.com/lollonet/snapMULTI/pull/217)) — extracted `pull-images.sh` and `resource-detect.sh` from setup.sh/deploy.sh
-- **Skip existing images** ([#218](https://github.com/lollonet/snapMULTI/pull/218)) — pull-images.sh skips already-pulled images, detects Docker Hub rate limit (429)
+- **Advanced install options** — prepare-sd.sh advanced menu (readonly, skip-upgrade, image tag, verbose)
+- **Shared modules** ([#217](https://github.com/lollonet/snapMULTI/pull/217)) — extracted pull-images.sh and resource-detect.sh
+- **Unified logging** ([#200](https://github.com/lollonet/snapMULTI/pull/200)) — unified-log.sh with timestamps and source IDs
+- **Pi Zero 2 W support** — documented in HARDWARE.md (64-bit required, 2.4 GHz only, headless audio)
 
 ### Changed
-- **Monorepo** ([#212](https://github.com/lollonet/snapMULTI/pull/212)) — merged `snapclient-pi` into `snapMULTI` as `client/` directory (was git submodule). One repo, one branch, one CI pipeline
-- **Single-branch CI** ([#211](https://github.com/lollonet/snapMULTI/pull/211)) — develop branch eliminated; `:dev` images (santcasp fork) built on-demand via `workflow_dispatch` checkbox
-- **Snapcast pinned to v0.35.0** — stable release, no longer tracking develop branch
-- **Modular firstboot** — rewritten as orchestrator with 4 extracted modules (unified-log, mount-music, install-docker, readonly-fs)
-- **Silent Docker pulls** — progress output suppressed on success, surfaced on failure (fixes 500+ line log spam from Docker Compose v5)
-- **Unified logging for setup.sh** — output filtered through unified logger instead of raw dump to install log
-- **Unified version format** — always `v0.x.x` (no more stripping `v` prefix)
+- **Monorepo** ([#212](https://github.com/lollonet/snapMULTI/pull/212)) — merged snapclient-pi into snapMULTI as client/ directory
+- **Single-branch CI** ([#211](https://github.com/lollonet/snapMULTI/pull/211)) — develop branch eliminated; :dev images via workflow_dispatch
+- **Snapcast pinned to v0.35.0**
+- **Modular firstboot** ([#200](https://github.com/lollonet/snapMULTI/pull/200), [#201](https://github.com/lollonet/snapMULTI/pull/201)) — rewritten as orchestrator with extracted modules
+- **Silent Docker pulls** — progress output suppressed on success, surfaced on failure
+- **Unified version format** — always v0.x.x
 
 ### Fixed
-- **badaix/snapcast restored on main** ([#210](https://github.com/lollonet/snapMULTI/pull/210)) — santcasp fork accidentally leaked via merge; reverted
-- **IMAGE_TAG not persisted** — `deploy.sh` now writes `IMAGE_TAG` to `.env` (previously lost after reboot)
-- **LOG_SOURCE not reset** — module calls no longer leak source labels into subsequent log lines
-- **--no-readonly flag** — positioned before positional config file argument
-- **display.sh validation** — restored display-detect.sh validation checks
-- **apt lock race** — explicit `_wait_for_apt_lock` with SECONDS-based 5-min deadline
-- **Health verification** — uses `docker compose ps --status healthy/running` instead of grep -c counting; client polls instead of fixed sleep
-- **Hostname sanitization** — enforces RFC 1123 max 253 chars
-- **prepare-sd.sh sed validation** — verifies boot script patches took effect, fails early if not
-- **prepare-sd.sh submodule error** — checks git exit code with clear network error message
-- **install.conf parsing** — `_rc` helper no longer crashes on missing keys with `set -e`
-- **USB/I2S HAT conflict** — `prepare-sd.sh` and `setup.sh` now strip `otg_mode=1` and `dr_mode=host` from config.txt (Imager sets these, they block GPIO I2S/I2C communication with audio HATs)
-- **CAKE QoS on clients** — `boot-tune.sh` skips CAKE/DSCP on client-only systems (server-side only feature; `tc qdisc replace` hangs on Pi Zero when WiFi is DOWN)
-- **Stale boot-tune.sh on overlayroot** — `system-tune.sh` uses `install -m 755` to always overwrite `/usr/local/bin/` copy
+- **badaix/snapcast restored on main** ([#210](https://github.com/lollonet/snapMULTI/pull/210)) — santcasp fork accidentally leaked
+- **IMAGE_TAG not persisted** ([#202](https://github.com/lollonet/snapMULTI/pull/202)) — deploy.sh writes to .env
+- **LOG_SOURCE not reset after module calls**
+- **--no-readonly flag positioned before positional config file argument**
+- **display.sh validation restored**
+- **apt lock race** — explicit _wait_for_apt_lock with SECONDS-based deadline
+- **Hostname sanitization** — RFC 1123 max 253 chars
+- **prepare-sd.sh sed validation and submodule error handling**
+- **install.conf parsing** — _rc helper no longer crashes with set -e
+- **USB/I2S HAT conflict** — strip otg_mode=1 and dr_mode=host from config.txt
+- **CAKE QoS on clients** — boot-tune.sh skips on client-only systems
+- **Stale boot-tune.sh on overlayroot** — install -m 755 always overwrites
 
 ## [0.3.26] — 2026-04-07
 
