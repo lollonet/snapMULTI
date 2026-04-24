@@ -5,7 +5,7 @@
 #   - ASCII progress bar with weighted percentages
 #   - Step checklist ([x] done, [>] current, [ ] pending)
 #   - Animated spinner for long-running operations
-#   - Live log output area (last 8 lines)
+#   - Live log output area (last 14 lines)
 #   - Elapsed time tracking
 #
 # The caller sets STEP_NAMES and STEP_WEIGHTS arrays before sourcing.
@@ -123,9 +123,9 @@ render_progress() {
     (( pct < 0 )) && pct=0
     (( pct > 100 )) && pct=100
 
-    # Build progress bar (fills available width minus labels)
-    # "  [####----] 100% |" = 10 chars overhead
-    local bar_width=$(( _box_width - 14 ))
+    # Build progress bar (fills available width minus elapsed label)
+    # "  00:00  [####----]" = 12 chars overhead
+    local bar_width=$(( _box_width - 12 ))
     (( bar_width < 20 )) && bar_width=20
     local filled=$(( pct * bar_width / 100 ))
     local empty=$(( bar_width - filled ))
@@ -134,11 +134,11 @@ render_progress() {
     printf -v pad '%*s' "$empty" ''; bar+="${pad// /-}"
 
     # Calculate rows used by header + steps
-    # header(3) + elapsed+bar(1) + blank(1) + steps(total) + blank(1) + separator(1) + footer(1) = total+8
-    local fixed_rows=$(( total + 8 ))
+    # header(3) + elapsed+bar(1) + pct(1) + blank(1) + steps(total) + blank(1) + separator(1) + footer(1) = total+9
+    local fixed_rows=$(( total + 9 ))
     local log_rows=$(( _tty_rows - fixed_rows ))
     (( log_rows < 4 )) && log_rows=4
-    (( log_rows > 8 )) && log_rows=8
+    (( log_rows > 14 )) && log_rows=14
 
     # Get last N lines of log for output area
     local log_lines=""
@@ -154,8 +154,9 @@ render_progress() {
         printf '  +%s+\n' "$hline"
         printf '  | \033[1m%-*.*s\033[0m |\n' "$_inner_width" "$_inner_width" "$PROGRESS_TITLE"
         printf '  +%s+\n' "$hline"
-        printf '  \033[36mElapsed: %02d:%02d\033[0m  \033[33m[%s]\033[0m %3d%% %s\n' \
-            $((elapsed/60)) $((elapsed%60)) "$bar" "$pct" "$spinner"
+        printf '  \033[36m%02d:%02d\033[0m  \033[33m[%s]\033[0m\n' \
+            $((elapsed/60)) $((elapsed%60)) "$bar"
+        printf '  %3d%% %s\n' "$pct" "$spinner"
         printf '\n'
         for i in $(seq 1 "$total"); do
             local name="${STEP_NAMES[$((i-1))]}"
@@ -303,7 +304,7 @@ progress_complete() {
 
     [[ -c /dev/tty1 ]] || return
 
-    local bar_width=$(( _box_width - 14 ))
+    local bar_width=$(( _box_width - 12 ))
     (( bar_width < 20 )) && bar_width=20
     local bar
     printf -v bar '%*s' "$bar_width" ''; bar="${bar// /#}"
@@ -322,9 +323,9 @@ progress_complete() {
         printf '  +%s+\n' "$hline"
         printf '  | \033[1m%-*.*s\033[0m |\n' "$_inner_width" "$_inner_width" "$PROGRESS_TITLE"
         printf '  +%s+\n' "$hline"
-        printf '  \033[36mElapsed: %02d:%02d\033[0m  \033[32m[%s]\033[0m 100%%\n' \
+        printf '  \033[36m%02d:%02d\033[0m  \033[32m[%s]\033[0m\n' \
             $((elapsed/60)) $((elapsed%60)) "$bar"
-        printf '\n'
+        printf '  100%%\n'
         for i in $(seq 1 "$total"); do
             printf '  \033[32m[x]\033[0m %s\n' "${STEP_NAMES[$((i-1))]}"
         done
