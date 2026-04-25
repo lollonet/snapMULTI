@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **I2C HAT detection false positive on bare Pi 4/5** ([#276](https://github.com/lollonet/snapMULTI/pull/276)) — scan restricted to bus 1 (GPIO header); HDMI internal buses (20/21 on Pi 4, 11/12 on Pi 5) had devices at PCM5122 addresses causing wrong HiFiBerry detection, ALSA crash, and install failure
+
 ## [0.6.3] — 2026-04-24
 
 ### Fixed
