@@ -719,6 +719,19 @@ if [ -n "$BOOT_CONFIG" ]; then
         echo "$CONFIG_MARKER_END"
     } >> "$BOOT_CONFIG"
 
+    # Load HAT overlay at runtime so ALSA card is available before reboot.
+    # Overlays written to config.txt only take effect after reboot, but
+    # verify_compose_stack needs snapclient healthy NOW. HATs with EEPROM
+    # don't need this (firmware loads the overlay at boot).
+    if [ -n "${HAT_OVERLAY:-}" ] && [[ "${HAT_DETECTION_SOURCE:-}" != "eeprom" ]]; then
+        if sudo dtoverlay "$HAT_OVERLAY" 2>/dev/null; then
+            echo "Loaded overlay $HAT_OVERLAY at runtime (will persist via config.txt)"
+        else
+            echo "WARNING: Could not load overlay $HAT_OVERLAY at runtime"
+            echo "  Audio will work after reboot (overlay is in config.txt)"
+        fi
+    fi
+
     echo "Boot configuration updated"
 
     # Remove fbcon=map:9 if present (legacy: hid boot messages by mapping

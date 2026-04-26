@@ -167,14 +167,23 @@ detect_hat() {
     # overlay written. dtparam applies immediately; modprobe i2c-dev exposes /dev/i2c-*.
     dtparam i2c_arm=on &>/dev/null || true
     [[ -n "$modprobe_bin" ]] && "$modprobe_bin" i2c-dev &>/dev/null || true
+    # Wait briefly for /dev/i2c-1 to appear after module load
+    local _i2c_wait
+    for _i2c_wait in 1 2 3; do
+        [[ -e /dev/i2c-1 ]] && break
+        sleep 1
+    done
     if [[ -n "$i2cdetect_bin" ]]; then
         local bus addr result="" found_bus=false
-        for bus_path in /dev/i2c-*; do
-            [[ -e "$bus_path" ]] || continue
+        # Scan only bus 1 (GPIO header). Pi 4/400 have HDMI internal buses
+        # (20, 21) and Pi 5 has buses (11, 12) with devices at 0x4C-0x4F
+        # that false-positive as PCM5122 audio DACs.
+        # shellcheck disable=SC2043  # intentional single-iteration: only GPIO bus
+        for bus in 1; do
+            [[ -e "/dev/i2c-$bus" ]] || continue
             found_bus=true
-            bus="${bus_path##*/i2c-}"
             local scan
-            scan=$("$i2cdetect_bin" -y "$bus" 2>/dev/null) || continue
+            scan=$(timeout 10 "$i2cdetect_bin" -y "$bus" 2>/dev/null) || continue
             echo "I2C bus $bus scan complete" >&2
             # PCM5122 at 0x4C/0x4D/0x4E/0x4F → PCM5122-based DAC
             for addr in 4c 4d 4e 4f; do
@@ -195,7 +204,7 @@ detect_hat() {
                 result="hifiberry-digi"; break
             fi
         done
-        $found_bus || echo "I2C: no /dev/i2c-* nodes available" >&2
+        $found_bus || echo "I2C: /dev/i2c-1 not available" >&2
         if [[ -n "$result" ]]; then
             HAT_DETECTION_SOURCE="i2c"
             echo "$result"
