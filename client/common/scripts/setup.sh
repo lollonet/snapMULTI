@@ -908,6 +908,9 @@ fi
 if docker info --format '{{.Driver}}' 2>/dev/null | grep -q fuse-overlayfs; then
     SOUNDCARD_VALUE="hw:${HAT_CARD_NAME:-Headphones},0"
     MIXER_VALUE="software"
+    # Tradeoff: bypasses multi_out (DAC + loopback), so the spectrum analyzer
+    # has no loopback feed on display-attached fuse-overlayfs systems.
+    # Acceptable: fuse-overlayfs + display is rare (Pi Zero 2W is headless).
 else
     SOUNDCARD_VALUE="default"
     MIXER_VALUE="${HAT_MIXER:-software}"
