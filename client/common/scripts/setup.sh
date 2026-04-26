@@ -900,19 +900,21 @@ else
     snapserver_ip=${snapserver_ip:-$current_snapserver}
 fi
 
-# Always use "default" ALSA device — asound.conf routes it to either:
-#   - multi_out (DAC + loopback) when display is present
-#   - direct DAC hw: when headless
-SOUNDCARD_VALUE="default"
-MIXER_VALUE="${HAT_MIXER:-software}"
-
 # Docker Compose profile: use HAS_DISPLAY from earlier detection (Step 7).
 if [[ "$HAS_DISPLAY" == true ]]; then
     DOCKER_COMPOSE_PROFILES="framebuffer"
+    # With display: use "default" which routes through multi_out (DAC + loopback)
+    # so the spectrum analyzer gets audio via the loopback side.
+    SOUNDCARD_VALUE="default"
 else
     DOCKER_COMPOSE_PROFILES=""
     echo "No display detected -- headless mode (audio only)"
+    # Headless: use direct hw: device. snapclient 0.35.0 translates "default"
+    # to "sysdefault" which opens card 0 (HDMI on Pi Zero 2W) — error 524
+    # when no HDMI display is connected. Direct hw: bypasses this.
+    SOUNDCARD_VALUE="hw:${HAT_CARD_NAME:-Headphones},0"
 fi
+MIXER_VALUE="${HAT_MIXER:-software}"
 
 # Update .env with all settings (idempotent - works on existing or new file)
 update_env_var() {
