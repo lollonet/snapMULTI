@@ -900,10 +900,21 @@ else
     snapserver_ip=${snapserver_ip:-$current_snapserver}
 fi
 
-# Always use "default" ALSA device — asound.conf routes it to either:
-#   - multi_out (DAC + loopback) when display is present
-#   - direct DAC hw: when headless
-SOUNDCARD_VALUE="default"
+# ALSA device for snapclient.
+# On fuse-overlayfs (read-only installs), ALSA control enumeration fails
+# inside Docker containers — snapclient's "default" → "sysdefault" path
+# cannot open control devices. Use the direct hw: device instead.
+# On overlay2 (writable installs), "default" works via asound.conf routing.
+if docker info --format '{{.Driver}}' 2>/dev/null | grep -q fuse-overlayfs; then
+    SOUNDCARD_VALUE="hw:${HAT_CARD_NAME:-Headphones},0"
+    MIXER_VALUE="software"
+    # Tradeoff: bypasses multi_out (DAC + loopback), so the spectrum analyzer
+    # has no loopback feed on display-attached fuse-overlayfs systems.
+    # Acceptable: fuse-overlayfs + display is rare (Pi Zero 2W is headless).
+else
+    SOUNDCARD_VALUE="default"
+    MIXER_VALUE="${HAT_MIXER:-software}"
+fi
 
 # Docker Compose profile: use HAS_DISPLAY from earlier detection (Step 7).
 if [[ "$HAS_DISPLAY" == true ]]; then
@@ -946,8 +957,9 @@ declare -A env_vars=(
     ["FBDISPLAY_MEM_LIMIT"]="$FBDISPLAY_MEM_LIMIT"
     ["FBDISPLAY_MEM_RESERVE"]="$FBDISPLAY_MEM_RESERVE"
     ["FBDISPLAY_CPU_LIMIT"]="$FBDISPLAY_CPU_LIMIT"
-    # Mixer (auto-detected from HAT config)
-    ["MIXER"]="${HAT_MIXER:-software}"
+    # Mixer: hardware on overlay2 (writable), software on fuse-overlayfs
+    # (container can't enumerate ALSA controls on fuse-overlayfs)
+    ["MIXER"]="$MIXER_VALUE"
     # ALSA/network (auto-detected)
     ["ALSA_BUFFER_TIME"]="$ALSA_BUFFER_TIME"
     ["ALSA_FRAGMENTS"]="$ALSA_FRAGMENTS"
