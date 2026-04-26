@@ -102,7 +102,8 @@ test_smb_cleanup() {
     rm -rf "$tmpdir"
 }
 
-test_smb_cleanup "false" "false" "false" "failed mount cleans creds"
+# Failed mount: creds and fstab kept for systemd retry on next boot
+test_smb_cleanup "false" "true" "true" "failed mount keeps creds+fstab for retry"
 test_smb_cleanup "true" "true" "true" "successful mount keeps creds for fstab"
 
 echo ""
