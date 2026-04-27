@@ -404,13 +404,19 @@ function Copy-ServerFiles {
         Copy-Item $roMode -Destination $serverDest
     }
 
-    # Optional: pre-built MPD database (avoids full NFS rescan on deploy)
+    # Optional: pre-built MPD database. Only ship it when the target's music
+    # source is a network mount — for local USB/disk the db's path pointers
+    # likely don't match the new host's library. See #278.
     $mpdDb = Join-Path $ProjectDir 'mpd\data\mpd.db'
     if (Test-Path $mpdDb) {
-        $mpdDataDest = Join-Path $serverDest 'mpd\data'
-        New-Item -ItemType Directory -Path $mpdDataDest -Force | Out-Null
-        Copy-Item $mpdDb -Destination $mpdDataDest
-        Write-Host '  Including pre-built MPD database (fast incremental scan)'
+        if ($MusicSource -eq 'nfs' -or $MusicSource -eq 'smb') {
+            $mpdDataDest = Join-Path $serverDest 'mpd\data'
+            New-Item -ItemType Directory -Path $mpdDataDest -Force | Out-Null
+            Copy-Item $mpdDb -Destination $mpdDataDest
+            Write-Host "  Including pre-built MPD database (fast incremental scan, $MusicSource source)"
+        } else {
+            Write-Host "  Skipping MPD db copy (source=$MusicSource, fresh scan on first boot)"
+        }
     }
 }
 

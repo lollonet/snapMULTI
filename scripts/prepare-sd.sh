@@ -340,11 +340,20 @@ copy_server_files() {
     cp "$PROJECT_DIR/docker-compose.yml" "$dest/"
     cp "$PROJECT_DIR/.env.example" "$dest/" 2>/dev/null || true
 
-    # Optional: pre-built MPD database (avoids full NFS rescan on deploy)
+    # Optional: pre-built MPD database. Only ship it when the target's music
+    # source is a network mount — for local USB/disk the db's path pointers
+    # likely don't match the new host's library. See #278.
     if [[ -f "$PROJECT_DIR/mpd/data/mpd.db" ]]; then
-        mkdir -p "$dest/mpd/data"
-        cp "$PROJECT_DIR/mpd/data/mpd.db" "$dest/mpd/data/"
-        echo "  Including pre-built MPD database (fast incremental scan)"
+        case "${MUSIC_SOURCE:-}" in
+            nfs|smb)
+                mkdir -p "$dest/mpd/data"
+                cp "$PROJECT_DIR/mpd/data/mpd.db" "$dest/mpd/data/"
+                echo "  Including pre-built MPD database (fast incremental scan, $MUSIC_SOURCE source)"
+                ;;
+            *)
+                echo "  Skipping MPD db copy (source=${MUSIC_SOURCE:-unset}, fresh scan on first boot)"
+                ;;
+        esac
     fi
 }
 

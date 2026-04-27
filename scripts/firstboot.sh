@@ -317,10 +317,22 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         cp "$SNAP_BOOT/server/docker-driver-reconcile.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/ro-mode.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/.version" "$SERVER_DIR/" 2>/dev/null || true
+        # Restore the MPD database backup only when the music source is on a
+        # network mount (NFS/SMB) where a full rescan would take hours.
+        # For local sources (USB/local disk) the db may be stale or contain
+        # path pointers from a different host's library — skip and let MPD
+        # build a fresh db on first scan (fast on local storage). See #278.
         if [[ -f "$SNAP_BOOT/server/mpd/data/mpd.db" ]]; then
-            mkdir -p "$SERVER_DIR/mpd/data"
-            cp "$SNAP_BOOT/server/mpd/data/mpd.db" "$SERVER_DIR/mpd/data/"
-            log_info "Restored MPD database backup"
+            case "${MUSIC_SOURCE:-}" in
+                nfs|smb)
+                    mkdir -p "$SERVER_DIR/mpd/data"
+                    cp "$SNAP_BOOT/server/mpd/data/mpd.db" "$SERVER_DIR/mpd/data/"
+                    log_info "Restored MPD database backup ($MUSIC_SOURCE source)"
+                    ;;
+                *)
+                    log_info "Skipping MPD db restore (source=${MUSIC_SOURCE:-unset}, not network)"
+                    ;;
+            esac
         fi
     fi
     cp -r "$SNAP_BOOT/common" "$SERVER_DIR/scripts/" 2>/dev/null || true
