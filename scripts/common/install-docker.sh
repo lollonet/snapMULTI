@@ -5,9 +5,17 @@
 # Requires: curl, dpkg, apt-get (run as root)
 # Side effects: adds Docker GPG key, APT source, installs docker-ce + compose plugin
 
-install_docker_apt() {
+# Add Docker apt repo and GPG key. Idempotent: skips if already configured.
+# Does NOT run apt-get update — caller decides when to refresh.
+setup_docker_repo() {
+    if [[ -f /etc/apt/sources.list.d/docker.list && -f /etc/apt/keyrings/docker.asc ]]; then
+        return 0
+    fi
+
     install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+    if ! curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc; then
+        return 1
+    fi
     chmod a+r /etc/apt/keyrings/docker.asc
 
     local arch version_codename docker_codename
@@ -22,7 +30,15 @@ install_docker_apt() {
 
     echo "deb [arch=$arch signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $docker_codename stable" \
         > /etc/apt/sources.list.d/docker.list
+}
 
-    apt-get update -qq
+install_docker_apt() {
+    setup_docker_repo
+
+    # Skip update when caller already refreshed metadata after adding the repo
+    # (firstboot consolidates Debian + Docker into one apt-get update).
+    if [[ "${SKIP_APT_UPDATE:-false}" != "true" ]]; then
+        apt-get update -qq
+    fi
     apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
 }

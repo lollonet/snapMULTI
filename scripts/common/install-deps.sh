@@ -124,6 +124,12 @@ install_dependencies() {
         pkgs+=(cifs-utils)
     fi
 
+    # fuse-overlayfs needed when overlayroot will activate post-reboot
+    # (kernel overlay2 cannot stack on overlayfs root → Docker needs FUSE driver).
+    if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
+        pkgs+=(fuse-overlayfs)
+    fi
+
     log_info "Installing: ${pkgs[*]}"
     if ! _apt_install_with_recovery "${pkgs[@]}"; then
         return 1
