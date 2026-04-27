@@ -9,8 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Consolidated apt operations during firstboot** — Docker apt repo now added before `install-deps.sh`'s `apt-get update`, so a single update covers Debian + Docker sources. `fuse-overlayfs` moved into `install-deps.sh` (gated on `ENABLE_READONLY=true`). Result: 2 `apt-get update` → 1, 3 `apt-get install` → 2. Saves ~15s on Pi 4 firstboot. Failure isolation preserved (Debian and Docker installs remain separate transactions)
+- **MPD database backup gated on network source** — `prepare-sd.sh` and `firstboot.sh` now restore `mpd/data/mpd.db` only when `MUSIC_SOURCE=nfs` or `smb`. For local USB/disk sources the db is skipped: scan is fast on local storage, and the db's path pointers may not match the new host's library (see [#278](https://github.com/lollonet/snapMULTI/issues/278))
 
 ### Fixed
+- **MPD verify timeout still too tight on Pi 4 2GB** — bumped `verify_services` floor from 120s to 180s. Observed on moniaserver `--both` install: MPD needed 130-150s for listener bind during firstboot (cold caches + image pull I/O contention). Network mounts (NFS/SMB) honor extended `MPD_START_PERIOD` as before; floor only affects local mounts where `MPD_START_PERIOD=30s` default
 - **MPD verify timeout too tight during firstboot** — `deploy.sh verify_services` previously gave up after 60s when `MPD_START_PERIOD=30s` (local mounts), but Pi 4 2GB during firstboot needs 90-120s for MPD's listener bind due to cold caches and post-pull I/O contention. Floor verify timeout at 120s, decoupled from MPD's healthcheck `start_period` (which is for Docker, not deploy). Network mounts (NFS/SMB) still get the extended 300s+ window
 - **I2C HAT detection false positive on bare Pi 4/5** ([#276](https://github.com/lollonet/snapMULTI/pull/276)) — scan restricted to bus 1 (GPIO header); HDMI internal buses (20/21 on Pi 4, 11/12 on Pi 5) had devices at PCM5122 addresses causing wrong HiFiBerry detection, ALSA crash, and install failure
 

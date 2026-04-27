@@ -812,13 +812,14 @@ verify_services() {
     # Verify timeout is decoupled from MPD_START_PERIOD: the healthcheck
     # (TCP ping on 6600) does not wait for library scan, but Pi 4/Zero during
     # firstboot has cold caches + post-pull I/O contention that can delay MPD's
-    # listener bind beyond 60s. Floor at 120s for local mounts; honor extended
+    # listener bind beyond 120s (observed on moniaserver Pi 4 2GB --both:
+    # 130-150s needed). Floor at 180s for local mounts; honor extended
     # MPD_START_PERIOD for network mounts (NFS/SMB).
     local start_period
     start_period=$(grep '^MPD_START_PERIOD=' "$ENV_FILE" 2>/dev/null | cut -d= -f2 | tr -d 's')
     start_period=${start_period:-30}
     local wait_seconds=15
-    local floor_seconds=120
+    local floor_seconds=180
     local effective=$(( start_period > floor_seconds ? start_period : floor_seconds ))
     local max_attempts=$(( (effective / wait_seconds) + 2 ))
 
