@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Consolidated apt operations during firstboot** — Docker apt repo now added before `install-deps.sh`'s `apt-get update`, so a single update covers Debian + Docker sources. `fuse-overlayfs` moved into `install-deps.sh` (gated on `ENABLE_READONLY=true`). Result: 2 `apt-get update` → 1, 3 `apt-get install` → 2. Saves ~15s on Pi 4 firstboot. Failure isolation preserved (Debian and Docker installs remain separate transactions)
+- **MPD database backup gated on network source** — `prepare-sd.sh` and `firstboot.sh` now restore `mpd/data/mpd.db` only when `MUSIC_SOURCE=nfs` or `smb`. For local USB/disk sources the db is skipped: scan is fast on local storage, and the db's path pointers may not match the new host's library (see [#278](https://github.com/lollonet/snapMULTI/issues/278))
 
 ### Documentation
 - **`docs/HARDWARE.md` Tested Combinations** updated with the 2026-04-27 release-gate validation: 6 devices reflashed from main, smoke test PASS, audio confirmed at ALSA `hw_ptr` level. Coverage now spans 3 Pi families (Zero 2W, 3 B+, 4 B), 2 DAC chip families (PCM5122 + WM8804/S/PDIF), HiFiBerry + InnoMaker brands, headless and HDMI-display variants, and `--both`/`--client` modes. Italian translation synced
-- **MPD database backup gated on network source** — `prepare-sd.sh` and `firstboot.sh` now restore `mpd/data/mpd.db` only when `MUSIC_SOURCE=nfs` or `smb`. For local USB/disk sources the db is skipped: scan is fast on local storage, and the db's path pointers may not match the new host's library (see [#278](https://github.com/lollonet/snapMULTI/issues/278))
 
 ### Fixed
 - **`device-smoke.sh` autodetect misclassified client-only as both** — `detect_dir` fell back to `${SCRIPT_DIR}/..` when `/opt/snapmulti` was missing. On a client-only install the script lives at `/opt/snapclient/scripts/`, so the parent (`/opt/snapclient`) matched as a "server" because it had `docker-compose.yml + .env`. Result: autodetect returned `both`, smoke check emitted false errors about missing server containers. Now `detect_dir` validates the candidate compose actually declares the role's service (`snapserver:` or `snapclient:`)
