@@ -33,7 +33,9 @@ setup_docker_repo() {
 }
 
 install_docker_apt() {
-    setup_docker_repo
+    if ! setup_docker_repo; then
+        return 1
+    fi
 
     # Skip update when caller already refreshed metadata after adding the repo
     # (firstboot consolidates Debian + Docker into one apt-get update).

@@ -357,6 +357,7 @@ fi
 set_module "deps"
 next_step "Installing git and dependencies..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
+DOCKER_REPO_PRECONFIGURED=false
 if checkpoint_reached "deps"; then
     log_info "Dependencies already installed (checkpoint), skipping"
 else
@@ -365,8 +366,10 @@ else
     # needs curl (preinstalled on RPi OS Lite + Debian Bookworm/Trixie).
     # shellcheck source=common/install-docker.sh
     source "$COMMON/install-docker.sh"
-    if ! setup_docker_repo; then
-        log_warn "Docker repo setup failed (curl/network) — install-docker will retry"
+    if setup_docker_repo; then
+        DOCKER_REPO_PRECONFIGURED=true
+    else
+        log_warn "Docker repo setup failed (curl/network) — install-docker will retry with its own update"
     fi
 
     # shellcheck source=common/install-deps.sh
@@ -387,8 +390,14 @@ if checkpoint_reached "docker"; then
 else
     # shellcheck source=common/setup-docker.sh
     source "$COMMON/setup-docker.sh"
-    # apt metadata already refreshed by install-deps.sh — skip redundant update
-    SKIP_APT_UPDATE=true setup_docker
+    # Skip redundant apt-get update only when install-deps.sh's update already
+    # saw the Docker repo. If pre-configuration failed, install_docker_apt must
+    # run its own update after the recovery attempt at setup_docker_repo.
+    if [[ "$DOCKER_REPO_PRECONFIGURED" == "true" ]]; then
+        SKIP_APT_UPDATE=true setup_docker
+    else
+        setup_docker
+    fi
     checkpoint_done "docker"
 fi
 milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
