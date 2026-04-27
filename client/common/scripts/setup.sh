@@ -909,10 +909,22 @@ if [[ "$HAS_DISPLAY" == true ]]; then
 else
     DOCKER_COMPOSE_PROFILES=""
     echo "No display detected -- headless mode (audio only)"
-    # Headless: use direct hw: device. snapclient 0.35.0 translates "default"
-    # to "sysdefault" which opens card 0 (HDMI on Pi Zero 2W) — error 524
-    # when no HDMI display is connected. Direct hw: bypasses this.
-    SOUNDCARD_VALUE="hw:${HAT_CARD_NAME:-Headphones},0"
+    # Headless: use ALSA hw plugin with explicit CARD=/DEV= parameters.
+    #
+    # Why this exact form (hw:CARD=NAME,DEV=0):
+    # 1. snapclient 0.35.0 translates bare "default" to "sysdefault" which
+    #    opens card 0 (HDMI on Pi Zero 2W) — error 524 when headless. So
+    #    we can't use "default".
+    # 2. The intuitive "hw:NAME,0" works for PCM but breaks snapcast's
+    #    mixer card extraction in alsa_player.cpp:67 — snapcast splits the
+    #    PCM name on ':' and looks for a literal "CARD=" substring; without
+    #    it, mixer_device_ stays as the bare "hw" string and
+    #    snd_mixer_attach("hw") fails to find any control (e.g. "Digital"
+    #    on HiFiBerry DAC+). See snapcast/snapcast#issues with v0.35.0.
+    # 3. The hw:CARD=NAME,DEV=0 form is an ALSA-recognized alias of
+    #    hw:NAME,0 (verified via aplay -L) and contains the literal
+    #    "CARD=" that snapcast's parser needs to extract the card index.
+    SOUNDCARD_VALUE="hw:CARD=${HAT_CARD_NAME:-Headphones},DEV=0"
 fi
 MIXER_VALUE="${HAT_MIXER:-software}"
 
