@@ -68,7 +68,8 @@ done
 
 detect_dir() {
     local explicit="$1"
-    shift
+    local role_service="$2"  # "snapserver" or "snapclient" — distinguishes role
+    shift 2
     if [[ -n "$explicit" ]]; then
         printf '%s\n' "$explicit"
         return 0
@@ -76,15 +77,21 @@ detect_dir() {
     local candidate
     for candidate in "$@"; do
         if [[ -d "$candidate" && -f "$candidate/docker-compose.yml" && -f "$candidate/.env" ]]; then
-            printf '%s\n' "$candidate"
-            return 0
+            # Validate the compose actually defines the role's service.
+            # Without this guard, on a client-only install the relative
+            # fallback (${SCRIPT_DIR}/..) resolves to /opt/snapclient and
+            # matches as both server and client → wrong "both" autodetect.
+            if grep -qE "^  ${role_service}:" "$candidate/docker-compose.yml" 2>/dev/null; then
+                printf '%s\n' "$candidate"
+                return 0
+            fi
         fi
     done
     return 1
 }
 
-SERVER_DIR="$(detect_dir "$SERVER_DIR" /opt/snapmulti "${SCRIPT_DIR}/.." || true)"
-CLIENT_DIR="$(detect_dir "$CLIENT_DIR" /opt/snapclient "${SCRIPT_DIR}/../client/common" || true)"
+SERVER_DIR="$(detect_dir "$SERVER_DIR" snapserver /opt/snapmulti "${SCRIPT_DIR}/.." || true)"
+CLIENT_DIR="$(detect_dir "$CLIENT_DIR" snapclient /opt/snapclient "${SCRIPT_DIR}/../client/common" || true)"
 
 if [[ "$MODE" == "auto" ]]; then
     if [[ -n "$SERVER_DIR" && -n "$CLIENT_DIR" ]]; then
