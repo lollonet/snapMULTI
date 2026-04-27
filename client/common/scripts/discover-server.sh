@@ -21,9 +21,13 @@ SNAPSERVER_PORT="${SNAPSERVER_PORT:-1704}"
 WATCH_MODE=false
 [[ "${1:-}" == "--watch" ]] && WATCH_MODE=true
 
-# Single tagged logger so journalctl -u snapclient-discover.service is greppable
-# without losing the boot-mode output to stderr. Lines: "[discover] <message>".
-_log() { echo "[discover] $*"; }
+# Single tagged logger. MUST write to stderr — functions like
+# _pick_failover_ipv4 are invoked in command substitution (`host=$(...)`),
+# which captures stdout. Logging on stdout would pollute the captured value
+# with [discover] lines and break the IP regex match. systemd captures both
+# streams into journald, so the [discover] tag is still grep-able via
+# `journalctl -u snapclient-discover.service`.
+_log() { echo "[discover] $*" >&2; }
 
 # "Both" mode: local snapserver always wins. Detect via install.conf
 # (single source of truth — set by prepare-sd.sh).
