@@ -1121,11 +1121,11 @@ EOF
 
 cat > /etc/systemd/system/snapclient-discover.timer <<EOF
 [Unit]
-Description=Re-discover snapserver every 5 minutes
+Description=Re-discover snapserver every 60 seconds (failover-aware health check)
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=5min
+OnUnitActiveSec=60s
 
 [Install]
 WantedBy=timers.target
