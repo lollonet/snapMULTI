@@ -809,15 +809,20 @@ start_services() {
 verify_services() {
     step "Verifying services"
 
-    # Use MPD_START_PERIOD from .env (default 30s) to set verification timeout.
-    # NFS mounts may need 300s for MPD to become healthy.
+    # Verify timeout is decoupled from MPD_START_PERIOD: the healthcheck
+    # (TCP ping on 6600) does not wait for library scan, but Pi 4/Zero during
+    # firstboot has cold caches + post-pull I/O contention that can delay MPD's
+    # listener bind beyond 60s. Floor at 120s for local mounts; honor extended
+    # MPD_START_PERIOD for network mounts (NFS/SMB).
     local start_period
     start_period=$(grep '^MPD_START_PERIOD=' "$ENV_FILE" 2>/dev/null | cut -d= -f2 | tr -d 's')
     start_period=${start_period:-30}
     local wait_seconds=15
-    local max_attempts=$(( (start_period / wait_seconds) + 2 ))
+    local floor_seconds=120
+    local effective=$(( start_period > floor_seconds ? start_period : floor_seconds ))
+    local max_attempts=$(( (effective / wait_seconds) + 2 ))
 
-    info "Checking services (up to ${start_period}s, ${wait_seconds}s interval)..."
+    info "Checking services (up to ${effective}s, ${wait_seconds}s interval)..."
 
     # shellcheck source=common/verify-compose.sh
     source "$SCRIPT_DIR/common/verify-compose.sh"
