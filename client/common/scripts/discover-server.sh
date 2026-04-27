@@ -65,8 +65,22 @@ _apply_server() {
     _log "server at $new_ip (was: ${current:-empty})"
     echo "$new_ip" > "$LAST_IP_FILE"
     if $WATCH_MODE; then
-        cd /opt/snapclient && docker compose up -d 2>/dev/null || \
-            _log "docker compose up -d failed, will retry next cycle"
+        # Capture compose output line-by-line into journald so a stuck failover
+        # is diagnosable. Without this, 2>/dev/null hides daemon-down /
+        # config-parse / image-pull errors and the next cycle's no-op early
+        # return (.env already updated → _apply_server returns 1) makes the
+        # failure invisible.
+        local compose_rc=0
+        if cd /opt/snapclient; then
+            {
+                docker compose up -d 2>&1 || compose_rc=$?
+            } | while IFS= read -r _line; do
+                _log "compose: $_line"
+            done
+            [[ "$compose_rc" -ne 0 ]] && _log "docker compose up -d failed (rc=$compose_rc), will retry next cycle"
+        else
+            _log "cd /opt/snapclient failed, cannot apply new server"
+        fi
     fi
     return 0
 }
@@ -94,8 +108,12 @@ _discover_all_ipv4() {
     fi
 }
 
-# Pick an IPv4 different from $1 if any. Falls back to the first IPv4 seen
-# (covers the case where we're scanning during initial boot — current=empty).
+# Pick an IPv4 different from $1 if any. On initial boot $current is empty,
+# so the loop's "$ip == $current" check is never true and the first discovered
+# IP is selected by the loop itself. The fallback below is only reached when
+# all discovered IPs equal the (presumed dead) current — i.e. Avahi cache
+# stale entry is the only result. We return that single IP so the caller
+# can log a "no failover available" situation rather than failing silently.
 _pick_failover_ipv4() {
     local current="$1"
     local all
@@ -108,14 +126,16 @@ _pick_failover_ipv4() {
     local ip
     while IFS= read -r ip; do
         [[ -z "$ip" || "$ip" == "$current" ]] && continue
-        _log "selecting $ip (different from current $current)"
+        _log "selecting $ip (different from current ${current:-<none>})"
         echo "$ip"
         return 0
     done <<< "$all"
-    # No different IP — return whatever single IP was discovered (initial boot path).
+    # All discovered IPs match the (dead) current — only stale cache entry
+    # remains visible. Return it so caller's _apply_server short-circuits
+    # with no-change and we log the situation.
     local first
     first=$(echo "$all" | head -1)
-    _log "no alternative to $current — returning $first"
+    _log "no alternative to ${current:-<none>} — only stale entry returned: $first"
     echo "$first"
 }
 
@@ -129,7 +149,7 @@ if $WATCH_MODE; then
         _log "$current:$SNAPSERVER_PORT alive, no scan"
         exit 0
     fi
-    _log "$current unreachable, scanning mDNS for alternative..."
+    _log "${current:-<none>} unreachable, scanning mDNS for alternative..."
 fi
 
 # Boot mode (or watch mode with current dead): scan and pick.
