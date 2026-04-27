@@ -92,21 +92,22 @@ setup_docker() {
     if [[ "$current_driver" != "fuse-overlayfs" ]]; then
         log_info "Switching Docker to fuse-overlayfs..."
 
-        # Wait for apt lock (Docker CE post-install hooks may hold it)
-        if declare -F _wait_for_apt_lock &>/dev/null; then
-            _wait_for_apt_lock
-        fi
-        # Install fuse-overlayfs package
-        if ! apt-get install -y fuse-overlayfs >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
-            log_error "Failed to install fuse-overlayfs — required for read-only mode"
-            return 1
-        fi
-
-        # Verify binary works BEFORE wiping Docker storage
+        # fuse-overlayfs is installed by install-deps.sh (gated on ENABLE_READONLY).
+        # Fallback install only kicks in when caller skipped that path
+        # (e.g. deploy.sh on a system that was upgraded into readonly mode).
         if ! fuse-overlayfs --version >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
-            log_error "fuse-overlayfs installed but binary is broken"
-            log_error "Read-only mode cannot be configured — aborting storage switch"
-            return 1
+            if declare -F _wait_for_apt_lock &>/dev/null; then
+                _wait_for_apt_lock
+            fi
+            if ! apt-get install -y fuse-overlayfs >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
+                log_error "Failed to install fuse-overlayfs — required for read-only mode"
+                return 1
+            fi
+            if ! fuse-overlayfs --version >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
+                log_error "fuse-overlayfs installed but binary is broken"
+                log_error "Read-only mode cannot be configured — aborting storage switch"
+                return 1
+            fi
         fi
 
         log_info "Verified fuse-overlayfs binary"

@@ -357,9 +357,21 @@ fi
 set_module "deps"
 next_step "Installing git and dependencies..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
+DOCKER_REPO_PRECONFIGURED=false
 if checkpoint_reached "deps"; then
     log_info "Dependencies already installed (checkpoint), skipping"
 else
+    # Pre-add Docker apt repo so install-deps.sh's apt-get update covers
+    # both Debian + Docker sources in one shot. The repo file write only
+    # needs curl (preinstalled on RPi OS Lite + Debian Bookworm/Trixie).
+    # shellcheck source=common/install-docker.sh
+    source "$COMMON/install-docker.sh"
+    if setup_docker_repo; then
+        DOCKER_REPO_PRECONFIGURED=true
+    else
+        log_warn "Docker repo setup failed (curl/network) — install-docker will retry with its own update"
+    fi
+
     # shellcheck source=common/install-deps.sh
     source "$COMMON/install-deps.sh"
     INSTALL_ROLE="$INSTALL_TYPE" install_dependencies
@@ -378,7 +390,14 @@ if checkpoint_reached "docker"; then
 else
     # shellcheck source=common/setup-docker.sh
     source "$COMMON/setup-docker.sh"
-    setup_docker
+    # Skip redundant apt-get update only when install-deps.sh's update already
+    # saw the Docker repo. If pre-configuration failed, install_docker_apt must
+    # run its own update after the recovery attempt at setup_docker_repo.
+    if [[ "$DOCKER_REPO_PRECONFIGURED" == "true" ]]; then
+        SKIP_APT_UPDATE=true setup_docker
+    else
+        setup_docker
+    fi
     checkpoint_done "docker"
 fi
 milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
@@ -402,12 +421,8 @@ if [[ "${ENABLE_READONLY}" == "true" ]]; then
     current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "unknown")
     if [[ "$current_driver" != "fuse-overlayfs" ]]; then
         log_info "Pre-configuring fuse-overlayfs for read-only mode..."
-        if ! fuse-overlayfs --version &>/dev/null; then
-            if declare -F _wait_for_apt_lock &>/dev/null; then
-                _wait_for_apt_lock
-            fi
-            apt-get install -y fuse-overlayfs >> "$UNIFIED_LOG" 2>&1 || true
-        fi
+        # fuse-overlayfs was installed by install-deps.sh (gated on ENABLE_READONLY).
+        # Verify the binary works before switching Docker storage driver.
         if fuse-overlayfs --version &>/dev/null; then
             # Source system-tune for tune_docker_daemon if not already loaded
             if ! declare -F tune_docker_daemon &>/dev/null; then
