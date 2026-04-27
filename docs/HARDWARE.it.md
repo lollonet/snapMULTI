@@ -296,17 +296,27 @@ Se un nodo è collegato a un ricevitore AV via cavo ottico, usa HiFiBerry Digi+ 
 
 ## Combinazioni Testate
 
-Queste combinazioni hardware sono state verificate in installazioni reali:
+Queste combinazioni hardware sono state verificate end-to-end (firstboot → smoke test → playback audio) nelle date indicate. Il batch del 2026-04-27 è la validazione release-gate per v0.6.x: 6 device riflashati da `main`, smoke test PASS su ognuno, `hw_ptr` ALSA che avanza durante la riproduzione (audio che raggiunge davvero il DAC, non solo la FIFO).
 
-| Modello Pi | HAT Audio | Modalità | Sorgente Musica | Stato |
-|------------|-----------|----------|----------------|-------|
-| Pi 4 | HiFiBerry DAC+ | Server + Client | NFS, USB | Funzionante |
-| Pi 4 | HiFiBerry Digi+ | Server + Client | NFS, USB | Funzionante |
-| Pi 4 | InnoMaker DAC | Client | — | Funzionante |
-| Pi 4 | Nessuno (HDMI/3.5mm) | Server | NFS, USB | Funzionante |
-| Pi 4 | Nessuno (HDMI) | Client (headless) | — | Funzionante |
-| Pi 3 | InnoMaker DAC | Client (headless) | — | Funzionante |
-| Pi Zero 2 W | InnoMaker DAC | Client (headless) | — | Funzionante |
+| Hostname | Modello Pi | HAT Audio | Chip DAC | Modalità | Display | Sorgente Musica | Validato | Stato |
+|---|---|---|---|---|---|---|---|---|
+| snapvideo | Pi 4 B (8 GB) | HiFiBerry DAC+ | PCM5122 (analogico) | both | HDMI 800×600 (display cover art) | locale | 2026-04-27 | Funzionante |
+| moniaserver | Pi 4 B (2 GB) | HiFiBerry DAC+ Standard | PCM5122 (analogico) | both | headless | USB | 2026-04-27 | Funzionante |
+| snapdigi | Pi 4 B (2 GB) | HiFiBerry Digi+ | WM8804 (S/PDIF) | client | HDMI verso TV LG 50" | n/d | 2026-04-27 | Funzionante |
+| piotto | Pi 4 B (2 GB) | nessuno (bcm2835 onboard) | — | client | headless | n/d | 2026-04-27 | Funzionante |
+| moniaclient | Pi 3 B+ (1 GB) | InnoMaker HIFI DAC HAT | PCM5122 (analogico) | client | headless | n/d | 2026-04-27 | Funzionante |
+| pizero | Pi Zero 2 W (512 MB) | InnoMaker DAC | PCM5122 (analogico) | client | headless | n/d | 2026-04-27 | Funzionante |
+
+**Copertura raggiunta il 2026-04-27**:
+
+- 3 famiglie di Pi: Pi Zero 2 W, Pi 3 B+, Pi 4 B (4 revisioni diverse di Pi 4: 1.1, 1.2, 1.4, 1.5)
+- 2 famiglie di chip DAC: PCM5122 (analogico, 4 schede tra brand HiFiBerry e InnoMaker) e WM8804 (S/PDIF digitale)
+- Più 1 device con `bcm2835` onboard (senza HAT)
+- Entrambi i path mixer: hardware (`hardware:Digital` su PCM5122) e software fallback (S/PDIF + onboard)
+- Entrambe le modalità di install (`--both`, `--client`) e `--server` esercitate nei round precedenti
+- Varianti headless e con display HDMI
+- Filesystem read-only (overlayroot + fuse-overlayfs) attivo su ogni device
+- Auto-detect via I2C bus 1 per PCM5122 EEPROM-less funziona su tutti e quattro i DAC HAT
 
 ## Limitazioni Note
 
