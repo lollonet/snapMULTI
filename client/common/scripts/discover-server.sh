@@ -70,13 +70,17 @@ _apply_server() {
         # config-parse / image-pull errors and the next cycle's no-op early
         # return (.env already updated → _apply_server returns 1) makes the
         # failure invisible.
+        #
+        # `|| compose_rc=$?` MUST be outside the pipe: bash's left-pipe runs in
+        # a subshell, so any assignment there does not propagate to the parent
+        # scope. With `set -o pipefail` (already active) the pipeline's exit
+        # code is the rightmost non-zero, so docker's failure makes the whole
+        # pipeline fail and `|| compose_rc=$?` runs in the parent shell.
         local compose_rc=0
         if cd /opt/snapclient; then
-            {
-                docker compose up -d 2>&1 || compose_rc=$?
-            } | while IFS= read -r _line; do
+            docker compose up -d 2>&1 | while IFS= read -r _line; do
                 _log "compose: $_line"
-            done
+            done || compose_rc=$?
             [[ "$compose_rc" -ne 0 ]] && _log "docker compose up -d failed (rc=$compose_rc), will retry next cycle"
         else
             _log "cd /opt/snapclient failed, cannot apply new server"
@@ -139,11 +143,43 @@ _pick_failover_ipv4() {
     echo "$first"
 }
 
+# Reconcile drift: container's effective SNAPSERVER_HOST must equal .env's.
+# If they differ (legacy `docker compose restart` bug, manual .env edit, or
+# any out-of-band change), recreate the container so it picks up .env.
+# Without this, a device whose .env was updated but whose container env was
+# not (the very bug fix #0 closes for the future) stays bound to the old
+# server forever, and the TCP-probe shortcut below — which trusts .env —
+# happily reports "alive, no scan" while the container retries the dead one.
+_reconcile_container_env() {
+    local env_host container_host
+    env_host=$(_current_host)
+    [[ -n "$env_host" ]] || return 0
+    container_host=$(docker inspect snapclient \
+        --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+        | awk -F= '/^SNAPSERVER_HOST=/{print $2; exit}')
+    [[ -n "$container_host" ]] || return 0  # container missing/down → up -d will create it later
+    if [[ "$env_host" != "$container_host" ]]; then
+        _log "drift: container=$container_host, .env=$env_host — reconciling via up -d"
+        local compose_rc=0
+        if cd /opt/snapclient; then
+            docker compose up -d 2>&1 | while IFS= read -r _line; do
+                _log "compose: $_line"
+            done || compose_rc=$?
+            [[ "$compose_rc" -ne 0 ]] && _log "reconcile up -d failed (rc=$compose_rc)"
+        fi
+        return 1  # signal: don't run other checks this cycle
+    fi
+    return 0
+}
+
 # Watch mode: short-circuit when the current server is healthy. This avoids
 # the flapping seen when avahi happens to return a different server first
 # during a routine timer fire — we should only switch when the current is
 # actually broken.
 if $WATCH_MODE; then
+    if ! _reconcile_container_env; then
+        exit 0  # reconcile already acted — let next cycle do the rest
+    fi
     current=$(_current_host)
     if [[ -n "$current" ]] && _tcp_alive "$current" "$SNAPSERVER_PORT"; then
         _log "$current:$SNAPSERVER_PORT alive, no scan"
