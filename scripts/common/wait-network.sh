@@ -77,10 +77,25 @@ _try_recover_network() {
         fi
     fi
 
-    # Stage 3 (90s): Add fallback DNS (non-destructive)
+    # Stage 3 (90s): Recover DNS
     if (( i == 45 )); then
         if ping -c1 -W2 1.1.1.1 &>/dev/null && ! getent hosts deb.debian.org &>/dev/null; then
-            log_warn "DNS not working — trying fallback (1.1.1.1)..."
+            log_warn "DNS not working — attempting recovery"
+
+            # NM may silently abandon /etc/resolv.conf write on boot ENOSPC; force re-commit before falling back.
+            if command -v nmcli &>/dev/null; then
+                if nmcli general reload dns-rc 2>/dev/null; then
+                    log_info "Triggered NetworkManager DNS re-commit"
+                    # Brief settle time, then retry the canonical check.
+                    sleep 2
+                    if getent hosts deb.debian.org &>/dev/null; then
+                        log_info "DNS recovered via NM dns-rc reload"
+                        return 0
+                    fi
+                fi
+            fi
+
+            log_warn "Falling back to 1.1.1.1"
             if command -v resolvectl &>/dev/null; then
                 # systemd-resolved: set fallback DNS on default interface
                 local _iface
