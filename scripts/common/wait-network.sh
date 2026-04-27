@@ -82,13 +82,7 @@ _try_recover_network() {
         if ping -c1 -W2 1.1.1.1 &>/dev/null && ! getent hosts deb.debian.org &>/dev/null; then
             log_warn "DNS not working — attempting recovery"
 
-            # Pi Zero 2W and other low-RAM boards can hit transient tmpfs
-            # ENOSPC at boot — NM logs "could not commit DNS changes:
-            # Failed to write file ... write() failed: No space left on
-            # device" and gives up. The DNS info IS in NM's internal state
-            # (visible via `nmcli connection show ...`), it just never made
-            # it to /etc/resolv.conf. Force NM to re-commit before falling
-            # back to a hardcoded public resolver.
+            # NM may silently abandon /etc/resolv.conf write on boot ENOSPC; force re-commit before falling back.
             if command -v nmcli &>/dev/null; then
                 if nmcli general reload dns-rc 2>/dev/null; then
                     log_info "Triggered NetworkManager DNS re-commit"
