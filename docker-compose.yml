@@ -40,6 +40,10 @@ services:
       - ./config:/config:ro
       - ./data:/data
       - ./audio:/audio
+      # Without this, snapserver's libavahi-client can't reach avahi-daemon
+      # and falls back to raw multicast: PTR is published but SRV/TXT records
+      # never appear, so clients see "Snapcast" but get None from get_service_info.
+      - /run/avahi-daemon/socket:/run/avahi-daemon/socket
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
