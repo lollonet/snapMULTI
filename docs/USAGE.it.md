@@ -398,6 +398,7 @@ security_opt:
   - apparmor:unconfined               # Necessario per accesso D-Bus (AppArmor lo blocca altrimenti)
 volumes:
   - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket  # Avahi dell'host (snapserver, shairport-sync)
+  - /run/avahi-daemon/socket:/run/avahi-daemon/socket        # Necessario per record SRV/TXT completi (snapserver, mpd)
   # oppure
   - /var/run/dbus:/var/run/dbus       # Avahi dell'host (go-librespot, tidal-connect)
 ```
