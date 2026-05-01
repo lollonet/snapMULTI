@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `[discover]` log prefix and mDNS result list to `journalctl -u snapclient-discover.service` for diagnosis
 - **Empty `/etc/resolv.conf` after boot on Pi Zero 2W / low-RAM boards** ([#287](https://github.com/lollonet/snapMULTI/pull/287)) — at boot, NetworkManager attempts an atomic write of `/etc/resolv.conf` (tmpfile + rename). Under tmpfs pressure on 512MB boards, this can fail with `write() failed: No space left on device` (transient ENOSPC despite ample free space). NM gives up after one failure and never retries — its DNS state is correct internally (`nmcli ... IP4.DNS` shows the real server) but `/etc/resolv.conf` stays empty. `wait-network.sh` stage 3 now first calls `nmcli general reload dns-rc` to force NM to re-commit its known DNS, recovering the real network DNS instead of falling back to public 1.1.1.1
 - **Snapserver mDNS announcement was incomplete (PTR only, no SRV/TXT)** ([#290](https://github.com/lollonet/snapMULTI/pull/290)) — the `snapserver` container did not bind-mount `/run/avahi-daemon/socket`, so libavahi-client couldn't reach the host's avahi-daemon. snapserver fell back to publishing PTR via raw multicast but never answered SRV/TXT follow-ups, so strict clients (e.g. Python `zeroconf`'s `get_service_info`, macOS `dns-sd -L`) returned None and reported "no servers found". Lenient clients (snapclient C++ binary, Pi `discover-server.sh`) usually worked because avahi-daemon on the same Pi cached `snapvideo.local` from other services and synthesised the resolve, plus `.env` cemented `SNAPSERVER_HOST` after the first success. Adding the socket bind-mount (same pattern as the `mpd` service) lets snapserver register via libavahi-client; avahi-daemon now publishes PTR + SRV + TXT + A correctly for any client
+- **Containerd Leases plugin self-heal at boot** ([#292](https://github.com/lollonet/snapMULTI/pull/292)) — Pi 3 / Pi Zero 2W can hit transient ENOSPC at boot when containerd creates its metadata bolt DB (`/var/lib/containerd/io.containerd.metadata.v1.bolt/meta.db`); containerd starts but the `io.containerd.lease.v1` plugin stays unloaded. Every subsequent `docker run` / `compose up -d` then fails with `Unimplemented: unknown service containerd.services.leases.v1.Leases` and containers stay in `Created` state forever. Same false-ENOSPC family as the NetworkManager resolv.conf case fixed in [#287](https://github.com/lollonet/snapMULTI/pull/287). `boot-tune.sh` now greps the containerd journal for the specific error string and restarts the containerd + docker stack when found — auto-recovery on next boot, no manual `systemctl restart` needed
 
 ### Maintenance
 - Bump `aquasecurity/trivy-action` 0.35.0 → 0.36.0 ([#289](https://github.com/lollonet/snapMULTI/pull/289))
@@ -40,7 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.3] — 2026-04-24
 
-### Fixed
 - **Docker images lost after reboot on readonly installs** ([#271](https://github.com/lollonet/snapMULTI/pull/271)) — first boot now pre-configures fuse-overlayfs before image pulls when `ENABLE_READONLY=true`, so images survive the overlayroot transition in the read-only lower layer. Previously Docker re-pulled ~1.5 GB into tmpfs on every reboot
 - **boot-tune.sh tmpfs detection** ([#271](https://github.com/lollonet/snapMULTI/pull/271)) — grep `'^/overlay'` never matched Raspberry Pi OS mount at `/media/root-rw`, silently killing all boot tuning (CPU governor, WiFi auto-disable, CAKE QoS, tmpfs resize)
 - **Docker driver reverted by deploy/setup** ([#271](https://github.com/lollonet/snapMULTI/pull/271)) — `tune_docker_daemon --live-restore` no longer pops fuse-overlayfs from `daemon.json`
@@ -63,7 +63,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Framebuffer display screenshot in README**
 
-### Fixed
 - **Boot partition remount safety** — chain of EXIT trap fixes for set -e compatibility: exit code preserved across cleanup, boot partition always restored to read-only
 
 ## [0.6.0] — 2026-04-22
@@ -85,7 +84,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 ### Removed
 - **In-place update path** ([#259](https://github.com/lollonet/snapMULTI/pull/259)) — update.sh decommissioned; reflash is the only supported upgrade method
 
-### Fixed
 - **Debian trixie overlayroot boot failure** ([#266](https://github.com/lollonet/snapMULTI/pull/266)) — systemd-remount-fs workaround for fsconfig() overlay reconfigure rejection
 - **Overlayroot persistence** — reliable activation via cmdline.txt + overlayroot.local.conf
 - **TUI size on framebuffer** (`cc0106e`) — compute from framebuffer dimensions when stty fails
@@ -97,12 +95,10 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **Serial image pull** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — sequential pulls replace paired background+foreground (fixes SD card IO contention)
 - **Locale setup** ([#246](https://github.com/lollonet/snapMULTI/pull/246)) — lightweight locale-gen for 7 locales replaces 236MB locales-all package
 
-### Fixed
 - **Docker storage driver follows filesystem state** ([#245](https://github.com/lollonet/snapMULTI/pull/245)) — overlay2 on writable root, fuse-overlayfs only when overlayroot is actually active (was incorrectly gated on ENABLE_READONLY flag, adding 20-40% IO overhead on writable systems)
 
 ## [0.5.1] — 2026-04-19
 
-### Fixed
 - **Install log flood** ([#237](https://github.com/lollonet/snapMULTI/pull/237)) — suppressed Docker Compose per-layer progress output
 - **deploy.sh double-logging** ([#238](https://github.com/lollonet/snapMULTI/pull/238)) — info() override by unified-log.sh prevented
 - **Pull robustness** ([#239](https://github.com/lollonet/snapMULTI/pull/239)) — cached image map, rate limit kill, MPD PID guard, metadata callback fix
@@ -125,7 +121,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 ### Changed
 - **Dynamic tmpfs sizing** ([#221](https://github.com/lollonet/snapMULTI/pull/221)) — 25% of RAM with 70%/90% monitoring thresholds
 
-### Fixed
 - **PIPESTATUS ordering** ([#220](https://github.com/lollonet/snapMULTI/pull/220)) — health checks AND not OR, fuse-overlayfs error handling
 - **Pull temp dir race** ([#230](https://github.com/lollonet/snapMULTI/pull/230)) — setup.sh retry on readonly pull failure
 - **Trivy arm64 scanning** ([#231](https://github.com/lollonet/snapMULTI/pull/231)) — tidal + client ARM images now scanned
@@ -134,7 +129,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 
 ## [0.4.1] — 2026-04-13
 
-### Fixed
 - **EXIT trap clobber** — pull-images.sh uses RETURN trap only (not EXIT) to avoid clobbering caller's _setup_failure_dump trap. Fixed unbound variable crash on v0.4.0
 
 ## [0.4.0] — 2026-04-13
@@ -160,7 +154,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **Silent Docker pulls** — progress output suppressed on success, surfaced on failure
 - **Unified version format** — always v0.x.x
 
-### Fixed
 - **badaix/snapcast restored on main** ([#210](https://github.com/lollonet/snapMULTI/pull/210)) — santcasp fork accidentally leaked
 - **IMAGE_TAG not persisted** ([#202](https://github.com/lollonet/snapMULTI/pull/202)) — deploy.sh writes to .env
 - **LOG_SOURCE not reset after module calls**
@@ -187,7 +180,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **SHA-pinned all GitHub Actions** — 8 workflows hardened against supply chain attacks
 - **Client submodule** — Python 3.14, enterprise readiness, autodiscovery fix, Mac runner, deploy removal
 
-### Fixed
 - **apt-get upgrade on first boot** — cloud-init's `apt-get update` runs before NTP sync (stale signatures); our `apt-get update` runs after NTP, indices are fresh for upgrade
 - **Client SNAPSERVER_HOST cleanup** — discover-server.sh clears hardcoded IPs (including stale 127.0.0.1) at boot for mDNS autodiscovery
 - **Firstboot hardening** ([#189](https://github.com/lollonet/snapMULTI/pull/189)) — log apt update/upgrade output (remove `-qq`), stub websockets in metadata test harness
@@ -198,7 +190,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **Album details in metadata** ([#185](https://github.com/lollonet/snapMULTI/pull/185)) — metadata-service exposes date, genre, track, disc from MPD. Non-MPD sources (Tidal, Spotify, AirPlay) enriched via MusicBrainz lookup with caching. Client display shows `1978 · Reggae · Track 3 · Disc 1`
 - **MusicBrainz tag enrichment** ([#185](https://github.com/lollonet/snapMULTI/pull/185)) — all sources get date/genre from MusicBrainz when the source doesn't provide them. Reuses artwork lookup cache — no extra API calls
 
-### Fixed
 - **Truncated album names** ([#185](https://github.com/lollonet/snapMULTI/pull/185)) — tidal-meta-bridge truncates long names with unclosed parentheses; metadata-service strips them before MusicBrainz queries
 
 ## [0.3.24] — 2026-04-02
@@ -210,7 +201,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **Client repo renamed** ([#179](https://github.com/lollonet/snapMULTI/pull/179)) — `rpi-snapclient-usb` → `snapclient-pi` across all docs, submodule, CI, issue templates. GitHub redirect handles old URLs
 - **CI: removed deploy step** ([#183](https://github.com/lollonet/snapMULTI/pull/183)) — build workflow no longer SSH-deploys to devices; deployment is via reflash only (live deploy caused fuse-overlayfs corruption on overlayroot)
 
-### Fixed
 - **deploy.sh crash on fresh install** ([#178](https://github.com/lollonet/snapMULTI/pull/178)) — `ensure_profile()` used `&&` pattern as last command in function; `set -e` killed the script when `AUTO_UPDATE` was absent (always on fresh installs)
 - **Artwork lookup failures cached forever** ([#180](https://github.com/lollonet/snapMULTI/pull/180)) — failed MusicBrainz/iTunes lookups now expire after 1 hour; sources like Tidal that never provide artwork get retried instead of permanent empty cache. Thread-safe cache eviction with `dict.pop`
 - **MPD zeroconf registration** ([#183](https://github.com/lollonet/snapMULTI/pull/183)) — added D-Bus socket mount so MPD can register via Avahi; mobile apps (MPDroid, Cantata) now auto-discover the server
@@ -234,7 +224,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **Shared Docker install** ([#168](https://github.com/lollonet/snapMULTI/pull/168)) — client setup.sh uses `install_docker_apt()` from shared script
 - **deploy.sh** — `ensure_profile()` helper deduplicates COMPOSE_PROFILES management
 
-### Fixed
 - **MPD database purge on reboot** ([#167](https://github.com/lollonet/snapMULTI/issues/167)) — entrypoint waits for actual music files before starting MPD; skips forced rescan when pre-built db exists; boot-tune restarts MPD if bind-mount is stale
 - **discover-server.sh missing from SD card** — was never added to prepare-sd copy chain
 - **NFS mount options** — added `rsize=32768` for read performance; removed redundant `wsize` on ro mount; removed `x-systemd` options that caused boot hangs
@@ -261,7 +250,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **Healthcheck interval 30s** ([#161](https://github.com/lollonet/snapMULTI/pull/161)) — faster failure detection (was: 60s, up to 3 min to detect)
 - **Shared system-tune.sh functions** ([#160](https://github.com/lollonet/snapMULTI/pull/160)) — `tune_avahi_daemon()`, `setup_readonly_fs()`, `install_boot_tune_service()` replace inline duplicates in deploy.sh and setup.sh
 
-### Fixed
 - **apt-get upgrade exit code masked** ([#159](https://github.com/lollonet/snapMULTI/pull/159)) — `| tail -3` hid failures; now checks exit code and logs warning
 - **fuse-overlayfs fatal in both mode** ([#159](https://github.com/lollonet/snapMULTI/pull/159)) — install failure now aborts (was: continued without it, then Docker fails on overlayroot)
 - **deploy.sh fuse-overlayfs ordering** ([#159](https://github.com/lollonet/snapMULTI/pull/159)) — install package before writing to daemon.json (was: Docker failed to start on fresh deploy)
@@ -277,7 +265,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **USB drive auto-mount** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — headless Debian doesn't auto-mount USB; firstboot.sh now mounts and adds fstab entry
 - **INSTALL.it.md** — Italian translation of installation guide
 
-### Fixed
 - **Docker image pull retry** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — 3 attempts with backoff (0s/10s/30s) prevents DNS failures during firstboot from bricking the install
 - **verify_services() timeout** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — uses MPD_START_PERIOD from .env (up to 300s for NFS) instead of hardcoded 60s
 - **Docker storage driver hardening** ([#147](https://github.com/lollonet/snapMULTI/pull/147)) — validates fuse-overlayfs before wiping Docker data; skips read-only mode on failure instead of bricking
@@ -299,7 +286,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 ### Added
 - **Network QoS for Snapcast** ([#144](https://github.com/lollonet/snapMULTI/pull/144)) — `deploy.sh` sets up CAKE qdisc with DSCP EF marking on Snapcast ports 1704/1705, prioritizing audio packets over bulk file transfers to prevent bufferbloat-induced glitches. Persists across reboots via iptables-save and networkd-dispatcher hook
 
-### Fixed
 - **CPU governor and USB autosuspend tuning** ([#139](https://github.com/lollonet/snapMULTI/pull/139)) — `deploy.sh` sets CPU governor to `performance` and disables USB autosuspend to prevent audio glitches; settings persist via `/etc/default/cpufrequtils` and udev rule
 - **Tidal SIGTERM forwarding** ([#143](https://github.com/lollonet/snapMULTI/pull/143)) — tidal-connect entrypoint now properly forwards SIGTERM to child processes with trap disarming to prevent re-entrancy; metadata bridge has circuit breaker after 10 consecutive failures
 - **First-boot client file validation** ([#142](https://github.com/lollonet/snapMULTI/pull/142)) — `firstboot.sh` validates critical client files (setup.sh, audio-hats/, display scripts) exist before proceeding; copy errors now surface instead of being silenced
@@ -321,7 +307,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **Hardware compatibility matrix** ([#124](https://github.com/lollonet/snapMULTI/pull/124)) — `docs/HARDWARE.md` now includes tables for all Pi model × role combinations (server, client, both mode) with memory limit totals and compatibility status
 - **Watchtower resource limits** — watchtower container now has 64M memory / 0.25 CPU limits (was unlimited)
 
-### Fixed
 - **MPD incomplete library scan** ([#128](https://github.com/lollonet/snapMULTI/pull/128)) — three root causes addressed: (1) `filter "~.*"` → `"._*"` in `mpd.conf` to correctly target only macOS resource forks via standard fnmatch instead of an undocumented/over-aggressive pattern; (2) `log_level "notice"` → `"info"` so file-skip and decode errors become visible; (3) new `mpd-entrypoint.sh` runs `mpc update --wait` after startup so the container is only healthy after the full library scan completes. Default `MPD_MEM_LIMIT` raised 256M → 512M to prevent OOM mid-scan on large FLAC libraries
 - **Metadata build block removed** — removed stale `build:` block from metadata service in `docker-compose.yml` (leftover from development; production uses pre-built image)
 - **README container count** — clarified total container count (seven on ARM including tidal-connect)
@@ -347,7 +332,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 
 ## [0.3.12] — 2026-03-19
 
-### Fixed
 - **Headless Pi detection with vc4-kms-v3d** ([#122](https://github.com/lollonet/snapMULTI/pull/122)) — `has_display()` in `firstboot.sh` now correctly detects headless Pi 4 when HDMI is unplugged. Previously returned "display present" when DRM status files existed but all said "disconnected" (vc4-kms-v3d creates `/dev/fb0` even without HDMI). New `found_status` flag distinguishes "no DRM files" (old firmware, assume display) from "all disconnected" (headless)
 - **DAC+ clock race on EEPROM-less boards** ([snapclient-pi#97](https://github.com/lollonet/snapclient-pi/pull/97)) — clone/EEPROM-less PCM5122 boards were misdetected as DAC+ Pro (floating GPIO3), causing master clock race with no audio. ALSA and I2C fallback detection now uses `hifiberry-dacplus-std` overlay (Pi as clock master). Adds `dtparam=i2c_arm=on` for I2C-based HATs. New manual menu option for Standard/clone boards
 
@@ -362,7 +346,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 ### Added
 - **Snapcast upstream migration** ([#121](https://github.com/lollonet/snapMULTI/pull/121)) — migrated snapserver from santcasp fork to official badaix/snapcast upstream (v0.35.0). Multi-stage Dockerfile builds from source with Snapweb bundled. Removes fork dependency
 
-### Fixed
 - **Locale errors during install** ([#120](https://github.com/lollonet/snapMULTI/pull/120)) — set `C.UTF-8` as default locale in `firstboot.sh`; removes unused `gnupg` package install that was failing on minimal images
 - **CI deploy secret resolution** — pass `HOST` as explicit `workflow_call` secret in `deploy.yml` (fixes environment-scoped secret not propagating to reusable workflows)
 
@@ -374,7 +357,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 ### Added
 - **Complete Installation Guide** ([#117](https://github.com/lollonet/snapMULTI/pull/117)) — `docs/INSTALL.md` covers all platforms (macOS/Linux/Windows): Raspberry Pi Imager steps, SD card remount procedure, Git prerequisites, `prepare-sd.sh`/`prepare-sd.ps1` usage with menu screenshots, first-boot expectations, verification commands, adding speaker Pis, troubleshooting table, and network port reference
 
-### Fixed
 - **Silent failures in plugin and metadata service** ([#118](https://github.com/lollonet/snapMULTI/pull/118)) — replaced bare `except:` / `except Exception: pass` with specific exception types and logging in `meta_mpd.py` (reconnect, GetMetadata) and `metadata-service.py` (hostname resolution); implemented `GetMetadata` command in `meta_mpd.py` (was returning an error stub)
 
 ### Security
@@ -388,7 +370,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 
 ## [0.3.9] — 2026-03-16
 
-### Fixed
 - **MPD healthcheck timeout on large NFS/SMB libraries** ([#112](https://github.com/lollonet/snapMULTI/pull/112)) — increase `MPD_START_PERIOD` default from 60s to 300s; switch mympd dependency to `service_started` (mympd retries MPD connection internally)
 - **MPD: Avahi mDNS errors** ([#111](https://github.com/lollonet/snapMULTI/pull/111)) — bind-mount `/run/avahi-daemon/socket` into MPD container; eliminates `Failed to create Avahi client: Daemon not running` log spam
 - **MPD: macOS dotfiles indexed** ([#111](https://github.com/lollonet/snapMULTI/pull/111)) — add `database { filter "~.*" }` to `mpd.conf`; excludes `._filename` resource fork files from the database (~48% noise reduction on NFS shares from macOS)
@@ -425,12 +406,10 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **Tidal Connect deploy via COMPOSE_PROFILES** ([#99](https://github.com/lollonet/snapMULTI/pull/99)) — ARM detection now writes `COMPOSE_PROFILES=tidal` to `.env`; `deploy.sh` and CI no longer need architecture-specific service lists. `pull_images()` and `verify_services()` derive active services from compose config dynamically
 - **Client submodule v0.2.3** — ALSA & network tuning with WiFi/Ethernet auto-detection, Docker image pull fix, discover-server install guard
 
-### Fixed
 - **Service health check timing** — Added 5-second initial wait in `verify_services` after `docker compose up -d`, preventing false-healthy results while containers are still in the "starting" state
 
 ## [0.3.5] — 2026-03-07
 
-### Fixed
 - **Avahi hostname collision hardening** ([#98](https://github.com/lollonet/snapMULTI/pull/98)) — Pin `host-name` in avahi-daemon.conf and restrict `allow-interfaces` to physical NICs (exclude docker0/br-*/veth*), preventing transient devices from claiming the hostname and breaking Tidal Connect mDNS
 
 ### Changed
@@ -460,7 +439,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 ### Added
 - **Per-image pull progress** ([#91](https://github.com/lollonet/snapMULTI/pull/91)) — First-boot deploy now pulls Docker images one at a time with `Pulling <service> (N/M)` progress on HDMI. `firstboot.sh` pipes deploy output through a filter that forwards key milestones to the TUI while logging everything
 
-### Fixed
 - **Fresh deploy bind-mount failures** ([#89](https://github.com/lollonet/snapMULTI/pull/89)) — Removed 3 dev-only bind mounts (`meta_tidal.py`, `common.sh`, `tidal-meta-bridge.sh`) from `docker-compose.yml` that referenced host scripts not present on fresh SD card deploys. Files are already baked into Docker images via COPY in Dockerfiles
 - **First-boot network recovery** ([#90](https://github.com/lollonet/snapMULTI/pull/90)) — Replaced single WiFi kick with 4-stage escalating recovery: WiFi activation at 30s, NetworkManager restart at 60s, fallback DNS at 90s, interface bounce at 120s. Added diagnostic logging so network failures produce actionable output in the install log
 - **firstboot.sh crash under `set -u`** — Unset `PROGRESS_LOG` variable caused immediate crash when firstboot.sh sourced `progress.sh` under strict mode
@@ -474,7 +452,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 
 ## [0.3.1] — 2026-03-02
 
-### Fixed
 - **Metadata-service MPD connection resilience** ([#88](https://github.com/lollonet/snapMULTI/pull/88)) — When MPD is unresponsive (e.g. during NFS database scan on startup), the 5s connect timeout blocked the executor thread every poll cycle, slowing all metadata streams. Added 10s cooldown between reconnection attempts, reduced timeout to 2s, and periodic "still unreachable" logging every 30s
 
 ## [0.3.0] — 2026-03-01
@@ -484,7 +461,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **Snapweb UI** — Web interface at `http://<server>:1780` for managing speakers, switching sources, and adjusting volume. Built from [snapcast/snapweb](https://github.com/snapcast/snapweb) v0.9.3 and bundled into the snapserver container
 - **Hardware mixer for volume-independent spectrum** ([#48](https://github.com/lollonet/snapMULTI/issues/48)) — New `MIXER` env var lets snapclient use the DAC's hardware mixer (`hardware:Digital`) so the ALSA loopback receives full-scale PCM regardless of volume. Spectrum bars stay consistent at any volume level. Defaults to `software` for compatibility; set `MIXER=hardware:<element>` to enable (run `amixer scontrols` to find your element name)
 
-### Fixed
 - **Tidal Connect metadata** ([#78](https://github.com/lollonet/snapMULTI/issues/78)) — Replaced non-functional WebSocket approach with file-based metadata. `speaker_controller_application` (ifi companion binary) now runs in tmux, `tidal-meta-bridge.sh` scrapes its TUI output and writes JSON to `/audio/tidal-metadata.json`, which `meta_tidal.py` polls and forwards to snapserver. Removes `websocket-client` dependency from snapserver image
 - **Controlscript buffer overflow protection** ([#68](https://github.com/lollonet/snapMULTI/pull/68)) — Added safety caps to stdin and pipe buffers in `meta_tidal.py` (64 KB) and `meta_shairport.py` (64 KB stdin + 1 MB pipe) to prevent unbounded memory growth from malformed or excessive input
 - **MPD database corruption on first run** — `deploy.sh` was pre-creating an empty `mpd.db` with `touch`; MPD interprets a 0-byte file as corrupt and refuses to scan. Now removes stale files so MPD creates a valid database on first start
@@ -562,7 +538,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
   - Removed `Dockerfile.librespot` and `patches/librespot-ipv4-fallback.patch`
   - New config file: `config/go-librespot.yml` (pipe backend, WebSocket API on port 24879)
 
-### Fixed
 - **Spotify FIFO ENXIO** ([#62](https://github.com/lollonet/snapMULTI/pull/62)) — go-librespot opens the FIFO with `O_NONBLOCK` only at playback start; if snapserver has no active writer it closes the read end, causing `ENXIO`. Fix holds the FIFO open in read-write mode (`exec 3<>`) before starting go-librespot
 - **firstboot.sh 5 GHz WiFi on first boot** — On Debian trixie, `brcmfmac` ignores the kernel `cfg80211.ieee80211_regdom` parameter, blocking auto-connect on 5 GHz DFS channels (e.g., channel 100). Fix applies regulatory domain via `iw reg set` and explicitly activates WiFi via `nmcli` after 30s timeout
 - **firstboot.sh DNS readiness** — Network check now verifies DNS resolution (`getent hosts deb.debian.org`) in addition to ping; prevents `apt-get` failure when ping succeeds but DNS lags behind on first boot
@@ -584,7 +559,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
   - Set `TIDAL_NAME` env var to override
 - **prepare-sd.sh** — Auto-unmounts SD card after preparation (macOS + Linux)
 
-### Fixed
 - **Tidal Connect ALSA plugins** — Base image missing `libasound2-plugins` for FIFO output
   - Created `Dockerfile.tidal` extending base image with ALSA plugins
   - Audio now correctly routes through FIFO to snapserver
@@ -627,7 +601,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 ### Changed
 - **Tidal service enabled by default** — No longer requires `--profile tidal` flag
 
-### Fixed
 - **Script execute permissions** — deploy.sh ensures all scripts are executable after clone
 - **airplay-entrypoint.sh mode** — Fixed missing execute permission in git
 
@@ -642,7 +615,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **meta_shairport.py rewrite** — Single-threaded select() event loop instead of daemon threads (more reliable as controlscript)
 - **shairport-sync entrypoint** — Added `-M` flag to enable metadata output
 
-### Fixed
 - **Metadata pipe creation** — deploy.sh now creates `/audio/shairport-metadata` FIFO
 - **Cover art IP resolution** — Uses actual host IP instead of container hostname (works across network)
 - **AirPlay duration parsing** — Binary metadata fields (`astm`, `PICT`) now correctly decoded as bytes instead of UTF-8
@@ -668,7 +640,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 - **firstboot.sh network check** — Detects default gateway each iteration, falls back to 1.1.1.1 and 8.8.8.8 (works behind restrictive firewalls)
 - **Snapserver log level** — Changed from `info` to `warning` to reduce log noise from constant resync messages
 
-### Fixed
 - **MPD first-run startup** — Pre-create empty `mpd.db` file; auto-detect network mounts and set `MPD_START_PERIOD` to 5 min (NFS) or 30s (local)
 - **myMPD startup** — Uses extended `MPD_START_PERIOD` for healthcheck, waits for MPD healthy before starting
 - **deploy.sh validate_config** — Change to PROJECT_ROOT before running `docker compose config` (fixes first-run failures when script invoked from a different directory)
@@ -692,7 +663,6 @@ Architecture reduction epic — 9 PRs (#247-#266) collapsing authority fragmenta
 
 Initial release. Multiroom audio server with five audio sources, security hardening, hardware auto-detection, and zero-touch deployment.
 
-### Fixed
 
 - **Zero-touch boot freeze** — Fixed prepare-sd.sh overwriting Pi Imager's firstrun.sh, which broke WiFi configuration and caused boot to hang at "Waiting for network..."
 
