@@ -153,10 +153,14 @@ fi
 # ── Containerd Leases plugin self-heal (false-ENOSPC at boot, see CHANGELOG) ──
 if systemctl is-active --quiet containerd 2>/dev/null \
    && journalctl -u containerd --since "10 minutes ago" --no-pager 2>/dev/null \
-        | grep -q 'io.containerd.lease.v1.*no space left on device'; then
+        | grep -q 'io\.containerd\.lease\.v1.*no space left on device'; then
     logger -t boot-tune -p warning "containerd Leases plugin failed at boot (transient ENOSPC) — restarting stack"
     systemctl restart containerd 2>/dev/null || true
-    sleep 3
+    # Poll up to 15s for containerd to be ready (Pi Zero 2W under pressure can take 5-10s)
+    for _i in 1 2 3 4 5; do
+        systemctl is-active --quiet containerd 2>/dev/null && break
+        sleep 3
+    done
     # Only restart docker if it was already meant to be running (avoid starting on disabled-docker hosts)
     if systemctl is-active --quiet docker 2>/dev/null \
        || systemctl is-enabled --quiet docker 2>/dev/null; then
