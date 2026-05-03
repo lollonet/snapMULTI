@@ -1,4 +1,4 @@
-"""Shared fixtures for meta_tidal tests."""
+"""Shared fixtures for meta_* plugin tests."""
 
 import json
 import sys
@@ -6,15 +6,16 @@ from pathlib import Path
 
 import pytest
 
-# Allow `import meta_tidal` from tests/
+# Allow `import meta_tidal` / `import meta_shairport` from tests/
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import meta_shairport  # noqa: E402
 import meta_tidal  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def _reset_module_state():
-    """Reset meta_tidal global state between every test."""
+    """Reset meta_tidal + meta_shairport global state between every test."""
     meta_tidal.metadata = {
         "title": "",
         "artist": [],
@@ -24,6 +25,16 @@ def _reset_module_state():
     }
     meta_tidal.playback_status = "unknown"
     meta_tidal.debug_mode = False
+
+    meta_shairport.metadata = {
+        "artist": [],
+        "title": "",
+        "album": "",
+        "genre": [],
+        "composer": [],
+        "artUrl": "",
+        "duration": 0.0,
+    }
     yield
 
 

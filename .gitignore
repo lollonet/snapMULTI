@@ -1,6 +1,11 @@
 # Environment variables
 .env
 
+# Triad workflow run artifacts (run-local, not for VCS)
+.agents/
+# Triad scripts symlink (host-local convenience)
+scripts/triad
+
 # snapMULTI runtime data
 data/
 audio/
