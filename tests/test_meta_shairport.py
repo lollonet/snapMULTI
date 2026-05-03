@@ -51,9 +51,16 @@ class TestGetHostIp:
 
     def test_socket_fallback_returns_string(self, monkeypatch):
         monkeypatch.delenv("COVER_ART_HOST", raising=False)
-        # Real socket call against 8.8.8.8 — may fail in airgapped env, return None
-        result = meta_shairport.get_host_ip()
-        assert result is None or isinstance(result, str)
+        # Mock socket so the test never opens a real connection (airgapped CI safe)
+        monkeypatch.setattr(
+            "meta_shairport.socket.socket.connect",
+            lambda self, *a, **kw: None,
+        )
+        monkeypatch.setattr(
+            "meta_shairport.socket.socket.getsockname",
+            lambda self: ("192.168.1.10", 0),
+        )
+        assert meta_shairport.get_host_ip() == "192.168.1.10"
 
     def test_socket_failure_returns_none(self, monkeypatch):
         monkeypatch.delenv("COVER_ART_HOST", raising=False)
@@ -144,10 +151,12 @@ class TestParseItem:
                 "composer": ["C"],
             }
         )
+        meta_shairport.metadata["artUrl"] = "http://10.0.0.5:5858/cover.jpg"
         meta_shairport.parse_item(_xml_item("70656e64"))  # 'pend'
         assert meta_shairport.metadata["artist"] == []
         assert meta_shairport.metadata["title"] == ""
         assert meta_shairport.metadata["album"] == ""
+        assert meta_shairport.metadata["artUrl"] == ""
         assert meta_shairport.metadata["duration"] == 0.0
         assert meta_shairport.metadata["genre"] == []
         assert meta_shairport.metadata["composer"] == []
