@@ -8,8 +8,6 @@ territory and rely on a running shairport-sync.
 import base64
 import struct
 
-import pytest
-
 import meta_shairport
 
 
