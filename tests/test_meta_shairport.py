@@ -181,7 +181,9 @@ class TestParseItem:
     def test_invalid_base64_data_no_crash(self):
         # Code present, data malformed → data stays empty, code branch may still fire
         before_artist = list(meta_shairport.metadata["artist"])
-        meta_shairport.parse_item(b"<item><code>61736172</code><data>!!!notb64</data></item>")
+        meta_shairport.parse_item(
+            b"<item><code>61736172</code><data>!!!notb64</data></item>"
+        )
         # asar with empty data → no update
         assert meta_shairport.metadata["artist"] == before_artist
 
@@ -250,7 +252,11 @@ class TestSendMetadata:
 
         # send_metadata emits at least the Player.Properties notification;
         # may also emit a Log entry — find the Properties one.
-        props = [m for m in capture_stdout if m.get("method") == "Plugin.Stream.Player.Properties"]
+        props = [
+            m
+            for m in capture_stdout
+            if m.get("method") == "Plugin.Stream.Player.Properties"
+        ]
         assert len(props) == 1
         msg = props[0]
         assert msg["jsonrpc"] == "2.0"
