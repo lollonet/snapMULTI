@@ -24,7 +24,7 @@ Play music in sync across every room. Stream from Spotify, AirPlay, your music l
 |--------|-----|
 | **Spotify** | Open app → select "*hostname* Spotify" (Premium) |
 | **AirPlay** | AirPlay icon → select "*hostname* AirPlay" |
-| **Tidal** | Open app → cast to "*hostname* Tidal" (ARM/Pi only) |
+| **Tidal** | Open app → cast to "*hostname* Tidal" (ARM/Pi only, **opt-in** — see [security note](docs/SOURCES.md#2-tidal-connect-pipe-from-tidal-connect)) |
 | **Music library** | Browse at `http://hostname.local:8180` |
 | **Any app** | Stream to port 4953 ([details](docs/SOURCES.md#5-tcp-input-tcp-server)) |
 

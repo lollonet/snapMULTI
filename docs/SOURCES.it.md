@@ -109,7 +109,16 @@ TIDAL_NAME="Tidal Salotto"
 - **Nessun controllo riproduzione** — Play/pausa/successivo devono essere controllati dall'app Tidal
 - **Nessuna copertina album** — La TUI del speaker controller non espone URL delle copertine
 
+**Avviso di sicurezza (LEGGERE PRIMA DI ABILITARE):**
+- L'immagine base è **Raspbian Stretch (EOL 2019-07)**. I pacchetti APT vengono da `archive.debian.org` con `trusted=yes` e `Acquire::Check-Valid-Until=false` — niente validazione firme, niente backport di sicurezza.
+- Il binario `tidal-connect` è **proprietario e non mantenuto** (closed-source di terze parti).
+- Il container gira come root (richiesto dal binario proprietario). Mitigato con `read_only`, `cap_drop: ALL`, `no-new-privileges`, tmpfs dedicate, e solo `DAC_OVERRIDE`.
+- Questo servizio è **opt-in tramite profilo Compose (`tidal`)** — disabilitato a meno che non venga abilitato esplicitamente.
+- **Raccomandazione:** abilitare solo su reti dove si accetta il compromesso di fiducia (LAN domestica con isolamento ospiti, non su infrastrutture condivise/pubbliche).
+
 **Requisiti Docker:** Modalità host network per mDNS. Volume `/audio` condiviso con snapserver.
+
+**Abilitazione Tidal:** aggiungere `tidal` a `COMPOSE_PROFILES` in `.env` (es. `COMPOSE_PROFILES=tidal`) e ri-eseguire `docker compose up -d`.
 
 ---
 

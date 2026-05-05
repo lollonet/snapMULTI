@@ -273,6 +273,12 @@ services:
   # Tidal Connect - Cast from Tidal app (ARM only: Pi 3/4/5)
   # Open Tidal app → Select device → "<hostname> Tidal"
   # Note: x86_64 not supported - tidal-connect binaries are ARM-only
+  #
+  # SECURITY NOTICE: tidal-connect base image is Raspbian Stretch (EOL 2019-07).
+  # We pull APT packages from archive.debian.org with `trusted=yes` and bypass
+  # Valid-Until checks. The tidal-connect binary itself is proprietary and
+  # unmaintained. This service is **opt-in** (Compose profile `tidal`):
+  # enable only if you accept the security trade-off. See docs/SOURCES.md.
   tidal-connect:
     image: lollonet/snapmulti-tidal:${IMAGE_TAG:-latest}
     container_name: tidal-connect
