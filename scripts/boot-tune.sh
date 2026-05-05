@@ -147,23 +147,53 @@ if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^mpd$'; then
     fi
     if ! docker exec mpd find /music -maxdepth 3 -type f \( -name '*.mp3' -o -name '*.flac' \) 2>/dev/null | head -1 | grep -q .; then
         cd /opt/snapmulti && docker compose restart mpd 2>/dev/null || true
+        # After restart give MPD ~10s to re-bind the mount, then check again.
+        # If /music is STILL empty, surface a loud warning so the user sees
+        # something is wrong without having to journalctl-spelunk.
+        sleep 10
+        if ! docker exec mpd find /music -maxdepth 3 -type f \( -name '*.mp3' -o -name '*.flac' \) 2>/dev/null | head -1 | grep -q .; then
+            logger -t boot-tune -p warning "music library appears EMPTY after mount + MPD restart (path=$music_path) — check NFS/SMB/USB mount status"
+            # Also write to install log if present (firstboot leaves it)
+            [[ -w /var/log/snapmulti-install.log ]] && \
+                echo "[$(date -u +%FT%TZ)] WARN: music library empty after boot (path=$music_path)" \
+                    >> /var/log/snapmulti-install.log
+        fi
     fi
 fi
 
 # ── Containerd Leases plugin self-heal (false-ENOSPC at boot, see CHANGELOG) ──
+# Scope to current boot only (-b 0): a 10-minute window picks up errors from
+# previous boots on rapid-reboot loops, causing redundant restarts that mask
+# a genuine tmpfs-full condition. Plus a hard cap of 3 self-heal attempts ever
+# (counter persisted in /var/lib/snapmulti-installer) — if we've burned all 3,
+# something is structurally wrong (real ENOSPC, hardware) and we want to fail
+# loud rather than thrash containerd.
+_CONTAINERD_HEAL_COUNTER="/var/lib/snapmulti-installer/containerd-heal.count"
+_containerd_heal_count() {
+    [[ -s "$_CONTAINERD_HEAL_COUNTER" ]] && cat "$_CONTAINERD_HEAL_COUNTER" || echo 0
+}
 if systemctl is-active --quiet containerd 2>/dev/null \
-   && journalctl -u containerd --since "10 minutes ago" --no-pager 2>/dev/null \
+   && journalctl -u containerd -b 0 --no-pager 2>/dev/null \
         | grep -q 'io\.containerd\.lease\.v1.*no space left on device'; then
-    logger -t boot-tune -p warning "containerd Leases plugin failed at boot (transient ENOSPC) — restarting stack"
-    systemctl restart containerd 2>/dev/null || true
-    # Poll up to 15s for containerd to be ready (Pi Zero 2W under pressure can take 5-10s)
-    for _i in 1 2 3 4 5; do
-        systemctl is-active --quiet containerd 2>/dev/null && break
-        sleep 3
-    done
-    # Only restart docker if it was already meant to be running (avoid starting on disabled-docker hosts)
-    if systemctl is-active --quiet docker 2>/dev/null \
-       || systemctl is-enabled --quiet docker 2>/dev/null; then
-        systemctl restart docker 2>/dev/null || true
+    _heal_count=$(_containerd_heal_count)
+    if (( _heal_count >= 3 )); then
+        logger -t boot-tune -p err "containerd Leases plugin still failing after $_heal_count self-heal attempts — manual intervention needed"
+    else
+        logger -t boot-tune -p warning "containerd Leases plugin failed at boot (transient ENOSPC, attempt $((_heal_count + 1))/3) — restarting stack"
+        systemctl restart containerd 2>/dev/null || true
+        # Poll up to 15s for containerd to be ready (Pi Zero 2W under pressure can take 5-10s)
+        for _i in 1 2 3 4 5; do
+            systemctl is-active --quiet containerd 2>/dev/null && break
+            sleep 3
+        done
+        # Only restart docker if it was already meant to be running (avoid starting on disabled-docker hosts)
+        if systemctl is-active --quiet docker 2>/dev/null \
+           || systemctl is-enabled --quiet docker 2>/dev/null; then
+            systemctl restart docker 2>/dev/null || true
+        fi
+        # Bump counter (best-effort; absent state dir means we can't track)
+        if [[ -d "$(dirname "$_CONTAINERD_HEAL_COUNTER")" ]] || mkdir -p "$(dirname "$_CONTAINERD_HEAL_COUNTER")" 2>/dev/null; then
+            echo $((_heal_count + 1)) > "$_CONTAINERD_HEAL_COUNTER" 2>/dev/null || true
+        fi
     fi
 fi

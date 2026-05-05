@@ -260,6 +260,24 @@ case "$MODE" in
         ;;
 esac
 
+section "Network"
+# DNS resolution must work — catches the NM dns-rc empty-resolv.conf
+# regression (see CHANGELOG entry for PR #287). 30s budget covers slow
+# DHCP + DNS warmup on Pi Zero 2W.
+_dns_ok=false
+for _dns_attempt in 1 2 3; do
+    if getent hosts raw.githubusercontent.com >/dev/null 2>&1; then
+        _dns_ok=true
+        break
+    fi
+    sleep 10
+done
+if [[ "$_dns_ok" == "true" ]]; then
+    pass_check "DNS resolution working (raw.githubusercontent.com)"
+else
+    fail_check "DNS resolution failing — check /etc/resolv.conf and 'nmcli general status'"
+fi
+
 section "Recent Errors"
 _error_count=0
 for log_src in "snapmulti-server" "snapclient" "docker"; do

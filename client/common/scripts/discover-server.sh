@@ -110,10 +110,16 @@ fi
 # Snapclient's built-in Avahi can pick IPv6 link-local addresses which
 # don't work inside Docker containers (scope ID mismatch), so we run
 # discovery on the host and pass the IPv4 result to the container.
+#
+# avahi-browse -rpt format (semicolon-separated):
+#   =;iface;IPv4;name;type;domain;hostname;address;port;txt   ← fully resolved
+#   +;iface;IPv4;name;type;domain                              ← PTR-only (rejected)
+# We require a resolved line (`=`) AND a numeric port in $9 — strict-client
+# parity (Python zeroconf, dns-sd) reject anything without complete SRV.
 _discover_all_ipv4() {
     if command -v avahi-browse &>/dev/null; then
         timeout 10 avahi-browse -rpt _snapcast._tcp 2>/dev/null \
-            | awk -F';' '/^=/ && $3=="IPv4" {print $8}' \
+            | awk -F';' '/^=/ && $3=="IPv4" && $9 ~ /^[0-9]+$/ {print $8}' \
             | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' \
             | sort -u
     fi

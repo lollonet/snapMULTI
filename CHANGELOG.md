@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Boot-reliability hardening from 3-council audit (Tier 1)** — seven follow-on fixes for the audit-driven launch-readiness work (`CAP-20260506-three-councils-synthesis.md` in vault):
+  - `snapmulti-server.service` + `snapclient.service` now declare `RequiresMountsFor=` on their project root and `/audio`, blocking Compose start until the underlying mounts (NFS / USB / fstab) actually attach instead of relying on `_netdev,nofail` + reactive recovery
+  - `tune_avahi_daemon` now installs `/etc/systemd/system/avahi-daemon.service.d/network.conf` with `After=network-online.target` + `Wants=network-online.target`, preventing avahi from publishing mDNS on a transient IP that NM revokes seconds later
+  - `discover-server.sh` now requires a numeric SRV port (`$9 ~ /^[0-9]+$/`) in addition to the `=` (resolved) marker; PTR-only or partial-SRV entries no longer pass as valid servers (matches strict-client behaviour like Python `zeroconf`)
+  - `backup-mpd.sh` gates `docker cp` on `State.Status == running` and rejects copies smaller than 256 bytes, so a backup never clobbers a good prior file with a partial / empty one written during MPD restart. Skip reason logged via `logger`
+  - Containerd Leases self-heal scoped to current boot only (`journalctl -b 0` instead of `--since "10 minutes ago"`) and capped at 3 lifetime attempts via `/var/lib/snapmulti-installer/containerd-heal.count`. Beyond 3, log err and stop thrashing — likely real ENOSPC or hardware fault
+  - `boot-tune.sh` MPD-music recovery now re-checks `/music` 10s after the restart attempt; if still empty it logs a `warning`-level entry to syslog AND `/var/log/snapmulti-install.log`, replacing the silent fail mode
+  - `device-smoke.sh` adds a Network section that asserts DNS resolution works (`getent hosts raw.githubusercontent.com`, 30s budget across 3 attempts) — catches NM dns-rc regressions like the one fixed in PR #287
 - **Consolidated apt operations during firstboot** ([#280](https://github.com/lollonet/snapMULTI/pull/280)) — Docker apt repo now added before `install-deps.sh`'s `apt-get update`, so a single update covers Debian + Docker sources. `fuse-overlayfs` moved into `install-deps.sh` (gated on `ENABLE_READONLY=true`). Result: 2 `apt-get update` → 1, 3 `apt-get install` → 2. Saves ~15s on Pi 4 firstboot. Failure isolation preserved (Debian and Docker installs remain separate transactions)
 - **MPD database backup gated on network source** ([#281](https://github.com/lollonet/snapMULTI/pull/281)) — `prepare-sd.sh` and `firstboot.sh` now restore `mpd/data/mpd.db` only when `MUSIC_SOURCE=nfs` or `smb`. For local USB/disk sources the db is skipped: scan is fast on local storage, and the db's path pointers may not match the new host's library (see [#278](https://github.com/lollonet/snapMULTI/issues/278))
 

@@ -1088,6 +1088,8 @@ Description=Snapclient Docker Compose Service
 Requires=docker.service avahi-daemon.service
 After=${_after_units}
 Wants=network-online.target
+# Block startup until the install dir is mounted (it's the compose project root)
+RequiresMountsFor=${INSTALL_DIR}
 
 [Service]
 Type=oneshot
