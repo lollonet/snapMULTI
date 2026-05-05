@@ -41,8 +41,9 @@ persist_overlayroot_enabled() {
         }
     fi
 
+    # recurse=0: overlay only `/`, leave NFS/USB fstab entries untouched (prevents systemd ordering cycles)
     if ! cat > /etc/overlayroot.local.conf <<'OREOF'
-overlayroot="tmpfs"
+overlayroot="tmpfs:recurse=0"
 overlayroot_cfgdisk="disabled"
 OREOF
     then
