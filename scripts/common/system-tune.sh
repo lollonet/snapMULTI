@@ -403,8 +403,11 @@ SEOF
         cat > /etc/systemd/system/snapmulti-docker-driver.service <<'DEOF'
 [Unit]
 Description=snapMULTI Docker storage driver reconciliation
+DefaultDependencies=no
 Before=docker.service
 After=local-fs.target
+Conflicts=shutdown.target
+Before=shutdown.target
 
 [Service]
 Type=oneshot

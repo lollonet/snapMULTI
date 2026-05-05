@@ -109,7 +109,16 @@ TIDAL_NAME="Living Room Tidal"
 - **No playback control** — Play/pause/next must be controlled from the Tidal app
 - **No album art** — The speaker controller TUI does not expose artwork URLs
 
+**Security disclosure (READ BEFORE ENABLING):**
+- Base image is **Raspbian Stretch (EOL 2019-07)**. APT packages come from `archive.debian.org` with `trusted=yes` and `Acquire::Check-Valid-Until=false` — no signature validation, no security backports.
+- The `tidal-connect` binary itself is **proprietary and unmaintained** (closed-source third-party).
+- Container runs as root (proprietary binary requires it). Mitigated with `read_only`, `cap_drop: ALL`, `no-new-privileges`, dedicated tmpfs, and `DAC_OVERRIDE` only.
+- This service is **opt-in by Compose profile (`tidal`)** — disabled unless you explicitly enable it.
+- **Recommendation:** enable only on networks where you accept the trust trade-off (home LAN with guest isolation, not on shared/public infrastructure).
+
 **Docker requirements:** Host network mode for mDNS. Shared `/audio` volume with snapserver.
+
+**Enabling Tidal:** add `tidal` to `COMPOSE_PROFILES` in `.env` (e.g. `COMPOSE_PROFILES=tidal`) and re-run `docker compose up -d`.
 
 ---
 

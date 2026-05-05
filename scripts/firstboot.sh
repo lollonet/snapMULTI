@@ -35,8 +35,16 @@ fi
 
 # Checkpoint helpers: skip completed phases on retry after power loss / crash.
 # Each checkpoint is a file in INSTALLER_STATE named after the phase.
-checkpoint_done()    { touch "$INSTALLER_STATE/.done-$1"; }
-checkpoint_reached() { [[ -f "$INSTALLER_STATE/.done-$1" ]]; }
+# Atomic write (.tmp + sync + rename) — power loss mid-write must NOT leave
+# a zero-byte file that checkpoint_reached treats as success.
+checkpoint_done() {
+    local f="$INSTALLER_STATE/.done-$1"
+    printf '%s\n' "$(date -u +%FT%TZ)" > "${f}.tmp"
+    sync -- "${f}.tmp" 2>/dev/null || true
+    mv -f -- "${f}.tmp" "$f"
+}
+# Require non-empty: a zero-byte file means truncated mid-write, not "done".
+checkpoint_reached() { [[ -s "$INSTALLER_STATE/.done-$1" ]]; }
 
 # Detect boot partition
 if [[ -d /boot/firmware ]]; then
