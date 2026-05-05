@@ -61,8 +61,9 @@ persist_overlayroot_enabled() {
     if ! grep -q 'overlayroot=tmpfs' "$cmdline" 2>/dev/null; then
         sed -i '1s#^#overlayroot=tmpfs #' "$cmdline" || return 1
     fi
+    # recurse=0: overlay only `/`, leave other fstab entries (NFS, USB, etc.) untouched.
     if ! cat > /etc/overlayroot.local.conf <<'OREOF'
-overlayroot="tmpfs"
+overlayroot="tmpfs:recurse=0"
 overlayroot_cfgdisk="disabled"
 OREOF
     then
