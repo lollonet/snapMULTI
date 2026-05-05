@@ -260,6 +260,30 @@ case "$MODE" in
         ;;
 esac
 
+section "Network"
+# DNS resolution must work — catches the NM dns-rc empty-resolv.conf
+# regression (see CHANGELOG entry for PR #287). 30s budget covers slow
+# DHCP + DNS warmup on Pi Zero 2W. Two neutral targets tried in sequence
+# so a single-vendor outage (or a network that blocks one of them) does
+# not produce a false-negative for the smoke test.
+_DNS_TARGETS=("cloudflare.com" "dns.google")
+_dns_ok=false
+for _dns_attempt in 1 2 3; do
+    for _target in "${_DNS_TARGETS[@]}"; do
+        if getent hosts "$_target" >/dev/null 2>&1; then
+            _dns_ok=true
+            _dns_target_ok="$_target"
+            break 2
+        fi
+    done
+    sleep 10
+done
+if [[ "$_dns_ok" == "true" ]]; then
+    pass_check "DNS resolution working (${_dns_target_ok})"
+else
+    fail_check "DNS resolution failing on all targets (${_DNS_TARGETS[*]}) — check /etc/resolv.conf and 'nmcli general status'"
+fi
+
 section "Recent Errors"
 _error_count=0
 for log_src in "snapmulti-server" "snapclient" "docker"; do

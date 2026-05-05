@@ -292,6 +292,24 @@ tune_avahi_daemon() {
     else
         ok "Avahi already configured"
     fi
+
+    # Drop-in: order avahi-daemon AFTER network-online.target so mDNS only
+    # publishes once the network is usable. Without this, avahi can answer
+    # mDNS before NM finishes IPv4 acquisition, advertising on a transient
+    # IP that goes away seconds later.
+    local dropin_dir="/etc/systemd/system/avahi-daemon.service.d"
+    local dropin="${dropin_dir}/network.conf"
+    if mkdir -p "$dropin_dir" 2>/dev/null && [[ ! -f "$dropin" ]]; then
+        if cat > "$dropin" <<'AVEOF'
+[Unit]
+After=network-online.target
+Wants=network-online.target
+AVEOF
+        then
+            systemctl daemon-reload 2>/dev/null || true
+            ok "Avahi ordered after network-online.target"
+        fi
+    fi
 }
 
 # ── Read-only filesystem (overlayroot) ──────────────────────────

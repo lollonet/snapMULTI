@@ -869,6 +869,9 @@ Description=snapMULTI Docker Compose Server
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
+# Block startup until project root + /audio (FIFO dir) are mounted; avoids
+# a Docker race where compose starts before NFS/USB attaches /music or /audio
+RequiresMountsFor=${PROJECT_ROOT} ${PROJECT_ROOT}/audio
 
 [Service]
 Type=oneshot
