@@ -169,8 +169,14 @@ fi
 # something is structurally wrong (real ENOSPC, hardware) and we want to fail
 # loud rather than thrash containerd.
 _CONTAINERD_HEAL_COUNTER="/var/lib/snapmulti-installer/containerd-heal.count"
+# Strip non-numeric bytes — a partial / corrupt counter file (e.g. power loss
+# during `echo … >`) must not feed garbage into the arithmetic `(( … ))` test
+# below, which would abort the whole script under `set -euo pipefail` and
+# silently skip the self-heal.
 _containerd_heal_count() {
-    [[ -s "$_CONTAINERD_HEAL_COUNTER" ]] && cat "$_CONTAINERD_HEAL_COUNTER" || echo 0
+    local raw
+    raw=$(cat "$_CONTAINERD_HEAL_COUNTER" 2>/dev/null | tr -dc '0-9')
+    [[ -n "$raw" ]] && echo "$raw" || echo 0
 }
 if systemctl is-active --quiet containerd 2>/dev/null \
    && journalctl -u containerd -b 0 --no-pager 2>/dev/null \
