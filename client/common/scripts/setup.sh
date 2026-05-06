@@ -1090,6 +1090,12 @@ After=${_after_units}
 Wants=network-online.target
 # Block startup until the install dir is mounted (it's the compose project root)
 RequiresMountsFor=${INSTALL_DIR}
+# Snapcast 0.35.0 upstream bug: when avahi-daemon restarts, libavahi-client
+# in snapclient drops its connection and never reconnects — server
+# discovery via mDNS silently breaks until snapclient is restarted
+# (same code path as snapserver, verified on upstream master branch).
+# Workaround: PartOf= propagates avahi-daemon restarts to this unit.
+PartOf=avahi-daemon.service
 
 [Service]
 Type=oneshot

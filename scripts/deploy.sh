@@ -867,11 +867,18 @@ install_systemd_service() {
 [Unit]
 Description=snapMULTI Docker Compose Server
 Requires=docker.service
-After=docker.service network-online.target
-Wants=network-online.target
+After=docker.service network-online.target avahi-daemon.service
+Wants=network-online.target avahi-daemon.service
 # Block startup until project root + /audio (FIFO dir) are mounted; avoids
 # a Docker race where compose starts before NFS/USB attaches /music or /audio
 RequiresMountsFor=${PROJECT_ROOT} ${PROJECT_ROOT}/audio
+# Snapcast 0.35.0 upstream bug: when avahi-daemon restarts, snapserver's
+# libavahi-client connection drops, the simple_poll quits, and snapserver
+# never re-registers — \`_snapcast._tcp\` mDNS publication is silently lost
+# until snapserver is restarted (verified on master branch too — same code).
+# Workaround: PartOf= propagates avahi-daemon restarts to this unit so
+# Docker re-creates the snapserver container with a fresh avahi connection.
+PartOf=avahi-daemon.service
 
 [Service]
 Type=oneshot
