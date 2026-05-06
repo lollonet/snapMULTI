@@ -432,30 +432,54 @@ milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
 # fuse-overlayfs. Docker re-pulls ~1.5 GB into the tmpfs upper layer,
 # filling it immediately and leaving no room for client images.
 #
-# Fix: switch to fuse-overlayfs NOW, before any images are pulled.
-# Images land on the writable SD card with the correct driver and
-# survive the overlayroot transition in the read-only lower layer.
+# Switch to fuse-overlayfs NOW, before any images are pulled. Images land
+# on the writable SD card with the correct driver and survive the
+# overlayroot transition in the read-only lower layer.
 # docker-driver-reconcile.sh remains as a safety net for edge cases
 # (e.g. overlayroot fails to activate → reconciler reverts to overlay2).
+#
+# Checkpointed: the switch runs `rm -rf /var/lib/docker/*` to drop
+# stale overlay2 layers. Without a checkpoint, a crash between this
+# `rm -rf` and the subsequent successful pull would re-run the wipe on
+# next boot — even when valid images already exist under fuse-overlayfs.
+# The checkpoint is set ONLY after the new daemon is up under the new
+# driver, so an interrupted switch correctly retries from scratch.
 if [[ "${ENABLE_READONLY}" == "true" ]]; then
-    current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "unknown")
-    if [[ "$current_driver" != "fuse-overlayfs" ]]; then
-        log_info "Pre-configuring fuse-overlayfs for read-only mode..."
-        # fuse-overlayfs was installed by install-deps.sh (gated on ENABLE_READONLY).
-        # Verify the binary works before switching Docker storage driver.
-        if fuse-overlayfs --version &>/dev/null; then
-            # Source system-tune for tune_docker_daemon if not already loaded
-            if ! declare -F tune_docker_daemon &>/dev/null; then
-                # shellcheck source=common/system-tune.sh
-                source "$COMMON/system-tune.sh"
-            fi
-            tune_docker_daemon --live-restore --fuse-overlayfs
-            systemctl stop docker
-            rm -rf /var/lib/docker/*
-            systemctl start docker
-            log_info "Docker switched to fuse-overlayfs (images will persist through overlayroot)"
+    if checkpoint_reached "fuse-overlayfs-switched"; then
+        log_info "fuse-overlayfs switch already complete (checkpoint), skipping"
+    else
+        current_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "unknown")
+        if [[ "$current_driver" == "fuse-overlayfs" ]]; then
+            # Already on the right driver — record it so we don't repeat the check
+            checkpoint_done "fuse-overlayfs-switched"
         else
-            log_warn "fuse-overlayfs not available — images will need re-pull after reboot"
+            log_info "Pre-configuring fuse-overlayfs for read-only mode..."
+            # fuse-overlayfs was installed by install-deps.sh (gated on ENABLE_READONLY).
+            # Verify the binary works before switching Docker storage driver.
+            if fuse-overlayfs --version &>/dev/null; then
+                # Source system-tune for tune_docker_daemon if not already loaded
+                if ! declare -F tune_docker_daemon &>/dev/null; then
+                    # shellcheck source=common/system-tune.sh
+                    source "$COMMON/system-tune.sh"
+                fi
+                tune_docker_daemon --live-restore --fuse-overlayfs
+                systemctl stop docker
+                rm -rf /var/lib/docker/*
+                systemctl start docker
+                # Wait briefly for daemon to be responsive before checkpointing
+                for _i in 1 2 3 4 5 6 7 8 9 10; do
+                    docker info >/dev/null 2>&1 && break
+                    sleep 2
+                done
+                if docker info --format '{{.Driver}}' 2>/dev/null | grep -qx "fuse-overlayfs"; then
+                    checkpoint_done "fuse-overlayfs-switched"
+                    log_info "Docker switched to fuse-overlayfs (images will persist through overlayroot)"
+                else
+                    log_warn "Docker driver switch did not stick — leaving checkpoint unset for retry"
+                fi
+            else
+                log_warn "fuse-overlayfs not available — images will need re-pull after reboot"
+            fi
         fi
     fi
 fi

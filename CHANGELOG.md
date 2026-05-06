@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **fuse-overlayfs pre-pull switch is now checkpointed** — the pre-configuration of Docker's storage driver in `firstboot.sh` runs `rm -rf /var/lib/docker/*` to drop stale overlay2 layers, but this destructive step had no checkpoint guard. Power loss between the wipe and the subsequent successful pull would re-run the wipe on next boot, clobbering valid images already pulled under fuse-overlayfs. Added `checkpoint_reached "fuse-overlayfs-switched"` guard, set ONLY after the new daemon comes up and `docker info` confirms the driver actually flipped to fuse-overlayfs (10 iterations × 2 s = 20 s wait window). An interrupted switch correctly retries from scratch on next boot; a successful switch is never repeated. Closes the H9 follow-up from the Council 1 audit (left as the only Tier 1 deferred item in PR #298 due to file overlap with #297)
+
 ### Security
 - **Tidal Connect: explicit security disclosure** — the `tidal-connect` source is built on Raspbian Stretch (EOL 2019-07) with `archive.debian.org` + `trusted=yes` and contains a proprietary, unmaintained binary. The service has always been opt-in via the `tidal` Compose profile, but the trade-off was not documented. `docs/SOURCES.md` now carries an explicit "READ BEFORE ENABLING" block; `README.md` flags Tidal as opt-in with a link to the disclosure; the comment block in `docker-compose.yml` warns at the source. No behaviour change — disclosure only. Italian translation synced
 
