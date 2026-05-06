@@ -289,6 +289,12 @@ journalctl -u snapmulti-server.service --since "10 min ago"
 
 In modalita **both**, `snapclient.service` si avvia dopo `snapmulti-server.service` per assicurarsi che il server sia pronto prima che il client si connetta.
 
+### Propagazione Avahi (`PartOf=avahi-daemon.service`)
+
+Sia `snapmulti-server.service` che `snapclient.service` hanno `PartOf=avahi-daemon.service`. Qualsiasi stop o restart di `avahi-daemon` (es. `sudo systemctl restart avahi-daemon` durante un aggiornamento pacchetto o debug manuale) **viene propagato agli stack Docker Compose** — entrambi i container vengono ricreati.
+
+Questo e intenzionale: Snapcast 0.35.0 (e l'attuale `master` upstream) gestisce `AVAHI_CLIENT_FAILURE` uscendo dal poll loop interno senza retry, quindi un restart del daemon rompe silenziosamente la pubblicazione mDNS `_snapcast._tcp` finche snapserver / snapclient non viene a sua volta riavviato. `PartOf=` rende questo recupero automatico. Impatto operativo: un `systemctl restart avahi-daemon` non e piu un'azione a basso impatto — aspettarsi ~3 s di gap audio mentre gli stack Compose vengono ricreati.
+
 ## Interfacce di Controllo
 
 snapMULTI ha tre interfacce di controllo, ognuna per uno scopo diverso:
