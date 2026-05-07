@@ -475,10 +475,26 @@ if [[ "${ENABLE_READONLY}" == "true" ]]; then
                     checkpoint_done "fuse-overlayfs-switched"
                     log_info "Docker switched to fuse-overlayfs (images will persist through overlayroot)"
                 else
-                    log_warn "Docker driver switch did not stick — leaving checkpoint unset for retry"
+                    # FAIL HARD before any pull. Continuing here would download
+                    # ~1.5 GB into Docker's overlay2 driver — those layers live
+                    # in /var/lib/docker which is in the overlayroot LOWER
+                    # layer. After the next reboot when overlayroot activates
+                    # read-only, Docker won't see them and would re-pull into
+                    # tmpfs, immediately exhausting it. Better to abort the
+                    # install loud than ship a silently-broken device.
+                    log_error "Docker driver switch FAILED — fuse-overlayfs not active after restart."
+                    log_error "Continuing would pull images with overlay2 and lose them after reboot."
+                    log_error "Diagnose with: vcgencmd get_throttled, dmesg | grep -i fuse, journalctl -u docker"
+                    log_error "Workaround: set ENABLE_READONLY=false in install.conf and reflash, OR use a Pi with working fuse module"
+                    exit 1
                 fi
             else
-                log_warn "fuse-overlayfs not available — images will need re-pull after reboot"
+                # fuse-overlayfs binary missing despite ENABLE_READONLY=true.
+                # install-deps.sh should have installed it — reaching here means
+                # apt-get failed silently OR the binary was removed afterward.
+                log_error "fuse-overlayfs binary missing — install-deps.sh failed silently?"
+                log_error "Refusing to continue: pulling images with overlay2 would lose them after reboot"
+                exit 1
             fi
         fi
     fi
