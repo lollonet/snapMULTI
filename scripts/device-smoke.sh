@@ -600,7 +600,7 @@ if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
         _music_path=$(grep '^MUSIC_PATH=' "$_server_env" 2>/dev/null | cut -d= -f2 | sed 's/[[:space:]]*$//' || true)
         _music_path="${_music_path:-/media/music}"
         case "$_music_source" in
-            nfs|smb)
+            nfs|smb|network)
                 if [[ -d "$_music_path" ]] \
                     && [[ -n "$(find "$_music_path" -maxdepth 3 -type f \
                         \( -name '*.mp3' -o -name '*.flac' -o -name '*.ogg' -o -name '*.m4a' -o -name '*.wav' -o -name '*.aac' \) \
