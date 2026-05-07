@@ -123,7 +123,7 @@ setup_music_source() {
             if timeout 60 mount -t cifs "//${SMB_SERVER}/${SMB_SHARE}" "$mount_point" -o "$mount_opts"; then
                 log_info "SMB mounted: $mount_point"
             else
-                log_warn "SMB mount timed out or failed — will retry on next boot (fstab configured)"
+                log_warn "SMB mount timed out or failed — will retry on next boot (fstab configured, MUSIC_PATH=$mount_point already exported)"
             fi
             ;;
         manual|"")
