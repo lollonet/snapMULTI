@@ -455,8 +455,19 @@ install_docker() {
     # Preserve fuse-overlayfs if already configured (firstboot pre-sets it
     # for read-only installs so images land with the correct driver).
     # Otherwise keep Docker's default overlay2.
+    #
+    # Two ways to detect "we need fuse-overlayfs":
+    #  (a) docker info returns "fuse-overlayfs" — daemon up, current config OK
+    #  (b) `/` is overlay (overlayroot active) — even if Docker is currently
+    #      stopped (e.g. mid-redeploy), we MUST preserve the storage-driver
+    #      setting in daemon.json. Without case (b), a redeploy on overlayroot
+    #      while Docker is briefly down would let tune_docker_daemon strip
+    #      the storage-driver key (the `cfg.pop` branch in system-tune.sh),
+    #      Docker would restart with overlay2 default, and previously-pulled
+    #      images would silently disappear.
     local _tune_args=(--live-restore)
-    if docker info --format '{{.Driver}}' 2>/dev/null | grep -q fuse-overlayfs; then
+    if docker info --format '{{.Driver}}' 2>/dev/null | grep -q fuse-overlayfs \
+       || mount 2>/dev/null | grep -q ' on / type overlay'; then
         _tune_args+=(--fuse-overlayfs)
     fi
     tune_docker_daemon "${_tune_args[@]}"
@@ -628,6 +639,23 @@ setup_env() {
             info "Local storage detected — using standard MPD start period (30s)"
         fi
 
+        # Detect music source for downstream tools (device-smoke.sh, MPD
+        # backup gate). Prefer the explicit MUSIC_SOURCE exported by
+        # mount-music.sh; fall back to inferring from the mount point so
+        # manual / pre-existing setups still get a value persisted.
+        local music_source_value="${MUSIC_SOURCE:-}"
+        if [[ -z "$music_source_value" ]]; then
+            if is_network_mount "$music_path"; then
+                # is_network_mount returns true for both nfs and cifs/smb,
+                # but we don't know which here — use the generic label.
+                music_source_value="network"
+            elif [[ "$music_path" == /media/usb-* ]] || [[ "$music_path" == /mnt/usb* ]]; then
+                music_source_value="usb"
+            else
+                music_source_value="local"
+            fi
+        fi
+
         # Generate .env
         cat > "$ENV_FILE" <<EOF
 # snapMULTI Environment Configuration
@@ -635,6 +663,13 @@ setup_env() {
 
 # Music library path
 MUSIC_PATH=$music_path
+
+# Music source kind (nfs, smb, usb, streaming-only, local, network).
+# Used by device-smoke.sh to decide whether to validate the library
+# (network sources can be silently empty if the share isn't mounted)
+# and by the MPD backup timer to decide whether to copy mpd.db across
+# reflashes (only meaningful for network-backed libraries).
+MUSIC_SOURCE=$music_source_value
 
 # Timezone
 TZ=$tz_detected

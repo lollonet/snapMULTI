@@ -34,6 +34,7 @@ setup_music_source() {
         streaming)
             mkdir -p /media/music
             export MUSIC_PATH="/media/music"
+            export MUSIC_SOURCE="streaming-only"
             export SKIP_MUSIC_SCAN=1
             log_info "Streaming-only mode — no local music library"
             ;;
@@ -61,6 +62,7 @@ setup_music_source() {
                         echo "$fstab_entry $usb_mount auto ro,nofail 0 0" >> /etc/fstab
                     fi
                     export MUSIC_PATH="$usb_mount"
+                    export MUSIC_SOURCE="usb"
                     log_info "USB mounted: $usb_dev at $usb_mount"
                 else
                     log_warn "Failed to mount $usb_dev — deploy.sh will try auto-detect"
@@ -78,12 +80,20 @@ setup_music_source() {
             if ! grep -qF "${NFS_SERVER}:${NFS_EXPORT}" /etc/fstab; then
                 echo "${NFS_SERVER}:${NFS_EXPORT} $mount_point nfs ro,soft,timeo=50,rsize=32768,_netdev,nofail 0 0" >> /etc/fstab
             fi
+            # Export PLANNED mount point and source regardless of immediate
+            # success — fstab is in place and systemd will retry, so the
+            # downstream config (.env via deploy.sh) must reflect the
+            # eventual reality, not the transient now. Without this,
+            # deploy.sh would fall back to /media/music and persist the
+            # wrong MUSIC_PATH even though /media/nfs-music will mount on
+            # the next boot.
+            export MUSIC_PATH="$mount_point"
+            export MUSIC_SOURCE="nfs"
             # Timeout prevents firstboot from hanging if NAS/DNS isn't ready yet.
             if timeout 30 mount -t nfs "${NFS_SERVER}:${NFS_EXPORT}" "$mount_point" -o ro,soft,timeo=50,rsize=32768,_netdev; then
-                export MUSIC_PATH="$mount_point"
                 log_info "NFS mounted: $mount_point"
             else
-                log_warn "NFS mount timed out or failed — will retry on next boot (fstab configured)"
+                log_warn "NFS mount timed out or failed — will retry on next boot (fstab configured, MUSIC_PATH=$mount_point already exported)"
             fi
             ;;
         smb)
@@ -105,8 +115,12 @@ setup_music_source() {
             if ! grep -qF "//${SMB_SERVER}/${SMB_SHARE}" /etc/fstab; then
                 echo "//${SMB_SERVER}/${SMB_SHARE} $mount_point cifs ${mount_opts},nofail 0 0" >> /etc/fstab
             fi
+            # Same rationale as the NFS branch above: export the planned
+            # mountpoint and source even on transient failure, so deploy.sh
+            # writes the right MUSIC_PATH/MUSIC_SOURCE to .env.
+            export MUSIC_PATH="$mount_point"
+            export MUSIC_SOURCE="smb"
             if timeout 60 mount -t cifs "//${SMB_SERVER}/${SMB_SHARE}" "$mount_point" -o "$mount_opts"; then
-                export MUSIC_PATH="$mount_point"
                 log_info "SMB mounted: $mount_point"
             else
                 log_warn "SMB mount timed out or failed — will retry on next boot (fstab configured)"
