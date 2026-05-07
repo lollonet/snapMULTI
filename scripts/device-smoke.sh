@@ -302,16 +302,19 @@ case "$_ntp_synced" in
 esac
 
 # Hostname mDNS round-trip — the host's own hostname.local must resolve
-# to the host's own IP via avahi. Catches DHCP/mDNS desync (e.g. IP
-# changed via DHCP renew but avahi cache stale, or hostname mismatch).
+# to ONE OF the host's own IPs via avahi. On dual-homed hosts (eth0 +
+# wlan0 active) avahi may advertise on a different interface than the
+# arbitrary "first" one, so we accept any of the local addresses to
+# avoid false-failing the mismatch path.
 if command -v avahi-resolve >/dev/null 2>&1; then
     _own_host="$(hostname).local"
-    _own_ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+    _own_ips=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
     _resolved=$(timeout 5 avahi-resolve -4 -n "$_own_host" 2>/dev/null | awk '{print $2}' | head -1)
-    if [[ -n "$_resolved" ]] && [[ "$_resolved" == "$_own_ip" ]]; then
+    if [[ -n "$_resolved" ]] && echo "$_own_ips" | grep -qF -- "$_resolved"; then
         pass_check "mDNS hostname round-trip ($_own_host -> $_resolved)"
     elif [[ -n "$_resolved" ]]; then
-        fail_check "mDNS hostname mismatch ($_own_host -> $_resolved, expected $_own_ip) — restart avahi-daemon"
+        _own_ips_csv=$(echo "$_own_ips" | tr '\n' ',' | sed 's/,$//; s/,/, /g')
+        fail_check "mDNS hostname mismatch ($_own_host -> $_resolved, expected one of: $_own_ips_csv) — restart avahi-daemon"
     else
         fail_check "mDNS hostname does NOT resolve ($_own_host) — avahi-daemon publishing broken"
     fi
@@ -331,20 +334,20 @@ if command -v arping >/dev/null 2>&1; then
     if [[ -n "$_own_iface" ]] && [[ -n "$_own_ip" ]]; then
         # \`arping -D\` exits 0 if no replies (no conflict) and 1 if replies
         # received (conflict). It also fails with 1+stderr when missing
-        # CAP_NET_RAW. We try \`sudo -n\` first; on permission failure we
-        # fall back to unprivileged arping AND distinguish the permission
-        # case from a real conflict by inspecting stderr — a permission
-        # gap should NOT hard-fail the smoke gate (that turns a config
-        # gap into a hard fail on every install without passwordless sudo).
-        _arping_run() {
-            "$@" -D -c 3 -w 5 -I "$_own_iface" "$_own_ip" 2>&1
-        }
-        _arping_out=$(_arping_run sudo -n arping)
-        _arping_rc=$?
-        if [[ $_arping_rc -ne 0 ]]; then
-            # sudo -n likely lacked NOPASSWD or no sudo at all — retry plain
-            _arping_out=$(_arping_run arping)
-            _arping_rc=$?
+        # CAP_NET_RAW. Probe sudo capability ONCE to choose the right
+        # invocation; never retry with a less-privileged invocation if
+        # the privileged one already returned a definitive answer
+        # (retry would silence a real conflict with a "permission" warn
+        # if the unprivileged retry then trips on cap_net_raw).
+        #
+        # \`|| _arping_rc=\$?\` pattern: under \`set -e\`, a bare
+        # \`var=\$(failing-cmd)\` would terminate the script without ever
+        # reaching the analysis branch below.
+        _arping_rc=0
+        if sudo -n true 2>/dev/null; then
+            _arping_out=$(sudo -n arping -D -c 3 -w 5 -I "$_own_iface" "$_own_ip" 2>&1) || _arping_rc=$?
+        else
+            _arping_out=$(arping -D -c 3 -w 5 -I "$_own_iface" "$_own_ip" 2>&1) || _arping_rc=$?
         fi
         if [[ $_arping_rc -eq 0 ]]; then
             pass_check "No IP conflict on $_own_ip ($_own_iface)"
@@ -353,7 +356,6 @@ if command -v arping >/dev/null 2>&1; then
         else
             fail_check "Possible IP conflict on $_own_ip — another host replied to our ARP probe"
         fi
-        unset -f _arping_run
     else
         warn "Could not determine own IP/iface for conflict check"
     fi
