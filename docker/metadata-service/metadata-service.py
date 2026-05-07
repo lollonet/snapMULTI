@@ -114,6 +114,12 @@ class MetadataService:
         self.artwork_dir = ARTWORK_DIR
         self.artwork_dir.mkdir(parents=True, exist_ok=True)
 
+        # Liveness signal for the /health endpoint. Bumped on every successful
+        # poll_loop iteration. Allows /health to report "stale" when the
+        # snapserver socket connection is broken even if the HTTP server is
+        # still happily serving requests on its own.
+        self.last_successful_poll_at: float = 0.0
+
         # Per-stream metadata state
         self.streams: dict[str, StreamMetadata] = {}
 
@@ -1536,6 +1542,13 @@ class MetadataService:
                     await asyncio.sleep(5)
                     continue
 
+                # Mark this iteration as a healthy round-trip with snapserver.
+                # /health uses this timestamp to differentiate "container alive
+                # AND talking to snapserver" from "container alive, snapserver
+                # silent for N seconds".
+                import time
+                self.last_successful_poll_at = time.time()
+
                 # Rebuild client → stream mapping (only if changed)
                 new_map = self._build_client_stream_map(server)
                 if new_map != self._client_stream_map:
@@ -1941,13 +1954,55 @@ async def handle_metadata(request: web.Request) -> web.Response:
 
 
 async def handle_health(request: web.Request) -> web.Response:
-    """Health check endpoint."""
+    """Health check endpoint.
+
+    Returns 200 only if the poll_loop has had a successful round-trip with
+    snapserver in the recent past. Otherwise returns 503 — Docker's
+    healthcheck will mark the container unhealthy, surfacing the
+    snapserver/RPC outage that a hardcoded 200 would have hidden.
+
+    The threshold is generous (60 s) compared to the poll interval
+    (~1 s healthy / 5 s on error) so brief snapserver restarts don't
+    flap the metadata-service health.
+    """
+    import time
+
+    base = {
+        "status": "ok",
+        "version": os.environ.get("SNAPMULTI_VERSION", "unknown"),
+        "capabilities": ["subscribe_stream", "server_info"],
+    }
+
+    if _service is None:
+        # Service hasn't initialised yet. Allow a short grace window;
+        # Docker healthcheck has start_period=10s in compose anyway.
+        return web.json_response(
+            {**base, "status": "starting"},
+            status=200,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    last = _service.last_successful_poll_at
+    if last == 0.0:
+        # Process started but never managed a successful snapserver poll.
+        # Could be: snapserver not yet up, RPC port firewall, host=wrong.
+        return web.json_response(
+            {**base, "status": "snapserver_unreachable", "last_poll_age_s": None},
+            status=503,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    age = time.time() - last
+    base["last_poll_age_s"] = round(age, 1)
+    if age > 60:
+        return web.json_response(
+            {**base, "status": "snapserver_stale"},
+            status=503,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
     return web.json_response(
-        {
-            "status": "ok",
-            "version": os.environ.get("SNAPMULTI_VERSION", "unknown"),
-            "capabilities": ["subscribe_stream", "server_info"],
-        },
+        base,
         headers={"Access-Control-Allow-Origin": "*"},
     )
 

@@ -454,7 +454,13 @@ if [[ "$(cd "$COMMON_DIR" 2>/dev/null && pwd)" != "$(cd "$INSTALL_DIR" 2>/dev/nu
     fi
     cp "$COMMON_DIR/docker-compose.yml" "$INSTALL_DIR/"
     cp -r "$COMMON_DIR/docker" "$INSTALL_DIR/"
-    cp "$COMMON_DIR/public/index.html" "$INSTALL_DIR/public/"
+    # Copy the entire public/ tree — fb-display bind-mounts it at
+    # /app/public, and uses standby.png + default-radio.png/svg in
+    # addition to index.html. Copying only index.html left those
+    # fallback assets missing → fb-display logged "Failed to load
+    # standby image" and showed a black rectangle in standby state.
+    mkdir -p "$INSTALL_DIR/public"
+    cp -r "$COMMON_DIR/public/." "$INSTALL_DIR/public/"
 fi
 
 # Copy .env only if it doesn't exist (preserve user settings)

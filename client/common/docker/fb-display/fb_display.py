@@ -80,11 +80,25 @@ async def discover_snapservers(timeout: float = DISCOVERY_TIMEOUT) -> list[str]:
     class _Listener:
         def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
             info = zc.get_service_info(type_, name)
-            if info and info.addresses:
-                ip = socket.inet_ntoa(info.addresses[0])
-                if ip not in servers:
-                    servers.append(ip)
-                    logger.info(f"mDNS: discovered snapcast server at {ip}")
+            if not info or not info.addresses:
+                return
+            # info.addresses contains BOTH IPv4 (4 bytes) and IPv6 (16 bytes)
+            # entries in arbitrary order. socket.inet_ntoa() raises OSError on
+            # 16-byte input. Filter to the first IPv4 we find — snapclient on
+            # bridged Docker can't use IPv6 link-local from the host.
+            ipv4_bytes = next(
+                (addr for addr in info.addresses if len(addr) == 4),
+                None,
+            )
+            if ipv4_bytes is None:
+                logger.debug(
+                    f"mDNS: skipping {name} (no IPv4 address in addresses)"
+                )
+                return
+            ip = socket.inet_ntoa(ipv4_bytes)
+            if ip not in servers:
+                servers.append(ip)
+                logger.info(f"mDNS: discovered snapcast server at {ip}")
 
         def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
             pass

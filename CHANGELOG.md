@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (quality-of-life)
+- **`discover-server.sh` now actually appends `SNAPSERVER_HOST=` when missing** — `sed -i s|...|...|` returns 0 even when no line matches, so the original `sed ... || echo ... >>` pattern never fired the append branch. On a freshly-flashed client whose `.env` lacks the line entirely, the host was silently never written. Replaced with an explicit `grep -q ... && sed ... || echo ... >>` decision
+- **client setup copies the entire `public/` tree, not only `index.html`** — `fb_display.py` reads `/app/public/standby.png` and the `default-radio.*` fallback assets in addition to `index.html`. The original `cp $COMMON_DIR/public/index.html $INSTALL_DIR/public/` left those missing → fb-display logged "Failed to load standby image" and rendered a black rectangle in standby state. Now the whole directory is copied
+- **fb-display mDNS discovery skips IPv6 addresses instead of crashing** — `socket.inet_ntoa(info.addresses[0])` raises `OSError` when `addresses[0]` is a 16-byte IPv6 entry (zeroconf returns both v4 and v6 in arbitrary order). Now we filter the addresses list and pick the first 4-byte (IPv4) entry, skipping the service entirely if no IPv4 is published
+- **metadata-service `/health` now reports staleness when snapserver RPC is broken** — the original handler returned a hardcoded `{"status":"ok"}` regardless of whether the metadata-service could actually talk to snapserver. The container could appear "healthy" to Docker Compose while doing nothing useful (RPC socket dropped, snapserver restarted, host config wrong). Now `/health` reads `last_successful_poll_at` (bumped on every successful `Server.GetStatus`) and returns 503 with `status: snapserver_unreachable` (never connected) or `snapserver_stale` (no successful poll for >60 s). Threshold is generous to avoid flapping during brief snapserver restarts (poll interval is ~1 s healthy)
+
 ### Added
 - **`device-smoke.sh`: five new health checks** — distilled from the live troubleshooting on 2026-05-07 where each of these conditions had a real-world manifestation in the same hour:
   - **NTP time sync** — `timedatectl show -p NTPSynchronized` must be `yes`. Snapcast's TimeProvider is NTP-immune but log timestamps and metadata-service rely on a sane wall clock; Pi Zero 2W's RTC sits at epoch 0 until NTP completes, masking boot-time bugs in any component using absolute timestamps
