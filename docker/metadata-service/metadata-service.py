@@ -2227,29 +2227,84 @@ def _render_html_shell(
 <meta http-equiv="refresh" content="60">
 <title>snapMULTI status</title>
 <style>
-  body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 760px; margin: 0 auto; padding: 1.5rem; color: #222; background: #fafafa; }}
-  h1 {{ margin: 0 0 .5rem; font-size: 1.6rem; }}
-  .verdict {{ padding: 1rem 1.2rem; border-radius: .5rem; margin-bottom: 1rem; }}
-  .verdict .icon {{ font-size: 1.6rem; margin-right: .5rem; }}
-  .verdict.ok       {{ background: #e7f7ea; border-left: 6px solid #2c7a3d; }}
-  .verdict.warn     {{ background: #fff8e1; border-left: 6px solid #c08c00; }}
-  .verdict.fail     {{ background: #ffeaea; border-left: 6px solid #b22222; }}
-  .verdict.starting {{ background: #eef3fa; border-left: 6px solid #345a91; }}
+  /* Dark theme — matches the snapMULTI fb-display aesthetic (dark TV/DAC look).
+     Designed for high contrast in a living-room context where the page might
+     be shown on a TV-connected Pi alongside the snapcast web UI. */
+  :root {{
+    --bg:           #15181c;
+    --panel:        #1f242b;
+    --border:       #2c333d;
+    --text:         #e6e8eb;
+    --text-dim:     #97a0ad;
+    --text-faint:   #5a6271;
+    --accent-ok:    #4ade80;  /* mint green */
+    --accent-warn:  #fbbf24;  /* amber */
+    --accent-fail:  #f87171;  /* coral */
+    --accent-info:  #60a5fa;  /* sky */
+    --accent-boot:  #a78bfa;  /* violet */
+  }}
+  * {{ box-sizing: border-box; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif;
+    max-width: 820px; margin: 0 auto; padding: 1.5rem;
+    color: var(--text); background: var(--bg);
+    line-height: 1.5;
+  }}
+  h1 {{ margin: 0 0 .4rem; font-size: 1.45rem; font-weight: 600; }}
+  .verdict {{
+    padding: 1.1rem 1.3rem; border-radius: .6rem; margin-bottom: 1.2rem;
+    background: var(--panel); border-left: 6px solid var(--text-faint);
+  }}
+  .verdict .icon {{ font-size: 1.6rem; margin-right: .55rem; vertical-align: -2px; }}
+  .verdict.ok       {{ border-left-color: var(--accent-ok);   }}
+  .verdict.ok       .icon {{ color: var(--accent-ok);         }}
+  .verdict.warn     {{ border-left-color: var(--accent-warn); }}
+  .verdict.warn     .icon {{ color: var(--accent-warn);       }}
+  .verdict.fail     {{ border-left-color: var(--accent-fail); }}
+  .verdict.fail     .icon {{ color: var(--accent-fail);       }}
+  .verdict.starting {{ border-left-color: var(--accent-boot); }}
+  .verdict.starting .icon {{ color: var(--accent-boot);       }}
   .verdict h1 {{ display: inline; }}
-  .verdict p  {{ margin: .4rem 0 0; }}
-  .banner {{ padding: .6rem 1rem; background: #fff8e1; border-left: 4px solid #c08c00; margin-bottom: 1rem; font-size: .95rem; }}
-  section {{ background: #fff; border: 1px solid #e3e3e3; border-radius: .4rem; margin-bottom: 1rem; padding: .8rem 1rem; }}
-  section h2 {{ font-size: 1rem; margin: 0 0 .5rem; color: #555; text-transform: uppercase; letter-spacing: .04em; }}
+  .verdict p  {{ margin: .5rem 0 0; color: var(--text-dim); }}
+  .banner {{
+    padding: .7rem 1rem; background: rgba(251,191,36,.12);
+    border-left: 4px solid var(--accent-warn);
+    margin-bottom: 1rem; font-size: .92rem;
+  }}
+  section {{
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: .5rem; margin-bottom: 1rem; padding: .9rem 1.1rem;
+  }}
+  section h2 {{
+    font-size: .82rem; margin: 0 0 .55rem; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: .08em; font-weight: 600;
+  }}
   ul {{ list-style: none; padding: 0; margin: 0; }}
-  li {{ padding: .25rem 0; border-bottom: 1px solid #f0f0f0; font-size: .95rem; }}
+  li {{
+    padding: .35rem 0; border-bottom: 1px solid var(--border);
+    font-size: .94rem;
+  }}
   li:last-child {{ border-bottom: none; }}
-  li .icon {{ display: inline-block; width: 1.5em; }}
-  .r-pass .icon {{ color: #2c7a3d; }}
-  .r-fail .icon {{ color: #b22222; }}
-  .r-warn .icon {{ color: #c08c00; }}
-  .r-info .icon {{ color: #5a7090; }}
-  code {{ background: #eee; padding: .1rem .35rem; border-radius: .2rem; font-size: .9em; }}
-  footer {{ margin-top: 1.5rem; font-size: .85rem; color: #777; text-align: center; }}
+  li .icon {{ display: inline-block; width: 1.6em; }}
+  .r-pass {{ color: var(--text); }}
+  .r-pass .icon {{ color: var(--accent-ok); }}
+  .r-fail .icon {{ color: var(--accent-fail); }}
+  .r-fail        {{ color: var(--text); }}
+  .r-warn .icon {{ color: var(--accent-warn); }}
+  .r-warn        {{ color: var(--text); }}
+  .r-info .icon {{ color: var(--accent-info); }}
+  .r-info        {{ color: var(--text-dim); }}
+  code {{
+    background: rgba(255,255,255,.06); color: var(--text);
+    padding: .12rem .4rem; border-radius: .25rem;
+    font-size: .88em; font-family: "SF Mono", Menlo, Consolas, monospace;
+  }}
+  strong {{ color: var(--text); font-weight: 600; }}
+  footer {{
+    margin-top: 1.5rem; font-size: .82rem;
+    color: var(--text-faint); text-align: center;
+  }}
+  footer strong {{ color: var(--text-dim); }}
 </style>
 </head><body>
 <div class="verdict {verdict_class}">
