@@ -2062,7 +2062,7 @@ async def handle_version(request: web.Request) -> web.Response:
 
 # Path inside the container — the host's /opt/snapmulti/audio is bind-mounted
 # at /audio (already in compose). The systemd timer on the host writes the
-# JSON snapshot here every 60s.
+# JSON snapshot here every 5 min.
 STATUS_JSON_PATH = "/audio/system-status.json"
 
 # Beginner-friendly grace period: when the snapshot file is older than this
