@@ -5,10 +5,15 @@ Description=Periodic snapMULTI system-status snapshot for /status web page
 # Wait for containers to come up before the FIRST snapshot — otherwise
 # the page shows red on every fresh boot, alarming beginners.
 OnBootSec=2min
-OnUnitActiveSec=60s
-# AccuracySec=5s avoids 60s ± 60s default jitter that would make the
-# page age-display ("snapshot from 25s ago") feel stale.
-AccuracySec=5s
+# 5-min interval: the page is for beginner self-diagnosis, not real-time
+# incident response. 5min × 4 hours = 48 SD writes (atomic .tmp + mv) —
+# negligible churn vs the boot of the smoke check itself (~2-3 s of
+# mDNS / journalctl / docker inspect). Browser-side refresh stays at
+# 60 s so the displayed age ("2m ago" / "4m ago") updates smoothly.
+OnUnitActiveSec=5min
+# AccuracySec=10s avoids systemd's default 1-min jitter that would make
+# the actual fire time wander noticeably from the 5-min cadence.
+AccuracySec=10s
 Persistent=false
 
 [Install]
