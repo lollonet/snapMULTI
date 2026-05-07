@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`has_display()` now recognises DSI / DPI / DisplayPort panels, not only HDMI** — `client/common/scripts/display.sh` previously globbed `card*-HDMI-*/status`. Pi 4 always exposes 2 HDMI connector status files even when nothing is plugged in; if BOTH HDMI ports were disconnected and the user had a DSI panel (e.g. official 7" Touch Display, Pi-Top, custom DSI ribbon), the function found `found_status=true` (HDMI disconnected entries exist) and returned headless — disabling fb-display / audio-visualizer despite a working screen. Fixed: scan all `card*/status` files, parse the connector type from the parent directory name, honour `HDMI-* / DSI-* / DPI-* / DP-* / eDP-*` and explicitly skip `*Writeback*` (which is a virtual render target, not a physical screen). 6 scenarios validated via standalone harness (HDMI+writeback, DSI-only, all-headless, DPI-only, writeback-only, Pi 5 DP).
+
 ### Added
 - **`device-smoke.sh`: five new health checks** — distilled from the live troubleshooting on 2026-05-07 where each of these conditions had a real-world manifestation in the same hour:
   - **NTP time sync** — `timedatectl show -p NTPSynchronized` must be `yes`. Snapcast's TimeProvider is NTP-immune but log timestamps and metadata-service rely on a sane wall clock; Pi Zero 2W's RTC sits at epoch 0 until NTP completes, masking boot-time bugs in any component using absolute timestamps
