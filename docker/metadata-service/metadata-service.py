@@ -1545,8 +1545,7 @@ class MetadataService:
                 # Mark this iteration as a healthy round-trip with snapserver.
                 # /health uses this timestamp to differentiate "container alive
                 # AND talking to snapserver" from "container alive, snapserver
-                # silent for N seconds".
-                import time
+                # silent for N seconds". `time` already imported at module top.
                 self.last_successful_poll_at = time.time()
 
                 # Rebuild client → stream mapping (only if changed)
@@ -1965,8 +1964,6 @@ async def handle_health(request: web.Request) -> web.Response:
     (~1 s healthy / 5 s on error) so brief snapserver restarts don't
     flap the metadata-service health.
     """
-    import time
-
     base = {
         "status": "ok",
         "version": os.environ.get("SNAPMULTI_VERSION", "unknown"),
