@@ -86,8 +86,14 @@ _apply_server() {
     if [[ "$new_ip" == "$current" ]]; then
         return 1  # no change
     fi
-    sed -i "s|^SNAPSERVER_HOST=.*|SNAPSERVER_HOST=$new_ip|" "$ENV_FILE" 2>/dev/null \
-        || echo "SNAPSERVER_HOST=$new_ip" >> "$ENV_FILE"
+    # `sed -i s/.../...` returns 0 even when no line matches — only fails on
+    # write errors. Use a presence check to decide between replace and append,
+    # otherwise a missing SNAPSERVER_HOST= line would be silently never added.
+    if grep -q '^SNAPSERVER_HOST=' "$ENV_FILE" 2>/dev/null; then
+        sed -i "s|^SNAPSERVER_HOST=.*|SNAPSERVER_HOST=$new_ip|" "$ENV_FILE"
+    else
+        echo "SNAPSERVER_HOST=$new_ip" >> "$ENV_FILE"
+    fi
     _log "server at $new_ip (was: ${current:-empty})"
     echo "$new_ip" > "$LAST_IP_FILE"
     if $WATCH_MODE; then
