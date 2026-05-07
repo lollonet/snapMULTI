@@ -2057,6 +2057,257 @@ async def handle_version(request: web.Request) -> web.Response:
 
 
 # ──────────────────────────────────────────────
+# /status — system health page (issue #177)
+# ──────────────────────────────────────────────
+
+# Path inside the container — the host's /opt/snapmulti/audio is bind-mounted
+# at /audio (already in compose). The systemd timer on the host writes the
+# JSON snapshot here every 60s.
+STATUS_JSON_PATH = "/audio/system-status.json"
+
+# Beginner-friendly grace period: when the snapshot file is older than this
+# much after host boot, we still trust it; when it's MISSING entirely AND
+# the container itself was started recently, we render "starting up" instead
+# of "broken". This avoids the false-alarm fail screen during firstboot.
+STATUS_BOOT_GRACE_SECONDS = 600  # 10 minutes
+
+
+def _read_status_snapshot() -> tuple[dict | None, float | None]:
+    """Read the JSON snapshot file. Returns (data, age_seconds) or (None, None).
+
+    Tolerant to:
+      - missing file (timer not yet fired or never installed)
+      - partial / unreadable file (concurrent write — atomic .tmp+mv on the
+        timer side makes this rare, but defensively handle it anyway)
+      - schema mismatch (unknown schema_version → still display, with banner)
+    """
+    try:
+        st = os.stat(STATUS_JSON_PATH)
+    except FileNotFoundError:
+        return None, None
+    except OSError:
+        return None, None
+    try:
+        with open(STATUS_JSON_PATH) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None, None
+    age = max(0.0, time.time() - st.st_mtime)
+    return data, age
+
+
+def _status_to_html(data: dict | None, age_s: float | None) -> str:
+    """Render the snapshot to a beginner-friendly HTML page.
+
+    All content is escaped via html.escape — message text from device-smoke
+    can contain anything (paths, error messages from journalctl, etc.) and
+    we never want to interpret it as HTML.
+    """
+    import html
+
+    # Boot-grace overlay: nothing to show yet AND container is fresh
+    container_age = time.time() - _SERVICE_START_AT if _SERVICE_START_AT else 0
+    if data is None and container_age < STATUS_BOOT_GRACE_SECONDS:
+        return _render_html_shell(
+            verdict_class="starting",
+            verdict_icon="⏳",
+            verdict_text="System is starting up…",
+            subtext=(
+                "snapMULTI is still bringing up its containers and running "
+                "the first health check. This page refreshes every minute."
+            ),
+            sections_html="",
+            footer="(no snapshot yet — usually appears within ~3 minutes of first boot)",
+        )
+
+    if data is None:
+        return _render_html_shell(
+            verdict_class="fail",
+            verdict_icon="✗",
+            verdict_text="No status snapshot available",
+            subtext=(
+                "The status timer has not produced a snapshot yet. "
+                "Check that snapmulti-status.timer is enabled: "
+                "<code>systemctl status snapmulti-status.timer</code>"
+            ),
+            sections_html="",
+            footer="",
+        )
+
+    # Schema sanity
+    schema = data.get("schema_version", 0)
+    schema_banner = ""
+    if schema != 1:
+        schema_banner = (
+            f'<div class="banner">⚠ Unknown snapshot schema (v{schema}). '
+            f"This page may not display all fields correctly. Update the dashboard.</div>"
+        )
+
+    overall = data.get("status", "fail")
+    failures = int(data.get("failures", 0))
+    warnings = int(data.get("warnings", 0))
+    hostname = data.get("hostname", "?")
+    mode = data.get("mode", "?")
+
+    if overall == "ok":
+        verdict_class = "ok"
+        verdict_icon = "✓"
+        verdict_text = "All systems healthy"
+        subtext = f"snapMULTI is running normally on <strong>{html.escape(hostname)}</strong> ({html.escape(mode)} mode)."
+    elif overall == "warn":
+        verdict_class = "warn"
+        verdict_icon = "⚠"
+        verdict_text = f"{warnings} warning(s) — non-critical"
+        subtext = (
+            "snapMULTI is running but some checks emitted warnings. "
+            "Review below for details — these usually self-resolve."
+        )
+    else:
+        verdict_class = "fail"
+        verdict_icon = "✗"
+        verdict_text = f"{failures} issue(s) need attention"
+        subtext = "Some checks failed. The details below describe what to fix."
+
+    # Group records by section
+    records = data.get("records", [])
+    sections: dict[str, list[dict]] = {}
+    for r in records:
+        sections.setdefault(r.get("section", "other"), []).append(r)
+
+    sec_html_parts = []
+    for sec_name, recs in sections.items():
+        rows = []
+        for r in recs:
+            status = r.get("status", "info")
+            msg = html.escape(r.get("msg", ""))
+            icon = {"pass": "✓", "fail": "✗", "warn": "⚠", "info": "ℹ"}.get(status, "•")
+            rows.append(
+                f'<li class="r-{status}"><span class="icon">{icon}</span>{msg}</li>'
+            )
+        sec_html_parts.append(
+            f"<section><h2>{html.escape(sec_name)}</h2><ul>{''.join(rows)}</ul></section>"
+        )
+
+    if age_s is not None:
+        if age_s < 60:
+            age_label = f"{int(age_s)}s ago"
+        elif age_s < 3600:
+            age_label = f"{int(age_s / 60)}m ago"
+        else:
+            age_label = f"{int(age_s / 3600)}h ago"
+        footer = f"Snapshot taken <strong>{age_label}</strong>. Refreshes every minute."
+    else:
+        footer = ""
+
+    return _render_html_shell(
+        verdict_class=verdict_class,
+        verdict_icon=verdict_icon,
+        verdict_text=verdict_text,
+        subtext=schema_banner + subtext,
+        sections_html="".join(sec_html_parts),
+        footer=footer,
+        embedded_json=json.dumps(data),
+    )
+
+
+def _render_html_shell(
+    *,
+    verdict_class: str,
+    verdict_icon: str,
+    verdict_text: str,
+    subtext: str,
+    sections_html: str,
+    footer: str,
+    embedded_json: str = "{}",
+) -> str:
+    return f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="60">
+<title>snapMULTI status</title>
+<style>
+  body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 760px; margin: 0 auto; padding: 1.5rem; color: #222; background: #fafafa; }}
+  h1 {{ margin: 0 0 .5rem; font-size: 1.6rem; }}
+  .verdict {{ padding: 1rem 1.2rem; border-radius: .5rem; margin-bottom: 1rem; }}
+  .verdict .icon {{ font-size: 1.6rem; margin-right: .5rem; }}
+  .verdict.ok       {{ background: #e7f7ea; border-left: 6px solid #2c7a3d; }}
+  .verdict.warn     {{ background: #fff8e1; border-left: 6px solid #c08c00; }}
+  .verdict.fail     {{ background: #ffeaea; border-left: 6px solid #b22222; }}
+  .verdict.starting {{ background: #eef3fa; border-left: 6px solid #345a91; }}
+  .verdict h1 {{ display: inline; }}
+  .verdict p  {{ margin: .4rem 0 0; }}
+  .banner {{ padding: .6rem 1rem; background: #fff8e1; border-left: 4px solid #c08c00; margin-bottom: 1rem; font-size: .95rem; }}
+  section {{ background: #fff; border: 1px solid #e3e3e3; border-radius: .4rem; margin-bottom: 1rem; padding: .8rem 1rem; }}
+  section h2 {{ font-size: 1rem; margin: 0 0 .5rem; color: #555; text-transform: uppercase; letter-spacing: .04em; }}
+  ul {{ list-style: none; padding: 0; margin: 0; }}
+  li {{ padding: .25rem 0; border-bottom: 1px solid #f0f0f0; font-size: .95rem; }}
+  li:last-child {{ border-bottom: none; }}
+  li .icon {{ display: inline-block; width: 1.5em; }}
+  .r-pass .icon {{ color: #2c7a3d; }}
+  .r-fail .icon {{ color: #b22222; }}
+  .r-warn .icon {{ color: #c08c00; }}
+  .r-info .icon {{ color: #5a7090; }}
+  code {{ background: #eee; padding: .1rem .35rem; border-radius: .2rem; font-size: .9em; }}
+  footer {{ margin-top: 1.5rem; font-size: .85rem; color: #777; text-align: center; }}
+</style>
+</head><body>
+<div class="verdict {verdict_class}">
+  <h1><span class="icon">{verdict_icon}</span>{verdict_text}</h1>
+  <p>{subtext}</p>
+</div>
+{sections_html}
+<footer>{footer}</footer>
+<script id="status-data" type="application/json">{embedded_json}</script>
+</body></html>"""
+
+
+async def handle_status(request: web.Request) -> web.Response:
+    """System status page — issue #177.
+
+    Default content: HTML for browsers (the issue's primary audience).
+    Programmatic clients can request JSON via `?format=json` or by parsing
+    the embedded `<script id="status-data">` block in the HTML.
+    """
+    data, age_s = _read_status_snapshot()
+    fmt = request.query.get("format", "")
+    if fmt == "json":
+        if data is None:
+            return web.json_response(
+                {"status": "no_snapshot"},
+                status=503,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+        return web.json_response(
+            data,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-store",
+            },
+        )
+    body = _status_to_html(data, age_s)
+    return web.Response(
+        text=body,
+        content_type="text/html",
+        charset="utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def handle_root_redirect(request: web.Request) -> web.Response:
+    """`GET /` → 302 to `/status`. Lets beginners just type host:port.
+
+    Why a redirect and not the page directly: keeps `/status` as the
+    canonical URL (deep-linkable, predictable) while making `/` Just Work.
+    """
+    raise web.HTTPFound("/status")
+
+
+# Track service start time for the boot-grace overlay logic
+_SERVICE_START_AT = time.time()
+
+
+# ──────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────
 
@@ -2102,6 +2353,10 @@ async def main() -> None:
     app.router.add_get("/metadata.json", handle_metadata)
     app.router.add_get("/health", handle_health)
     app.router.add_get("/version", handle_version)
+    app.router.add_get("/status", handle_status)
+    # Landing page redirects to /status — beginners just type the host:port
+    # in a browser and get the health dashboard, no endpoint guessing.
+    app.router.add_get("/", handle_root_redirect)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", HTTP_PORT)

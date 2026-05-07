@@ -1,0 +1,15 @@
+[Unit]
+Description=Periodic snapMULTI system-status snapshot for /status web page
+
+[Timer]
+# Wait for containers to come up before the FIRST snapshot — otherwise
+# the page shows red on every fresh boot, alarming beginners.
+OnBootSec=2min
+OnUnitActiveSec=60s
+# AccuracySec=5s avoids 60s ± 60s default jitter that would make the
+# page age-display ("snapshot from 25s ago") feel stale.
+AccuracySec=5s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

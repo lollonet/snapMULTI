@@ -107,6 +107,11 @@ install_dependencies() {
     # scenario that surfaced in 2026-05-07 troubleshooting.
     command -v arping &>/dev/null || pkgs+=(iputils-arping)
 
+    # jq: needed by device-smoke.sh \`--json\` mode (issue #177 status page).
+    # Bash printf cannot safely escape arbitrary message text (unicode, embedded
+    # quotes/newlines from journalctl/arping output) — jq handles this correctly.
+    command -v jq &>/dev/null || pkgs+=(jq)
+
     # Server: monitoring tools for operational visibility
     if [[ "$role" == "server" || "$role" == "both" ]]; then
         command -v sar   &>/dev/null || pkgs+=(sysstat)
