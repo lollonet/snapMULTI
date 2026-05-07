@@ -515,7 +515,11 @@ if [[ "$MODE" == "client" || "$MODE" == "both" ]]; then
         # \`closed\` (single line) = no stream. Any other content = active.
         if grep -q 'access:' "$f" 2>/dev/null; then
             _audio_active=true
-            _rate=$(awk -F': ' '/^rate:/ {print $2; exit}' "$f")
+            # `rate:` line in hw_params is "rate: 44100 (44100/1)" — fraction
+            # annotation. `$2+0` forces numeric coercion in awk, stripping
+            # the trailing " (44100/1)". format and channels are single-token
+            # so the simple split on ': ' is fine for them.
+            _rate=$(awk '/^rate:/ {print $2+0; exit}' "$f")
             _format=$(awk -F': ' '/^format:/ {print $2; exit}' "$f")
             _channels=$(awk -F': ' '/^channels:/ {print $2; exit}' "$f")
             # snapMULTI invariant: 44100 / S16_LE / 2 channels
