@@ -342,7 +342,7 @@ _check_avahi_mount() {
     docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$container" || return 0
     if docker inspect "$container" --format '{{range .Mounts}}{{.Source}}|{{end}}' 2>/dev/null \
         | grep -q '/run/avahi-daemon/socket'; then
-        pass_check "$container: avahi socket mounted (PR #290)"
+        pass_check "$container: avahi socket mounted"
     else
         fail_check "$container: avahi socket NOT mounted — mDNS publication will degrade. Re-deploy with current docker-compose.yml"
     fi
