@@ -479,20 +479,40 @@ if [[ "$MODE" == "client" || "$MODE" == "both" ]]; then
     if [[ -f "$_client_env" ]]; then
         # `|| true`: pipefail + set -e would kill the script on grep no-match
         _soundcard=$(grep '^SOUNDCARD=' "$_client_env" 2>/dev/null | cut -d= -f2- || true)
-        # Extract CARD name from \`hw:CARD=NAME,DEV=0\` format
+        # Two paths to derive the expected ALSA card name:
+        #  (a) SOUNDCARD=hw:CARD=NAME,DEV=0           — headless client with HAT (PR #282)
+        #  (b) SOUNDCARD=default + /etc/asound.conf   — display+HAT setup; routing
+        #      via `multi` plugin pumps audio to BOTH the HAT and a Loopback for
+        #      audio-visualizer / fb-display. The asound.conf names the HAT card
+        #      via `ctl.!default { card NAME }` and `pcm "hw:NAME,0"` references.
         _card_name=$(echo "$_soundcard" | sed -nE 's/.*CARD=([^,]+).*/\1/p')
+        _card_source="SOUNDCARD"
+        if [[ -z "$_card_name" ]] && [[ "$_soundcard" == "default" ]] && [[ -f /etc/asound.conf ]]; then
+            # Prefer the explicit `ctl.!default { card NAME }` declaration
+            _card_name=$(awk '/^ctl\.!default/,/^}/' /etc/asound.conf 2>/dev/null \
+                | grep -oE 'card [A-Za-z0-9_-]+' | awk 'NR==1 {print $2}' || true)
+            # Fallback: first `hw:NAME,...` reference (skip Loopback as
+            # that's the visualizer tap, not the audio destination)
+            if [[ -z "$_card_name" ]]; then
+                _card_name=$(grep -oE 'hw:[A-Za-z0-9_-]+' /etc/asound.conf 2>/dev/null \
+                    | sed 's/hw://' | grep -v -i '^Loopback$' | head -1 || true)
+            fi
+            [[ -n "$_card_name" ]] && _card_source="/etc/asound.conf"
+        fi
         if [[ -n "$_card_name" ]]; then
             if command -v aplay >/dev/null 2>&1; then
                 if aplay -l 2>/dev/null | grep -qE "card [0-9]+: $_card_name "; then
-                    pass_check "HAT consistency: card '$_card_name' present in ALSA"
+                    pass_check "HAT consistency: card '$_card_name' present in ALSA (via $_card_source)"
                 else
-                    fail_check "HAT mismatch: SOUNDCARD references CARD=$_card_name but \`aplay -l\` does not show it — HAT removed / wrong DAC profile?"
+                    fail_check "HAT mismatch: $_card_source references card '$_card_name' but \`aplay -l\` does not show it — HAT removed / wrong DAC profile?"
                 fi
             else
                 warn "aplay not installed — HAT consistency check skipped"
             fi
+        elif [[ "$_soundcard" == "default" ]] && [[ ! -f /etc/asound.conf ]]; then
+            info "SOUNDCARD=default with no /etc/asound.conf — likely USB / HDMI audio (no HAT to verify)"
         elif [[ -n "$_soundcard" ]]; then
-            info "SOUNDCARD='$_soundcard' has no CARD= — HAT consistency check not applicable"
+            info "SOUNDCARD='$_soundcard' has no CARD= and asound.conf yields no card name — HAT consistency check not applicable"
         else
             info "No SOUNDCARD in client .env — HAT consistency check skipped"
         fi
