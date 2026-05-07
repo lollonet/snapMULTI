@@ -329,17 +329,31 @@ if command -v arping >/dev/null 2>&1; then
     _own_iface=$(ip -4 -o route get 1.1.1.1 2>/dev/null | awk '{print $5; exit}')
     _own_ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
     if [[ -n "$_own_iface" ]] && [[ -n "$_own_ip" ]]; then
-        if sudo -n arping -D -c 3 -w 5 -I "$_own_iface" "$_own_ip" >/dev/null 2>&1; then
-            pass_check "No IP conflict on $_own_ip ($_own_iface)"
-        else
-            # arping -D exits 1 on duplicate detected OR on permission failure;
-            # try non-sudo to distinguish (best-effort, may still fail without raw socket cap)
-            if arping -D -c 3 -w 5 -I "$_own_iface" "$_own_ip" >/dev/null 2>&1; then
-                pass_check "No IP conflict on $_own_ip ($_own_iface)"
-            else
-                fail_check "Possible IP conflict on $_own_ip — another host replied to our ARP probe (or arping needs root)"
-            fi
+        # \`arping -D\` exits 0 if no replies (no conflict) and 1 if replies
+        # received (conflict). It also fails with 1+stderr when missing
+        # CAP_NET_RAW. We try \`sudo -n\` first; on permission failure we
+        # fall back to unprivileged arping AND distinguish the permission
+        # case from a real conflict by inspecting stderr — a permission
+        # gap should NOT hard-fail the smoke gate (that turns a config
+        # gap into a hard fail on every install without passwordless sudo).
+        _arping_run() {
+            "$@" -D -c 3 -w 5 -I "$_own_iface" "$_own_ip" 2>&1
+        }
+        _arping_out=$(_arping_run sudo -n arping)
+        _arping_rc=$?
+        if [[ $_arping_rc -ne 0 ]]; then
+            # sudo -n likely lacked NOPASSWD or no sudo at all — retry plain
+            _arping_out=$(_arping_run arping)
+            _arping_rc=$?
         fi
+        if [[ $_arping_rc -eq 0 ]]; then
+            pass_check "No IP conflict on $_own_ip ($_own_iface)"
+        elif echo "$_arping_out" | grep -qiE 'permission|not permitted|capabilities|password is required'; then
+            warn "arping needs CAP_NET_RAW / sudo — IP-conflict check skipped (run as root, or 'setcap cap_net_raw+ep \$(command -v arping)')"
+        else
+            fail_check "Possible IP conflict on $_own_ip — another host replied to our ARP probe"
+        fi
+        unset -f _arping_run
     else
         warn "Could not determine own IP/iface for conflict check"
     fi
@@ -385,21 +399,29 @@ fi
 # trouble, often a marginal PSU/cable). vcgencmd only on Raspberry Pi.
 if command -v vcgencmd >/dev/null 2>&1; then
     _throttled_raw=$(vcgencmd get_throttled 2>/dev/null | sed 's/throttled=//')
-    _throttled_dec=$((_throttled_raw))
-    _now_bits=$(( _throttled_dec & 0xF ))
-    _hist_bits=$(( _throttled_dec & 0xF0000 ))
-    if (( _now_bits != 0 )); then
-        fail_check "Hardware throttling RIGHT NOW (throttled=$_throttled_raw) — under-voltage / thermal / PSU issue"
-    elif (( _hist_bits != 0 )); then
-        # Historical only — not a hard fail but flag loudly
-        _msg="hardware throttling occurred since boot (throttled=$_throttled_raw)"
-        (( _hist_bits & 0x10000 )) && _msg="$_msg [under-voltage]"
-        (( _hist_bits & 0x20000 )) && _msg="$_msg [arm-freq-capped]"
-        (( _hist_bits & 0x40000 )) && _msg="$_msg [throttling]"
-        (( _hist_bits & 0x80000 )) && _msg="$_msg [soft-temp-limit]"
-        warn "$_msg — likely PSU/cable issue (5V/3A required)"
+    # Guard: empty / non-hex output (vcgencmd present but unable to read,
+    # e.g. user not in `video` group, firmware mailbox hiccup) must NOT be
+    # silently treated as 0x0 → "healthy". Empty $((…)) evaluates to 0 in
+    # bash arithmetic, which would invert the diagnostic.
+    if [[ -z "$_throttled_raw" ]] || [[ ! "$_throttled_raw" =~ ^0x[0-9a-fA-F]+$ ]]; then
+        warn "vcgencmd returned no usable data ('$_throttled_raw') — throttle check skipped (permission issue? try \`sudo usermod -aG video \$USER\` and re-login)"
     else
-        pass_check "Hardware healthy (throttled=0x0, no under-voltage / throttling)"
+        _throttled_dec=$((_throttled_raw))
+        _now_bits=$(( _throttled_dec & 0xF ))
+        _hist_bits=$(( _throttled_dec & 0xF0000 ))
+        if (( _now_bits != 0 )); then
+            fail_check "Hardware throttling RIGHT NOW (throttled=$_throttled_raw) — under-voltage / thermal / PSU issue"
+        elif (( _hist_bits != 0 )); then
+            # Historical only — not a hard fail but flag loudly
+            _msg="hardware throttling occurred since boot (throttled=$_throttled_raw)"
+            (( _hist_bits & 0x10000 )) && _msg="$_msg [under-voltage]"
+            (( _hist_bits & 0x20000 )) && _msg="$_msg [arm-freq-capped]"
+            (( _hist_bits & 0x40000 )) && _msg="$_msg [throttling]"
+            (( _hist_bits & 0x80000 )) && _msg="$_msg [soft-temp-limit]"
+            warn "$_msg — likely PSU/cable issue (5V/3A required)"
+        else
+            pass_check "Hardware healthy (throttled=0x0, no under-voltage / throttling)"
+        fi
     fi
 else
     info "vcgencmd not available — skipping throttle check (non-Raspberry-Pi host?)"
