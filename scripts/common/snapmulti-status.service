@@ -1,0 +1,38 @@
+[Unit]
+Description=Refresh snapMULTI system-status snapshot for /status web page
+# Run after Docker so smoke checks see the containers
+After=docker.service network-online.target
+# Hard-fail-tolerant — the snapshot is best-effort; if smoke can't run
+# (Docker briefly down, etc.) the next timer firing tries again.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=oneshot
+# Concurrency guard: flock-based, so two timer firings can't write the
+# JSON file at once (Pi Zero 2W on a slow SD can have smoke runs > 60s).
+# `flock --nonblock` exits immediately if another instance holds the lock.
+# RuntimeMaxSec also kills runaway runs that would block the next timer.
+RuntimeMaxSec=120
+TimeoutStartSec=130
+KillMode=mixed
+# `flock --nonblock` exits 1 when the lock is busy (concurrent run). That's
+# the intended "skip this firing" behaviour, not a failure — tell systemd so
+# the journal doesn't log a misleading FAILED status.
+SuccessExitStatus=0 1
+# Atomic write: smoke writes to .tmp, then mv to final. metadata-service
+# never reads a partial file. chown after write so the metadata container
+# (uid PUID:PGID, default 1000:1000) can read the root-written file.
+# `||:` on the inner pipeline means a smoke FAILURE doesn't fail the
+# unit — the JSON contains the failure records and the page shows them.
+ExecStart=/usr/bin/flock --nonblock /run/snapmulti-status.lock \
+    /bin/bash -c '/opt/snapmulti/scripts/device-smoke.sh --json --no-fail-on-warn > /opt/snapmulti/audio/system-status.json.tmp || :; \
+                  if [ -s /opt/snapmulti/audio/system-status.json.tmp ]; then \
+                      mv /opt/snapmulti/audio/system-status.json.tmp /opt/snapmulti/audio/system-status.json; \
+                      chown ${PUID:-1000}:${PGID:-1000} /opt/snapmulti/audio/system-status.json 2>/dev/null || :; \
+                  else \
+                      rm -f /opt/snapmulti/audio/system-status.json.tmp; \
+                  fi'
+
+[Install]
+WantedBy=multi-user.target

@@ -123,7 +123,7 @@ Snapserver supporta più codec (configurabili in `config/snapserver.conf`):
 | Porta | Protocollo | Scopo |
 |-------|------------|-------|
 | 8082 | WebSocket | Push metadati traccia (sottoscrizione con CLIENT_ID) |
-| 8083 | HTTP | File copertine, JSON metadati, health check |
+| 8083 | HTTP | File copertine, JSON metadati, health check, pagina di stato sistema (`/status`) |
 
 **Configurazione**: variabili d'ambiente (default: localhost per connessioni Snapserver/MPD)
 - Interroga Snapserver JSON-RPC ogni 2s per i metadati degli stream
@@ -274,6 +274,9 @@ Dopo l'installazione, systemd gestisce il ciclo di vita dei container (ADR-005).
 | `snapclient-discover.timer` | client, both | Riscopre il server via mDNS ogni 5 min |
 | `snapclient-display.service` | client (display) | Rileva HDMI e riconcilia i container display |
 | `snapmulti-boot-tune.service` | tutti | CPU governor, USB autosuspend, WiFi power save |
+| `snapmulti-status.timer` | server, both | Aggiorna lo snapshot della pagina `/status` ogni 5 min (issue #177) |
+| `snapmulti-backup.timer` | server, both | Backup giornaliero del database MPD sulla partizione di boot |
+| `snapmulti-diagnostics.timer` | tutti | Cattura periodica di log diagnostici |
 
 ```bash
 # Controlla stato
@@ -303,12 +306,14 @@ snapMULTI ha tre interfacce di controllo, ognuna per uno scopo diverso:
 |-------------|---------|---------|
 | **Snapweb** | `http://<ip-del-server>:1780` | Gestisci altoparlanti: cambia sorgente audio, regola volume per stanza, raggruppa/separa |
 | **myMPD** | `http://<ip-del-server>:8180` | Sfoglia e riproduci la tua libreria musicale, gestisci playlist, visualizza copertine |
+| **Stato sistema** | `http://<ip-del-server>:8083` | Dashboard di salute: stato dei container, mount NFS, percorso audio, errori recenti. Si aggiorna automaticamente ogni minuto (issue #177) |
 | **App Snapcast** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) | Controllo altoparlanti da smartphone — stesse funzioni di Snapweb |
 
 **Quale mi serve?**
 - Per **riprodurre musica dalla libreria** → apri myMPD
 - Per **cambiare cosa riproduce un altoparlante** (es. da MPD a Spotify) → apri Snapweb o l'app mobile
 - Per **trasmettere da Spotify/AirPlay/Tidal** → usa direttamente quelle app (trovano snapMULTI automaticamente)
+- Per **verificare se tutto funziona** (prima di aprire una issue su GitHub, o dopo aver cambiato la rete) → apri la pagina di stato sistema
 
 ## Controllare MPD
 

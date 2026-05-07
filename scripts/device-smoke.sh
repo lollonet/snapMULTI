@@ -21,20 +21,40 @@ MODE="auto"
 SERVER_DIR=""
 CLIENT_DIR=""
 FAILURES=0
+WARNINGS=0
+JSON_OUTPUT=false
+NO_FAIL_ON_WARN=false
+
+# JSON-mode buffers — populated by helpers when JSON_OUTPUT=true.
+# Each is a JSON-encoded object string ready for jq to assemble.
+declare -a JSON_RECORDS=()
+JSON_CURRENT_SECTION="general"
+SCHEMA_VERSION=1
+RUN_STARTED_AT=""
 
 usage() {
     cat <<'EOF'
-Usage: device-smoke.sh [--server|--client|--both] [--server-dir PATH] [--client-dir PATH]
+Usage: device-smoke.sh [OPTIONS]
 
 Mode selection:
-  --server      Expect only server install
-  --client      Expect only client install
-  --both        Expect both server and client installs
-  default       Auto-detect from installed directories
+  --server          Expect only server install
+  --client          Expect only client install
+  --both            Expect both server and client installs
+  default           Auto-detect from installed directories
 
 Overrides:
-  --server-dir  Override server install directory
-  --client-dir  Override client install directory
+  --server-dir PATH Override server install directory
+  --client-dir PATH Override client install directory
+
+Output:
+  --json            Emit a single JSON object on stdout instead of human
+                    text on stderr. Suitable for the snapmulti-status
+                    timer / metadata-service /status endpoint.
+  --no-fail-on-warn Exit 0 when only warnings (not failures) occurred.
+                    Default behaviour is exit 0 when 0 fails (warnings
+                    don't fail anyway), so this is mainly for callers
+                    that want a guaranteed-non-zero exit ONLY on hard
+                    failures (the status timer wants this).
 EOF
 }
 
@@ -54,6 +74,14 @@ while [[ $# -gt 0 ]]; do
             [[ -n "$CLIENT_DIR" ]] || { error "--client-dir requires a path"; exit 2; }
             shift 2
             ;;
+        --json)
+            JSON_OUTPUT=true
+            shift
+            ;;
+        --no-fail-on-warn)
+            NO_FAIL_ON_WARN=true
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -65,6 +93,26 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# JSON requires jq for safe escaping of arbitrary message text.
+if [[ "$JSON_OUTPUT" == "true" ]]; then
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "ERROR: --json requires jq (apt-get install jq)" >&2
+        exit 2
+    fi
+    RUN_STARTED_AT=$(date -u +%FT%TZ)
+fi
+
+# Helper: append one record to JSON_RECORDS using jq for safe escaping.
+# Args: status (pass|fail|warn|info), message
+_json_record() {
+    local status="$1" msg="$2"
+    JSON_RECORDS+=("$(jq -nc \
+        --arg sec "$JSON_CURRENT_SECTION" \
+        --arg st  "$status" \
+        --arg msg "$msg" \
+        '{section: $sec, status: $st, msg: $msg}')")
+}
 
 detect_dir() {
     local explicit="$1"
@@ -115,17 +163,41 @@ require_cmd() {
 }
 
 section() {
+    JSON_CURRENT_SECTION="$*"
+    if [[ "$JSON_OUTPUT" == "true" ]]; then
+        return  # section header is implicit in each record's `section` field
+    fi
     printf '\n%s%s==> %s%s\n' "$CYAN" "$BOLD" "$*" "$NC" >&2
 }
 
 pass_check() {
-    ok "$1"
+    if [[ "$JSON_OUTPUT" == "true" ]]; then
+        _json_record pass "$1"
+    else
+        ok "$1"
+    fi
 }
 
 fail_check() {
-    error "$1"
     FAILURES=$((FAILURES + 1))
+    if [[ "$JSON_OUTPUT" == "true" ]]; then
+        _json_record fail "$1"
+    else
+        error "$1"
+    fi
 }
+
+# Override info/warn from logging.sh in JSON mode so they too end up
+# in the structured output. We have to do this AFTER `source logging.sh`
+# at the top of the file — the override happens here, well after that.
+if [[ "$JSON_OUTPUT" == "true" ]]; then
+    # shellcheck disable=SC2317  # called via dispatch table when JSON_OUTPUT
+    info() { _json_record info "$*"; }
+    # shellcheck disable=SC2317
+    warn() { WARNINGS=$((WARNINGS + 1)); _json_record warn "$*"; }
+    # `error` keeps writing to stderr — it's used by usage() / require_cmd
+    # before any check has run, and we want those visible regardless.
+fi
 
 check_unit() {
     local unit="$1"
@@ -270,7 +342,7 @@ _check_avahi_mount() {
     docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$container" || return 0
     if docker inspect "$container" --format '{{range .Mounts}}{{.Source}}|{{end}}' 2>/dev/null \
         | grep -q '/run/avahi-daemon/socket'; then
-        pass_check "$container: avahi socket mounted (PR #290)"
+        pass_check "$container: avahi socket mounted"
     else
         fail_check "$container: avahi socket NOT mounted — mDNS publication will degrade. Re-deploy with current docker-compose.yml"
     fi
@@ -653,6 +725,56 @@ else
     warn "$_error_count total error(s) in recent logs (non-blocking)"
 fi
 
+# ── Final emit ──
+if [[ "$JSON_OUTPUT" == "true" ]]; then
+    # Compose final document. `jq -s '.'` slurps the per-record objects
+    # into an array, then we wrap with metadata. All escaping is handled
+    # by jq — no risk of malformed output from message text containing
+    # quotes, newlines, or non-ASCII characters.
+    overall_status="ok"
+    if (( FAILURES > 0 )); then
+        overall_status="fail"
+    elif (( WARNINGS > 0 )); then
+        overall_status="warn"
+    fi
+    if [[ ${#JSON_RECORDS[@]} -eq 0 ]]; then
+        records_json="[]"
+    else
+        records_json=$(printf '%s\n' "${JSON_RECORDS[@]}" | jq -s '.')
+    fi
+    jq -nc \
+        --argjson schema "$SCHEMA_VERSION" \
+        --arg     status "$overall_status" \
+        --arg     mode "$MODE" \
+        --arg     hostname "$(hostname 2>/dev/null || echo unknown)" \
+        --arg     started "$RUN_STARTED_AT" \
+        --arg     finished "$(date -u +%FT%TZ)" \
+        --argjson failures "$FAILURES" \
+        --argjson warnings "$WARNINGS" \
+        --argjson records "$records_json" \
+        '{
+            schema_version: $schema,
+            status: $status,
+            mode: $mode,
+            hostname: $hostname,
+            started_at: $started,
+            finished_at: $finished,
+            failures: $failures,
+            warnings: $warnings,
+            records: $records
+        }'
+    # Exit 0 when fail-on-warn mode is opt-out and only warnings present;
+    # otherwise exit non-zero on real failures.
+    if (( FAILURES > 0 )); then
+        exit 1
+    fi
+    if [[ "$NO_FAIL_ON_WARN" == "true" ]] && (( WARNINGS > 0 )); then
+        exit 0
+    fi
+    exit 0
+fi
+
+# Human (CLI) mode
 echo ""
 if [[ "$FAILURES" -eq 0 ]]; then
     ok "Smoke check passed"

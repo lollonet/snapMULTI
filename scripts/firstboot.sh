@@ -760,6 +760,30 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     fi
 fi
 
+# System-status snapshot timer for the /status web page (issue #177).
+# Server installs only — the page lives at metadata-service:8083/status,
+# and metadata-service runs only in the server stack. Reads the JSON
+# snapshot from /opt/snapmulti/audio/system-status.json (volume already
+# bind-mounted into the metadata container).
+if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+    STATUS_DIR=""
+    for _stat_candidate in \
+        "$COMMON" \
+        "$SERVER_DIR/scripts/common"; do
+        if [[ -f "$_stat_candidate/snapmulti-status.service" && \
+              -f "$_stat_candidate/snapmulti-status.timer" ]]; then
+            STATUS_DIR="$_stat_candidate"; break
+        fi
+    done
+    if [[ -n "$STATUS_DIR" ]]; then
+        cp "$STATUS_DIR/snapmulti-status.service" /etc/systemd/system/
+        cp "$STATUS_DIR/snapmulti-status.timer"   /etc/systemd/system/
+        systemctl daemon-reload
+        systemctl enable snapmulti-status.timer
+        log_info "System-status snapshot timer installed (5-min snapshot interval)"
+    fi
+fi
+
 # Read-only filesystem
 if [[ "${ENABLE_READONLY}" == "true" ]]; then
     log_info "Configuring read-only filesystem..."
@@ -803,6 +827,7 @@ case "$INSTALL_TYPE" in
     server|both)
         _tty "  Speakers:  http://${IP_ADDR:-$LOCAL_HOSTNAME}:1780"
         _tty "  Library:   http://${IP_ADDR:-$LOCAL_HOSTNAME}:8180"
+        _tty "  Status:    http://${IP_ADDR:-$LOCAL_HOSTNAME}:8083  (system health page)"
         ;;
     client)
         _tty "  Player will auto-discover your server"

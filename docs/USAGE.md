@@ -219,7 +219,7 @@ Host mode is recommended for single-server deployments.
 | Port | Protocol | Purpose |
 |------|----------|---------|
 | 8082 | WebSocket | Track metadata push (subscribe with CLIENT_ID) |
-| 8083 | HTTP | Cover art files, metadata JSON, health check |
+| 8083 | HTTP | Cover art files, metadata JSON, health check, system status page (`/status`) |
 
 **Configuration**: environment variables (defaults to localhost for Snapserver/MPD connections)
 - Polls Snapserver JSON-RPC every 2s for stream metadata
@@ -274,6 +274,9 @@ After installation, systemd owns the container lifecycle (ADR-005). Docker's `re
 | `snapclient-discover.timer` | client, both | Re-discovers server via mDNS every 5 min |
 | `snapclient-display.service` | client (display) | Detects HDMI and reconciles display containers |
 | `snapmulti-boot-tune.service` | all | CPU governor, USB autosuspend, WiFi power save |
+| `snapmulti-status.timer` | server, both | Refreshes the `/status` web page snapshot every 5 min (issue #177) |
+| `snapmulti-backup.timer` | server, both | Daily MPD database backup to boot partition |
+| `snapmulti-diagnostics.timer` | all | Periodic diagnostic log capture |
 
 ```bash
 # Check status
@@ -303,12 +306,14 @@ snapMULTI has three control interfaces, each for a different purpose:
 |-----------|--------|-------------|
 | **Snapweb** | `http://<server-ip>:1780` | Manage speakers: switch audio sources, adjust volume per room, group/ungroup speakers |
 | **myMPD** | `http://<server-ip>:8180` | Browse and play your music library, manage playlists, view album art |
+| **System status** | `http://<server-ip>:8083` | Health dashboard: container status, NFS mount, audio path, recent errors. Auto-refreshes every minute (issue #177) |
 | **Snapcast app** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) | Mobile speaker control — same features as Snapweb, from your phone |
 
 **Which one do I need?**
 - To **play music from your library** → open myMPD
 - To **switch what a speaker plays** (e.g. from MPD to Spotify) → open Snapweb or the mobile app
 - To **cast from Spotify/AirPlay/Tidal** → use those apps directly (they find snapMULTI automatically)
+- To **check if everything is healthy** (before opening a GitHub issue, or after changing the network) → open the system status page
 
 ## Control MPD
 
