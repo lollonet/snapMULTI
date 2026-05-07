@@ -780,7 +780,7 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         cp "$STATUS_DIR/snapmulti-status.timer"   /etc/systemd/system/
         systemctl daemon-reload
         systemctl enable snapmulti-status.timer
-        log_info "System-status snapshot timer installed (60s interval)"
+        log_info "System-status snapshot timer installed (5-min snapshot interval)"
     fi
 fi
 

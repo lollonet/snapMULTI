@@ -29,6 +29,7 @@ Play music in sync across every room. Stream from Spotify, AirPlay, your music l
 | **Any app** | Stream to port 4953 ([details](docs/SOURCES.md#5-tcp-input-tcp-server)) |
 
 Manage speakers at `http://hostname.local:1780`
+Check system health at `http://hostname.local:8083`
 
 ## Quick Start
 

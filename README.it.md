@@ -29,6 +29,7 @@ Riproduci musica in sincronia in ogni stanza. Streaming da Spotify, AirPlay, la 
 | **Qualsiasi app** | Stream sulla porta 4953 ([dettagli](docs/SOURCES.it.md#5-ingresso-tcp-tcp-server)) |
 
 Gestisci gli altoparlanti su `http://hostname.local:1780`
+Verifica lo stato del sistema su `http://hostname.local:8083`
 
 ## Avvio Rapido
 

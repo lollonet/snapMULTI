@@ -2206,7 +2206,7 @@ def _status_to_html(data: dict | None, age_s: float | None) -> str:
         subtext=schema_banner + subtext,
         sections_html="".join(sec_html_parts),
         footer=footer,
-        embedded_json=json.dumps(data),
+        embedded_json=json.dumps(data).replace("</", "<\\/"),
     )
 
 
