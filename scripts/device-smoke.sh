@@ -491,17 +491,26 @@ if [[ "$MODE" == "client" || "$MODE" == "both" ]]; then
             # Prefer the explicit `ctl.!default { card NAME }` declaration
             _card_name=$(awk '/^ctl\.!default/,/^}/' /etc/asound.conf 2>/dev/null \
                 | grep -oE 'card [A-Za-z0-9_-]+' | awk 'NR==1 {print $2}' || true)
-            # Fallback: first `hw:NAME,...` reference (skip Loopback as
-            # that's the visualizer tap, not the audio destination)
+            # Fallback: first `hw:NAME,...` reference (skip Loopback —
+            # that's the visualizer tap, not the audio destination).
+            # The pattern requires an ALPHABETIC lead character so we
+            # don't pick up bare-numeric device indices like `hw:0` or
+            # `hw:1` (USB-audio asound.confs commonly use those, and
+            # capturing them as a "card name" would false-fail the
+            # subsequent aplay -l grep).
             if [[ -z "$_card_name" ]]; then
-                _card_name=$(grep -oE 'hw:[A-Za-z0-9_-]+' /etc/asound.conf 2>/dev/null \
+                _card_name=$(grep -oE 'hw:[A-Za-z][A-Za-z0-9_-]*' /etc/asound.conf 2>/dev/null \
                     | sed 's/hw://' | grep -v -i '^Loopback$' | head -1 || true)
             fi
             [[ -n "$_card_name" ]] && _card_source="/etc/asound.conf"
         fi
         if [[ -n "$_card_name" ]]; then
             if command -v aplay >/dev/null 2>&1; then
-                if aplay -l 2>/dev/null | grep -qE "card [0-9]+: $_card_name "; then
+                # `-F` (fixed-string) so card names with regex metachars
+                # (e.g. `+` in HiFiBerry DAC+ long names) don't break the
+                # match. The surrounding `": "` and trailing space anchor
+                # the line format adequately without ERE.
+                if aplay -l 2>/dev/null | grep -qF ": $_card_name "; then
                     pass_check "HAT consistency: card '$_card_name' present in ALSA (via $_card_source)"
                 else
                     fail_check "HAT mismatch: $_card_source references card '$_card_name' but \`aplay -l\` does not show it — HAT removed / wrong DAC profile?"
@@ -584,8 +593,11 @@ if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
     if [[ -f "$_server_env" ]]; then
         # `|| true`: pipefail + set -e would kill the script when the key
         # is not present (servers without an explicit MUSIC_SOURCE).
-        _music_source=$(grep '^MUSIC_SOURCE=' "$_server_env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true)
-        _music_path=$(grep '^MUSIC_PATH=' "$_server_env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true)
+        # Use `sed 's/[[:space:]]*$//'` instead of `tr -d '[:space:]'` —
+        # the latter would also strip INTERNAL spaces from a path like
+        # `/media/my music`, breaking the subsequent `[[ -d ... ]]` test.
+        _music_source=$(grep '^MUSIC_SOURCE=' "$_server_env" 2>/dev/null | cut -d= -f2 | sed 's/[[:space:]]*$//' || true)
+        _music_path=$(grep '^MUSIC_PATH=' "$_server_env" 2>/dev/null | cut -d= -f2 | sed 's/[[:space:]]*$//' || true)
         _music_path="${_music_path:-/media/music}"
         case "$_music_source" in
             nfs|smb)
