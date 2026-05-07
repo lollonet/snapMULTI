@@ -2139,7 +2139,7 @@ def _status_to_html(data: dict | None, age_s: float | None) -> str:
     schema_banner = ""
     if schema != 1:
         schema_banner = (
-            f'<div class="banner">⚠ Unknown snapshot schema (v{schema}). '
+            f'<div class="banner">⚠ Unknown snapshot schema (v{html.escape(str(schema))}). '
             f"This page may not display all fields correctly. Update the dashboard.</div>"
         )
 

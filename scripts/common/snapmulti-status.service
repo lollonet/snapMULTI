@@ -16,6 +16,10 @@ Type=oneshot
 RuntimeMaxSec=120
 TimeoutStartSec=130
 KillMode=mixed
+# `flock --nonblock` exits 1 when the lock is busy (concurrent run). That's
+# the intended "skip this firing" behaviour, not a failure — tell systemd so
+# the journal doesn't log a misleading FAILED status.
+SuccessExitStatus=0 1
 # Atomic write: smoke writes to .tmp, then mv to final. metadata-service
 # never reads a partial file. chown after write so the metadata container
 # (uid PUID:PGID, default 1000:1000) can read the root-written file.
