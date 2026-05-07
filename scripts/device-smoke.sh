@@ -284,6 +284,127 @@ else
     fail_check "DNS resolution failing on all targets (${_DNS_TARGETS[*]}) — check /etc/resolv.conf and 'nmcli general status'"
 fi
 
+# Time sync — Snapcast TimeProvider is NTP-immune, but log timestamps and
+# metadata-service rely on a sane wall clock. Pi Zero 2W's RTC sits at
+# epoch 0 until NTP completes, which can mask boot-time bugs in any
+# component that uses absolute timestamps.
+_ntp_synced=$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo "unknown")
+case "$_ntp_synced" in
+    yes)
+        pass_check "Time synchronised (NTP)"
+        ;;
+    no)
+        fail_check "Time NOT synchronised — \`timedatectl status\` for details, often resolves itself within 60s of boot"
+        ;;
+    *)
+        warn "Time sync state unknown (timedatectl returned '$_ntp_synced')"
+        ;;
+esac
+
+# Hostname mDNS round-trip — the host's own hostname.local must resolve
+# to the host's own IP via avahi. Catches DHCP/mDNS desync (e.g. IP
+# changed via DHCP renew but avahi cache stale, or hostname mismatch).
+if command -v avahi-resolve >/dev/null 2>&1; then
+    _own_host="$(hostname).local"
+    _own_ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+    _resolved=$(timeout 5 avahi-resolve -4 -n "$_own_host" 2>/dev/null | awk '{print $2}' | head -1)
+    if [[ -n "$_resolved" ]] && [[ "$_resolved" == "$_own_ip" ]]; then
+        pass_check "mDNS hostname round-trip ($_own_host -> $_resolved)"
+    elif [[ -n "$_resolved" ]]; then
+        fail_check "mDNS hostname mismatch ($_own_host -> $_resolved, expected $_own_ip) — restart avahi-daemon"
+    else
+        fail_check "mDNS hostname does NOT resolve ($_own_host) — avahi-daemon publishing broken"
+    fi
+else
+    warn "avahi-resolve not installed — skipping mDNS hostname check"
+fi
+
+# IP conflict detection — duplicate-address probe. \`arping -D\` returns
+# exit 0 if NO replies (good: nobody else claims our IP) and exit 1 if
+# replies received (bad: another host on the LAN has our IP, will cause
+# intermittent packet loss like the F8:17:2D historic .95 case from
+# 2026-05-07). Requires \`iputils-arping\` (already installed by
+# install-deps.sh on snapMULTI 0.6.4+).
+if command -v arping >/dev/null 2>&1; then
+    _own_iface=$(ip -4 -o route get 1.1.1.1 2>/dev/null | awk '{print $5; exit}')
+    _own_ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+    if [[ -n "$_own_iface" ]] && [[ -n "$_own_ip" ]]; then
+        if sudo -n arping -D -c 3 -w 5 -I "$_own_iface" "$_own_ip" >/dev/null 2>&1; then
+            pass_check "No IP conflict on $_own_ip ($_own_iface)"
+        else
+            # arping -D exits 1 on duplicate detected OR on permission failure;
+            # try non-sudo to distinguish (best-effort, may still fail without raw socket cap)
+            if arping -D -c 3 -w 5 -I "$_own_iface" "$_own_ip" >/dev/null 2>&1; then
+                pass_check "No IP conflict on $_own_ip ($_own_iface)"
+            else
+                fail_check "Possible IP conflict on $_own_ip — another host replied to our ARP probe (or arping needs root)"
+            fi
+        fi
+    else
+        warn "Could not determine own IP/iface for conflict check"
+    fi
+else
+    warn "arping not installed — skipping IP conflict check (apt-get install iputils-arping)"
+fi
+
+# Snapcast mDNS publishing (server-only) — \`_snapcast._tcp\` SRV+TXT must
+# be answered, not just PTR. Strict clients (Python zeroconf, macOS
+# dns-sd -L) reject PTR-only and report "no servers found". This was
+# fixed in PR #290 (avahi socket bind-mount) but the upstream Snapcast
+# 0.35.0 bug still drops the registration if avahi-daemon restarts —
+# PR #300 (PartOf=avahi-daemon.service) is our workaround. avahi-browse
+# itself is a strict client: a "+" line means PTR-only, "=" means
+# fully resolved with SRV+TXT.
+if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
+    if command -v avahi-browse >/dev/null 2>&1; then
+        _resolved_count=$(timeout 8 avahi-browse -rpt _snapcast._tcp 2>/dev/null \
+            | grep -c '^=' || true)
+        if [[ "$_resolved_count" -ge 1 ]]; then
+            pass_check "Snapcast mDNS fully resolves ($_resolved_count entry/entries with SRV+TXT)"
+        else
+            _ptr_count=$(timeout 5 avahi-browse -pt _snapcast._tcp 2>/dev/null \
+                | grep -c '^+' || true)
+            if [[ "$_ptr_count" -ge 1 ]]; then
+                fail_check "Snapcast mDNS publishes PTR but NO SRV+TXT — strict clients fail. Try \`docker compose restart snapserver\`"
+            else
+                fail_check "Snapcast mDNS not visible at all — check snapserver container + avahi-daemon"
+            fi
+        fi
+    else
+        warn "avahi-browse not installed — skipping Snapcast mDNS check"
+    fi
+fi
+
+# Throttle / undervoltage — \`vcgencmd get_throttled\` reports a bitmask:
+#   bit 0 (0x1)     — under-voltage detected NOW
+#   bit 1 (0x2)     — arm freq capped NOW
+#   bit 2 (0x4)     — currently throttled
+#   bit 3 (0x8)     — soft temp limit active NOW
+#   bits 16-19      — same conditions, occurred since boot (sticky)
+# Bits 0/2 = currently in trouble → fail. Bits 16-19 = warn (history of
+# trouble, often a marginal PSU/cable). vcgencmd only on Raspberry Pi.
+if command -v vcgencmd >/dev/null 2>&1; then
+    _throttled_raw=$(vcgencmd get_throttled 2>/dev/null | sed 's/throttled=//')
+    _throttled_dec=$((_throttled_raw))
+    _now_bits=$(( _throttled_dec & 0xF ))
+    _hist_bits=$(( _throttled_dec & 0xF0000 ))
+    if (( _now_bits != 0 )); then
+        fail_check "Hardware throttling RIGHT NOW (throttled=$_throttled_raw) — under-voltage / thermal / PSU issue"
+    elif (( _hist_bits != 0 )); then
+        # Historical only — not a hard fail but flag loudly
+        _msg="hardware throttling occurred since boot (throttled=$_throttled_raw)"
+        (( _hist_bits & 0x10000 )) && _msg="$_msg [under-voltage]"
+        (( _hist_bits & 0x20000 )) && _msg="$_msg [arm-freq-capped]"
+        (( _hist_bits & 0x40000 )) && _msg="$_msg [throttling]"
+        (( _hist_bits & 0x80000 )) && _msg="$_msg [soft-temp-limit]"
+        warn "$_msg — likely PSU/cable issue (5V/3A required)"
+    else
+        pass_check "Hardware healthy (throttled=0x0, no under-voltage / throttling)"
+    fi
+else
+    info "vcgencmd not available — skipping throttle check (non-Raspberry-Pi host?)"
+fi
+
 section "Recent Errors"
 _error_count=0
 for log_src in "snapmulti-server" "snapclient" "docker"; do
