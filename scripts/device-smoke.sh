@@ -260,6 +260,28 @@ case "$MODE" in
         ;;
 esac
 
+# Avahi socket bind-mount verification — confirms PR #290 (snapserver
+# avahi mount) and PR #298 (mpd already had it) deployed correctly.
+# Without these mounts, libavahi-client cannot reach the host's
+# avahi-daemon, mDNS publication degrades to PTR-only, and strict
+# clients fail (the bug we spent 2026-05-07 hunting).
+_check_avahi_mount() {
+    local container="$1"
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$container" || return 0
+    if docker inspect "$container" --format '{{range .Mounts}}{{.Source}}|{{end}}' 2>/dev/null \
+        | grep -q '/run/avahi-daemon/socket'; then
+        pass_check "$container: avahi socket mounted (PR #290)"
+    else
+        fail_check "$container: avahi socket NOT mounted — mDNS publication will degrade. Re-deploy with current docker-compose.yml"
+    fi
+}
+case "$MODE" in
+    server) _check_avahi_mount snapserver; _check_avahi_mount mpd ;;
+    client) _check_avahi_mount snapclient ;;
+    both)   _check_avahi_mount snapserver; _check_avahi_mount mpd; _check_avahi_mount snapclient ;;
+esac
+unset -f _check_avahi_mount 2>/dev/null || true
+
 section "Network"
 # DNS resolution must work — catches the NM dns-rc empty-resolv.conf
 # regression (see CHANGELOG entry for PR #287). 30s budget covers slow
@@ -363,33 +385,46 @@ else
     warn "arping not installed — skipping IP conflict check (apt-get install iputils-arping)"
 fi
 
-# Snapcast mDNS publishing (server-only) — \`_snapcast._tcp\` SRV+TXT must
-# be answered, not just PTR. Strict clients (Python zeroconf, macOS
+# mDNS strict-client publishing (server-only) — services must answer
+# SRV+TXT, not just PTR. Strict clients (Python zeroconf, macOS
 # dns-sd -L) reject PTR-only and report "no servers found". This was
 # fixed in PR #290 (avahi socket bind-mount) but the upstream Snapcast
 # 0.35.0 bug still drops the registration if avahi-daemon restarts —
 # PR #300 (PartOf=avahi-daemon.service) is our workaround. avahi-browse
 # itself is a strict client: a "+" line means PTR-only, "=" means
-# fully resolved with SRV+TXT.
+# fully resolved with SRV+TXT. Same logic for AirPlay + Spotify.
+_check_mdns_service() {
+    local service="$1" label="$2" hint="$3"
+    local resolved_count ptr_count
+    resolved_count=$(timeout 8 avahi-browse -rpt "$service" 2>/dev/null | grep -c '^=' || true)
+    if [[ "$resolved_count" -ge 1 ]]; then
+        pass_check "$label mDNS fully resolves ($resolved_count entry/entries with SRV+TXT)"
+        return
+    fi
+    ptr_count=$(timeout 5 avahi-browse -pt "$service" 2>/dev/null | grep -c '^+' || true)
+    if [[ "$ptr_count" -ge 1 ]]; then
+        fail_check "$label mDNS publishes PTR but NO SRV+TXT — strict clients fail. Try \`$hint\`"
+    else
+        # AirPlay/Spotify can legitimately be invisible if the matching
+        # source is disabled in compose-profiles or hasn't been reached
+        # by a client yet — demote to warn (not fail) for those.
+        if [[ "$service" == "_snapcast._tcp" ]]; then
+            fail_check "$label mDNS not visible at all — check snapserver container + avahi-daemon"
+        else
+            warn "$label mDNS not visible — service may be disabled or no client has paired yet"
+        fi
+    fi
+}
 if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
     if command -v avahi-browse >/dev/null 2>&1; then
-        _resolved_count=$(timeout 8 avahi-browse -rpt _snapcast._tcp 2>/dev/null \
-            | grep -c '^=' || true)
-        if [[ "$_resolved_count" -ge 1 ]]; then
-            pass_check "Snapcast mDNS fully resolves ($_resolved_count entry/entries with SRV+TXT)"
-        else
-            _ptr_count=$(timeout 5 avahi-browse -pt _snapcast._tcp 2>/dev/null \
-                | grep -c '^+' || true)
-            if [[ "$_ptr_count" -ge 1 ]]; then
-                fail_check "Snapcast mDNS publishes PTR but NO SRV+TXT — strict clients fail. Try \`docker compose restart snapserver\`"
-            else
-                fail_check "Snapcast mDNS not visible at all — check snapserver container + avahi-daemon"
-            fi
-        fi
+        _check_mdns_service "_snapcast._tcp"          "Snapcast" "docker compose restart snapserver"
+        _check_mdns_service "_raop._tcp"              "AirPlay"  "docker compose restart shairport-sync"
+        _check_mdns_service "_spotify-connect._tcp"   "Spotify"  "docker compose restart librespot"
     else
-        warn "avahi-browse not installed — skipping Snapcast mDNS check"
+        warn "avahi-browse not installed — skipping all mDNS strict-client checks"
     fi
 fi
+unset -f _check_mdns_service 2>/dev/null || true
 
 # Throttle / undervoltage — \`vcgencmd get_throttled\` reports a bitmask:
 #   bit 0 (0x1)     — under-voltage detected NOW
@@ -427,6 +462,141 @@ if command -v vcgencmd >/dev/null 2>&1; then
     fi
 else
     info "vcgencmd not available — skipping throttle check (non-Raspberry-Pi host?)"
+fi
+
+# ──────────────────────────────────────────────────────────────────
+# Tier-2 checks — added 2026-05-07
+# ──────────────────────────────────────────────────────────────────
+
+if [[ "$MODE" == "client" || "$MODE" == "both" ]]; then
+    section "Audio"
+
+    # HAT consistency — SOUNDCARD env in client .env should reference a
+    # CARD that's actually present in \`aplay -l\`. Catches a stale or
+    # mis-detected HAT config (where audio-hat-detect.sh said one thing
+    # but the kernel exposes another).
+    _client_env="${CLIENT_DIR:-/opt/snapclient}/.env"
+    if [[ -f "$_client_env" ]]; then
+        # `|| true`: pipefail + set -e would kill the script on grep no-match
+        _soundcard=$(grep '^SOUNDCARD=' "$_client_env" 2>/dev/null | cut -d= -f2- || true)
+        # Extract CARD name from \`hw:CARD=NAME,DEV=0\` format
+        _card_name=$(echo "$_soundcard" | sed -nE 's/.*CARD=([^,]+).*/\1/p')
+        if [[ -n "$_card_name" ]]; then
+            if command -v aplay >/dev/null 2>&1; then
+                if aplay -l 2>/dev/null | grep -qE "card [0-9]+: $_card_name "; then
+                    pass_check "HAT consistency: card '$_card_name' present in ALSA"
+                else
+                    fail_check "HAT mismatch: SOUNDCARD references CARD=$_card_name but \`aplay -l\` does not show it — HAT removed / wrong DAC profile?"
+                fi
+            else
+                warn "aplay not installed — HAT consistency check skipped"
+            fi
+        elif [[ -n "$_soundcard" ]]; then
+            info "SOUNDCARD='$_soundcard' has no CARD= — HAT consistency check not applicable"
+        else
+            info "No SOUNDCARD in client .env — HAT consistency check skipped"
+        fi
+    else
+        info "Client .env not found — HAT consistency check skipped"
+    fi
+
+    # Audio path active params — when audio is playing, the kernel
+    # populates /proc/asound/.../hw_params. Empty / "closed" means no
+    # stream is currently flowing (fine in a smoke test scenario; the
+    # check is only meaningful as a pass when audio is actually in
+    # progress). We INFO when idle, pass when active and well-formed,
+    # fail only when a stream IS active but at the wrong format.
+    _hw_params_files=()
+    while IFS= read -r f; do
+        _hw_params_files+=("$f")
+    done < <(ls /proc/asound/card*/pcm0p/sub*/hw_params 2>/dev/null)
+    _audio_active=false
+    for f in "${_hw_params_files[@]}"; do
+        # \`closed\` (single line) = no stream. Any other content = active.
+        if grep -q 'access:' "$f" 2>/dev/null; then
+            _audio_active=true
+            _rate=$(awk -F': ' '/^rate:/ {print $2; exit}' "$f")
+            _format=$(awk -F': ' '/^format:/ {print $2; exit}' "$f")
+            _channels=$(awk -F': ' '/^channels:/ {print $2; exit}' "$f")
+            # snapMULTI invariant: 44100 / S16_LE / 2 channels
+            if [[ "$_rate" == "44100" ]] && [[ "$_format" == "S16_LE" ]] && [[ "$_channels" == "2" ]]; then
+                pass_check "Audio path active and at expected format ($_rate/$_format/${_channels}ch on $(dirname "$f"))"
+            else
+                fail_check "Audio path active but wrong format: rate=$_rate format=$_format channels=$_channels (expected 44100/S16_LE/2)"
+            fi
+            break
+        fi
+    done
+    if [[ "$_audio_active" == "false" ]]; then
+        info "No audio currently playing — audio path check skipped (pass-through, not a fail)"
+    fi
+fi
+
+section "Operations"
+
+# Containerd Leases self-heal counter — set by the boot-tune.sh self-heal
+# logic added in PR #292 + capped by PR #298 H5. Above 3 = structural
+# problem (genuine ENOSPC, not transient false-ENOSPC family).
+_heal_counter="/var/lib/snapmulti-installer/containerd-heal.count"
+if [[ -s "$_heal_counter" ]]; then
+    _heal_count_raw=$(tr -dc '0-9' < "$_heal_counter" 2>/dev/null || echo 0)
+    _heal_count="${_heal_count_raw:-0}"
+    if (( _heal_count >= 3 )); then
+        fail_check "Containerd self-heal at limit ($_heal_count/3) — structural ENOSPC, manual intervention needed (check tmpfs / boot-tune.sh logs)"
+    elif (( _heal_count >= 1 )); then
+        warn "Containerd has self-healed ${_heal_count} time(s) since install — monitoring (3 = give up)"
+    else
+        pass_check "Containerd self-heal counter clean (0/3)"
+    fi
+else
+    pass_check "Containerd self-heal not triggered (no event since install)"
+fi
+
+# Music library non-empty (server only, when network-backed). Local
+# disks are skipped — they have many legitimate states (empty drive,
+# fresh install, etc.) and the user wants the system up regardless.
+if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
+    _server_env="${SERVER_DIR:-/opt/snapmulti}/.env"
+    if [[ -f "$_server_env" ]]; then
+        # `|| true`: pipefail + set -e would kill the script when the key
+        # is not present (servers without an explicit MUSIC_SOURCE).
+        _music_source=$(grep '^MUSIC_SOURCE=' "$_server_env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true)
+        _music_path=$(grep '^MUSIC_PATH=' "$_server_env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true)
+        _music_path="${_music_path:-/media/music}"
+        case "$_music_source" in
+            nfs|smb)
+                if [[ -d "$_music_path" ]] \
+                    && [[ -n "$(find "$_music_path" -maxdepth 3 -type f \
+                        \( -name '*.mp3' -o -name '*.flac' -o -name '*.ogg' -o -name '*.m4a' -o -name '*.wav' -o -name '*.aac' \) \
+                        2>/dev/null | head -1)" ]]; then
+                    pass_check "Music library non-empty ($_music_path, source=$_music_source)"
+                else
+                    fail_check "Music library appears EMPTY ($_music_path, source=$_music_source) — check NFS/SMB mount + remote share"
+                fi
+                ;;
+            *)
+                info "Music source not network-backed (MUSIC_SOURCE='${_music_source:-unset}') — library content check skipped"
+                ;;
+        esac
+    fi
+
+    # JSON-RPC API responsive — \`Server.GetStatus\` returns the full
+    # server config + streams + groups. A 200 with valid JSON is the
+    # smallest functional check that proves snapserver is not just
+    # \`Up\` per docker but actually serving control requests.
+    if command -v curl >/dev/null 2>&1; then
+        _rpc_response=$(curl -sS --max-time 5 \
+            -X POST -H 'Content-Type: application/json' \
+            -d '{"jsonrpc":"2.0","method":"Server.GetStatus","id":1}' \
+            http://127.0.0.1:1780/jsonrpc 2>/dev/null || true)
+        if echo "$_rpc_response" | grep -q '"result"'; then
+            pass_check "Snapcast JSON-RPC API responsive (Server.GetStatus on :1780)"
+        else
+            fail_check "Snapcast JSON-RPC API not responding correctly — response: '$(echo "$_rpc_response" | head -c 100)'"
+        fi
+    else
+        warn "curl not installed — skipping JSON-RPC API check"
+    fi
 fi
 
 section "Recent Errors"
