@@ -102,6 +102,11 @@ install_dependencies() {
     command -v avahi-daemon &>/dev/null || pkgs+=(avahi-daemon)
     command -v avahi-browse &>/dev/null || pkgs+=(avahi-utils)
 
+    # iputils-arping: needed by device-smoke.sh for IP-conflict detection
+    # (\`arping -D\` duplicate address probe). Catches the static-IP-squatter
+    # scenario that surfaced in 2026-05-07 troubleshooting.
+    command -v arping &>/dev/null || pkgs+=(iputils-arping)
+
     # Server: monitoring tools for operational visibility
     if [[ "$role" == "server" || "$role" == "both" ]]; then
         command -v sar   &>/dev/null || pkgs+=(sysstat)

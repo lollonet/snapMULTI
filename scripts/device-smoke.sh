@@ -284,6 +284,151 @@ else
     fail_check "DNS resolution failing on all targets (${_DNS_TARGETS[*]}) — check /etc/resolv.conf and 'nmcli general status'"
 fi
 
+# Time sync — Snapcast TimeProvider is NTP-immune, but log timestamps and
+# metadata-service rely on a sane wall clock. Pi Zero 2W's RTC sits at
+# epoch 0 until NTP completes, which can mask boot-time bugs in any
+# component that uses absolute timestamps.
+_ntp_synced=$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo "unknown")
+case "$_ntp_synced" in
+    yes)
+        pass_check "Time synchronised (NTP)"
+        ;;
+    no)
+        fail_check "Time NOT synchronised — \`timedatectl status\` for details, often resolves itself within 60s of boot"
+        ;;
+    *)
+        warn "Time sync state unknown (timedatectl returned '$_ntp_synced')"
+        ;;
+esac
+
+# Hostname mDNS round-trip — the host's own hostname.local must resolve
+# to ONE OF the host's own IPs via avahi. On dual-homed hosts (eth0 +
+# wlan0 active) avahi may advertise on a different interface than the
+# arbitrary "first" one, so we accept any of the local addresses to
+# avoid false-failing the mismatch path.
+if command -v avahi-resolve >/dev/null 2>&1; then
+    _own_host="$(hostname).local"
+    _own_ips=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
+    _resolved=$(timeout 5 avahi-resolve -4 -n "$_own_host" 2>/dev/null | awk '{print $2}' | head -1)
+    if [[ -n "$_resolved" ]] && echo "$_own_ips" | grep -qF -- "$_resolved"; then
+        pass_check "mDNS hostname round-trip ($_own_host -> $_resolved)"
+    elif [[ -n "$_resolved" ]]; then
+        _own_ips_csv=$(echo "$_own_ips" | tr '\n' ',' | sed 's/,$//; s/,/, /g')
+        fail_check "mDNS hostname mismatch ($_own_host -> $_resolved, expected one of: $_own_ips_csv) — restart avahi-daemon"
+    else
+        fail_check "mDNS hostname does NOT resolve ($_own_host) — avahi-daemon publishing broken"
+    fi
+else
+    warn "avahi-resolve not installed — skipping mDNS hostname check"
+fi
+
+# IP conflict detection — duplicate-address probe. \`arping -D\` returns
+# exit 0 if NO replies (good: nobody else claims our IP) and exit 1 if
+# replies received (bad: another host on the LAN has our IP, will cause
+# intermittent packet loss like the F8:17:2D historic .95 case from
+# 2026-05-07). Requires \`iputils-arping\` (already installed by
+# install-deps.sh on snapMULTI 0.6.4+).
+if command -v arping >/dev/null 2>&1; then
+    _own_iface=$(ip -4 -o route get 1.1.1.1 2>/dev/null | awk '{print $5; exit}')
+    _own_ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+    if [[ -n "$_own_iface" ]] && [[ -n "$_own_ip" ]]; then
+        # \`arping -D\` exits 0 if no replies (no conflict) and 1 if replies
+        # received (conflict). It also fails with 1+stderr when missing
+        # CAP_NET_RAW. Probe sudo capability ONCE to choose the right
+        # invocation; never retry with a less-privileged invocation if
+        # the privileged one already returned a definitive answer
+        # (retry would silence a real conflict with a "permission" warn
+        # if the unprivileged retry then trips on cap_net_raw).
+        #
+        # \`|| _arping_rc=\$?\` pattern: under \`set -e\`, a bare
+        # \`var=\$(failing-cmd)\` would terminate the script without ever
+        # reaching the analysis branch below.
+        _arping_rc=0
+        if sudo -n true 2>/dev/null; then
+            _arping_out=$(sudo -n arping -D -c 3 -w 5 -I "$_own_iface" "$_own_ip" 2>&1) || _arping_rc=$?
+        else
+            _arping_out=$(arping -D -c 3 -w 5 -I "$_own_iface" "$_own_ip" 2>&1) || _arping_rc=$?
+        fi
+        if [[ $_arping_rc -eq 0 ]]; then
+            pass_check "No IP conflict on $_own_ip ($_own_iface)"
+        elif echo "$_arping_out" | grep -qiE 'permission|not permitted|capabilities|password is required'; then
+            warn "arping needs CAP_NET_RAW / sudo — IP-conflict check skipped (run as root, or 'setcap cap_net_raw+ep \$(command -v arping)')"
+        else
+            fail_check "Possible IP conflict on $_own_ip — another host replied to our ARP probe"
+        fi
+    else
+        warn "Could not determine own IP/iface for conflict check"
+    fi
+else
+    warn "arping not installed — skipping IP conflict check (apt-get install iputils-arping)"
+fi
+
+# Snapcast mDNS publishing (server-only) — \`_snapcast._tcp\` SRV+TXT must
+# be answered, not just PTR. Strict clients (Python zeroconf, macOS
+# dns-sd -L) reject PTR-only and report "no servers found". This was
+# fixed in PR #290 (avahi socket bind-mount) but the upstream Snapcast
+# 0.35.0 bug still drops the registration if avahi-daemon restarts —
+# PR #300 (PartOf=avahi-daemon.service) is our workaround. avahi-browse
+# itself is a strict client: a "+" line means PTR-only, "=" means
+# fully resolved with SRV+TXT.
+if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
+    if command -v avahi-browse >/dev/null 2>&1; then
+        _resolved_count=$(timeout 8 avahi-browse -rpt _snapcast._tcp 2>/dev/null \
+            | grep -c '^=' || true)
+        if [[ "$_resolved_count" -ge 1 ]]; then
+            pass_check "Snapcast mDNS fully resolves ($_resolved_count entry/entries with SRV+TXT)"
+        else
+            _ptr_count=$(timeout 5 avahi-browse -pt _snapcast._tcp 2>/dev/null \
+                | grep -c '^+' || true)
+            if [[ "$_ptr_count" -ge 1 ]]; then
+                fail_check "Snapcast mDNS publishes PTR but NO SRV+TXT — strict clients fail. Try \`docker compose restart snapserver\`"
+            else
+                fail_check "Snapcast mDNS not visible at all — check snapserver container + avahi-daemon"
+            fi
+        fi
+    else
+        warn "avahi-browse not installed — skipping Snapcast mDNS check"
+    fi
+fi
+
+# Throttle / undervoltage — \`vcgencmd get_throttled\` reports a bitmask:
+#   bit 0 (0x1)     — under-voltage detected NOW
+#   bit 1 (0x2)     — arm freq capped NOW
+#   bit 2 (0x4)     — currently throttled
+#   bit 3 (0x8)     — soft temp limit active NOW
+#   bits 16-19      — same conditions, occurred since boot (sticky)
+# Bits 0/2 = currently in trouble → fail. Bits 16-19 = warn (history of
+# trouble, often a marginal PSU/cable). vcgencmd only on Raspberry Pi.
+if command -v vcgencmd >/dev/null 2>&1; then
+    _throttled_raw=$(vcgencmd get_throttled 2>/dev/null | sed 's/throttled=//')
+    # Guard: empty / non-hex output (vcgencmd present but unable to read,
+    # e.g. user not in `video` group, firmware mailbox hiccup) must NOT be
+    # silently treated as 0x0 → "healthy". Empty $((…)) evaluates to 0 in
+    # bash arithmetic, which would invert the diagnostic.
+    if [[ -z "$_throttled_raw" ]] || [[ ! "$_throttled_raw" =~ ^0x[0-9a-fA-F]+$ ]]; then
+        warn "vcgencmd returned no usable data ('$_throttled_raw') — throttle check skipped (permission issue? try \`sudo usermod -aG video \$USER\` and re-login)"
+    else
+        _throttled_dec=$((_throttled_raw))
+        _now_bits=$(( _throttled_dec & 0xF ))
+        _hist_bits=$(( _throttled_dec & 0xF0000 ))
+        if (( _now_bits != 0 )); then
+            fail_check "Hardware throttling RIGHT NOW (throttled=$_throttled_raw) — under-voltage / thermal / PSU issue"
+        elif (( _hist_bits != 0 )); then
+            # Historical only — not a hard fail but flag loudly
+            _msg="hardware throttling occurred since boot (throttled=$_throttled_raw)"
+            (( _hist_bits & 0x10000 )) && _msg="$_msg [under-voltage]"
+            (( _hist_bits & 0x20000 )) && _msg="$_msg [arm-freq-capped]"
+            (( _hist_bits & 0x40000 )) && _msg="$_msg [throttling]"
+            (( _hist_bits & 0x80000 )) && _msg="$_msg [soft-temp-limit]"
+            warn "$_msg — likely PSU/cable issue (5V/3A required)"
+        else
+            pass_check "Hardware healthy (throttled=0x0, no under-voltage / throttling)"
+        fi
+    fi
+else
+    info "vcgencmd not available — skipping throttle check (non-Raspberry-Pi host?)"
+fi
+
 section "Recent Errors"
 _error_count=0
 for log_src in "snapmulti-server" "snapclient" "docker"; do
