@@ -970,7 +970,39 @@ Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=${PROJECT_ROOT}
 ExecStartPre=/bin/bash -c 'for i in \$(seq 1 60); do docker info >/dev/null 2>&1 && exit 0; sleep 2; done; exit 1'
+# Wait for avahi-daemon to be fully ready before \`docker compose up\`.
+# Without this, snapserver's libavahi-client connect race-loses against
+# avahi-daemon initialisation and falls back to PTR-only UDP 5353
+# multicast — strict mDNS clients (Python zeroconf, dns-sd, snapclient
+# 0.36+) fail to discover the service. \`is-active\` gates on systemd
+# state; the socket existence proves the dbus listener is up; the final
+# \`sleep 2\` lets avahi publish its first announce. Non-fatal on
+# unusual setups (no avahi installed) — falls through after 30 s.
+ExecStartPre=/bin/bash -c 'for i in \$(seq 1 30); do systemctl is-active --quiet avahi-daemon.service && [[ -S /run/avahi-daemon/socket ]] && break; sleep 1; done; sleep 2'
 ExecStart=/usr/bin/docker compose up -d
+# Self-heal mDNS publish race: 12 s after compose up, query the local
+# avahi cache for \`_snapcast._tcp\`. If the PTR record is present but
+# the SRV/TXT records are NOT, snapserver lost the libavahi-client race
+# at startup and is now stuck publishing PTR-only via raw UDP 5353
+# multicast. Restart the snapserver container — its
+# fresh libavahi-client connection succeeds because avahi is now
+# stable. avahi-browse exit code is 1 if no records are found at all
+# (timeout), so we anchor on the SRV/TXT presence specifically.
+# Use \`-prt\` (no \`-l\`): the \`l\` flag is --ignore-local, which would
+# exclude services published by THIS host's avahi-daemon — exactly the
+# records we need to inspect. Same convention as device-smoke.sh and
+# discover-server.sh, which both omit \`-l\` for this reason.
+# All non-fatal: failures here must not hold the unit in failed state.
+ExecStartPost=-/bin/bash -c '\\
+    sleep 12; \\
+    if command -v avahi-browse >/dev/null 2>&1; then \\
+        out=\$(avahi-browse -prt _snapcast._tcp 2>/dev/null || true); \\
+        if echo "\$out" | grep -qE "^\\+;.*;_snapcast\\._tcp" \\
+           && ! echo "\$out" | grep -qE "^=;.*;_snapcast\\._tcp"; then \\
+            logger -t snapmulti-server "mDNS PTR-only detected, restarting snapserver to recover SRV+TXT publish"; \\
+            /usr/bin/docker compose -f ${PROJECT_ROOT}/docker-compose.yml restart snapserver >/dev/null 2>&1 || true; \\
+        fi; \\
+    fi'
 ExecStop=/usr/bin/docker compose down
 TimeoutStartSec=180
 Restart=on-failure
