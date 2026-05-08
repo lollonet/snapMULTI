@@ -40,8 +40,13 @@ RUN cmake --build build --parallel "$(nproc)"
 FROM debian:bookworm-slim
 
 # Install runtime dependencies only
+# libasound2-plugins provides the rate_converter (samplerate_best) used by
+# /etc/asound.conf when the host runs in display+HAT mode (multi_out routing
+# via snd_aloop). Without it, snapclient fails to open the ALSA default
+# device on display installs and crashes silently.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
+    libasound2-plugins \
     alsa-utils \
     libboost-system-dev \
     libboost-program-options-dev \

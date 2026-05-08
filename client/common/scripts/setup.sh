@@ -232,6 +232,34 @@ if ! declare -F detect_hat &>/dev/null; then
     exit 1
 fi
 
+# Ensure HAT detection tools are present BEFORE we call detect_hat. On
+# minimal Pi OS images neither alsa-utils (aplay), i2c-tools (i2cdetect),
+# nor kmod (modprobe) are installed by default; without them, detect_hat
+# silently falls back to internal-audio because every probe path
+# (EEPROM, ALSA name, I2C scan, USB) fails. install_dependencies (run
+# later as part of install) would have installed them, but by then the
+# wrong HAT_CONFIG is already locked in.
+_ensure_hat_detect_tools() {
+    local _missing=()
+    command -v aplay      &>/dev/null || _missing+=(alsa-utils)
+    command -v i2cdetect  &>/dev/null || _missing+=(i2c-tools)
+    command -v modprobe   &>/dev/null || _missing+=(kmod)
+    if (( ${#_missing[@]} > 0 )); then
+        if [[ "${AUDIO_HAT:-auto}" == "auto" ]]; then
+            echo "Installing minimal HAT detection tools: ${_missing[*]}"
+            DEBIAN_FRONTEND=noninteractive apt-get update -qq 2>&1 | tail -3 || true
+            if ! DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${_missing[@]}"; then
+                echo "FATAL: AUDIO_HAT=auto requested but cannot install detection tools (${_missing[*]})" >&2
+                echo "FATAL: Set AUDIO_HAT explicitly in install.conf to skip auto-detection." >&2
+                exit 1
+            fi
+        else
+            echo "WARNING: HAT detection tools missing (${_missing[*]}) — relying on AUDIO_HAT=$AUDIO_HAT explicit value"
+        fi
+    fi
+}
+_ensure_hat_detect_tools
+
 if [ "$AUTO_MODE" = true ]; then
     # Auto mode: detect or use configured HAT
     if [ "$AUDIO_HAT" = "auto" ]; then
@@ -1190,15 +1218,56 @@ if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
         return 0
     fi
 
-    # Ensure daemon.json exists. Preserve fuse-overlayfs if already configured
-    # (firstboot pre-sets it for read-only installs so images land with the
-    # correct driver). docker-driver-reconcile.sh remains as boot-time safety net.
+    # Ensure daemon.json exists. Always include --fuse-overlayfs when
+    # ENABLE_READONLY=true so the daemon.json is correct even if the
+    # daemon is briefly down (matches deploy.sh's overlayroot-aware
+    # detection). docker-driver-reconcile.sh remains as boot-time safety net.
     log_progress "Ensuring daemon.json exists..."
     local _tune_args=(--live-restore)
-    if docker info --format '{{.Driver}}' 2>/dev/null | grep -q fuse-overlayfs; then
+    if docker info --format '{{.Driver}}' 2>/dev/null | grep -q fuse-overlayfs \
+       || mount | grep -E '^(overlayroot| / type overlay)' >/dev/null 2>&1; then
         _tune_args+=(--fuse-overlayfs)
     fi
     tune_docker_daemon "${_tune_args[@]}"
+
+    # Fail-hard pre-pull guard: if ENABLE_READONLY=true but the running
+    # daemon is still on overlay2, FORCE the switch now (wipe + restart)
+    # before docker compose pull lands ~600 MB of client images on the
+    # wrong driver. Without this, those layers live in /var/lib/docker
+    # which becomes the overlayroot LOWER layer at next boot — Docker
+    # under fuse-overlayfs will not see them and will re-pull into the
+    # tmpfs upper, immediately exhausting it.
+    #
+    # Idempotent: skips when firstboot.sh has already written the
+    # checkpoint file (server / both / client-from-firstboot all hit
+    # firstboot's switch first). Standalone setup.sh runs (advanced
+    # users without firstboot) trigger the full path.
+    local _switch_checkpoint="/var/lib/snapmulti-installer/.done-fuse-overlayfs-switched"
+    if [[ ! -s "$_switch_checkpoint" ]]; then
+        local _running_driver
+        _running_driver=$(docker info --format '{{.Driver}}' 2>/dev/null || echo "unknown")
+        if [[ "$_running_driver" != "fuse-overlayfs" ]]; then
+            log_progress "Forcing Docker storage driver to fuse-overlayfs before pull..."
+            systemctl stop docker
+            rm -rf /var/lib/docker/*
+            systemctl start docker
+            local _i
+            for _i in 1 2 3 4 5 6 7 8 9 10; do
+                docker info >/dev/null 2>&1 && break
+                sleep 2
+            done
+            if ! docker info --format '{{.Driver}}' 2>/dev/null | grep -qx "fuse-overlayfs"; then
+                log_progress "ERROR: Docker driver switch FAILED — fuse-overlayfs not active after restart"
+                log_progress "ERROR: Continuing would pull with overlay2 and lose images after overlayroot activates"
+                log_progress "ERROR: Diagnose with: vcgencmd get_throttled, dmesg | grep -i fuse, journalctl -u docker"
+                log_progress "ERROR: Workaround: rerun setup.sh with --no-readonly OR fix the fuse kernel module"
+                exit 1
+            fi
+            log_progress "Docker switched to fuse-overlayfs (images will persist through overlayroot)"
+        fi
+        mkdir -p /var/lib/snapmulti-installer
+        printf '%s\n' "$(date -u +%FT%TZ)" > "$_switch_checkpoint"
+    fi
 
     # ro-mode helper + SSH key persistence (raspi-config call below has rollback)
     local _ro_mode_script=""

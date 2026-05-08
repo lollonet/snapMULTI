@@ -898,6 +898,26 @@ show_status() {
 install_systemd_service() {
     step "Installing systemd service"
 
+    # Resolve the persisted music path so the systemd unit can wait for
+    # the actual NFS/SMB/USB mount before starting compose. Without this,
+    # MPD/myMPD can come up bound to an empty bind-mount source and the
+    # library silently appears empty until manual restart. We pull from
+    # .env (the source-of-truth that persists across re-deploys) and
+    # only add it to RequiresMountsFor when it is a *network* mount —
+    # local SD-card paths and USB UUIDs are handled by other systemd
+    # ordering targets.
+    local music_mount_clause=""
+    local music_path_from_env=""
+    if [[ -f "$ENV_FILE" ]]; then
+        music_path_from_env=$(grep -m1 '^MUSIC_PATH=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+    fi
+    if [[ -n "$music_path_from_env" ]] \
+       && [[ "$music_path_from_env" != "${PROJECT_ROOT}"* ]] \
+       && is_network_mount "$music_path_from_env"; then
+        music_mount_clause=" $music_path_from_env"
+        info "Adding $music_path_from_env to RequiresMountsFor (network-backed library)"
+    fi
+
     cat > /etc/systemd/system/snapmulti-server.service <<EOF
 [Unit]
 Description=snapMULTI Docker Compose Server
@@ -906,7 +926,7 @@ After=docker.service network-online.target avahi-daemon.service
 Wants=network-online.target avahi-daemon.service
 # Block startup until project root + /audio (FIFO dir) are mounted; avoids
 # a Docker race where compose starts before NFS/USB attaches /music or /audio
-RequiresMountsFor=${PROJECT_ROOT} ${PROJECT_ROOT}/audio
+RequiresMountsFor=${PROJECT_ROOT} ${PROJECT_ROOT}/audio${music_mount_clause}
 # Snapcast 0.35.0 upstream bug: when avahi-daemon restarts, snapserver's
 # libavahi-client connection drops, the simple_poll quits, and snapserver
 # never re-registers — \`_snapcast._tcp\` mDNS publication is silently lost
