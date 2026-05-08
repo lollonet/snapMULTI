@@ -1,0 +1,23 @@
+[Unit]
+Description=Bind network music mount to merged-root path (overlayroot recurse=0 workaround)
+# overlayroot's initramfs script rewrites _netdev fstab entries even with
+# recurse=0, leaving the actual NFS/SMB mount visible only at
+# /media/root-ro/media/<src>-music. This unit restores the natural path
+# /media/<src>-music so the rest of the stack (MPD bind-mount, .env
+# MUSIC_PATH) sees real content. No-op when overlayroot is not active.
+ConditionPathIsMountPoint=/media/root-ro
+After=remote-fs.target
+# Must complete before snapserver / docker compose stack starts: MPD
+# resolves its bind-mount source at container creation, so an empty
+# /media/nfs-music at that moment yields a permanently empty /music.
+Before=docker.service snapmulti-server.service snapclient.service
+RequiresMountsFor=/media/root-ro
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/snapmulti-music-bind
+ExecStop=/usr/local/bin/snapmulti-music-bind --unmount
+
+[Install]
+WantedBy=multi-user.target

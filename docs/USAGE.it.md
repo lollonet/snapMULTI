@@ -277,6 +277,7 @@ Dopo l'installazione, systemd gestisce il ciclo di vita dei container (ADR-005).
 | `snapmulti-status.timer` | server, both | Aggiorna lo snapshot della pagina `/status` ogni 5 min (issue #177) |
 | `snapmulti-backup.timer` | server, both | Backup giornaliero del database MPD sulla partizione di boot |
 | `snapmulti-diagnostics.timer` | tutti | Cattura periodica di log diagnostici |
+| `snapmulti-music-bind.service` | server, both (solo NFS/SMB) | Bind-mount della libreria musicale di rete al percorso naturale quando `recurse=0` di overlayroot la nasconderebbe. No-op se overlayroot non è attivo |
 
 ```bash
 # Controlla stato

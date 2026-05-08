@@ -277,6 +277,7 @@ After installation, systemd owns the container lifecycle (ADR-005). Docker's `re
 | `snapmulti-status.timer` | server, both | Refreshes the `/status` web page snapshot every 5 min (issue #177) |
 | `snapmulti-backup.timer` | server, both | Daily MPD database backup to boot partition |
 | `snapmulti-diagnostics.timer` | all | Periodic diagnostic log capture |
+| `snapmulti-music-bind.service` | server, both (NFS/SMB only) | Bind-mounts the network music library to its natural path when overlayroot's `recurse=0` would otherwise hide it. No-op when overlayroot is inactive |
 
 ```bash
 # Check status
