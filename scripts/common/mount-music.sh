@@ -45,18 +45,10 @@ _write_systemd_mount_unit() {
     local fstype="$1" what="$2" where="$3" options="$4" timeout="${5:-45}"
     local unit_name unit_path
 
+    # systemd-escape ships with systemd — hard-fail, do NOT fall back to fstab (see PR #325).
     if ! command -v systemd-escape &>/dev/null; then
-        log_warn "systemd-escape unavailable — cannot generate .mount unit; falling back to fstab"
-        # Idempotent append: avoid duplicate fstab entries when setup.sh
-        # is re-run (e.g. firstboot retry after a partial failure).
-        if ! grep -qF " $where " /etc/fstab 2>/dev/null; then
-            echo "$what $where $fstype $options 0 0" >> /etc/fstab
-        fi
-        # Return 0 so the caller (setup_music_source under set -e in
-        # firstboot.sh) continues after the fallback. The log_warn above
-        # already surfaces the degraded path; aborting the entire install
-        # would be a surprising side-effect of "falling back to fstab".
-        return 0
+        log_error "systemd-escape unavailable — install with 'apt-get install --reinstall systemd'."
+        return 1
     fi
 
     unit_name="$(systemd-escape -p --suffix=mount "$where")"
