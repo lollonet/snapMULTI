@@ -7,7 +7,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# FIRSTBOOT and DISPLAY_LIB are referenced inside the eval'd `assert` strings
+# below; shellcheck cannot see usage through eval, so silence SC2034.
+# shellcheck disable=SC2034
 FIRSTBOOT="$SCRIPT_DIR/../scripts/firstboot.sh"
+# shellcheck disable=SC2034
 DISPLAY_LIB="$SCRIPT_DIR/../client/common/scripts/display.sh"
 
 pass=0
