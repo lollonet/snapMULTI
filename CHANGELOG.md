@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`device-smoke.sh` checks `/health` and `/status` on the metadata-service** (server / both) — two new HTTP probes complete the operations-section coverage that previously stopped at Snapcast JSON-RPC. `/health` validates that the metadata container is bound to `:8083` AND can talk to snapserver (the v0.6.4-hardened endpoint returns 503 with `snapserver_unreachable` / `snapserver_stale` instead of a hardcoded `ok` — stricter than docker's `Up (healthy)` heartbeat which reuses the same endpoint and accepts any 2xx). `/status` proves the issue #177 web dashboard is wired AND the renderer can read the snapshot file (or the boot-grace overlay activates when no snapshot exists yet — both user-acceptable). Validated live on snapvideo. Smoke tests now cover all three control planes: snapserver JSON-RPC, metadata health, status web page
+
 ### Changed
 - **`SNAPMULTI_VERSION` baked into the metadata image at build time** — previously the version reported by `/health` and `/version` came from an env var written by `deploy.sh` into `.env` at install time. After a `docker compose pull`, the new image ran with the *old* `.env` value, so the running code reported a stale version (observed on snapvideo: pulled v0.6.4 image, `/health` still reported `v0.6.3`). Now `Dockerfile.metadata` declares `ARG SNAPMULTI_VERSION=dev`, the workflow passes `--build-arg SNAPMULTI_VERSION=v$TAG` (or `dev`/`manual` for `workflow_dispatch`), and the value is baked as both `ENV SNAPMULTI_VERSION=` and `LABEL org.opencontainers.image.version=`. `docker-compose.yml` no longer overrides the env var, `deploy.sh` no longer writes to `.env`, `deploy.yml` no longer rewrites it on the target host, and `.env.example` documents the new flow. Result: image and reported version are tightly coupled, no drift after `docker pull` is possible.
 
