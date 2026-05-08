@@ -254,6 +254,12 @@ services:
       # /version always report the actually-running code's version.
     volumes:
       - ./artwork:/app/artwork
+      # /audio:/audio (read-only) — so the renderer can serve the
+      # system-status.json snapshot written by snapmulti-status.timer
+      # on the host. Without this mount, /status renders the
+      # "no snapshot available" failure verdict even when the host-side
+      # timer is healthy (issue surfaced after v0.6.4 ship).
+      - ./audio:/audio:ro
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)"]
       interval: 30s

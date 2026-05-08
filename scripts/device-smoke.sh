@@ -702,8 +702,40 @@ if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
         else
             fail_check "Snapcast JSON-RPC API not responding correctly — response: '$(echo "$_rpc_response" | head -c 100)'"
         fi
+
+        # metadata-service /health — proves the container is bound to :8083
+        # AND can talk to snapserver JSON-RPC. The hardened /health
+        # returns 503 with snapserver_unreachable / snapserver_stale when
+        # the back-end is silent — a stricter check than docker's
+        # \`Up (healthy)\` heartbeat (which reuses the same endpoint but
+        # accepts any 2xx).
+        _meta_health=$(curl -sS --max-time 5 -w '\n%{http_code}' http://127.0.0.1:8083/health 2>/dev/null || true)
+        _meta_code=$(echo "$_meta_health" | tail -n 1)
+        _meta_body=$(echo "$_meta_health" | sed '$d')
+        if [[ "$_meta_code" == "200" ]] && echo "$_meta_body" | grep -q '"status": "ok"'; then
+            pass_check "metadata-service /health responsive (status:ok on :8083)"
+        elif [[ "$_meta_code" == "503" ]]; then
+            _meta_status=$(echo "$_meta_body" | grep -oE '"status": "[^"]+"' | head -n 1)
+            fail_check "metadata-service /health degraded — HTTP 503 ${_meta_status:-(no status field)}"
+        else
+            fail_check "metadata-service /health unexpected — HTTP $_meta_code body='$(echo "$_meta_body" | head -c 100)'"
+        fi
+
+        # /status web page (issue #177) — probe the JSON variant
+        # (?format=json) instead of the HTML one. The HTML always returns
+        # 200 (even with a "no snapshot available" failure verdict in the
+        # body, e.g. when the /audio volume is not mounted in the metadata
+        # container). The JSON variant returns 503 when the snapshot is
+        # missing, distinguishing "endpoint reachable" from "feature
+        # actually working end-to-end".
+        _status_code=$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' 'http://127.0.0.1:8083/status?format=json' 2>/dev/null || true)
+        case "$_status_code" in
+            200) pass_check "/status snapshot present and readable (issue #177 path)" ;;
+            503) fail_check "/status reports no snapshot — check snapmulti-status.timer AND /audio bind-mount on metadata container" ;;
+            *)   fail_check "/status not responding — HTTP ${_status_code:-no-response}" ;;
+        esac
     else
-        warn "curl not installed — skipping JSON-RPC API check"
+        warn "curl not installed — skipping JSON-RPC + /health + /status checks"
     fi
 fi
 
