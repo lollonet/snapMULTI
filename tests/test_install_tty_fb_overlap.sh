@@ -109,17 +109,14 @@ assert 'grep -qE "COMPOSE_PROFILES=\"\".*verify_compose_stack" "$FIRSTBOOT"' \
 echo
 echo "=== firstboot.sh — quiet boot flags for fb-display (client/both only) ==="
 
-# Need cmdline patching gated on INSTALL_TYPE client/both AND /dev/fb0.
-# Walk a window of lines looking for the four expected flags being
-# appended via sed.
+# Cmdline patcher now lives INSIDE the existing client/both setup block
+# (gated on INSTALL_TYPE at line ~672). Awk between the section header
+# and the next blank line OR `# Run setup.sh` boundary.
 quiet_block=$(awk '
     /Quiet boot for fb-display/ {in_block=1}
-    in_block && /^# ══/ {in_block=0}
+    in_block && /^[[:space:]]*# Run setup\.sh/ {in_block=0}
     in_block {print}
 ' "$FIRSTBOOT")
-
-assert 'echo "$quiet_block" | grep -qE "INSTALL_TYPE.*client.*both"' \
-       'quiet boot block gated on INSTALL_TYPE client|both'
 
 assert 'echo "$quiet_block" | grep -qE "\\[\\[ -c /dev/fb0 \\]\\]"' \
        'quiet boot block gated on /dev/fb0 presence'
@@ -139,13 +136,24 @@ done
 assert 'echo "$quiet_block" | grep -qE "if ! grep -qE.*CMDLINE_FILE"' \
        'each cmdline flag append is idempotent (grep guard)'
 
-# CRITICAL ORDERING: the quiet-boot block MUST run BEFORE
-# setup_readonly_fs. raspi-config's `do_overlayfs 0` remounts
-# /boot/firmware read-only mid-install, after which sed -i can no
-# longer touch cmdline.txt. Verified live on snapvideo (the wrong
-# order produced 4× `cmdline: failed to add '...'` warnings and an
-# empty quiet-boot effect post-reboot).
+# CRITICAL ORDERING #1: the quiet-boot block MUST run BEFORE
+# `bash scripts/setup.sh`. setup.sh itself runs `raspi-config nonint
+# do_overlayfs 0` (around setup.sh:1369) which remounts /boot/firmware
+# READ-ONLY immediately. Verified live on snapvideo (post-PR-#320
+# reflash): patcher logged `cmdline: failed to add '<flag>'` × 5 with
+# /boot/firmware already ro because setup.sh had run first.
 quiet_line=$(grep -nE "^[[:space:]]*for flag in .*systemd\\.show_status" "$FIRSTBOOT" | head -1 | cut -d: -f1)
+setup_line=$(grep -nE "^[[:space:]]*bash scripts/setup\\.sh" "$FIRSTBOOT" | head -1 | cut -d: -f1)
+if [[ -n "$quiet_line" && -n "$setup_line" && "$quiet_line" -lt "$setup_line" ]]; then
+    echo "  PASS: quiet-boot block (line $quiet_line) runs BEFORE bash scripts/setup.sh (line $setup_line)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: quiet-boot block NOT before setup.sh call (quiet=$quiet_line, setup=$setup_line)"
+    fail=$((fail + 1))
+fi
+
+# CRITICAL ORDERING #2: still BEFORE setup_readonly_fs (PR #320 invariant
+# preserved transitively, since setup.sh runs before setup_readonly_fs).
 ro_line=$(grep -nE "^[[:space:]]*setup_readonly_fs " "$FIRSTBOOT" | head -1 | cut -d: -f1)
 if [[ -n "$quiet_line" && -n "$ro_line" && "$quiet_line" -lt "$ro_line" ]]; then
     echo "  PASS: quiet-boot block (line $quiet_line) runs BEFORE setup_readonly_fs (line $ro_line)"

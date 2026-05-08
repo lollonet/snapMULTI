@@ -731,6 +731,46 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     [[ "$ENABLE_READONLY" != "true" ]] && setup_args+=(--no-readonly)
     [[ -n "$CONFIG_FILE" ]] && setup_args+=("$CONFIG_FILE")
 
+    # ── Quiet boot for fb-display ────────────────────────────────────
+    # Without this, the post-install reboot leaves systemd / kernel
+    # `[ OK ] Started X.service ...` lines streaming on tty1 (drawn via
+    # fbcon on /dev/fb0) right while fb-display starts writing raw
+    # pixels there. The two outputs interleave on the framebuffer for
+    # 30–60 s until multi-user.target settles. Boot quietly: only
+    # WARN/ERROR messages remain visible (sufficient for emergency
+    # diagnostics), and fb-display has the framebuffer to itself.
+    #
+    # CRITICAL ORDERING: this block MUST run BEFORE `bash scripts/setup.sh`
+    # below. setup.sh runs `raspi-config nonint do_overlayfs 0` (at line
+    # ~1369) which remounts /boot/firmware READ-ONLY immediately. PR #320
+    # moved the patcher before firstboot's own `setup_readonly_fs` call —
+    # but missed that setup.sh activates overlayroot ITSELF, ahead of
+    # firstboot's call. Verified live on snapvideo (post-PR-#320 reflash):
+    # the patcher logged `cmdline: failed to add 'quiet'` × 5 with
+    # /boot/firmware already ro. The fix is to patch BEFORE setup.sh runs
+    # at all — for server-only installs the gate (/dev/fb0) is false anyway.
+    #
+    # Flag rationale:
+    #   quiet                       — kernel skips KERN_INFO / KERN_NOTICE
+    #   loglevel=3                  — only WARN+ from kernel reach console
+    #   systemd.show_status=false   — systemd ≥ 257 prints
+    #                                 `[ OK ] Started X.service` even
+    #                                 under `quiet`; this suppresses it
+    #   vt.global_cursor_default=0  — hide cursor blink behind fb-display
+    #   logo.nologo                 — hide raspberry-pi boot logo
+    if [[ -c /dev/fb0 ]] && [[ -n "${CMDLINE_FILE:-}" ]] && [[ -f "$CMDLINE_FILE" ]]; then
+        # Idempotent: only append flags that aren't already there.
+        for flag in "quiet" "loglevel=3" "systemd.show_status=false" "vt.global_cursor_default=0" "logo.nologo"; do
+            if ! grep -qE "(^| )${flag//./\\.}( |\$)" "$CMDLINE_FILE"; then
+                if sed -i "1s/\$/ ${flag}/" "$CMDLINE_FILE" 2>/dev/null; then
+                    log_info "cmdline: added '${flag}' (quiet boot for fb-display)"
+                else
+                    log_warn "cmdline: failed to add '${flag}' (is /boot/firmware mounted ro?)"
+                fi
+            fi
+        done
+    fi
+
     # Run setup.sh — parse output through unified logger (same as deploy.sh).
     # Tee a copy of every line so the failure path can dump full unfiltered
     # output (the case-statement filter drops most stderr noise on the
@@ -925,49 +965,6 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
             log_info "Music-bind unit installed (overlayroot $MUSIC_SOURCE workaround)"
         fi
         unset BIND_DIR _bind_candidate
-    fi
-fi
-
-# ── Quiet boot for fb-display ────────────────────────────────────
-# Without this, the post-install reboot leaves systemd / kernel
-# `[ OK ] Started X.service ...` lines streaming on tty1 (drawn via
-# fbcon on /dev/fb0) right while fb-display starts writing raw
-# pixels there. The two outputs interleave on the framebuffer for
-# 30–60 s until multi-user.target settles. Boot quietly: only
-# WARN/ERROR messages remain visible (sufficient for emergency
-# diagnostics), and fb-display has the framebuffer to itself.
-#
-# Applies to client / both installs where a display is present.
-# Server-only installs (no fb-display) keep verbose boot for SSH-less
-# debugging on a head-attached server.
-#
-# CRITICAL ORDERING: this block MUST run BEFORE setup_readonly_fs.
-# raspi-config's `do_overlayfs 0` remounts /boot/firmware read-only
-# during the configuration step (verified live on snapvideo: the log
-# showed `cmdline: failed to add 'quiet'` × 4 with /boot/firmware
-# already in `mount | grep ro`). After that point sed -i can no
-# longer rewrite cmdline.txt and the flags never land.
-#
-# Flag rationale:
-#   quiet                       — kernel skips KERN_INFO / KERN_NOTICE
-#   loglevel=3                  — only WARN+ from kernel reach console
-#   systemd.show_status=false   — systemd ≥ 257 prints
-#                                 `[ OK ] Started X.service` even
-#                                 under `quiet`; this suppresses it
-#   vt.global_cursor_default=0  — hide cursor blink behind fb-display
-#   logo.nologo                 — hide raspberry-pi boot logo
-if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
-    if [[ -c /dev/fb0 ]] && [[ -n "${CMDLINE_FILE:-}" ]] && [[ -f "$CMDLINE_FILE" ]]; then
-        # Idempotent: only append flags that aren't already there.
-        for flag in "quiet" "loglevel=3" "systemd.show_status=false" "vt.global_cursor_default=0" "logo.nologo"; do
-            if ! grep -qE "(^| )${flag//./\\.}( |\$)" "$CMDLINE_FILE"; then
-                if sed -i "1s/\$/ ${flag}/" "$CMDLINE_FILE" 2>/dev/null; then
-                    log_info "cmdline: added '${flag}' (quiet boot for fb-display)"
-                else
-                    log_warn "cmdline: failed to add '${flag}' (is /boot/firmware mounted ro?)"
-                fi
-            fi
-        done
     fi
 fi
 
