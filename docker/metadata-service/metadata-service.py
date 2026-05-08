@@ -2447,6 +2447,7 @@ async def _async_main() -> None:
     `loop.add_signal_handler()` routes the signal through the loop so
     a clean SystemExit unwinds asyncio.run() promptly.
     """
+
     def _shutdown(*_):
         sys.exit(0)
 
