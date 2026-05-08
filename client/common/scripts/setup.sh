@@ -1231,17 +1231,20 @@ if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
         return 0
     fi
 
-    # Ensure daemon.json exists. Always include --fuse-overlayfs when
-    # ENABLE_READONLY=true so the daemon.json is correct even if the
-    # daemon is briefly down (matches deploy.sh's overlayroot-aware
-    # detection). docker-driver-reconcile.sh remains as boot-time safety net.
+    # Always include --fuse-overlayfs when ENABLE_READONLY=true. We're
+    # already inside the `if ENABLE_READONLY=true` block, so the
+    # eventual driver MUST be fuse-overlayfs once overlayroot activates
+    # at the next reboot. Conditioning on the *current* driver was a
+    # bug: standalone fresh installs run with Docker on overlay2 (no
+    # overlayroot active yet), so the conditional skipped --fuse-overlayfs,
+    # tune_docker_daemon then POPPED storage-driver from daemon.json
+    # (`cfg.pop('storage-driver', None)` in system-tune.sh:187–190), and
+    # the fail-hard guard below stopped/wiped/started Docker only to
+    # have it come back on overlay2 — verification failed, exit 1, the
+    # guard turned itself into the install blocker for the exact users
+    # it was meant to protect.
     log_progress "Ensuring daemon.json exists..."
-    local _tune_args=(--live-restore)
-    if docker info --format '{{.Driver}}' 2>/dev/null | grep -q fuse-overlayfs \
-       || mount 2>/dev/null | grep -qE '^overlayroot |^[^ ]+ on / type overlay\b'; then
-        _tune_args+=(--fuse-overlayfs)
-    fi
-    tune_docker_daemon "${_tune_args[@]}"
+    tune_docker_daemon --live-restore --fuse-overlayfs
 
     # Fail-hard pre-pull guard: if ENABLE_READONLY=true but the running
     # daemon is still on overlay2, FORCE the switch now (wipe + restart)
