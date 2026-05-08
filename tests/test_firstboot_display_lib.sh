@@ -42,17 +42,10 @@ assert 'grep -qE "\\*-DSI-\\*\\|\\*-DPI-\\*" "$DISPLAY_LIB"' \
 assert 'grep -qE "\\*-DP-\\*\\|\\*-eDP-\\*" "$DISPLAY_LIB"' \
        "display.sh recognises DP and eDP connectors"
 
-# 4. firstboot must not redefine has_display() unconditionally — only
-#    inside an else-branch as fallback
-unconditional=$(awk '
-    /^has_display\(\)/ {
-        # Check the line ABOVE for "else" (fallback context); if the
-        # function header is at indent 0 with no else-branch leading,
-        # it would be the unconditional definition we removed.
-        print prev
-    }
-    { prev = $0 }
-' "$FIRSTBOOT")
+# 4. firstboot must not redefine has_display() unconditionally at top
+#    level. The fallback definition lives inside an `else` branch and is
+#    therefore indented; an un-indented `has_display()` would mean the
+#    pre-PR-#311 duplicate has been re-introduced.
 assert '! grep -qE "^has_display\\(\\)" "$FIRSTBOOT"' \
        "has_display() is no longer defined at top-level in firstboot.sh"
 

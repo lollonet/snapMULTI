@@ -828,6 +828,7 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
             systemctl enable snapmulti-music-bind.service
             log_info "Music-bind unit installed (overlayroot $MUSIC_SOURCE workaround)"
         fi
+        unset BIND_DIR _bind_candidate
     fi
 fi
 
