@@ -6,7 +6,7 @@
 #   - Log levels (INFO, WARN, ERROR, OK)
 #   - Source identification (which module produced the line)
 #   - Dual output: install log file + TUI progress feed
-#   - Console output for errors/warnings on /dev/tty1
+#   - Console output for errors/warnings on $PROGRESS_TTY (default /dev/tty1)
 #
 # Replaces both logging.sh and log_and_tty() from firstboot.sh.
 #
@@ -20,6 +20,10 @@
 # Log file destinations (can be overridden before sourcing)
 UNIFIED_LOG="${UNIFIED_LOG:-/var/log/snapmulti-install.log}"
 LOG_SOURCE="${LOG_SOURCE:-unknown}"
+
+# Console TTY for ERROR/WARN visibility. firstboot.sh sets this to /dev/tty3
+# so the install log doesn't overlap fb-display rendering on /dev/tty1 / fb0.
+PROGRESS_TTY="${PROGRESS_TTY:-/dev/tty1}"
 
 # Ensure log file exists and is writable
 if [[ ! -f "$UNIFIED_LOG" ]]; then
@@ -48,8 +52,8 @@ log_msg() {
 
     # Show errors and warnings on HDMI console
     case "$level" in
-        ERROR) echo "[ERROR] [$source] $msg" > /dev/tty1 2>/dev/null || true ;;
-        WARN)  echo "[WARN]  [$source] $msg" > /dev/tty1 2>/dev/null || true ;;
+        ERROR) echo "[ERROR] [$source] $msg" > "$PROGRESS_TTY" 2>/dev/null || true ;;
+        WARN)  echo "[WARN]  [$source] $msg" > "$PROGRESS_TTY" 2>/dev/null || true ;;
     esac
 }
 
@@ -68,5 +72,5 @@ step()  { log_info "==> $*"; }
 # Backward compatibility with firstboot.sh log_and_tty()
 log_and_tty() {
     log_info "$*"
-    echo "$*" > /dev/tty1 2>/dev/null || true
+    echo "$*" > "$PROGRESS_TTY" 2>/dev/null || true
 }

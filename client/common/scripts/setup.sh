@@ -1096,6 +1096,19 @@ if systemctl is-enabled x11-autostart.service &>/dev/null; then
     systemctl disable x11-autostart.service
     echo "  Disabled previous X11 autostart service"
 fi
+
+# Free /dev/tty1 (and through it /dev/fb0) so fb-display owns the
+# framebuffer post-reboot. Default Raspberry Pi OS enables agetty on tty1,
+# whose login prompt would draw on top of fb-display via fbcon. Console
+# login remains accessible via Alt+F2 (logind autovt template auto-spawns
+# agetty on tty2 on demand). Idempotent: mask is a no-op when already set.
+if [[ "$HAS_DISPLAY" == true ]]; then
+    if systemctl list-unit-files getty@.service &>/dev/null; then
+        systemctl stop getty@tty1.service 2>/dev/null || true
+        systemctl mask getty@tty1.service 2>/dev/null || true
+        echo "  Masked getty@tty1.service (login prompt) — fb-display owns /dev/fb0; use Alt+F2 for console"
+    fi
+fi
 echo ""
 
 # ============================================
