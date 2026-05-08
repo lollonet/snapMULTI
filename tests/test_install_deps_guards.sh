@@ -47,6 +47,13 @@ deploy_block=$(awk '/^setup_server_host\(\)/,/^}/' "$DEPLOY")
 assert 'echo "$deploy_block" | grep -qE "PROGRESS_MANAGED"' \
        'setup_server_host references PROGRESS_MANAGED'
 
+# Mirror setup.sh:474 which uses non-empty `-n` check, not strict
+# `== "1"` equality. A future caller passing PROGRESS_MANAGED=yes or
+# =true would silently bypass the guard under strict equality while
+# setup.sh still skips — and the comment claims they mirror.
+assert 'echo "$deploy_block" | grep -qE "\\[\\[ -n \"\\\$\\{PROGRESS_MANAGED:-\\}\""' \
+       'guard uses `-n` non-empty check (mirrors setup.sh:474)'
+
 assert 'echo "$deploy_block" | grep -qE "command -v docker"' \
        'guard checks docker is already installed'
 
