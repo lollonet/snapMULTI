@@ -1647,11 +1647,31 @@ def cleanup(signum: int | None = None, frame=None) -> None:
     sys.exit(0)
 
 
-if __name__ == "__main__":
-    signal.signal(signal.SIGTERM, cleanup)
-    signal.signal(signal.SIGINT, cleanup)
+async def _async_main() -> None:
+    """Async entry point with asyncio-aware signal handlers.
 
+    A plain `signal.signal(SIGTERM, cleanup)` registration does NOT
+    deliver under `asyncio.run(main())`: Python queues the signal but
+    only invokes the handler between bytecode instructions, and the
+    asyncio event loop spends most of its time inside `await` points
+    where no bytecode is running. Result: SIGTERM from `docker stop`
+    is ignored for ~90 s (until Docker's stop_grace_period elapses
+    and SIGKILL arrives), and systemd-shutdown then waits another
+    DefaultTimeoutStopSec (~90 s) for the host-visible PID. Total:
+    ~3 minutes of `Waiting for process: NNNN (python3)` per reboot.
+
+    `loop.add_signal_handler()` routes the signal through the loop
+    so cleanup() runs at the next iteration and `sys.exit(0)` raises
+    SystemExit which asyncio.run() unwinds promptly.
+    """
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, cleanup, sig, None)
+    await main()
+
+
+if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        asyncio.run(_async_main())
     except KeyboardInterrupt:
         cleanup(None, None)

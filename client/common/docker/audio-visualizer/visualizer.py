@@ -451,10 +451,18 @@ def cleanup(signum=None, frame=None):
     sys.exit(0)
 
 
+async def _async_main():
+    """Same asyncio-aware signal handler pattern as fb_display.py —
+    avoids the 90 s systemd-shutdown stall on reboot. See the
+    docstring in fb_display.py:_async_main for the full rationale."""
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, cleanup, sig, None)
+    await main()
+
+
 if __name__ == "__main__":
-    signal.signal(signal.SIGTERM, cleanup)
-    signal.signal(signal.SIGINT, cleanup)
     try:
-        asyncio.run(main())
+        asyncio.run(_async_main())
     except KeyboardInterrupt:
         cleanup()
