@@ -1201,6 +1201,12 @@ Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=${INSTALL_DIR}
 ExecStartPre=/bin/bash -c 'for i in \$(seq 1 60); do docker info >/dev/null 2>&1 && exit 0; sleep 2; done; exit 1'
+# Wait for avahi-daemon readiness before snapclient-discover and \`docker
+# compose up\`. snapclient-discover queries _snapcast._tcp via avahi-browse;
+# snapclient's libavahi-client also needs avahi ready to react to server
+# restarts. Non-fatal: 30 s max wait, then proceed (avahi may be missing
+# in unusual setups).
+ExecStartPre=/bin/bash -c 'for i in \$(seq 1 30); do systemctl is-active --quiet avahi-daemon.service && [[ -S /run/avahi-daemon/socket ]] && break; sleep 1; done; sleep 2'
 ExecStartPre=-/usr/local/bin/snapclient-discover
 ExecStart=/usr/bin/docker compose up -d
 ExecStop=/usr/bin/docker compose down
