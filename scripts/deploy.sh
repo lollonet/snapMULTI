@@ -630,19 +630,11 @@ setup_env() {
             fi
         fi
 
-        # Detect if music is on network mount
-        local mpd_start_period="30s"
-        if is_network_mount "$music_path"; then
-            mpd_start_period="300s"
-            info "Network mount detected — using extended MPD start period (5 min)"
-        else
-            info "Local storage detected — using standard MPD start period (30s)"
-        fi
-
         # Detect music source for downstream tools (device-smoke.sh, MPD
-        # backup gate). Prefer the explicit MUSIC_SOURCE exported by
-        # mount-music.sh; fall back to inferring from the mount point so
-        # manual / pre-existing setups still get a value persisted.
+        # backup gate, MPD start period below). Prefer the explicit
+        # MUSIC_SOURCE exported by mount-music.sh; fall back to inferring
+        # from the mount point so manual / pre-existing setups still get
+        # a value persisted.
         local music_source_value="${MUSIC_SOURCE:-}"
         if [[ -z "$music_source_value" ]]; then
             if is_network_mount "$music_path"; then
@@ -655,6 +647,23 @@ setup_env() {
                 music_source_value="local"
             fi
         fi
+
+        # MPD start period: extend to 5 min for network-backed libraries
+        # so the healthcheck doesn't trip while NFS/SMB attaches and MPD
+        # scans. Decision MUST come from music_source_value (authoritative
+        # at install time) — not from is_network_mount, which probes the
+        # live mount and returns false during firstboot when the NFS
+        # mount timed out (fstab is set, retry will succeed on next boot).
+        local mpd_start_period="30s"
+        case "$music_source_value" in
+            nfs|smb|network)
+                mpd_start_period="300s"
+                info "Network-backed library ($music_source_value) — using extended MPD start period (5 min)"
+                ;;
+            *)
+                info "Local storage ($music_source_value) — using standard MPD start period (30s)"
+                ;;
+        esac
 
         # Generate .env
         cat > "$ENV_FILE" <<EOF
