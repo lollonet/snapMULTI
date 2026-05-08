@@ -76,6 +76,14 @@ assert 'echo "$server_unit" | grep -qE "ExecStartPost"' \
 assert 'echo "$server_unit" | grep -qE "avahi-browse.*_snapcast"' \
        'ExecStartPost queries avahi-browse for _snapcast._tcp'
 
+# Critical: avahi-browse must NOT carry the `-l` flag (--ignore-local).
+# Local services are EXACTLY what we want to inspect — `-l` would
+# exclude this host's snapserver records and the self-heal would
+# never fire. Same convention as device-smoke.sh and
+# discover-server.sh, which both omit -l.
+assert '! echo "$server_unit" | grep -qE "avahi-browse [^_]*-[prtl]*l[prtl]* _snapcast"' \
+       'avahi-browse runs WITHOUT -l (--ignore-local would skip our own records)'
+
 assert 'echo "$server_unit" | grep -qE "docker compose.*restart snapserver"' \
        'ExecStartPost restarts snapserver on PTR-only detection'
 

@@ -988,11 +988,15 @@ ExecStart=/usr/bin/docker compose up -d
 # fresh libavahi-client connection succeeds because avahi is now
 # stable. avahi-browse exit code is 1 if no records are found at all
 # (timeout), so we anchor on the SRV/TXT presence specifically.
+# Use \`-prt\` (no \`-l\`): the \`l\` flag is --ignore-local, which would
+# exclude services published by THIS host's avahi-daemon — exactly the
+# records we need to inspect. Same convention as device-smoke.sh and
+# discover-server.sh, which both omit \`-l\` for this reason.
 # All non-fatal: failures here must not hold the unit in failed state.
 ExecStartPost=-/bin/bash -c '\\
     sleep 12; \\
     if command -v avahi-browse >/dev/null 2>&1; then \\
-        out=\$(avahi-browse -prtl _snapcast._tcp 2>/dev/null || true); \\
+        out=\$(avahi-browse -prt _snapcast._tcp 2>/dev/null || true); \\
         if echo "\$out" | grep -qE "^\\+;.*;_snapcast\\._tcp" \\
            && ! echo "\$out" | grep -qE "^=;.*;_snapcast\\._tcp"; then \\
             logger -t snapmulti-server "mDNS PTR-only detected, restarting snapserver to recover SRV+TXT publish"; \\
