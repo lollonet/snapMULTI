@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **`SNAPMULTI_VERSION` baked into the metadata image at build time** — previously the version reported by `/health` and `/version` came from an env var written by `deploy.sh` into `.env` at install time. After a `docker compose pull`, the new image ran with the *old* `.env` value, so the running code reported a stale version (observed on snapvideo: pulled v0.6.4 image, `/health` still reported `v0.6.3`). Now `Dockerfile.metadata` declares `ARG SNAPMULTI_VERSION=dev`, the workflow passes `--build-arg SNAPMULTI_VERSION=v$TAG` (or `dev`/`manual` for `workflow_dispatch`), and the value is baked as both `ENV SNAPMULTI_VERSION=` and `LABEL org.opencontainers.image.version=`. `docker-compose.yml` no longer overrides the env var, `deploy.sh` no longer writes to `.env`, `deploy.yml` no longer rewrites it on the target host, and `.env.example` documents the new flow. Result: image and reported version are tightly coupled, no drift after `docker pull` is possible.
+
 ## [0.6.4] — 2026-05-08
 
 ### Added

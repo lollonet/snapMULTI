@@ -71,13 +71,6 @@ jobs:
             sudo cp /tmp/snapmulti-deploy/docker-compose.yml /opt/snapmulti/docker-compose.yml
             rm -rf /tmp/snapmulti-deploy
 
-            echo "Updating SNAPMULTI_VERSION in .env..."
-            if grep -q '^SNAPMULTI_VERSION=' .env 2>/dev/null; then
-              sudo sed -i "s|^SNAPMULTI_VERSION=.*|SNAPMULTI_VERSION=${DEPLOY_VERSION}|" .env
-            else
-              echo "SNAPMULTI_VERSION=${DEPLOY_VERSION}" | sudo tee -a .env > /dev/null
-            fi
-
             echo "Logging in to Docker Hub..."
             if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
               echo "ERROR: DOCKERHUB_USERNAME or DOCKERHUB_TOKEN secret is empty."
@@ -148,10 +141,10 @@ jobs:
                 sudo rsync -aX --ignore-existing /var/lib/docker/fuse-overlayfs/ \
                     "$BAKE_DIR/var/lib/docker/fuse-overlayfs/"
 
-                # Verify version was actually written
-                BAKED=$(grep '^SNAPMULTI_VERSION=' "$BAKE_DIR/opt/snapmulti/.env" 2>/dev/null | cut -d= -f2)
-                if [[ "$BAKED" != "${DEPLOY_VERSION}" ]]; then
-                    echo "ERROR: Bake verification failed -- expected ${DEPLOY_VERSION}, got ${BAKED}"
+                # Sanity-check that the bake actually persisted the .env (rsync failure
+                # would already have exited via set -e, but guard against an empty file).
+                if [[ ! -s "$BAKE_DIR/opt/snapmulti/.env" ]]; then
+                    echo "ERROR: Bake verification failed -- baked .env is empty or missing"
                     exit 1
                 fi
 

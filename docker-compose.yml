@@ -249,7 +249,9 @@ services:
     environment:
       - TZ=${TZ:-Europe/Berlin}
       - EXTERNAL_HOST=${EXTERNAL_HOST:-}
-      - SNAPMULTI_VERSION=${SNAPMULTI_VERSION:-unknown}
+      # SNAPMULTI_VERSION is baked into the image at build time (see
+      # Dockerfile.metadata + build-push.yml --build-arg), so /health and
+      # /version always report the actually-running code's version.
     volumes:
       - ./artwork:/app/artwork
     healthcheck:

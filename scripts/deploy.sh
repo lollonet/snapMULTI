@@ -954,21 +954,6 @@ _detect_version() {
     echo "$version"
 }
 
-# Write SNAPMULTI_VERSION to .env (called early so metadata container gets it).
-# Does NOT write .version file — that's done by write_version after verify.
-write_version_to_env() {
-    local version
-    version=$(_detect_version)
-    if [[ -n "$version" ]] && [[ -f "$ENV_FILE" ]]; then
-        if grep -q '^SNAPMULTI_VERSION=' "$ENV_FILE" 2>/dev/null; then
-            sed -i "s|^SNAPMULTI_VERSION=.*|SNAPMULTI_VERSION=$version|" "$ENV_FILE"
-        else
-            echo "SNAPMULTI_VERSION=$version" >> "$ENV_FILE"
-        fi
-        info "Version: $version"
-    fi
-}
-
 # Record deployed version to .version file (called after successful verify).
 write_version() {
     local version
@@ -1052,7 +1037,6 @@ main() {
     info "Using profile: $profile"
 
     setup_env "$profile"
-    write_version_to_env
     validate_config
     pull_images
     start_services
