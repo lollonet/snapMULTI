@@ -33,6 +33,23 @@ assert_contains "$content" "WriteAllText((Join-Path \$Dest 'client/VERSION'), \$
 assert_contains "$content" 'Assert-PreparedSdCard -Dest $Dest -Boot $Boot -InstallType $InstallType' "verification runs before eject"
 assert_contains "$content" "runcmd:\\s*(\\[\\]|null|~)?" "inline/empty runcmd cases handled"
 
+# docker/ directory copy (parity with PR #321 on the bash side).
+# Without this copy, the metadata-service bind-mount in
+# docker-compose.yml (PR #319) breaks the install on Windows-prepped
+# SD cards because Docker auto-creates an empty dir at the bind source.
+assert_contains "$content" "Join-Path \$ProjectDir 'docker'" "docker/ source path resolved"
+assert_contains "$content" 'Test-Path $dockerSrc' "docker/ copy is guarded on the source existing"
+assert_contains "$content" "New-Item -ItemType Directory -Path \$dockerDest" "docker/ destination created idempotently"
+
+# Optional helper copies (parity with .sh).
+assert_contains "$content" "docker-driver-reconcile.sh" "docker-driver-reconcile.sh copied (optional)"
+
+# install.conf advanced keys (parity with .sh, otherwise firstboot reads
+# undefined values for SKIP_UPGRADE / IMAGE_TAG / VERBOSE_INSTALL).
+assert_contains "$content" "SKIP_UPGRADE=" "install.conf carries SKIP_UPGRADE"
+assert_contains "$content" "IMAGE_TAG=" "install.conf carries IMAGE_TAG"
+assert_contains "$content" "VERBOSE_INSTALL=" "install.conf carries VERBOSE_INSTALL"
+
 echo ""
 if [[ "$fail" -gt 0 ]]; then
     echo "FAILED: $fail tests failed, $pass passed"
