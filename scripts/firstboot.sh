@@ -225,7 +225,16 @@ cleanup_on_failure() {
         echo "" > /dev/tty1 2>/dev/null || true
         echo "  --- Installation FAILED (module: $CURRENT_MODULE) ---" > /dev/tty1 2>/dev/null || true
         echo "  Check log: $UNIFIED_LOG" > /dev/tty1 2>/dev/null || true
-        touch "$FAILED_MARKER"
+
+        # Atomic FAILED_MARKER write: same pattern as checkpoint_done.
+        # touch leaves a zero-byte file; if power loss strikes between
+        # the syscall and the fs flush, we may end up with an empty file
+        # that still satisfies `[[ -f "$FAILED_MARKER" ]]` but the
+        # diagnostic dump above may be lost. Atomic write guarantees
+        # the marker either has the timestamp or doesn't exist.
+        printf '%s\n' "$(date -u +%FT%TZ)" > "${FAILED_MARKER}.tmp" 2>/dev/null || true
+        sync -- "${FAILED_MARKER}.tmp" 2>/dev/null || true
+        mv -f -- "${FAILED_MARKER}.tmp" "$FAILED_MARKER" 2>/dev/null || true
     fi
 }
 trap cleanup_on_failure EXIT
@@ -540,7 +549,6 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     # shellcheck source=common/mount-music.sh
     source "$COMMON/mount-music.sh"
     setup_music_source
-    scrub_credentials
 
     # Export IMAGE_TAG for deploy.sh
     if [[ "$IMAGE_TAG" != "latest" ]]; then
@@ -554,9 +562,14 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     fi
     cd "$SERVER_DIR"
 
-    # Run deploy.sh — parse output through unified logger
+    # Run deploy.sh — parse output through unified logger.
+    # Tee a copy of every line to a temp file so on failure we can dump
+    # the full unfiltered output (the case-statement filter below drops
+    # most stderr/systemctl/docker noise on the success path; on the
+    # failure path that's exactly the noise that matters).
+    deploy_log=$(mktemp /tmp/firstboot-deploy-XXXXXX.log)
     set +eo pipefail
-    bash scripts/deploy.sh 2>&1 | while IFS= read -r line; do
+    bash scripts/deploy.sh 2>&1 | tee "$deploy_log" | while IFS= read -r line; do
         if [[ "$VERBOSE_INSTALL" == "true" ]]; then
             log_msg INFO deploy "${line:0:200}"
         else
@@ -580,10 +593,18 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
 
     if [[ "$deploy_rc" -ne 0 ]]; then
         set -eo pipefail
-        log_error "Server deployment failed"
-        log_error "Troubleshoot: sudo cat $UNIFIED_LOG | tail -50"
+        log_error "Server deployment failed (rc=$deploy_rc)"
+        log_error "Full subprocess output (last 200 lines):"
+        if [[ -f "$deploy_log" ]]; then
+            tail -n 200 "$deploy_log" | while IFS= read -r line; do
+                log_msg ERROR deploy "${line:0:200}"
+            done
+        fi
+        log_error "Troubleshoot: sudo cat $UNIFIED_LOG | tail -200"
+        rm -f "$deploy_log"
         exit 1
     fi
+    rm -f "$deploy_log"
     set -eo pipefail
     milestone "$CURRENT_STEP" "Server deploy complete" 2 2>/dev/null || true
 
@@ -597,6 +618,15 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         exit 1
     fi
     checkpoint_done "deploy"
+
+    # Scrub credentials only AFTER deploy verified. Doing it earlier (the
+    # original placement, before deploy.sh) means: if firstboot crashed
+    # between the scrub and the deploy checkpoint, the next boot would
+    # re-enter setup_music_source() with empty NFS_*/SMB_* vars, yielding
+    # a broken fstab line ("//empty/empty cifs guest") that masks the
+    # original good line. Now scrub runs only on the success path; on
+    # retry, the install.conf creds are still intact.
+    scrub_credentials
   fi  # checkpoint guard
 fi
 
@@ -665,9 +695,13 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     [[ "$ENABLE_READONLY" != "true" ]] && setup_args+=(--no-readonly)
     [[ -n "$CONFIG_FILE" ]] && setup_args+=("$CONFIG_FILE")
 
-    # Run setup.sh — parse output through unified logger (same as deploy.sh)
+    # Run setup.sh — parse output through unified logger (same as deploy.sh).
+    # Tee a copy of every line so the failure path can dump full unfiltered
+    # output (the case-statement filter drops most stderr noise on the
+    # success path; on failure that's the noise we need).
+    setup_log=$(mktemp /tmp/firstboot-setup-XXXXXX.log)
     set +eo pipefail
-    bash scripts/setup.sh "${setup_args[@]}" 2>&1 | while IFS= read -r line; do
+    bash scripts/setup.sh "${setup_args[@]}" 2>&1 | tee "$setup_log" | while IFS= read -r line; do
         if [[ "$VERBOSE_INSTALL" == "true" ]]; then
             log_msg INFO setup "${line:0:200}"
         else
@@ -691,10 +725,18 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
 
     if [[ "$setup_rc" -ne 0 ]]; then
         set -eo pipefail
-        log_error "Client setup failed"
-        log_error "Troubleshoot: sudo cat $UNIFIED_LOG | tail -50"
+        log_error "Client setup failed (rc=$setup_rc)"
+        log_error "Full subprocess output (last 200 lines):"
+        if [[ -f "$setup_log" ]]; then
+            tail -n 200 "$setup_log" | while IFS= read -r line; do
+                log_msg ERROR setup "${line:0:200}"
+            done
+        fi
+        log_error "Troubleshoot: sudo cat $UNIFIED_LOG | tail -200"
+        rm -f "$setup_log"
         exit 1
     fi
+    rm -f "$setup_log"
     set -eo pipefail
     unset PROGRESS_MANAGED
     milestone "$CURRENT_STEP" "Client setup complete" 2 2>/dev/null || true

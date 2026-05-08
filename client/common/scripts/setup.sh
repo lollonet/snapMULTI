@@ -305,14 +305,27 @@ fi
 # shellcheck source=/dev/null
 source "$HAT_CONFIG_FILE"
 
-# Override HAT_CARD_NAME with the actual ALSA card id when detect_hat
-# probed a real USB DAC. Many USB devices report ids like "Device", "S2",
-# "X20" — the static "USB" baked into usb-audio.conf would yield a
-# non-existent card via hw:CARD=USB,DEV=0 (issue #8). When set,
-# USB_CARD_ID is the authoritative override.
-if [[ "${HAT_CONFIG:-}" == "usb-audio" ]] && [[ -n "${USB_CARD_ID:-}" ]]; then
-    echo "Overriding HAT_CARD_NAME=$HAT_CARD_NAME with USB_CARD_ID=$USB_CARD_ID"
-    HAT_CARD_NAME="$USB_CARD_ID"
+# Override HAT_CARD_NAME with the actual ALSA card id when the user is
+# installing for a USB DAC. Many USB devices report ids like "Device",
+# "S2", "X20" — the static "USB" baked into usb-audio.conf would yield
+# a non-existent card via hw:CARD=USB,DEV=0 (issue #8).
+#
+# detect_hat populates USB_CARD_ID when it auto-detects the device. If
+# the user picked usb-audio MANUALLY (menu option 11), detect_hat never
+# ran in USB branch, so USB_CARD_ID is empty — probe `aplay -l` here
+# too so the manual path matches the auto path.
+if [[ "${HAT_CONFIG:-}" == "usb-audio" ]]; then
+    if [[ -z "${USB_CARD_ID:-}" ]] && command -v aplay &>/dev/null; then
+        USB_CARD_ID=$(aplay -l 2>/dev/null \
+            | awk -F'[ :]+' '/USB/ && /^card [0-9]+/ {print $3; exit}' || true)
+        if [[ -n "$USB_CARD_ID" ]]; then
+            echo "Probed USB ALSA card id (manual select path): $USB_CARD_ID"
+        fi
+    fi
+    if [[ -n "${USB_CARD_ID:-}" ]]; then
+        echo "Overriding HAT_CARD_NAME=$HAT_CARD_NAME with USB_CARD_ID=$USB_CARD_ID"
+        HAT_CARD_NAME="$USB_CARD_ID"
+    fi
 fi
 
 # Validate required HAT configuration variables
@@ -443,7 +456,23 @@ for _deps_candidate in \
     [[ -f "$_deps_candidate" ]] && source "$_deps_candidate" && break
 done
 
-if declare -F install_dependencies &>/dev/null; then
+# Skip the full install_dependencies pass when firstboot has already
+# provisioned the host (PROGRESS_MANAGED=1). install-deps.sh is
+# idempotent (apt is a no-op for already-installed packages), but on
+# Pi Zero 2W the apt-get update + per-package check costs ~30-60s and
+# repeats network/disk pressure. Gate is "not blind": we still verify
+# the essential client commands are present, falling through to the
+# full install if any of them is missing (firstboot may have run a
+# different role or partially failed).
+_essential_client_cmds_present() {
+    command -v aplay         &>/dev/null && \
+    command -v curl          &>/dev/null && \
+    command -v avahi-daemon  &>/dev/null
+}
+
+if [[ -n "${PROGRESS_MANAGED:-}" ]] && _essential_client_cmds_present; then
+    log_progress "Skipping install_dependencies — firstboot already provisioned the host (PROGRESS_MANAGED=1)"
+elif declare -F install_dependencies &>/dev/null; then
     # Skip apt upgrade — only firstboot does full upgrade on first install.
     # Standalone setup.sh and firstboot-delegated runs both skip.
     INSTALL_ROLE=client SKIP_UPGRADE=true install_dependencies
