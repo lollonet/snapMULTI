@@ -32,9 +32,13 @@ remount_rw
 trap 'remount_ro' EXIT
 mkdir -p "$DIAG_DIR"
 
-# Rotate: keep only the last MAX_SNAPSHOTS
-# shellcheck disable=SC2012
-existing=$(ls -1d "$DIAG_DIR"/[0-9]* 2>/dev/null | sort | head -n -"$MAX_SNAPSHOTS")
+# Rotate: keep only the last MAX_SNAPSHOTS.
+# Use `find` instead of `ls glob`: when DIAG_DIR is empty (first run), the
+# unmatched glob makes ls exit 2, pipefail propagates it, set -e kills the
+# script — and systemd reports the unit failed despite the rotation being
+# a no-op anyway. find returns 0 on empty results.
+existing=$(find "$DIAG_DIR" -mindepth 1 -maxdepth 1 -type d -name '[0-9]*' 2>/dev/null \
+    | sort | head -n -"$MAX_SNAPSHOTS" || true)
 if [[ -n "$existing" ]]; then
     echo "$existing" | while IFS= read -r old; do
         rm -rf "$old"

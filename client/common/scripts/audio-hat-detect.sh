@@ -215,12 +215,25 @@ detect_hat() {
         echo "I2C: i2cdetect unavailable, skipping" >&2
     fi
 
-    # USB audio device check
-    if command -v aplay &>/dev/null && aplay -l 2>/dev/null | grep -qi 'USB'; then
-        echo "Detected USB audio device" >&2
-        HAT_DETECTION_SOURCE="usb"
-        echo "usb-audio"
-        return
+    # USB audio device check.
+    # `aplay -l` lines look like:
+    #   card 1: Audio [USB Audio CODEC], device 0: USB Audio [USB Audio]
+    # The literal token "USB" appears in the description but the ALSA
+    # card *id* (between `card N:` and the bracketed name) is what we
+    # need for `hw:CARD=NAME,DEV=0`. Many USB DACs report ids like
+    # "Device", "S2", "X20", etc. — hardcoding "USB" yields a non-existent
+    # card. Probe the actual id and export it for setup.sh to consume.
+    if command -v aplay &>/dev/null; then
+        local _usb_card_id=""
+        _usb_card_id=$(aplay -l 2>/dev/null \
+            | awk -F'[ :]+' '/USB/ && /^card [0-9]+/ {print $3; exit}' || true)
+        if [[ -n "$_usb_card_id" ]]; then
+            echo "Detected USB audio device (ALSA card id: $_usb_card_id)" >&2
+            HAT_DETECTION_SOURCE="usb"
+            export USB_CARD_ID="$_usb_card_id"
+            echo "usb-audio"
+            return
+        fi
     fi
 
     # Internal audio fallback
