@@ -351,7 +351,20 @@ setup_server_host() {
     # Skip apt upgrade in standalone deploy (only firstboot does full upgrade)
     # shellcheck source=common/install-deps.sh
     source "$SCRIPT_DIR/common/install-deps.sh"
-    INSTALL_ROLE=server SKIP_UPGRADE=true install_dependencies
+
+    # Skip the full install_dependencies pass when firstboot has already
+    # provisioned the host (PROGRESS_MANAGED=1). install-deps.sh is
+    # idempotent, but on Pi Zero 2W the redundant `apt-get update` + dpkg
+    # checks add ~30-60 s and risk transient ENOSPC on the small tmpfs.
+    # Mirrors the guard in client/common/scripts/setup.sh:474.
+    if [[ -n "${PROGRESS_MANAGED:-}" ]] \
+       && command -v docker &>/dev/null \
+       && command -v curl &>/dev/null \
+       && command -v avahi-daemon &>/dev/null; then
+        info "Skipping install_dependencies — firstboot already provisioned the host (PROGRESS_MANAGED=${PROGRESS_MANAGED})"
+    else
+        INSTALL_ROLE=server SKIP_UPGRADE=true install_dependencies
+    fi
 
     # Server-specific tuning (not package management)
     tune_cpu_governor
