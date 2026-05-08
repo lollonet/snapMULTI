@@ -107,6 +107,39 @@ assert 'grep -qE "COMPOSE_PROFILES=\"\".*verify_compose_stack" "$FIRSTBOOT"' \
        'verify_compose_stack runs with COMPOSE_PROFILES="" (only counts unprofiled services)'
 
 echo
+echo "=== firstboot.sh — quiet boot flags for fb-display (client/both only) ==="
+
+# Need cmdline patching gated on INSTALL_TYPE client/both AND /dev/fb0.
+# Walk a window of lines looking for the four expected flags being
+# appended via sed.
+quiet_block=$(awk '
+    /Quiet boot for fb-display/ {in_block=1}
+    in_block && /^# ══/ {in_block=0}
+    in_block {print}
+' "$FIRSTBOOT")
+
+assert 'echo "$quiet_block" | grep -qE "INSTALL_TYPE.*client.*both"' \
+       'quiet boot block gated on INSTALL_TYPE client|both'
+
+assert 'echo "$quiet_block" | grep -qE "\\[\\[ -c /dev/fb0 \\]\\]"' \
+       'quiet boot block gated on /dev/fb0 presence'
+
+for flag in quiet loglevel=3 vt.global_cursor_default=0 logo.nologo; do
+    if echo "$quiet_block" | grep -qF "$flag"; then
+        echo "  PASS: cmdline flag '$flag' is appended"
+        pass=$((pass + 1))
+    else
+        echo "  FAIL: cmdline flag '$flag' missing"
+        fail=$((fail + 1))
+    fi
+done
+
+# Idempotency: each append must be guarded by a grep against the
+# existing cmdline so re-run firstboot doesn't duplicate flags.
+assert 'echo "$quiet_block" | grep -qE "if ! grep -qE.*CMDLINE_FILE"' \
+       'each cmdline flag append is idempotent (grep guard)'
+
+echo
 echo "=== client setup.sh — mask getty@tty1 when HAS_DISPLAY ==="
 
 # setup.sh has MULTIPLE `if [[ "$HAS_DISPLAY" == true ]]` blocks

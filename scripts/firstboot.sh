@@ -934,6 +934,31 @@ else
     log_info "Read-only filesystem: skipped (ENABLE_READONLY=false)"
 fi
 
+# ── Quiet boot for fb-display ────────────────────────────────────
+# Without this, the post-install reboot leaves systemd / kernel
+# `[ OK ] Started X.service ...` lines streaming on tty1 (drawn via
+# fbcon on /dev/fb0) right while fb-display starts writing raw
+# pixels there. The two outputs interleave on the framebuffer for
+# 30–60 s until multi-user.target settles. Boot quietly: only
+# WARN/ERROR messages remain visible (sufficient for emergency
+# diagnostics), and fb-display has the framebuffer to itself.
+#
+# Applies to client / both installs where a display is present.
+# Server-only installs (no fb-display) keep verbose boot for SSH-less
+# debugging on a head-attached server.
+if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+    if [[ -c /dev/fb0 ]] && [[ -n "${CMDLINE_FILE:-}" ]] && [[ -f "$CMDLINE_FILE" ]]; then
+        # Idempotent: only append flags that aren't already there.
+        for flag in "quiet" "loglevel=3" "vt.global_cursor_default=0" "logo.nologo"; do
+            if ! grep -qE "(^| )${flag//./\\.}( |\$)" "$CMDLINE_FILE"; then
+                sed -i "1s/\$/ ${flag}/" "$CMDLINE_FILE" 2>/dev/null \
+                    && log_info "cmdline: added '${flag}' (quiet boot for fb-display)" \
+                    || log_warn "cmdline: failed to add '${flag}'"
+            fi
+        done
+    fi
+fi
+
 # ══════════════════════════════════════════════════════════════════
 # COMPLETE
 # ══════════════════════════════════════════════════════════════════
