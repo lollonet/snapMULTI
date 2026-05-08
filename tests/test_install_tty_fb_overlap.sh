@@ -82,7 +82,7 @@ assert 'grep -qE "log_and_tty\\(\\)" "$UNIFIED_LOG_SH" && \
        'log_and_tty() targets "$PROGRESS_TTY"'
 
 echo
-echo "=== firstboot.sh — chvt 3 at start, chvt 8 before fb-display ==="
+echo "=== firstboot.sh — TUI on tty3, fb-display deferred to post-reboot ==="
 
 assert 'grep -qE "export PROGRESS_TTY=/dev/tty3" "$FIRSTBOOT"' \
        'firstboot.sh exports PROGRESS_TTY=/dev/tty3'
@@ -90,42 +90,54 @@ assert 'grep -qE "export PROGRESS_TTY=/dev/tty3" "$FIRSTBOOT"' \
 assert 'grep -qE "chvt 3" "$FIRSTBOOT"' \
        'firstboot.sh switches to VT 3 for the install TUI'
 
-# The chvt 8 must precede `systemctl start snapclient.service`.
-chvt8_line=$(grep -nE 'chvt 8' "$FIRSTBOOT" | head -1 | cut -d: -f1)
-snap_start_line=$(grep -nE 'systemctl start snapclient\.service' "$FIRSTBOOT" | head -1 | cut -d: -f1)
-if [[ -n "$chvt8_line" && -n "$snap_start_line" && "$chvt8_line" -lt "$snap_start_line" ]]; then
-    echo "  PASS: chvt 8 (line $chvt8_line) runs BEFORE systemctl start snapclient (line $snap_start_line)"
-    pass=$((pass + 1))
-else
-    echo "  FAIL: chvt 8 missing or AFTER snapclient start (chvt8=$chvt8_line, start=$snap_start_line)"
-    fail=$((fail + 1))
-fi
+# fb-display must NOT start during install — install TUI on tty3
+# stays visible all the way through the final banner. Verify the
+# legacy `chvt 8` workaround is gone (no executable line, only
+# rationale in comments).
+assert '! grep -qE "^[[:space:]]+chvt 8" "$FIRSTBOOT"' \
+       'no executable `chvt 8` line (fb-display deferred to post-reboot)'
 
-# chvt 8 path must be guarded on /dev/fb0 + chvt presence: scan a small
-# window of lines preceding chvt 8 for the conditional.
-chvt8_ln=$(grep -nE 'chvt 8' "$FIRSTBOOT" | head -1 | cut -d: -f1)
-if [[ -n "$chvt8_ln" ]]; then
-    start_ln=$((chvt8_ln - 5))
-    (( start_ln < 1 )) && start_ln=1
-    guard_window=$(sed -n "${start_ln},${chvt8_ln}p" "$FIRSTBOOT")
-    if echo "$guard_window" | grep -qE 'if \[\[ -c /dev/fb0' \
-       && echo "$guard_window" | grep -q 'command -v chvt'; then
-        echo "  PASS: chvt 8 block guarded on /dev/fb0 + chvt presence"
+# Client start path: docker compose up with COMPOSE_PROFILES="" so
+# only the unprofiled `snapclient` service comes up; fb-display and
+# audio-visualizer (both `profiles: framebuffer`) are deferred.
+assert 'grep -qE "COMPOSE_PROFILES=\"\".*docker compose up" "$FIRSTBOOT"' \
+       'firstboot starts snapclient with COMPOSE_PROFILES="" (no framebuffer)'
+
+assert 'grep -qE "COMPOSE_PROFILES=\"\".*verify_compose_stack" "$FIRSTBOOT"' \
+       'verify_compose_stack runs with COMPOSE_PROFILES="" (only counts unprofiled services)'
+
+echo
+echo "=== firstboot.sh — quiet boot flags for fb-display (client/both only) ==="
+
+# Need cmdline patching gated on INSTALL_TYPE client/both AND /dev/fb0.
+# Walk a window of lines looking for the four expected flags being
+# appended via sed.
+quiet_block=$(awk '
+    /Quiet boot for fb-display/ {in_block=1}
+    in_block && /^# ══/ {in_block=0}
+    in_block {print}
+' "$FIRSTBOOT")
+
+assert 'echo "$quiet_block" | grep -qE "INSTALL_TYPE.*client.*both"' \
+       'quiet boot block gated on INSTALL_TYPE client|both'
+
+assert 'echo "$quiet_block" | grep -qE "\\[\\[ -c /dev/fb0 \\]\\]"' \
+       'quiet boot block gated on /dev/fb0 presence'
+
+for flag in quiet loglevel=3 vt.global_cursor_default=0 logo.nologo; do
+    if echo "$quiet_block" | grep -qF "$flag"; then
+        echo "  PASS: cmdline flag '$flag' is appended"
         pass=$((pass + 1))
     else
-        echo "  FAIL: chvt 8 missing fb0/chvt guard (window:"
-        echo "$guard_window" | sed 's/^/    /'
-        echo "    )"
+        echo "  FAIL: cmdline flag '$flag' missing"
         fail=$((fail + 1))
     fi
-else
-    echo "  FAIL: chvt 8 not found in firstboot.sh"
-    fail=$((fail + 1))
-fi
+done
 
-# setterm clears blanker/cursor on tty8.
-assert 'grep -qE "setterm.*-blank 0.*tty8|setterm.*tty8.*-blank 0" "$FIRSTBOOT"' \
-       'setterm disables blanker on /dev/tty8'
+# Idempotency: each append must be guarded by a grep against the
+# existing cmdline so re-run firstboot doesn't duplicate flags.
+assert 'echo "$quiet_block" | grep -qE "if ! grep -qE.*CMDLINE_FILE"' \
+       'each cmdline flag append is idempotent (grep guard)'
 
 echo
 echo "=== client setup.sh — mask getty@tty1 when HAS_DISPLAY ==="

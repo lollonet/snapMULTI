@@ -203,7 +203,14 @@ render_progress() {
 }
 
 log_progress() {
-    echo "$*" >> "$PROGRESS_LOG"
+    # When PROGRESS_MANAGED=1 (firstboot.sh is the parent and tees our
+    # stdout into log_msg), skip the direct PROGRESS_LOG append: the
+    # parent's log_msg writes the same line a second time, doubling
+    # every entry in the TUI Log area. The stdout echo below remains
+    # so the parent's pipe filter still sees the line.
+    if [[ -z "${PROGRESS_MANAGED:-}" ]]; then
+        echo "$*" >> "$PROGRESS_LOG"
+    fi
     # Also echo to stdout so firstboot's pipe filter can capture it for the install log
     echo "[INFO] $*"
 }
