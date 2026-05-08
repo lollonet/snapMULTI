@@ -127,6 +127,18 @@ CLIENT_DIR="/opt/snapclient"
 LOG_SOURCE="firstboot"
 export UNIFIED_LOG="/var/log/snapmulti-install.log"
 
+# Move the install TUI to /dev/tty3 so /dev/tty1 (and /dev/fb0 through it)
+# can be claimed by fb-display without overlap. We chvt to tty3 so the
+# install progress remains visible on the HDMI console; right before
+# starting fb-display we switch to tty8 (a blank, autovt-free VT) so the
+# kernel fbcon driver clears the framebuffer for fb-display to draw on.
+# Standalone runs (no tty3 available) silently fall back via the test below.
+if [[ -c /dev/tty3 ]] && command -v chvt &>/dev/null; then
+    export PROGRESS_TTY=/dev/tty3
+    chvt 3 2>/dev/null || true
+    setterm -blank 0 -powersave off >/dev/tty3 2>/dev/null || true
+fi
+
 # Source unified logger
 COMMON="$SNAP_BOOT/common"
 [[ ! -d "$COMMON" ]] && COMMON="$SCRIPT_DIR/common"
@@ -227,9 +239,17 @@ cleanup_on_failure() {
             echo "=== END DIAGNOSTIC DUMP ==="
         } >> "$UNIFIED_LOG" 2>/dev/null || true
 
-        echo "" > /dev/tty1 2>/dev/null || true
-        echo "  --- Installation FAILED (module: $CURRENT_MODULE) ---" > /dev/tty1 2>/dev/null || true
-        echo "  Check log: $UNIFIED_LOG" > /dev/tty1 2>/dev/null || true
+        # Failure messages must be visible regardless of which VT is
+        # active. fb-display may have started already (post snapclient),
+        # in which case PROGRESS_TTY is no longer the visible VT — so
+        # write to both PROGRESS_TTY and /dev/tty1 as a belt+braces.
+        for _vt in "$PROGRESS_TTY" /dev/tty1; do
+            [[ -c "$_vt" ]] || continue
+            echo "" > "$_vt" 2>/dev/null || true
+            echo "  --- Installation FAILED (module: $CURRENT_MODULE) ---" > "$_vt" 2>/dev/null || true
+            echo "  Check log: $UNIFIED_LOG" > "$_vt" 2>/dev/null || true
+        done
+        chvt 1 2>/dev/null || true
 
         # Atomic FAILED_MARKER write: same pattern as checkpoint_done.
         # touch leaves a zero-byte file; if power loss strikes between
@@ -750,7 +770,17 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     next_step "Verifying client..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
-    # Start client via systemd — the lifecycle owner post-install (ADR-005)
+    # Start client via systemd — the lifecycle owner post-install (ADR-005).
+    # Switch to a blank VT first so fb-display has /dev/fb0 to itself.
+    # The kernel fbcon driver clears the framebuffer on chvt; fb-display
+    # then writes raw pixels without the install TUI fighting for the
+    # same surface. VT 8 is outside logind's autovt range (NAutoVTs=6
+    # by default) so nothing else fights for it. setterm prevents the
+    # 10-minute screen blanker from kicking in mid-render.
+    if [[ -c /dev/fb0 ]] && command -v chvt &>/dev/null; then
+        chvt 8 2>/dev/null || true
+        setterm -blank 0 -powersave off -cursor off >/dev/tty8 2>/dev/null || true
+    fi
     log_info "Starting client via systemd..."
     systemctl start snapclient.service || log_warn "systemctl start snapclient failed"
 
@@ -907,9 +937,13 @@ progress_complete 2>/dev/null || true
 LOCAL_HOSTNAME=$(hostname 2>/dev/null || echo "snapmulti")
 IP_ADDR=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}') || true
 
-# Show completion banner on both log and HDMI console
-# (log_info only writes to log + PROGRESS_LOG, not tty1 — use direct echo)
-_tty() { echo "$*" > /dev/tty1 2>/dev/null || true; log_info "$*"; }
+# Show completion banner on both log and HDMI console.
+# log_info only writes to the install log + PROGRESS_LOG, not the visible
+# console — use a direct echo to the install TUI tty. For server-only this
+# is /dev/tty1 (and the user sees it directly); for client/both we already
+# switched to /dev/tty8 so fb-display can render — the banner survives in
+# the log, and fb-display itself shows the install is finished.
+_tty() { echo "$*" > "$PROGRESS_TTY" 2>/dev/null || true; log_info "$*"; }
 
 _elapsed="$((SECONDS / 60))m$((SECONDS % 60))s"
 log_info "Installation completed in $_elapsed"
