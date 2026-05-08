@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6] — 2026-05-08
+
 ### Fixed
 - **Partial-install retry could break NFS / SMB mount with a malformed fstab line** — `firstboot.sh` called `scrub_credentials` immediately after `setup_music_source`, before `deploy.sh` had succeeded. If the install crashed between the scrub and `checkpoint_done "deploy"`, the next boot re-entered `setup_music_source` with empty `NFS_*` / `SMB_*` (the scrub had emptied them in `install.conf`). For SMB this produced a fresh fstab line `// /media/smb-music cifs ...,guest` that conflicted with the original good line; for NFS, `mount -t nfs :{empty}` failed outright. Moved `scrub_credentials` to AFTER the successful deploy checkpoint — on retry the original creds are still there
 - **`MPD_START_PERIOD` was 30s instead of 300s when NFS mounted late** — `deploy.sh setup_env` decided the start period via `is_network_mount "$music_path"` (a runtime `df -T` probe). When firstboot's NFS mount timed out (NAS slow), `df -T /media/nfs-music` returned the underlying ext4 and the network branch was skipped, so `.env` recorded `MUSIC_SOURCE=nfs` AND `MPD_START_PERIOD=30s` — the MPD healthcheck then tripped repeatedly during the NFS-attach + first-scan window. Fix: same pattern as Wave 2 `RequiresMountsFor` — read `music_source_value` (authoritative at install time) and gate via `case` on `nfs|smb|network`. Runtime probe stays as fallback when MUSIC_SOURCE is missing

@@ -197,6 +197,11 @@ set_module() {
 set_module "init"
 cleanup_on_failure() {
     local exit_code=$?
+    # Always clean up subprocess tee logs (see Wave 4 N5) — the explicit
+    # rm -f calls handle the common path, but a SIGTERM/OOM between
+    # mktemp and the explicit rm would leak. /tmp is tmpfs so harmless,
+    # but keeps the contract clean.
+    rm -f -- "${deploy_log:-}" "${setup_log:-}" 2>/dev/null || true
     if [[ $exit_code -ne 0 ]]; then
         stop_progress_animation 2>/dev/null || true
         log_error "Installation FAILED in module: $CURRENT_MODULE (exit code: $exit_code)"
