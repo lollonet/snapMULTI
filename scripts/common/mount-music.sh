@@ -45,17 +45,9 @@ _write_systemd_mount_unit() {
     local fstype="$1" what="$2" where="$3" options="$4" timeout="${5:-45}"
     local unit_name unit_path
 
-    # Single authority for NFS/SMB mounts: hand-crafted .mount unit in
-    # /etc/systemd/system/ (overlayroot-immune). The earlier fallback to
-    # /etc/fstab was a dead-code safety net — systemd-escape ships with
-    # systemd itself, which is core on every supported Pi OS release
-    # (Bookworm + Trixie). The fallback ALSO defeated the whole purpose
-    # of PR #311 (overlayroot rewrites fstab and strips `nofail`,
-    # routing a transient NFS miss into emergency.target). Architecture
-    # audit finding #3: dual mounting authority — removed.
+    # systemd-escape ships with systemd — hard-fail, do NOT fall back to fstab (see PR #325).
     if ! command -v systemd-escape &>/dev/null; then
-        log_error "systemd-escape unavailable — refusing to write /etc/fstab fallback (overlayroot would strip nofail and route a transient NAS miss into emergency.target)."
-        log_error "Diagnose: 'apt-get install --reinstall systemd' (the binary is shipped in the systemd package on Debian)."
+        log_error "systemd-escape unavailable — install with 'apt-get install --reinstall systemd'."
         return 1
     fi
 
