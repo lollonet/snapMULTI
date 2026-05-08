@@ -145,6 +145,8 @@ jobs:
           file: Dockerfile.metadata
           platforms: ${{ matrix.platform }}
           push: true
+          build-args: |
+            SNAPMULTI_VERSION=${{ steps.version.outputs.tag && format('v{0}', steps.version.outputs.tag) || steps.version.outputs.label }}
           tags: |
             lollonet/snapmulti-metadata:${{ steps.version.outputs.label }}-${{ matrix.suffix }}
             ${{ steps.version.outputs.tag && format('lollonet/snapmulti-metadata:{0}-{1}', steps.version.outputs.tag, matrix.suffix) || '' }}

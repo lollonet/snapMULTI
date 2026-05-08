@@ -23,6 +23,14 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 ENV PYTHONDONTWRITEBYTECODE=1
 
+# Bake the snapMULTI version into the image so /health and /version report
+# what's actually running, never a stale value from a previously-rendered
+# .env file. Build args are populated by .github/workflows/build-push.yml
+# (tagged release: vX.Y.Z; workflow_dispatch: dev/manual).
+ARG SNAPMULTI_VERSION=dev
+ENV SNAPMULTI_VERSION=${SNAPMULTI_VERSION}
+LABEL org.opencontainers.image.version=${SNAPMULTI_VERSION}
+
 USER 1000
 
 CMD ["python3", "/app/metadata-service.py"]
