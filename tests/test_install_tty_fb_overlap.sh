@@ -124,7 +124,7 @@ assert 'echo "$quiet_block" | grep -qE "INSTALL_TYPE.*client.*both"' \
 assert 'echo "$quiet_block" | grep -qE "\\[\\[ -c /dev/fb0 \\]\\]"' \
        'quiet boot block gated on /dev/fb0 presence'
 
-for flag in quiet loglevel=3 vt.global_cursor_default=0 logo.nologo; do
+for flag in quiet loglevel=3 systemd.show_status=false vt.global_cursor_default=0 logo.nologo; do
     if echo "$quiet_block" | grep -qF "$flag"; then
         echo "  PASS: cmdline flag '$flag' is appended"
         pass=$((pass + 1))
@@ -138,6 +138,22 @@ done
 # existing cmdline so re-run firstboot doesn't duplicate flags.
 assert 'echo "$quiet_block" | grep -qE "if ! grep -qE.*CMDLINE_FILE"' \
        'each cmdline flag append is idempotent (grep guard)'
+
+# CRITICAL ORDERING: the quiet-boot block MUST run BEFORE
+# setup_readonly_fs. raspi-config's `do_overlayfs 0` remounts
+# /boot/firmware read-only mid-install, after which sed -i can no
+# longer touch cmdline.txt. Verified live on snapvideo (the wrong
+# order produced 4× `cmdline: failed to add '...'` warnings and an
+# empty quiet-boot effect post-reboot).
+quiet_line=$(grep -nE "^[[:space:]]*for flag in .*systemd\\.show_status" "$FIRSTBOOT" | head -1 | cut -d: -f1)
+ro_line=$(grep -nE "^[[:space:]]*setup_readonly_fs " "$FIRSTBOOT" | head -1 | cut -d: -f1)
+if [[ -n "$quiet_line" && -n "$ro_line" && "$quiet_line" -lt "$ro_line" ]]; then
+    echo "  PASS: quiet-boot block (line $quiet_line) runs BEFORE setup_readonly_fs (line $ro_line)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: quiet-boot block AFTER setup_readonly_fs (quiet=$quiet_line, ro=$ro_line)"
+    fail=$((fail + 1))
+fi
 
 echo
 echo "=== client setup.sh — mask getty@tty1 when HAS_DISPLAY ==="
