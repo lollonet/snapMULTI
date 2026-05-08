@@ -770,21 +770,29 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     next_step "Verifying client..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
-    # Start client via systemd — the lifecycle owner post-install (ADR-005).
-    # Switch to a blank VT first so fb-display has /dev/fb0 to itself.
-    # The kernel fbcon driver clears the framebuffer on chvt; fb-display
-    # then writes raw pixels without the install TUI fighting for the
-    # same surface. VT 8 is outside logind's autovt range (NAutoVTs=6
-    # by default) so nothing else fights for it. setterm prevents the
-    # 10-minute screen blanker from kicking in mid-render.
-    if [[ -c /dev/fb0 ]] && command -v chvt &>/dev/null; then
-        chvt 8 2>/dev/null || true
-        setterm -blank 0 -powersave off -cursor off >/dev/tty8 2>/dev/null || true
+    # Start ONLY the snapclient container during install — defer the
+    # `framebuffer` profile services (fb-display, audio-visualizer) to
+    # the post-reboot snapclient.service. Rationale:
+    #   - fb-display draws raw pixels on /dev/fb0 the moment its container
+    #     starts. If we let it run during install, its output overlaps
+    #     the TUI on /dev/tty3 (kernel fbcon shares the framebuffer
+    #     surface) and the user loses the last ~60–90 s of install
+    #     feedback (verify, apt upgrade, MPD backup, banner).
+    #   - The post-reboot path already has the framebuffer to itself:
+    #     getty@tty1.service is masked by client setup.sh, snapclient.service
+    #     is enabled and reads .env with COMPOSE_PROFILES=framebuffer, so
+    #     fb-display + audio-visualizer come up cleanly with no install
+    #     TUI competing for fb0.
+    # This makes the previous chvt 8 workaround unnecessary — TUI on tty3
+    # stays visible until the explicit reboot countdown.
+    log_info "Starting snapclient container (fb-display deferred to post-reboot)..."
+    if ! ( cd "$CLIENT_DIR" && COMPOSE_PROFILES="" docker compose up -d ); then
+        log_warn "docker compose up -d snapclient failed"
     fi
-    log_info "Starting client via systemd..."
-    systemctl start snapclient.service || log_warn "systemctl start snapclient failed"
 
-    if ! verify_compose_stack "$CLIENT_DIR/docker-compose.yml" "client" 12 5; then
+    # Verify only the unprofiled service set (just snapclient) — the
+    # framebuffer services come up at the next boot.
+    if ! COMPOSE_PROFILES="" verify_compose_stack "$CLIENT_DIR/docker-compose.yml" "client" 12 5; then
         log_error "Client verify failed — will retry on next boot"
         exit 1
     fi
