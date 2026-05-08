@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] — 2026-05-08
+
 ### Added
 - **System status web page at `:8083/status` (closes #177)** — browser-friendly health dashboard for users who can flash an SD card but cannot SSH. Architecture: `device-smoke.sh --json` runs every 5 min via a new systemd timer (`snapmulti-status.timer`), writes to `/opt/snapmulti/audio/system-status.json` (a volume already shared with the metadata-service container), the metadata-service serves a server-side-rendered HTML page reading that snapshot. Plan reviewed by 4-agent /council --deep before implementation; all council-flagged risks (JSON corruption from bash printf, file-write race, permission mismatch, boot-time false alarms, schema evolution, discoverability) are addressed. Ships with:
   - **`--json` and `--no-fail-on-warn` flags** on `device-smoke.sh` — uses `jq` for safe escaping of arbitrary message text (unicode, embedded quotes / newlines from journalctl / arping output). `jq` added to `install-deps.sh` (gated on `command -v jq`)
