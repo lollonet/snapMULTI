@@ -2323,6 +2323,16 @@ async def handle_status(request: web.Request) -> web.Response:
     Default content: HTML for browsers (the issue's primary audience).
     Programmatic clients can request JSON via `?format=json` or by parsing
     the embedded `<script id="status-data">` block in the HTML.
+
+    Security note: the JSON response carries hostname, mount-point paths,
+    and recent journalctl snippets. Other endpoints on this service expose
+    artwork / metadata that browsers fetch from the snapcast Web UI, hence
+    the `Access-Control-Allow-Origin: *` header — but the status snapshot
+    is operational/diagnostic information and the same header would let
+    any web page on the LAN read it just by knowing the host. We do NOT
+    set CORS on `/status` (HTML or JSON): browsers can still fetch their
+    own origin (the snapMULTI host's own pages), but third-party sites
+    cannot exfiltrate the diagnostic payload.
     """
     data, age_s = _read_status_snapshot()
     fmt = request.query.get("format", "")
@@ -2331,14 +2341,11 @@ async def handle_status(request: web.Request) -> web.Response:
             return web.json_response(
                 {"status": "no_snapshot"},
                 status=503,
-                headers={"Access-Control-Allow-Origin": "*"},
+                headers={"Cache-Control": "no-store"},
             )
         return web.json_response(
             data,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "no-store",
-            },
+            headers={"Cache-Control": "no-store"},
         )
     body = _status_to_html(data, age_s)
     return web.Response(

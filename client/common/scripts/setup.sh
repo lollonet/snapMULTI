@@ -305,6 +305,16 @@ fi
 # shellcheck source=/dev/null
 source "$HAT_CONFIG_FILE"
 
+# Override HAT_CARD_NAME with the actual ALSA card id when detect_hat
+# probed a real USB DAC. Many USB devices report ids like "Device", "S2",
+# "X20" — the static "USB" baked into usb-audio.conf would yield a
+# non-existent card via hw:CARD=USB,DEV=0 (issue #8). When set,
+# USB_CARD_ID is the authoritative override.
+if [[ "${HAT_CONFIG:-}" == "usb-audio" ]] && [[ -n "${USB_CARD_ID:-}" ]]; then
+    echo "Overriding HAT_CARD_NAME=$HAT_CARD_NAME with USB_CARD_ID=$USB_CARD_ID"
+    HAT_CARD_NAME="$USB_CARD_ID"
+fi
+
 # Validate required HAT configuration variables
 if [[ -z "${HAT_NAME:-}" ]] || [[ -z "${HAT_CARD_NAME:-}" ]]; then
     echo "ERROR: Invalid HAT configuration file: $HAT_CONFIG_FILE"
