@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **mDNS published PTR-only records on first boot — strict clients failed to discover Snapcast** — `snapmulti-server.service` and `snapclient.service` only had a `docker info`-readiness `ExecStartPre`. When `docker info` returned ready before avahi-daemon had finished initialising, snapserver's `libavahi-client` connect race-lost: the connection silently degraded to PTR-only via raw UDP 5353 multicast, and the SRV/TXT follow-up queries that strict mDNS clients send (Python `zeroconf`, `dns-sd`, snapclient 0.36+) were never answered. The same race hit snapclient's discovery (`snapclient-discover` runs `avahi-browse` against an empty cache). Symptom in `device-smoke.sh`: recurring `[ERROR] Snapcast mDNS publishes PTR but NO SRV+TXT — strict clients fail. Try \`docker compose restart snapserver\``. Two coordinated fixes: (1) both units gained a second `ExecStartPre` that polls `systemctl is-active --quiet avahi-daemon.service` AND `[[ -S /run/avahi-daemon/socket ]]` for up to 30 s, then `sleep 2` for avahi's first announce — non-fatal so the unit still comes up on systems without avahi; (2) `snapmulti-server.service` gained an `ExecStartPost=-` that, 12 s after `compose up`, queries `avahi-browse -prtl _snapcast._tcp` for the local cache and restarts the `snapserver` container if it sees a `+;…;_snapcast._tcp` PTR but NO `=;…;_snapcast._tcp` SRV/TXT pair. The leading `-` makes the hook ignore-failure so a transient browse error never holds the unit in failed state. Pairs with the existing `PartOf=avahi-daemon.service` (PR #300) which still propagates LATER avahi restarts; this fix closes the FIRST-BOOT race
+
 ## [0.6.6] — 2026-05-08
 
 ### Fixed
