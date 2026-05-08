@@ -344,7 +344,15 @@ copy_server_files() {
     # trying to mount a directory onto a file (or vice-versa)?`.
     # See PR #319 (which added the bind-mount) and the post-merge
     # install failure on snapvideo that surfaced this gap.
-    [[ -d "$PROJECT_DIR/docker" ]] && cp -r "$PROJECT_DIR/docker" "$dest/"
+    # `cp -r src dst/` is NOT idempotent: when `dst/docker/` already
+    # exists from a prior run, the source directory is copied INTO it,
+    # creating `dst/docker/docker/`. macOS `cp` lacks the `-T` flag, so
+    # the portable idiom is `cp -r src/. dst/` which copies the
+    # *contents* of src into dst (no nesting on re-prep).
+    if [[ -d "$PROJECT_DIR/docker" ]]; then
+        mkdir -p "$dest/docker"
+        cp -r "$PROJECT_DIR/docker/." "$dest/docker/"
+    fi
     cp "$PROJECT_DIR/docker-compose.yml" "$dest/"
     cp "$PROJECT_DIR/.env.example" "$dest/" 2>/dev/null || true
 

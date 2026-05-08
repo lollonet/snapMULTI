@@ -42,20 +42,30 @@ assert() {
 
 echo "=== prepare-sd.sh — copy docker/ to boot partition ==="
 
-# Inside copy_server_files() we should copy PROJECT_DIR/docker.
+# Inside copy_server_files() we should copy PROJECT_DIR/docker
+# *idempotently* — `cp -r src/. dst/` copies contents (no nesting).
 copy_block=$(awk '/^copy_server_files\(\)/,/^\}/' "$PREP")
 
-assert 'echo "$copy_block" | grep -qE "cp -r \"\\\$PROJECT_DIR/docker\""' \
-       'copy_server_files runs `cp -r $PROJECT_DIR/docker $dest/`'
+assert 'echo "$copy_block" | grep -qE "cp -r \"\\\$PROJECT_DIR/docker/\\.\" \"\\\$dest/docker/\""' \
+       'copy_server_files uses idempotent `cp -r $PROJECT_DIR/docker/. $dest/docker/`'
 
 assert 'echo "$copy_block" | grep -qE "\\[\\[ -d \"\\\$PROJECT_DIR/docker\" \\]\\]"' \
        'docker copy is guarded on the source directory existing'
+
+# Negative: must NOT use the bare `cp -r src dst/` form which nests
+# `dst/docker/docker/` on re-prep of the same SD card.
+assert '! echo "$copy_block" | grep -qE "cp -r \"\\\$PROJECT_DIR/docker\" \"\\\$dest/\""' \
+       'copy_server_files does NOT use the non-idempotent `cp -r src dst/` form'
 
 echo
 echo "=== firstboot.sh — copy docker/ from boot to /opt/snapmulti ==="
 
 # Inside the server-copy block we should copy SNAP_BOOT/server/docker.
-fb_block=$(awk '/INSTALL_TYPE.*server.*both/,/^fi$/' "$FIRSTBOOT" | head -60)
+# No `head -N` here: awk's range terminates at the first matching `^fi$`
+# already, and on Ubuntu mawk an early `head` close + `pipefail` would
+# SIGPIPE the substitution and silently kill the test (CI-only failure
+# mode, not reproducible on macOS gawk).
+fb_block=$(awk '/INSTALL_TYPE.*server.*both/,/^fi$/' "$FIRSTBOOT")
 
 assert 'echo "$fb_block" | grep -qE "cp -rT \"\\\$SNAP_BOOT/server/docker\" \"\\\$SERVER_DIR/docker\""' \
        'firstboot copies docker/ to /opt/snapmulti via cp -rT (idempotent)'
