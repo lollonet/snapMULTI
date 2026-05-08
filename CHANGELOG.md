@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5] — 2026-05-08
+
 ### Fixed
 - **`/status` web page rendered "no snapshot available" even when the timer was healthy** — PR #307 added `STATUS_JSON_PATH = "/audio/system-status.json"` in `metadata-service.py` on the assumption that `./audio:/audio` was already bind-mounted in the metadata container, but it was not (only artwork was). The host-side timer wrote the snapshot correctly, but the metadata container couldn't read it, so the HTML page rendered the failure verdict. Reproduced live on snapvideo after the v0.6.4 ship. Fix: add `./audio:/audio:ro` to the metadata service in `docker-compose.yml`. Read-only is sufficient because the metadata-service only reads the snapshot
 
