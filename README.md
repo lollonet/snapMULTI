@@ -8,9 +8,11 @@
 [![Donate](https://img.shields.io/badge/Donate-PayPal-yellowgreen)](https://paypal.me/lolettic)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-License: `GPL-3.0-only`
+License: `GPL-3.0-only` · [Code of Conduct](CODE_OF_CONDUCT.md) · [Third-party notices](THIRD-PARTY-NOTICES.md)
 
 Play music in sync across every room. Stream from Spotify, AirPlay, your music library, or any app — all speakers play together.
+
+**What it is**: a Sonos-style multiroom audio system you build yourself with Raspberry Pis (~€60 per room with a DAC HAT). All open source, no cloud, no subscription, no telemetry. Flash an SD card, boot, done.
 
 <p align="center">
   <img src="docs/images/display-playing.png" alt="snapMULTI playing Nirvana — cover art, spectrum analyzer, track info" width="720">
