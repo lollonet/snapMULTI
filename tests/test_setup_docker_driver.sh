@@ -42,12 +42,16 @@ assert_contains "$setup_docker_body" ' on / type overlay' "setup_docker detects 
 setup_docker_code=$(echo "$setup_docker_body" | grep -v '^\s*#')
 assert_not_contains "$setup_docker_code" 'ENABLE_READONLY' "setup_docker code does not use ENABLE_READONLY flag"
 
-# _configure_readonly() creates daemon.json; preserves fuse-overlayfs if already
-# active (firstboot pre-configures it), docker-driver-reconcile.sh is safety net
+# _configure_readonly() creates daemon.json; mirrors firstboot's fail-hard
+# pre-pull guard for standalone client installs (Wave 2 — PR #312).
 assert_contains "$readonly_body" 'tune_docker_daemon' "readonly config creates daemon.json"
 assert_contains "$readonly_body" '--live-restore' "readonly config sets live-restore"
 assert_contains "$readonly_body" 'fuse-overlayfs' "readonly config handles fuse-overlayfs detection"
-assert_not_contains "$readonly_body" 'rm -rf /var/lib/docker' "readonly config does not wipe Docker storage"
+# Wave 2: setup.sh now wipes /var/lib/docker as part of the fail-hard
+# fuse-overlayfs switch — but ONLY guarded by the checkpoint file so the
+# wipe is idempotent (skipped when firstboot already did the switch).
+assert_contains "$readonly_body" 'rm -rf /var/lib/docker' "readonly config wipes Docker storage as part of fail-hard switch (Wave 2)"
+assert_contains "$readonly_body" '.done-fuse-overlayfs-switched' "wipe is gated on the firstboot checkpoint (idempotent)"
 assert_contains "$readonly_body" 'fuse-overlayfs --version' "readonly config verifies fuse-overlayfs binary"
 assert_contains "$readonly_body" 'FAILED' "readonly config shows failure message when overlayfs fails"
 
