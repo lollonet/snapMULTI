@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Install TUI overlapped fb-display on the HDMI console** — both the `firstboot.sh` install progress (rendered via fbcon on `/dev/tty1`) and the fb-display container (raw pixels on `/dev/fb0`) were fighting for the same framebuffer surface. The overlap was visible at the end of the client install (firstboot calls `systemctl start snapclient.service` BEFORE the reboot, so fb-display starts while the install TUI is still drawing) and again post-reboot, where the default `getty@tty1.service` login prompt would redraw on top of fb-display. Three coordinated fixes: (1) `progress.sh` and `unified-log.sh` now write to `$PROGRESS_TTY` (default `/dev/tty1` for backward-compat with standalone runs); (2) `firstboot.sh` exports `PROGRESS_TTY=/dev/tty3` + `chvt 3` at start so the install TUI gets its own VT, then `chvt 8` (a blank VT outside `logind`'s autovt range) right before starting `snapclient.service` so the kernel `fbcon` driver clears the framebuffer for fb-display to draw on without contention; (3) client `setup.sh` now masks `getty@tty1.service` when `HAS_DISPLAY=true` — console login remains accessible via Alt+F2 (logind autovt template auto-spawns agetty on tty2 on demand)
+
 ## [0.6.6] — 2026-05-08
 
 ### Fixed

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Progress display library for snapMULTI auto-install.
 #
-# Provides a full-screen TUI on /dev/tty1 (HDMI console) with:
+# Provides a full-screen TUI on $PROGRESS_TTY (default /dev/tty1) with:
 #   - ASCII progress bar with weighted percentages
 #   - Step checklist ([x] done, [>] current, [ ] pending)
 #   - Animated spinner for long-running operations
@@ -27,6 +27,12 @@ PROGRESS_ANIM_PID=""
 # Title displayed in the TUI header (can be overridden before progress_init)
 PROGRESS_TITLE="${PROGRESS_TITLE:-snapMULTI Auto-Install}"
 
+# Target TTY for the TUI. firstboot.sh sets this to /dev/tty3 so that
+# fb-display can own /dev/tty1 (and through it /dev/fb0) post-install
+# without the install log overlapping the cover-art renderer.
+# Standalone callers and legacy callers still default to /dev/tty1.
+PROGRESS_TTY="${PROGRESS_TTY:-/dev/tty1}"
+
 # Default steps — fallback for standalone testing only.
 # Callers (firstboot.sh) always set STEP_NAMES/STEP_WEIGHTS before sourcing.
 if [[ ${#STEP_NAMES[@]} -eq 0 ]]; then
@@ -50,15 +56,15 @@ progress_init() {
     # On HD screens the default 8x16 font yields 240 columns — far too small.
     # Uni3-TerminusBold28x14 gives ~137 cols x 38 rows on 1080p, enough
     # for the 74-char wide TUI layout.
-    if [[ -c /dev/tty1 ]]; then
+    if [[ -c "$PROGRESS_TTY" ]]; then
         local fb_width
         fb_width=$(cut -d, -f1 /sys/class/graphics/fb0/virtual_size 2>/dev/null || echo 0)
         if (( fb_width > 1000 )); then
             # Use large font if available (not all Pi OS images include it)
             if ls /usr/share/consolefonts/Uni3-TerminusBold28x14* &>/dev/null; then
-                setfont Uni3-TerminusBold28x14 -C /dev/tty1 2>/dev/null || true
+                setfont Uni3-TerminusBold28x14 -C "$PROGRESS_TTY" 2>/dev/null || true
             elif ls /usr/share/consolefonts/Lat15-TerminusBold24x12* &>/dev/null; then
-                setfont Lat15-TerminusBold24x12 -C /dev/tty1 2>/dev/null || true
+                setfont Lat15-TerminusBold24x12 -C "$PROGRESS_TTY" 2>/dev/null || true
             fi
         fi
     fi
@@ -75,10 +81,10 @@ _box_width=96
 _inner_width=94
 
 _detect_tty_size() {
-    if [[ -c /dev/tty1 ]]; then
-        # Try stty first (works when called from tty1 directly)
-        _tty_cols=$(stty -F /dev/tty1 size 2>/dev/null | awk '{print $2}') || _tty_cols=0
-        _tty_rows=$(stty -F /dev/tty1 size 2>/dev/null | awk '{print $1}') || _tty_rows=0
+    if [[ -c "$PROGRESS_TTY" ]]; then
+        # Try stty first (works when called from the target tty directly)
+        _tty_cols=$(stty -F "$PROGRESS_TTY" size 2>/dev/null | awk '{print $2}') || _tty_cols=0
+        _tty_rows=$(stty -F "$PROGRESS_TTY" size 2>/dev/null | awk '{print $1}') || _tty_rows=0
 
         # Fallback: compute from framebuffer size and console font metrics.
         # stty returns empty when called via SSH or cloud-init (no controlling tty).
@@ -126,10 +132,10 @@ render_progress() {
     # Defense in depth — every "render" caller should already short-circuit
     # under PROGRESS_MANAGED, but if any future caller forgets, this guard
     # prevents a child process (e.g. setup.sh in --both mode) from drawing
-    # over the parent's TUI on /dev/tty1.
+    # over the parent's TUI.
     [[ -n "${PROGRESS_MANAGED:-}" ]] && return
 
-    [[ -c /dev/tty1 ]] || return
+    [[ -c "$PROGRESS_TTY" ]] || return
 
     # Clamp pct to 0-100
     (( pct < 0 )) && pct=0
@@ -193,7 +199,7 @@ render_progress() {
             printf '  | %-*s |\n' "$_inner_width" ""
         done
         printf '  +%s+\n' "$hline"
-    } > /dev/tty1
+    } > "$PROGRESS_TTY"
 }
 
 log_progress() {
@@ -325,7 +331,7 @@ progress_complete() {
     now_mono=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
     local elapsed=$(( now_mono - PROGRESS_START_MONO ))
 
-    [[ -c /dev/tty1 ]] || return
+    [[ -c "$PROGRESS_TTY" ]] || return
 
     local bar_width=$(( _box_width - 12 ))
     (( bar_width < 20 )) && bar_width=20
@@ -395,5 +401,5 @@ progress_complete() {
         printf '  +%s+\n' "$hline"
         printf '\n'
         printf '  \033[1;32m  snapMULTI ready\033[0m\n'
-    } > /dev/tty1
+    } > "$PROGRESS_TTY"
 }
