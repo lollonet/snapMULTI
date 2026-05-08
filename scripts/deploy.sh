@@ -901,21 +901,42 @@ install_systemd_service() {
     # Resolve the persisted music path so the systemd unit can wait for
     # the actual NFS/SMB/USB mount before starting compose. Without this,
     # MPD/myMPD can come up bound to an empty bind-mount source and the
-    # library silently appears empty until manual restart. We pull from
-    # .env (the source-of-truth that persists across re-deploys) and
-    # only add it to RequiresMountsFor when it is a *network* mount —
-    # local SD-card paths and USB UUIDs are handled by other systemd
-    # ordering targets.
+    # library silently appears empty until manual restart.
+    #
+    # Source of truth precedence:
+    #   1. MUSIC_SOURCE in .env (set by mount-music.sh during firstboot) —
+    #      authoritative because at install time the NFS/SMB mount may
+    #      not be active yet (NAS slow, mount timed out), so a runtime
+    #      df -T probe would see the underlying ext4 and skip the wait
+    #      clause for exactly the case we wanted to cover.
+    #   2. is_network_mount runtime probe — fallback for manual deploys
+    #      without mount-music.sh (no MUSIC_SOURCE recorded).
     local music_mount_clause=""
     local music_path_from_env=""
+    local music_source_from_env=""
     if [[ -f "$ENV_FILE" ]]; then
         music_path_from_env=$(grep -m1 '^MUSIC_PATH=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+        music_source_from_env=$(grep -m1 '^MUSIC_SOURCE=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
     fi
     if [[ -n "$music_path_from_env" ]] \
-       && [[ "$music_path_from_env" != "${PROJECT_ROOT}"* ]] \
-       && is_network_mount "$music_path_from_env"; then
-        music_mount_clause=" $music_path_from_env"
-        info "Adding $music_path_from_env to RequiresMountsFor (network-backed library)"
+       && [[ "$music_path_from_env" != "${PROJECT_ROOT}"* ]]; then
+        case "$music_source_from_env" in
+            nfs|smb|network)
+                music_mount_clause=" $music_path_from_env"
+                info "Adding $music_path_from_env to RequiresMountsFor (MUSIC_SOURCE=$music_source_from_env)"
+                ;;
+            "")
+                # No MUSIC_SOURCE persisted — fall back to runtime probe
+                if is_network_mount "$music_path_from_env"; then
+                    music_mount_clause=" $music_path_from_env"
+                    info "Adding $music_path_from_env to RequiresMountsFor (runtime probe: network-backed)"
+                fi
+                ;;
+            *)
+                # Local source (usb / local) — kernel mounts these at boot,
+                # no extra wait required for compose start.
+                ;;
+        esac
     fi
 
     cat > /etc/systemd/system/snapmulti-server.service <<EOF

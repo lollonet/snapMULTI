@@ -33,8 +33,14 @@ echo "=== Wave-2: deploy.sh RequiresMountsFor music_path ==="
 assert 'grep -q "music_mount_clause" "$DEPLOY_SH"' \
        "deploy.sh defines music_mount_clause variable"
 
+assert 'grep -q "music_source_from_env" "$DEPLOY_SH"' \
+       "deploy.sh reads MUSIC_SOURCE from .env (authoritative at install time)"
+
+assert 'grep -qE "nfs\\|smb\\|network" "$DEPLOY_SH"' \
+       "MUSIC_SOURCE in {nfs,smb,network} adds path to RequiresMountsFor"
+
 assert 'grep -q "is_network_mount \"\$music_path_from_env\"" "$DEPLOY_SH"' \
-       "music path inclusion gated on is_network_mount"
+       "is_network_mount runtime probe kept as fallback for manual deploys"
 
 assert 'grep -qE "RequiresMountsFor=.*\\\${PROJECT_ROOT}/audio\\\${music_mount_clause}" "$DEPLOY_SH"' \
        "RequiresMountsFor heredoc embeds music_mount_clause"
