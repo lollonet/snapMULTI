@@ -80,14 +80,32 @@ assert '! echo "$nfs_block" | grep -qE "echo .* >> /etc/fstab"' \
 assert '! echo "$smb_block" | grep -qE "echo .* >> /etc/fstab"' \
        'smb branch no longer writes /etc/fstab'
 
-# nofail must be in the options passed to the helper (defence in depth
-# even though the helper bypasses fstab; if a future fallback path
-# rewrites fstab, nofail is preserved).
+# nofail must be in the options passed to the helper. The helper itself
+# never writes /etc/fstab (single authority — see assertion below), so
+# this is defence in depth: if a future contributor adds a manual
+# fstab fallback, nofail will at least be preserved.
 assert 'echo "$nfs_block" | grep -qE "nofail"' \
        'nfs options include nofail'
 
 assert 'echo "$smb_block" | grep -qE "nofail"' \
        'smb options include nofail'
+
+# Single authority: the helper itself MUST NOT write /etc/fstab as a
+# fallback. The earlier fallback (when systemd-escape was unavailable)
+# defeated PR #311 — overlayroot rewrites fstab and strips `nofail`,
+# routing a transient NFS miss into emergency.target. systemd-escape
+# is part of systemd itself (always present on Pi OS Bookworm/Trixie),
+# so the fallback was dead code. Helper now hard-fails instead.
+helper_block=$(awk '/^_write_systemd_mount_unit\(\)/,/^}/' "$MOUNT_SH")
+
+assert '! echo "$helper_block" | grep -qE "echo .* >> /etc/fstab"' \
+       'helper does NOT write /etc/fstab as a fallback (single authority)'
+
+assert 'echo "$helper_block" | grep -qE "log_error.*systemd-escape unavailable"' \
+       'helper hard-fails with diagnostic when systemd-escape is missing'
+
+assert 'echo "$helper_block" | grep -qE "return 1"' \
+       'helper returns non-zero on missing systemd-escape (no silent fallback)'
 
 # snapMULTI uses reflash as primary update strategy (DEC-003), so there is
 # never a "legacy fstab line" to migrate. The unit file in
