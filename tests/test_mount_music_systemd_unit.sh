@@ -15,8 +15,10 @@
 # .mount units in /etc/systemd/system/ instead — files there are NOT
 # rewritten by the overlayroot initramfs hook, so the path AND the
 # nofail (carried as `Options=` and unit-level dependency defaults)
-# survive. Migration: any existing fstab line for the same Where= path
-# is removed at install time so it can't race with the new unit.
+# survive. No fstab migration code: snapMULTI uses reflash as its
+# primary update strategy (DEC-003), so there is never a legacy fstab
+# entry to clean up. The unit file in /etc/systemd/system/ is
+# overwritten idempotently on retry.
 #
 # Also tests the defensive companion in system-tune.sh:
 #   - update-initramfs is forced after raspi-config do_overlayfs (closes
