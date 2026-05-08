@@ -130,18 +130,42 @@ assert 'grep -qE "setterm.*-blank 0.*tty8|setterm.*tty8.*-blank 0" "$FIRSTBOOT"'
 echo
 echo "=== client setup.sh — mask getty@tty1 when HAS_DISPLAY ==="
 
-assert 'awk "/HAS_DISPLAY.*== true/,/^fi$/" "$SETUP_SH" | grep -qE "systemctl mask getty@tty1\\.service"' \
-       'setup.sh masks getty@tty1.service inside the HAS_DISPLAY block'
+# setup.sh has MULTIPLE `if [[ "$HAS_DISPLAY" == true ]]` blocks
+# (audio loopback at line ~590, COMPOSE_PROFILES at line ~990, getty
+# mask at line ~1105). The simple awk-range pattern stops at the FIRST
+# `^fi$` in the file, which is the audio block — the getty mask is never
+# in scope. Use a depth-tracked walk so grep sees content from ANY
+# HAS_DISPLAY block, regardless of nesting.
+hd_blocks=$(awk '
+    /^if \[\[ "\$HAS_DISPLAY" == true \]\]; then$/ {depth=1; print; next}
+    depth>0 && /^[[:space:]]*if / {depth++}
+    depth>0 && /^[[:space:]]*fi$/ {print; depth--; next}
+    depth>0 {print}
+' "$SETUP_SH")
 
-assert 'awk "/HAS_DISPLAY.*== true/,/^fi$/" "$SETUP_SH" | grep -qE "systemctl stop getty@tty1\\.service"' \
-       'setup.sh stops getty@tty1.service before mask (to drop running prompt)'
+if echo "$hd_blocks" | grep -qE 'systemctl mask getty@tty1\.service'; then
+    echo "  PASS: setup.sh masks getty@tty1.service inside a HAS_DISPLAY block"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: setup.sh missing systemctl mask getty@tty1 inside HAS_DISPLAY"
+    fail=$((fail + 1))
+fi
 
-# Must NOT mask getty unconditionally — headless installs need tty1 free
-# of fb-display anyway, but forcibly masking would surprise users.
+if echo "$hd_blocks" | grep -qE 'systemctl stop getty@tty1\.service'; then
+    echo "  PASS: setup.sh stops getty@tty1.service before mask (to drop running prompt)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: setup.sh missing systemctl stop getty@tty1 inside HAS_DISPLAY"
+    fail=$((fail + 1))
+fi
+
+# Must NOT mask getty unconditionally — headless installs need tty1
+# free, and forcibly masking would surprise diagnostics-only runs.
 mask_outside_block=$(awk '
-    /^if \[\[ "\$HAS_DISPLAY" == true \]\]; then$/ {in_block=1; next}
-    in_block && /^fi$/ {in_block=0; next}
-    !in_block && /systemctl mask getty@tty1/ {print NR": "$0}
+    /^if \[\[ "\$HAS_DISPLAY" == true \]\]; then$/ {depth=1; next}
+    depth>0 && /^[[:space:]]*if / {depth++; next}
+    depth>0 && /^[[:space:]]*fi$/ {depth--; next}
+    depth==0 && /systemctl mask getty@tty1/ {print NR": "$0}
 ' "$SETUP_SH" || true)
 if [[ -z "$mask_outside_block" ]]; then
     echo "  PASS: getty@tty1 mask is gated on HAS_DISPLAY (not unconditional)"
