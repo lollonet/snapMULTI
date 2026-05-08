@@ -721,17 +721,19 @@ if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
             fail_check "metadata-service /health unexpected — HTTP $_meta_code body='$(echo "$_meta_body" | head -c 100)'"
         fi
 
-        # /status web page (issue #177) — server-side-rendered HTML
-        # dashboard reading the snapshot written by snapmulti-status.timer.
-        # HTTP 200 proves the route is wired AND the renderer can read
-        # the snapshot (or the boot-grace overlay activates when no
-        # snapshot exists yet — both are user-acceptable states).
-        _status_code=$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:8083/status 2>/dev/null || true)
-        if [[ "$_status_code" == "200" ]]; then
-            pass_check "/status web page responsive (200 on :8083/status)"
-        else
-            fail_check "/status web page not responding — HTTP ${_status_code:-no-response}"
-        fi
+        # /status web page (issue #177) — probe the JSON variant
+        # (?format=json) instead of the HTML one. The HTML always returns
+        # 200 (even with a "no snapshot available" failure verdict in the
+        # body, e.g. when the /audio volume is not mounted in the metadata
+        # container). The JSON variant returns 503 when the snapshot is
+        # missing, distinguishing "endpoint reachable" from "feature
+        # actually working end-to-end".
+        _status_code=$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' 'http://127.0.0.1:8083/status?format=json' 2>/dev/null || true)
+        case "$_status_code" in
+            200) pass_check "/status snapshot present and readable (issue #177 path)" ;;
+            503) fail_check "/status reports no snapshot — check snapmulti-status.timer AND /audio bind-mount on metadata container" ;;
+            *)   fail_check "/status not responding — HTTP ${_status_code:-no-response}" ;;
+        esac
     else
         warn "curl not installed — skipping JSON-RPC + /health + /status checks"
     fi
