@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **TUI flicker during `--both` install: client install screen briefly overdrew the unified TUI** — `progress()` and `progress_init()` in `scripts/common/progress.sh` were missing the `PROGRESS_MANAGED` short-circuit that `milestone()`, `start_progress_animation()`, and `progress_complete()` already had. When `firstboot.sh` invoked `setup.sh --auto` with `PROGRESS_MANAGED=1`, the child's 10 `progress N "..."` calls each rendered the stand-alone `Snapclient Auto-Install` TUI to `/dev/tty1` (with `STEP_NAMES`/`PROGRESS_TITLE` from setup.sh), then firstboot's spinner thread re-rendered the unified TUI ~1 s later, producing a visible flash of "old client install screen" multiple times during the client phase. Reproduced live on snapvideo. Fix: gate `progress_init` (setfont + log truncate), `progress` (render call), and add a defense-in-depth guard in `render_progress` itself, all on `PROGRESS_MANAGED`. The child's logs still flow into the parent via the pipe filter — only the screen-drawing is suppressed
+
 ## [0.6.5] — 2026-05-08
 
 ### Fixed

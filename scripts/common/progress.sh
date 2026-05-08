@@ -39,6 +39,12 @@ fi
 PROGRESS_LOG="/tmp/snapmulti-progress.log"
 
 progress_init() {
+    # When the parent process owns /dev/tty1 (firstboot calling setup.sh
+    # via PROGRESS_MANAGED=1), don't touch the screen or the parent's log
+    # file: setfont triggers a console redraw and the truncate would wipe
+    # the parent's running progress log.
+    [[ -n "${PROGRESS_MANAGED:-}" ]] && return
+
     : > "$PROGRESS_LOG"
 
     # On HD screens the default 8x16 font yields 240 columns — far too small.
@@ -116,6 +122,12 @@ _detect_tty_size() {
 render_progress() {
     local step=$1 pct=$2 elapsed=$3 spinner=${4:-}
     local total=${#STEP_NAMES[@]}
+
+    # Defense in depth — every "render" caller should already short-circuit
+    # under PROGRESS_MANAGED, but if any future caller forgets, this guard
+    # prevents a child process (e.g. setup.sh in --both mode) from drawing
+    # over the parent's TUI on /dev/tty1.
+    [[ -n "${PROGRESS_MANAGED:-}" ]] && return
 
     [[ -c /dev/tty1 ]] || return
 
@@ -268,6 +280,17 @@ stop_progress_animation() {
 progress() {
     local step=$1 msg="$2"
     local total=${#STEP_NAMES[@]}
+
+    # Always log: the parent's pipe filter (firstboot -> setup.sh) maps the
+    # stdout "=== Step ... ===" line into its own log entry, and the child's
+    # own PROGRESS_LOG append (in log_progress) is harmless.
+    if [[ -n "${PROGRESS_MANAGED:-}" ]]; then
+        local now_mono elapsed
+        now_mono=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
+        elapsed=$(( now_mono - PROGRESS_START_MONO ))
+        echo "=== Step $step/$total: $msg ($((elapsed/60))m$((elapsed%60))s) ==="
+        return
+    fi
 
     stop_progress_animation
 
