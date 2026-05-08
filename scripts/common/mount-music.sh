@@ -29,6 +29,63 @@ if ! declare -F log_info &>/dev/null; then
     }
 fi
 
+# Write a hand-crafted systemd .mount unit for a network share. Unlike
+# /etc/fstab, files in /etc/systemd/system/ are immune to the overlayroot
+# initramfs hook that rewrites paths and strips `nofail` — so the unit
+# survives the first post-overlayroot boot intact and will not promote
+# a transient NFS/SMB miss into a `local-fs.target` failure.
+#
+# Args:
+#   $1 — fs type (nfs, cifs)
+#   $2 — What= (server:export, //server/share, etc.)
+#   $3 — Where= (mount point)
+#   $4 — comma-separated mount options (must include `nofail`)
+#   $5 — TimeoutSec value (seconds)
+_write_systemd_mount_unit() {
+    local fstype="$1" what="$2" where="$3" options="$4" timeout="${5:-45}"
+    local unit_name unit_path
+
+    if ! command -v systemd-escape &>/dev/null; then
+        log_warn "systemd-escape unavailable — cannot generate .mount unit; falling back to fstab"
+        echo "$what $where $fstype $options 0 0" >> /etc/fstab
+        return 1
+    fi
+
+    unit_name="$(systemd-escape -p --suffix=mount "$where")"
+    unit_path="/etc/systemd/system/${unit_name}"
+
+    cat > "$unit_path" << EOF
+[Unit]
+Description=Mount music share at ${where} (snapMULTI, overlayroot-safe)
+Documentation=man:systemd.mount(5)
+After=network-online.target nss-lookup.target
+Wants=network-online.target
+# Order before the snapMULTI services so MPD/snapserver/snapclient see
+# the share when they start. This is ordering only — not Requires= —
+# so a slow NAS does NOT block the unit graph and cannot route systemd
+# into emergency.target on a transient first-boot miss.
+Before=snapmulti-server.service snapclient.service
+
+[Mount]
+What=${what}
+Where=${where}
+Type=${fstype}
+Options=${options}
+TimeoutSec=${timeout}
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    chmod 644 "$unit_path"
+
+    if systemctl daemon-reload 2>/dev/null \
+       && systemctl enable "$unit_name" >/dev/null 2>&1; then
+        log_info "systemd .mount unit installed: $unit_name"
+    else
+        log_warn "systemd .mount unit installed but enable failed: $unit_name"
+    fi
+}
+
 setup_music_source() {
     case "${MUSIC_SOURCE:-}" in
         streaming)
@@ -75,25 +132,37 @@ setup_music_source() {
             local mount_point="/media/nfs-music"
             mkdir -p "$mount_point"
             log_info "Mounting NFS: ${NFS_SERVER:-}:${NFS_EXPORT:-}"
-            # Write fstab entry first — even if this mount fails (NAS not ready),
-            # systemd will retry on subsequent boots with nofail.
-            if ! grep -qF "${NFS_SERVER}:${NFS_EXPORT}" /etc/fstab; then
-                echo "${NFS_SERVER}:${NFS_EXPORT} $mount_point nfs ro,soft,timeo=50,rsize=32768,_netdev,nofail 0 0" >> /etc/fstab
-            fi
-            # Export PLANNED mount point and source regardless of immediate
-            # success — fstab is in place and systemd will retry, so the
-            # downstream config (.env via deploy.sh) must reflect the
-            # eventual reality, not the transient now. Without this,
-            # deploy.sh would fall back to /media/music and persist the
-            # wrong MUSIC_PATH even though /media/nfs-music will mount on
-            # the next boot.
+            # Generate a hand-crafted systemd .mount unit instead of
+            # writing /etc/fstab. The overlayroot initramfs hook
+            # rewrites fstab during the first post-overlayroot boot,
+            # mapping `/media/nfs-music` to `/media/root-ro/media/
+            # nfs-music` AND stripping `nofail` in the process. The
+            # rewritten line then triggers a hard `local-fs.target`
+            # failure when the NAS is slow to answer the very first
+            # mount attempt — systemd lands in emergency.target with
+            # "Cannot open access to console, the root account is
+            # locked. Press Enter to continue", forcing the user to
+            # reboot manually for a second attempt where the DNS / ARP
+            # caches are warm.
+            #
+            # Files in /etc/systemd/system/ are NOT rewritten by the
+            # overlayroot hook, so a hand-crafted .mount unit keeps
+            # the path stable AND honours the original options
+            # including nofail (via Options= and the unit-level
+            # `RequiredBy=` defaults that don't enrol the unit into
+            # local-fs.target).
+            _write_systemd_mount_unit nfs "${NFS_SERVER}:${NFS_EXPORT}" \
+                "$mount_point" \
+                "ro,soft,timeo=50,rsize=32768,_netdev,nofail" \
+                45
             export MUSIC_PATH="$mount_point"
             export MUSIC_SOURCE="nfs"
-            # Timeout prevents firstboot from hanging if NAS/DNS isn't ready yet.
+            # Try mount immediately; failure is non-fatal because the
+            # systemd unit retries every boot.
             if timeout 30 mount -t nfs "${NFS_SERVER}:${NFS_EXPORT}" "$mount_point" -o ro,soft,timeo=50,rsize=32768,_netdev; then
                 log_info "NFS mounted: $mount_point"
             else
-                log_warn "NFS mount timed out or failed — will retry on next boot (fstab configured, MUSIC_PATH=$mount_point already exported)"
+                log_warn "NFS mount timed out or failed — systemd unit will retry on next boot (MUSIC_PATH=$mount_point already exported)"
             fi
             ;;
         smb)
@@ -111,19 +180,19 @@ setup_music_source() {
                 mount_opts="${mount_opts},guest"
             fi
 
-            # Write fstab entry first — even if this mount fails, systemd retries with nofail.
-            if ! grep -qF "//${SMB_SERVER}/${SMB_SHARE}" /etc/fstab; then
-                echo "//${SMB_SERVER}/${SMB_SHARE} $mount_point cifs ${mount_opts},nofail 0 0" >> /etc/fstab
-            fi
-            # Same rationale as the NFS branch above: export the planned
-            # mountpoint and source even on transient failure, so deploy.sh
-            # writes the right MUSIC_PATH/MUSIC_SOURCE to .env.
+            # Same rationale as the NFS branch — overlayroot rewriter
+            # would strip `nofail` from a fstab line and route systemd
+            # into emergency mode on first-boot SMB hiccup.
+            _write_systemd_mount_unit cifs "//${SMB_SERVER}/${SMB_SHARE}" \
+                "$mount_point" \
+                "${mount_opts},nofail" \
+                60
             export MUSIC_PATH="$mount_point"
             export MUSIC_SOURCE="smb"
             if timeout 60 mount -t cifs "//${SMB_SERVER}/${SMB_SHARE}" "$mount_point" -o "$mount_opts"; then
                 log_info "SMB mounted: $mount_point"
             else
-                log_warn "SMB mount timed out or failed — will retry on next boot (fstab configured, MUSIC_PATH=$mount_point already exported)"
+                log_warn "SMB mount timed out or failed — systemd unit will retry on next boot (MUSIC_PATH=$mount_point already exported)"
             fi
             ;;
         manual|"")
