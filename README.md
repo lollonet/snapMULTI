@@ -20,6 +20,49 @@ Play music in sync across every room. Stream from Spotify, AirPlay, your music l
   <em>HDMI display: cover art, spectrum analyzer, track metadata — rendered directly to framebuffer, no desktop needed</em>
 </p>
 
+## How it works
+
+```text
+   Spotify   AirPlay   Tidal   myMPD web UI   any TCP audio app
+      │         │        │           │                │
+      └─────────┴────────┴───────────┴────────────────┘
+                              │
+                              ▼
+                    ┌───────────────────┐
+                    │  Server (Pi / NUC)│  mixes sources, encodes once,
+                    │  snapserver       │  fans out a single audio stream
+                    └───────────────────┘
+                              │  Snapcast over LAN (TCP/UDP)
+                              ▼
+              ┌───────────┬───────────┬──────────────┐
+              │  Pi #1    │  Pi #2    │  Pi #N       │  each runs snapclient
+              │  Living   │  Kitchen  │  Bedroom     │  + a DAC HAT or USB DAC
+              └───────────┴───────────┴──────────────┘
+                              │
+                              ▼
+                          🔊 Speakers
+```
+
+All clients play in lock-step (~5 ms drift across rooms). Add a client by flashing another SD and inserting it in any Pi — no IP config, no pairing, mDNS auto-discovers the server. Server and one client can run on the same Pi (`both` mode).
+
+## Why snapMULTI
+
+| | snapMULTI | Sonos | Volumio | MoOde |
+|---|---|---|---|---|
+| **Cost per room** | ~€60 (Pi 4 + DAC HAT) | €200+ (One SL) | ~€60 hardware + Volumio Plus subscription for multi-room | ~€60 hardware |
+| **Open source** | ✅ GPL-3.0 | ❌ proprietary | Partial (multi-room is paid) | ✅ |
+| **Multi-room sync** | ✅ Snapcast (~5 ms) | ✅ proprietary | ✅ (with Plus) | ❌ single device |
+| **Cloud-free** | ✅ all local | ❌ Sonos cloud required | Partial | ✅ |
+| **Telemetry** | ❌ none, none planned | ✅ collected by default | Partial | ❌ |
+| **Spotify Connect** | ✅ Premium | ✅ | ✅ (Plus) | ✅ |
+| **AirPlay** | ✅ AirPlay 1 | ✅ AirPlay 2 | ✅ (Plus) | ✅ |
+| **Tidal Connect** | ✅ (ARM only, opt-in) | ✅ | ✅ (Plus) | ✅ |
+| **HDMI cover-art display** | ✅ built-in fb-display | ❌ | ❌ | ❌ |
+| **Setup** | flash SD → boot → done (~10 min) | app setup | wizard (~30 min) | wizard |
+| **First-party hardware** | none — bring your own Pi | required | none | none |
+
+Pick snapMULTI when you want **multi-room + Pi-DIY + zero cloud + zero subscription** in one package. Pick Sonos when you want plug-and-play and don't mind the price tag and the cloud lock-in. Pick Volumio Plus when you already own its hardware and the multi-room subscription is OK with you.
+
 ## Sources
 
 | Source | How |

@@ -20,6 +20,49 @@ Riproduci musica in sincronia in ogni stanza. Streaming da Spotify, AirPlay, la 
   <em>Display HDMI: copertina, analizzatore di spettro, metadati brano — rendering diretto su framebuffer, nessun desktop</em>
 </p>
 
+## Come funziona
+
+```text
+   Spotify   AirPlay   Tidal   myMPD web UI   qualsiasi app TCP audio
+      │         │        │           │                │
+      └─────────┴────────┴───────────┴────────────────┘
+                              │
+                              ▼
+                    ┌───────────────────┐
+                    │  Server (Pi / NUC)│  miscela le sorgenti, codifica
+                    │  snapserver       │  una volta, distribuisce uno stream
+                    └───────────────────┘
+                              │  Snapcast su LAN (TCP/UDP)
+                              ▼
+              ┌───────────┬───────────┬──────────────┐
+              │  Pi #1    │  Pi #2    │  Pi #N       │  ognuno esegue snapclient
+              │  Soggiorno│  Cucina   │  Camera      │  + un DAC HAT o USB DAC
+              └───────────┴───────────┴──────────────┘
+                              │
+                              ▼
+                          🔊 Altoparlanti
+```
+
+Tutti i client suonano in lock-step (~5 ms di drift tra stanze). Aggiungi un client flashando un'altra SD e inserendola in qualsiasi Pi — niente IP da configurare, niente pairing, mDNS trova il server da solo. Server e un client possono girare sullo stesso Pi (modalità `both`).
+
+## Perché snapMULTI
+
+| | snapMULTI | Sonos | Volumio | MoOde |
+|---|---|---|---|---|
+| **Costo per stanza** | ~60 € (Pi 4 + DAC HAT) | 200 €+ (One SL) | ~60 € hardware + abbonamento Volumio Plus per multi-stanza | ~60 € hardware |
+| **Open source** | ✅ GPL-3.0 | ❌ proprietario | Parziale (multi-stanza è a pagamento) | ✅ |
+| **Sync multi-stanza** | ✅ Snapcast (~5 ms) | ✅ proprietario | ✅ (con Plus) | ❌ singolo dispositivo |
+| **Senza cloud** | ✅ tutto locale | ❌ richiede cloud Sonos | Parziale | ✅ |
+| **Telemetria** | ❌ nessuna, nessuna prevista | ✅ raccolta di default | Parziale | ❌ |
+| **Spotify Connect** | ✅ Premium | ✅ | ✅ (Plus) | ✅ |
+| **AirPlay** | ✅ AirPlay 1 | ✅ AirPlay 2 | ✅ (Plus) | ✅ |
+| **Tidal Connect** | ✅ (solo ARM, opt-in) | ✅ | ✅ (Plus) | ✅ |
+| **Display HDMI copertina** | ✅ fb-display integrato | ❌ | ❌ | ❌ |
+| **Setup** | flash SD → boot → fatto (~10 min) | setup app | wizard (~30 min) | wizard |
+| **Hardware proprietario** | nessuno — porti il tuo Pi | richiesto | nessuno | nessuno |
+
+Scegli snapMULTI se vuoi **multi-stanza + Pi-DIY + zero cloud + zero abbonamento** in un solo pacchetto. Scegli Sonos se vuoi plug-and-play e non ti dispiace il prezzo e il vincolo cloud. Scegli Volumio Plus se hai già il loro hardware e l'abbonamento multi-stanza ti sta bene.
+
 ## Sorgenti
 
 | Sorgente | Come |
