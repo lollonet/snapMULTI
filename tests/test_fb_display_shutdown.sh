@@ -25,8 +25,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE="$SCRIPT_DIR/../client/common/docker-compose.yml"
+SERVER_COMPOSE="$SCRIPT_DIR/../docker-compose.yml"
 FB_PY="$SCRIPT_DIR/../client/common/docker/fb-display/fb_display.py"
 VIZ_PY="$SCRIPT_DIR/../client/common/docker/audio-visualizer/visualizer.py"
+META_PY="$SCRIPT_DIR/../docker/metadata-service/metadata-service.py"
 
 pass=0
 fail=0
@@ -94,8 +96,31 @@ assert 'grep -qE "asyncio\.run\(_async_main\(\)\)" "$VIZ_PY"' \
        'visualizer.py __main__ runs the async wrapper'
 
 echo
+echo "=== server docker-compose.yml — init + stop_grace_period for metadata ==="
+
+meta_block=$(awk '
+    /^  metadata:/ {in_block=1; print; next}
+    in_block && /^  [a-z]/ {exit}
+    in_block {print}
+' "$SERVER_COMPOSE")
+
+assert 'echo "$meta_block" | grep -qE "^[[:space:]]+init: true"' \
+       'metadata sets init: true'
+assert 'echo "$meta_block" | grep -qE "^[[:space:]]+stop_grace_period: 2s"' \
+       'metadata sets stop_grace_period: 2s'
+
+echo
+echo "=== metadata-service.py — asyncio-aware signal handler ==="
+
+assert 'grep -qE "loop\.add_signal_handler" "$META_PY"' \
+       'metadata-service.py uses loop.add_signal_handler(...)'
+
+assert 'grep -qE "asyncio\.run\(_async_main\(\)\)" "$META_PY"' \
+       'metadata-service.py runs the async wrapper'
+
+echo
 echo "=== Python syntax ==="
-for f in "$FB_PY" "$VIZ_PY"; do
+for f in "$FB_PY" "$VIZ_PY" "$META_PY"; do
     if python3 -c "import ast; ast.parse(open('$f').read())" 2>/dev/null; then
         echo "  PASS: python3 ast.parse $(basename "$f")"
         pass=$((pass + 1))
