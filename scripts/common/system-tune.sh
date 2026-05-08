@@ -361,10 +361,42 @@ setup_readonly_fs() {
 DefaultEnvironment="LIBMOUNT_FORCE_MOUNT2=always"
 SYSDEOF
 
+    # Defensive cmdline.txt sanity check BEFORE raspi-config touches it.
+    # Some Pi OS images ship `console=serial0,115200 console=tty1` and
+    # raspi-config preserves both. If `console=tty1` is missing — e.g. a
+    # custom image dropped it — the first boot post-overlayroot will
+    # render emergency-mode messages on a console nobody sees, leaving
+    # the user with a frozen black screen. Restore tty1 before enabling
+    # overlayfs so a failure surface stays visible.
+    local cmdline=""
+    for candidate in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
+        [[ -f "$candidate" ]] && cmdline="$candidate" && break
+    done
+    if [[ -n "$cmdline" ]] && ! grep -qE '(^| )console=tty1( |$)' "$cmdline"; then
+        sed -i '1s/$/ console=tty1/' "$cmdline" 2>/dev/null \
+            && ok "Restored console=tty1 to cmdline.txt (was missing)" \
+            || warn "Could not restore console=tty1 — emergency mode messages may not be visible"
+    fi
+
     # Enable overlayfs via raspi-config (takes effect after reboot)
     if command -v raspi-config &>/dev/null; then
         if raspi-config nonint do_overlayfs 0; then
             if persist_overlayroot_enabled; then
+                # Force initramfs rebuild even if raspi-config thinks it's
+                # current — first-boot post-install sometimes shows
+                # "press Enter to continue / console not available" because
+                # the initramfs lacks overlay support (race between apt
+                # installing kernel modules and raspi-config rebuilding).
+                # update-initramfs is idempotent; the extra invocation is
+                # cheap insurance against a transient first-boot fail that
+                # the user can only "fix with a manual reboot".
+                if command -v update-initramfs &>/dev/null; then
+                    if update-initramfs -u -k all >/dev/null 2>&1; then
+                        ok "initramfs rebuilt for overlay support"
+                    else
+                        warn "update-initramfs -u failed — first boot may need manual reboot"
+                    fi
+                fi
                 ok "Read-only filesystem enabled (activates after reboot)"
             else
                 rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
