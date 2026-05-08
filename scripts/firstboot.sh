@@ -373,6 +373,17 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         cp "$SNAP_BOOT/server/docker-compose.yml" "$SERVER_DIR/"
         cp "$SNAP_BOOT/server/.env.example" "$SERVER_DIR/" 2>/dev/null || true
         cp -r "$SNAP_BOOT/server/config" "$SERVER_DIR/"
+        # docker/ holds the bind-mounted source for containers (e.g.
+        # metadata-service.py). Without this, the compose bind-mount
+        # source is missing and Docker creates an empty directory in
+        # its place — the container then fails with "not a directory:
+        # Are you trying to mount a directory onto a file?". Copy
+        # idempotently with `cp -rT` so a partial-install retry doesn't
+        # nest /opt/snapmulti/docker/docker/.
+        if [[ -d "$SNAP_BOOT/server/docker" ]]; then
+            mkdir -p "$SERVER_DIR/docker"
+            cp -rT "$SNAP_BOOT/server/docker" "$SERVER_DIR/docker"
+        fi
         cp "$SNAP_BOOT/server/deploy.sh" "$SERVER_DIR/scripts/"
         cp "$SNAP_BOOT/server/boot-tune.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/status.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
