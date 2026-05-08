@@ -8,9 +8,11 @@
 [![Donate](https://img.shields.io/badge/Donate-PayPal-yellowgreen)](https://paypal.me/lolettic)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-Licenza: `GPL-3.0-only`
+Licenza: `GPL-3.0-only` · [Codice di condotta](CODE_OF_CONDUCT.md) · [Note di terze parti](THIRD-PARTY-NOTICES.md)
 
 Riproduci musica in sincronia in ogni stanza. Streaming da Spotify, AirPlay, la tua libreria musicale o qualsiasi app — tutti gli altoparlanti suonano insieme.
+
+**Cos'è**: un sistema audio multiroom in stile Sonos che ti costruisci da solo con Raspberry Pi (~60 € per stanza con un DAC HAT). Tutto open source, niente cloud, niente abbonamento, niente telemetria. Flash della SD, boot, fatto.
 
 <p align="center">
   <img src="docs/images/display-playing.png" alt="snapMULTI in riproduzione — copertina, analizzatore di spettro, info brano" width="720">

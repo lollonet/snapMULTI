@@ -30,15 +30,17 @@ The server runs all audio services: Snapcast, MPD, shairport-sync (AirPlay), and
 
 ### Server Examples
 
-| Hardware | Suitability | Notes |
-|----------|-------------|-------|
-| Raspberry Pi 4 (4 GB+) | ✅ Recommended | Handles all sources + 10 clients + display comfortably |
-| Raspberry Pi 4 (2 GB) | ✅ Good | Server-only or server + headless client; tight with display |
-| Raspberry Pi 3B+ | ⚠️ Tight | 1 GB RAM — works server-only but no headroom for spikes |
-| Raspberry Pi Zero 2 W | ❌ Not supported | 512 MB RAM — cannot fit server containers |
-| Intel NUC / mini PC | ✅ Excellent | Ideal for large deployments or music libraries |
-| Old laptop / desktop | ✅ Excellent | Any x86_64 machine with 2+ GB RAM works well |
-| NAS with Docker | ✅ Good | If it supports Docker and has 2+ cores and 2+ GB RAM |
+**TL;DR**: Pi 4 (2+ GB) is the safe pick. Pi 3 B+ works but tight. Pi Zero 2 W cannot run the server — use it as a client instead.
+
+| Hardware | Verdict | Best for | Why |
+|----------|---------|----------|-----|
+| Raspberry Pi 4 (4 GB+) | ✅ Recommended | Any setup, including server + display | Handles all 5 sources + 10 clients + cover-art display comfortably |
+| Raspberry Pi 4 (2 GB) | ✅ Good | Server-only or server + headless client | Tight if you also want the cover-art display on the same Pi |
+| Raspberry Pi 3 B+ | ⚠️ Server-only | Single-purpose server with 1-2 streaming sources | 1 GB RAM is enough at idle (~309 MiB measured) but no spike headroom for big MPD scans |
+| Raspberry Pi Zero 2 W | ❌ Not supported | — (use as a client only) | 512 MB RAM cannot fit all server containers |
+| Intel NUC / mini PC | ✅ Excellent | Large libraries, many clients | Plenty of CPU and RAM, low power |
+| Old laptop / desktop | ✅ Excellent | Reusing existing hardware | Any x86_64 with 2+ GB RAM works |
+| NAS with Docker | ✅ Good | Always-on appliance | Needs 2+ cores, 2+ GB RAM, Docker support |
 
 > **Note:** Pi 3B+ has only **1 GB RAM**. Server-only works (measured ~309 MiB actual usage) but leaves limited headroom. Not recommended for "both" mode (server + client with display). Pi 2 is too slow for simultaneous AirPlay + Spotify; avoid for server use.
 

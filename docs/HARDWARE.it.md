@@ -30,15 +30,17 @@ Il server esegue tutti i servizi audio: Snapcast, MPD, shairport-sync (AirPlay) 
 
 ### Esempi di Server
 
-| Hardware | Idoneità | Note |
-|----------|----------|------|
-| Raspberry Pi 4 (4 GB+) | ✅ Consigliato | Gestisce tutte le sorgenti + 10 client + display comodamente |
-| Raspberry Pi 4 (2 GB) | ✅ Buono | Solo server o server + client headless; stretto con display |
-| Raspberry Pi 3B+ | ⚠️ Stretto | 1 GB RAM — funziona solo server ma senza margine per i picchi |
-| Raspberry Pi Zero 2 W | ❌ Non supportato | 512 MB RAM — non può contenere i container server |
-| Intel NUC / mini PC | ✅ Eccellente | Ideale per grandi installazioni o librerie musicali |
-| Vecchio laptop / desktop | ✅ Eccellente | Qualsiasi macchina x86_64 con 2+ GB di RAM funziona bene |
-| NAS con Docker | ✅ Buono | Se supporta Docker e ha 2+ core e 2+ GB di RAM |
+**TL;DR**: Pi 4 (2+ GB) è la scelta sicura. Pi 3 B+ funziona ma stretto. Pi Zero 2 W non può fare il server — usalo come client.
+
+| Hardware | Verdetto | Per cosa | Perché |
+|----------|----------|----------|--------|
+| Raspberry Pi 4 (4 GB+) | ✅ Consigliato | Qualsiasi setup, anche server + display | Gestisce tutte e 5 le sorgenti + 10 client + display copertine comodamente |
+| Raspberry Pi 4 (2 GB) | ✅ Buono | Solo server o server + client headless | Stretto se vuoi anche il display copertine sullo stesso Pi |
+| Raspberry Pi 3 B+ | ⚠️ Solo server | Server dedicato con 1-2 sorgenti streaming | 1 GB di RAM basta a riposo (~309 MiB misurati) ma niente margine per i picchi delle scansioni MPD |
+| Raspberry Pi Zero 2 W | ❌ Non supportato | — (usa solo come client) | 512 MB di RAM non bastano a contenere i container server |
+| Intel NUC / mini PC | ✅ Eccellente | Librerie grandi, molti client | CPU e RAM in abbondanza, basso consumo |
+| Vecchio laptop / desktop | ✅ Eccellente | Riuso di hardware esistente | Qualsiasi x86_64 con 2+ GB di RAM funziona |
+| NAS con Docker | ✅ Buono | Sempre-attivo, appliance | Servono 2+ core, 2+ GB di RAM, supporto Docker |
 
 > **Nota:** Il Pi 3B+ ha solo **1 GB di RAM**. Solo server funziona (misurato ~309 MiB di utilizzo effettivo) ma lascia margine limitato. Non consigliato per la modalità "entrambi" (server + client con display). Il Pi 2 è troppo lento per AirPlay + Spotify simultanei; evitare per uso server.
 
