@@ -36,29 +36,42 @@ SECONDS=0
 AUTO_MODE=false
 AUTO_CONFIG=""
 ENABLE_READONLY=true
+# Track explicit CLI override separately so precedence is:
+#   explicit CLI > config file > default. Without this, a config file
+#   that sets ENABLE_READONLY=true silently undoes a CLI --no-readonly.
+CLI_READONLY_OVERRIDE=""
 NEEDS_REBOOT=false
 
+# Argument parsing: flags can appear in any order; the first non-flag
+# positional is the auto-config path. The previous parser only captured
+# the config when it followed --auto IMMEDIATELY and was not a flag, so
+# `setup.sh --auto --no-readonly /boot/firmware/install.conf` (firstboot's
+# call shape) silently dropped the path.
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --auto)
             AUTO_MODE=true
-            if [[ $# -gt 1 && "$2" != --* ]]; then
-                AUTO_CONFIG="$2"
-                shift 2
-            else
-                AUTO_CONFIG=""
-                shift
-            fi
+            shift
             ;;
         --read-only)
-            ENABLE_READONLY=true
+            CLI_READONLY_OVERRIDE=true
             shift
             ;;
         --no-readonly)
-            ENABLE_READONLY=false
+            CLI_READONLY_OVERRIDE=false
             shift
             ;;
-        *) shift ;;
+        --*)
+            # Unknown flag — ignore for forward-compat
+            shift
+            ;;
+        *)
+            # First non-flag positional is the auto-config path
+            if [[ -z "$AUTO_CONFIG" ]]; then
+                AUTO_CONFIG="$1"
+            fi
+            shift
+            ;;
     esac
 done
 
@@ -87,9 +100,9 @@ if [ "$AUTO_MODE" = true ]; then
     DISPLAY_RESOLUTION="${DISPLAY_RESOLUTION:-}"
     BAND_MODE="${BAND_MODE:-third-octave}"
     SNAPSERVER_HOST="${SNAPSERVER_HOST:-}"
-    # ENABLE_READONLY: command line --read-only takes precedence, then config file
-    if [[ "$ENABLE_READONLY" != "true" ]]; then
-        ENABLE_READONLY="${ENABLE_READONLY:-false}"
+    # Apply explicit CLI override last so it wins over the config file
+    if [[ -n "$CLI_READONLY_OVERRIDE" ]]; then
+        ENABLE_READONLY="$CLI_READONLY_OVERRIDE"
     fi
 fi
 

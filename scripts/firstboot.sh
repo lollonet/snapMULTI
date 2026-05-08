@@ -260,18 +260,39 @@ cumulative_pct() {
 # shellcheck source=common/verify-compose.sh
 source "$COMMON/verify-compose.sh"
 
-# Headless detection (for client modes)
-has_display() {
-    [[ -c /dev/fb0 ]] || return 1
-    local found_status=false
-    for card in /sys/class/drm/card*-HDMI-*/status; do
-        [[ -f "$card" ]] || continue
-        found_status=true
-        grep -q "^connected" "$card" && return 0
-    done
-    $found_status && return 1
-    return 1
-}
+# Headless detection (for client modes) — single source of truth lives in
+# client/common/scripts/display.sh (HDMI/DSI/DPI/DP/eDP). Source it from
+# the staging copy on the SD card so firstboot agrees with setup.sh and
+# display-detect.sh on what counts as a connected display.
+_DISPLAY_LIB=""
+for _candidate in \
+    "$SNAP_BOOT/client/scripts/display.sh" \
+    "$CLIENT_DIR/scripts/display.sh" \
+    "$CLIENT_DIR/common/scripts/display.sh"; do
+    if [[ -f "$_candidate" ]]; then
+        _DISPLAY_LIB="$_candidate"
+        break
+    fi
+done
+if [[ -n "$_DISPLAY_LIB" ]]; then
+    # shellcheck source=../client/common/scripts/display.sh
+    source "$_DISPLAY_LIB"
+else
+    # Fallback if display.sh missing (older SD layout) — same conservative
+    # HDMI-only check that was here before; better than crashing.
+    has_display() {
+        [[ -c /dev/fb0 ]] || return 1
+        local found_status=false card
+        for card in /sys/class/drm/card*-HDMI-*/status; do
+            [[ -f "$card" ]] || continue
+            found_status=true
+            grep -q "^connected" "$card" && return 0
+        done
+        $found_status && return 1
+        return 1
+    }
+fi
+unset _DISPLAY_LIB _candidate
 
 # Make future boots verbose
 CMDLINE_FILE=""
@@ -781,6 +802,32 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         systemctl daemon-reload
         systemctl enable snapmulti-status.timer
         log_info "System-status snapshot timer installed (5-min snapshot interval)"
+    fi
+fi
+
+# Network music bind workaround for overlayroot recurse=0 (issue: NFS/SMB
+# mounts land at /media/root-ro/media/<src>-music in the merged root, so
+# /media/<src>-music ends up empty and MPD's bind-mount serves nothing).
+# Installed for server / both modes only — client-only installs do not run
+# the music stack.
+if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+    if [[ "${MUSIC_SOURCE:-}" == "nfs" || "${MUSIC_SOURCE:-}" == "smb" ]]; then
+        BIND_DIR=""
+        for _bind_candidate in \
+            "$COMMON" \
+            "$SERVER_DIR/scripts/common"; do
+            if [[ -f "$_bind_candidate/snapmulti-music-bind.service" && \
+                  -f "$_bind_candidate/snapmulti-music-bind.sh" ]]; then
+                BIND_DIR="$_bind_candidate"; break
+            fi
+        done
+        if [[ -n "$BIND_DIR" ]]; then
+            install -m 0755 "$BIND_DIR/snapmulti-music-bind.sh" /usr/local/bin/snapmulti-music-bind
+            cp "$BIND_DIR/snapmulti-music-bind.service" /etc/systemd/system/
+            systemctl daemon-reload
+            systemctl enable snapmulti-music-bind.service
+            log_info "Music-bind unit installed (overlayroot $MUSIC_SOURCE workaround)"
+        fi
     fi
 fi
 
