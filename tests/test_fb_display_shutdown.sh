@@ -121,11 +121,13 @@ assert 'grep -qE "asyncio\.run\(_async_main\(\)\)" "$META_PY"' \
 echo
 echo "=== Python syntax ==="
 for f in "$FB_PY" "$VIZ_PY" "$META_PY"; do
-    if python3 -c "import ast; ast.parse(open('$f').read())" 2>/dev/null; then
-        echo "  PASS: python3 ast.parse $(basename "$f")"
+    # py_compile: safe path handling (no quoting hazards) and matches
+    # how Python itself validates the source on import.
+    if python3 -m py_compile "$f" 2>/dev/null; then
+        echo "  PASS: python3 -m py_compile $(basename "$f")"
         pass=$((pass + 1))
     else
-        echo "  FAIL: python3 ast.parse $(basename "$f")"
+        echo "  FAIL: python3 -m py_compile $(basename "$f")"
         fail=$((fail + 1))
     fi
 done

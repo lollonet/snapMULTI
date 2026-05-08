@@ -21,8 +21,10 @@ import ipaddress
 import json
 import logging
 import os
+import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 import urllib.parse
@@ -2445,9 +2447,6 @@ async def _async_main() -> None:
     `loop.add_signal_handler()` routes the signal through the loop so
     a clean SystemExit unwinds asyncio.run() promptly.
     """
-    import signal
-    import sys
-
     def _shutdown(*_):
         sys.exit(0)
 

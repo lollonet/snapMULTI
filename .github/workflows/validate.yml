@@ -55,6 +55,17 @@ jobs:
             echo "  Checking $f"
             if ! shellcheck -x -S warning "$f"; then FAILED=1; fi
           done
+          # Server test suite — the bash-tests job runs these; lint
+          # them here so style issues surface alongside runtime
+          # assertions instead of being silent. SC2034 (var unused)
+          # is suppressed because the eval-inside-assert pattern
+          # references variables that shellcheck cannot trace into
+          # the eval string.
+          for f in tests/test_*.sh; do
+            [ -f "$f" ] || continue
+            echo "  Checking $f"
+            if ! shellcheck -x -S warning -e SC2034 "$f"; then FAILED=1; fi
+          done
           if [ "$FAILED" -eq 1 ]; then
             echo "ERROR: shellcheck found issues"
             exit 1
