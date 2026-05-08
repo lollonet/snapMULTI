@@ -337,6 +337,14 @@ copy_server_files() {
     # ro-mode helper (client has its own copy, server needs one too)
     [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/"
     cp -r "$PROJECT_DIR/config" "$dest/"
+    # docker/ contains source files that the compose file bind-mounts
+    # into containers (currently metadata-service.py). Without this
+    # copy, Docker auto-creates an empty directory at the bind source
+    # and the container fails to start with `not a directory: Are you
+    # trying to mount a directory onto a file (or vice-versa)?`.
+    # See PR #319 (which added the bind-mount) and the post-merge
+    # install failure on snapvideo that surfaced this gap.
+    [[ -d "$PROJECT_DIR/docker" ]] && cp -r "$PROJECT_DIR/docker" "$dest/"
     cp "$PROJECT_DIR/docker-compose.yml" "$dest/"
     cp "$PROJECT_DIR/.env.example" "$dest/" 2>/dev/null || true
 
