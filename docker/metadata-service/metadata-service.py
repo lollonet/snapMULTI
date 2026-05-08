@@ -21,8 +21,10 @@ import ipaddress
 import json
 import logging
 import os
+import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 import urllib.parse
@@ -2429,5 +2431,31 @@ async def main() -> None:
     await _service.poll_loop()
 
 
+async def _async_main() -> None:
+    """Async entry point with asyncio-aware signal handlers.
+
+    Without explicit handlers, SIGTERM from `docker stop` is queued by
+    Python but never processed: under `asyncio.run(main())` the loop
+    spends its time inside `await` points where Python only checks
+    signals between bytecode instructions. Docker waits stop_grace_period
+    (default 10 s) then SIGKILLs, but the host-visible PID lingers as
+    defunct while systemd-shutdown waits DefaultTimeoutStopSec (~90 s)
+    per zombie. On a `both` install (server+client on the same Pi)
+    that's three Python containers: fb-display, audio-visualizer, and
+    this metadata-service — each adding ~90 s to reboot.
+
+    `loop.add_signal_handler()` routes the signal through the loop so
+    a clean SystemExit unwinds asyncio.run() promptly.
+    """
+
+    def _shutdown(*_):
+        sys.exit(0)
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, _shutdown)
+    await main()
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(_async_main())

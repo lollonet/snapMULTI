@@ -83,6 +83,10 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     group_add:
       - "29"           # audio — access /dev/snd/*
+    # Same rationale as fb-display: tini propagates SIGTERM, short
+    # grace period avoids the 90 s systemd-shutdown wait per zombie.
+    init: true
+    stop_grace_period: 2s
     <<: *default-security
     cap_add:
       - SYS_NICE  # Audio priority
@@ -130,6 +134,20 @@ services:
     profiles:
       - framebuffer
     network_mode: host
+    # Without init, the python3 main process is PID 1 inside the
+    # container and its `signal.signal(SIGTERM, ...)` handlers don't
+    # fire under asyncio.run() (asyncio blocks signal delivery between
+    # await points). Docker waits stop_grace_period (default 10 s) then
+    # SIGKILL — but systemd-shutdown then enumerates the host-visible
+    # PID and waits DefaultTimeoutStopSec (90 s) for it. Result: every
+    # reboot took ~90 s extra for the python3 zombie. tini as PID 1
+    # propagates signals correctly and reaps zombies.
+    init: true
+    # Don't wait the docker default 10 s for SIGTERM — fb-display has
+    # no important on-shutdown work (just close the fb mmap), 2 s is
+    # plenty for tini to forward + child to exit, after which docker
+    # SIGKILLs and the host PID disappears immediately.
+    stop_grace_period: 2s
     <<: *default-security
     devices:
       - /dev/fb0:/dev/fb0
