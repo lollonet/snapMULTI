@@ -21,7 +21,6 @@ import ipaddress
 import json
 import logging
 import os
-import re
 import signal
 import socket
 import subprocess
@@ -64,16 +63,41 @@ _POLL_LOOP_MAX_ERRORS = 30
 _mb_last_request: float = 0.0
 _mb_lock = threading.Lock()
 
+# Defensive lock for OrderedDict cache mutations. Today the only caller of
+# _cache_set is enrich_artwork / enrich_tags, both run SERIALLY by the poll
+# loop via `await loop.run_in_executor(...)` (no asyncio.gather, no
+# create_task on cache writers). So in current code there's no concurrent
+# write — the lock is cheap insurance against future code paths that might
+# parallelise enrich (e.g. asyncio.gather across streams). OrderedDict's
+# internal doubly-linked list pointers can be corrupted by concurrent
+# move_to_end / popitem, with crashes (KeyError) hard to reproduce.
+_cache_lock = threading.Lock()
+
 
 def _mb_rate_limit() -> None:
-    """Enforce MusicBrainz 1 req/s rate limit, sleeping only the remaining time."""
+    """Enforce MusicBrainz 1 req/s rate limit, sleeping only the remaining time.
+
+    Lock is released BEFORE sleep so concurrent threads don't queue on the
+    lock during the 1.1s window — they each reserve their slot atomically
+    via the timestamp update, then sleep independently. This keeps the
+    thread pool free for non-MusicBrainz tasks (HTTP /status, file I/O)
+    even when several artwork lookups land in MusicBrainz at once.
+    """
     global _mb_last_request
     with _mb_lock:
         now = time.monotonic()
         wait = 1.1 - (now - _mb_last_request)
+        # Reserve the slot atomically: even if we sleep outside the lock,
+        # the next thread's `now - _mb_last_request` already accounts for
+        # our sleep window via this forward-dated timestamp.
         if wait > 0:
-            time.sleep(wait)
-        _mb_last_request = time.monotonic()
+            _mb_last_request = now + wait
+        else:
+            _mb_last_request = now
+            wait = 0.0
+    # Sleep OUTSIDE the lock — other waiters can compute their slot.
+    if wait > 0:
+        time.sleep(wait)
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -193,18 +217,20 @@ class MetadataService:
         value: str,
         limit: int = _MAX_CACHE_ENTRIES,
     ) -> None:
-        """Set a cache entry, evicting oldest if at capacity."""
-        cache[key] = value
-        cache.move_to_end(key)
-        while len(cache) > limit:
-            cache.popitem(last=False)
+        """Set a cache entry, evicting oldest if at capacity. Thread-safe."""
+        with _cache_lock:
+            cache[key] = value
+            cache.move_to_end(key)
+            while len(cache) > limit:
+                cache.popitem(last=False)
 
     def _mark_failed(self, url: str) -> None:
         """Record a failed download URL, bounded to _MAX_CACHE_ENTRIES."""
-        self._failed_downloads[url] = None
-        self._failed_downloads.move_to_end(url)
-        while len(self._failed_downloads) > self._cache_limit:
-            self._failed_downloads.popitem(last=False)
+        with _cache_lock:
+            self._failed_downloads[url] = None
+            self._failed_downloads.move_to_end(url)
+            while len(self._failed_downloads) > self._cache_limit:
+                self._failed_downloads.popitem(last=False)
 
     @staticmethod
     def _release_meta_cache_value(date: str, original_date: str, genre: str) -> str:
@@ -410,35 +436,47 @@ class MetadataService:
             ws_clients.difference_update(clients_to_remove)
 
     def _resolve_client_stream(self, client_id: str) -> str | None:
-        """Resolve a CLIENT_ID to its stream_id using cached mapping."""
+        """Resolve a CLIENT_ID to its stream_id using cached mapping.
+
+        Resolution order:
+          1. Exact match on `_client_stream_map` (the snapserver-reported
+             client identifier).
+          2. Strip the standard `snapclient-` prefix and try exact match
+             again — handles the documented case where snapclient sets its
+             ID as `snapclient-<hostname>` while snapserver registers
+             `<hostname>`.
+
+        Word-boundary fuzzy matching was removed: it correctly fixed the
+        "Cucina" / "Cucinino" collision but still misfired on
+        "Sala" / "Sala Grande" (the space is a word boundary, so `\bSala\b`
+        matches both rooms). In a multiroom setup, sending metadata or
+        volume commands to the wrong room is a worse failure mode than
+        refusing to resolve and logging a warning. Users who relied on
+        substring matching should rename their snapcast clients to match
+        the snapserver identifier exactly, or use the `snapclient-` prefix
+        convention.
+        """
         # Exact match first
         if client_id in self._client_stream_map:
             return self._client_stream_map[client_id]
-        # Token-bounded substring match. The previous bare-substring check
-        # (`a in b or b in a`) collided on prefix names: client "Cucina"
-        # would match identifier "Cucinino" because "Cucina" is a substring
-        # of "Cucinino" — order-dependent on dict iteration. We require a
-        # word boundary (\b) so "snapvideo" still matches inside
-        # "snapclient-snapvideo" (the "-" is a non-word char) but "Cucina"
-        # does NOT match inside "Cucinino" (both ends are word chars).
-        # Iterate longest identifier first so the most specific match wins
-        # on legitimate ties.
-        sorted_items = sorted(
-            self._client_stream_map.items(),
-            key=lambda kv: -len(kv[0]),
-        )
-        for identifier, stream_id in sorted_items:
-            if not identifier or not client_id:
-                continue
-            id_pattern = r"\b" + re.escape(identifier) + r"\b"
-            client_pattern = r"\b" + re.escape(client_id) + r"\b"
-            if re.search(id_pattern, client_id) or re.search(
-                client_pattern, identifier
-            ):
+        # Documented prefix convention: snapclient may identify itself as
+        # `snapclient-<hostname>` while snapserver registered just
+        # `<hostname>`.
+        if client_id.startswith("snapclient-"):
+            stripped = client_id[len("snapclient-") :]
+            if stripped in self._client_stream_map:
                 logger.debug(
-                    f"Fuzzy match: client '{client_id}' matched identifier '{identifier}'"
+                    "Resolved '%s' via snapclient- prefix strip → '%s'",
+                    client_id,
+                    stripped,
                 )
-                return stream_id
+                return self._client_stream_map[stripped]
+        logger.debug(
+            "No stream match for client '%s' (registered: %s). "
+            "Rename to match exactly or use 'snapclient-<id>' prefix.",
+            client_id,
+            list(self._client_stream_map.keys()),
+        )
         return None
 
     def _find_client_volume(self, server: dict, client_id: str) -> dict:
