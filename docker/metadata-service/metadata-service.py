@@ -1658,6 +1658,7 @@ class MetadataService:
                         await self._broadcast_to_stream(stream_id, metadata, server)
 
                 # Send current metadata to clients that just switched streams
+                stream_switch_failures: set[SubscribedClient] = set()
                 for sc in stream_switched_clients:
                     sm = self.streams.get(sc.stream_id)
                     if sm and sm.current:
@@ -1670,7 +1671,10 @@ class MetadataService:
                         try:
                             await sc.websocket.send(json.dumps(output))
                         except Exception:
-                            ws_clients.discard(sc)
+                            stream_switch_failures.add(sc)
+                if stream_switch_failures:
+                    async with ws_clients_lock:
+                        ws_clients.difference_update(stream_switch_failures)
 
                 server_info_counter += 1
                 if server_info_counter >= 20:  # ~60s at 3s poll interval
@@ -1697,6 +1701,7 @@ class MetadataService:
     ) -> None:
         """Broadcast metadata to all clients subscribed to this stream."""
         output = self._output_metadata(metadata)
+        clients_to_remove: set[SubscribedClient] = set()
 
         for sc in ws_clients.copy():
             if sc.stream_id != stream_id:
@@ -1716,7 +1721,13 @@ class MetadataService:
             try:
                 await sc.websocket.send(json.dumps(client_output))
             except Exception:
-                ws_clients.discard(sc)
+                clients_to_remove.add(sc)
+
+        # Mutate ws_clients under the lock — same invariant as
+        # _broadcast_server_info / ws_handler.
+        if clients_to_remove:
+            async with ws_clients_lock:
+                ws_clients.difference_update(clients_to_remove)
 
     async def handle_control_command(self, client_id: str, message: str) -> None:
         """Handle control commands from a subscribed client."""
@@ -1773,10 +1784,15 @@ async def ws_handler(websocket: Any) -> None:
             # Subscription message
             if "subscribe" in data:
                 client_id = str(data["subscribe"])[:256]
-                if sc:
-                    ws_clients.discard(sc)
-                sc = SubscribedClient(websocket, client_id)
-                ws_clients.add(sc)
+                # ws_clients is iterated under ws_clients_lock by
+                # _broadcast_server_info; mutate under the same lock so
+                # an iteration in flight cannot raise "Set changed size
+                # during iteration".
+                async with ws_clients_lock:
+                    if sc:
+                        ws_clients.discard(sc)
+                    sc = SubscribedClient(websocket, client_id)
+                    ws_clients.add(sc)
                 logger.info(f"Client {client_addr} subscribed as '{client_id}'")
 
                 # Resolve stream and send current metadata immediately
@@ -1810,10 +1826,11 @@ async def ws_handler(websocket: Any) -> None:
             # Stream subscription (controller clients — no client-ID resolution, no volume)
             if "subscribe_stream" in data:
                 stream_name = str(data["subscribe_stream"])[:256]
-                if sc:
-                    ws_clients.discard(sc)
-                sc = SubscribedClient(websocket, stream_id_direct=stream_name)
-                ws_clients.add(sc)
+                async with ws_clients_lock:
+                    if sc:
+                        ws_clients.discard(sc)
+                    sc = SubscribedClient(websocket, stream_id_direct=stream_name)
+                    ws_clients.add(sc)
                 logger.info(
                     f"Client {client_addr} subscribed to stream '{stream_name}'"
                 )
@@ -1845,7 +1862,8 @@ async def ws_handler(websocket: Any) -> None:
         pass
     finally:
         if sc:
-            ws_clients.discard(sc)
+            async with ws_clients_lock:
+                ws_clients.discard(sc)
         logger.info(f"WebSocket client disconnected: {client_addr}")
 
 

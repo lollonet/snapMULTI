@@ -322,6 +322,15 @@ def main() -> None:
             ):
                 try:
                     chunk = sys.stdin.read(4096)
+                    # On a non-blocking TextIOWrapper, read() returns:
+                    #   - None when no complete data is ready (would-block,
+                    #     e.g. partial UTF-8 sequence in the buffer)
+                    #   - "" only on TRUE EOF (writer closed)
+                    # `if not chunk:` matched both, prematurely closing stdin
+                    # on a transient would-block. Distinguish the two now.
+                    if chunk is None:
+                        # Would-block — leave stdin open, retry next select
+                        continue
                     if not chunk:
                         # stdin EOF - snapserver closed connection
                         # Keep running to continue reading metadata
@@ -372,6 +381,14 @@ def main() -> None:
                             except Exception as e:
                                 log("warning", f"Parse error: {e}")
                         else:
+                            # Orphan </item> appears BEFORE <item> (corrupt
+                            # pipe / mid-stream startup). Without this slice
+                            # the buffer kept the orphan forever, growing
+                            # to MAX_PIPE_BUFFER (10 MB) before reset and
+                            # losing all metadata in between. Drop the
+                            # prefix up to the next <item> so the next
+                            # iteration finds a balanced pair.
+                            pipe_buffer = pipe_buffer[start:]
                             break
                 except OSError as e:
                     log("warning", f"Pipe read error: {e}")
