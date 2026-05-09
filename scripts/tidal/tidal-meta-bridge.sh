@@ -110,13 +110,22 @@ while true; do
     ALBUM=$(extract_field "xalbum name: " "$OUTPUT") || true
     DURATION=$(extract_field "xduration: " "$OUTPUT") || true
 
-    # Parse position (e.g., "38 / 227") — bash only
+    # Parse position (e.g., "38 / 227") — bash only.
+    # The TUI panel border is rendered as a literal "x" by speaker_controller_
+    # application, so position lines come through tmux capture as
+    # `x  38 / 227                          xx` (NOT `  38 / 227`).
+    # `strip_escapes` only handles ANSI/C1 control sequences — the `x` is a
+    # plain ASCII char and survives. The original anchored regex
+    # `^[0-9]+...` could never match a line starting with `x`, so POSITION
+    # stayed 0 forever and the progress bar never advanced on Tidal.
+    # Use an anchorless regex with BASH_REMATCH capture so the position
+    # pattern is found anywhere in the line, regardless of the leading
+    # panel char or padding spaces. Other TUI lines (xduration:, xartists:)
+    # do NOT contain a `<digits> / <digits>` pattern, so they don't match.
     POSITION=0
     while IFS= read -r line; do
-        # Match lines like "  38 / 227"
-        line="${line#"${line%%[! ]*}"}"  # ltrim spaces
-        if [[ "$line" =~ ^[0-9]+' '*/' '*[0-9]+$ ]]; then
-            POSITION="${line%%[/ ]*}"
+        if [[ "$line" =~ ([0-9]+)[[:space:]]*/[[:space:]]*([0-9]+) ]]; then
+            POSITION="${BASH_REMATCH[1]}"
             break
         fi
     done <<< "$OUTPUT"
