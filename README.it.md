@@ -76,6 +76,8 @@ Scegli snapMULTI se vuoi **multi-stanza + Pi-DIY + zero cloud + zero abbonamento
 Gestisci gli altoparlanti su `http://hostname.local:1780`
 Verifica lo stato del sistema su `http://hostname.local:8083`
 
+> **Riferimento completo delle porte**: vedi [`docs/USAGE.it.md#servizi-e-porte`](docs/USAGE.it.md#servizi-e-porte) per l'elenco completo di porte, protocolli e cosa espone ogni container.
+
 ## Avvio Rapido
 
 **[QUICKSTART.it.md](QUICKSTART.it.md)** — da zero alla musica in 5 minuti.
@@ -120,6 +122,12 @@ Vedi [Guida all'Uso — Aggiornamento](docs/USAGE.it.md#aggiornamento) per opzio
 | [Uso e Operazioni](docs/USAGE.it.md) | Architettura, servizi, MPD, mDNS, aggiornamento |
 | [Sorgenti Audio](docs/SOURCES.it.md) | Configurazione sorgenti, parametri, API JSON-RPC |
 | [Changelog](CHANGELOG.md) | Cronologia versioni |
+
+## Contribuire
+
+PR, segnalazioni di bug e post "mostra il tuo setup" sono benvenuti — vedi [CONTRIBUTING.it.md](CONTRIBUTING.it.md).
+
+Per problemi di sicurezza, segui il flusso di disclosure privato in [SECURITY.md](SECURITY.md).
 
 ## Ringraziamenti
 

@@ -76,6 +76,8 @@ Pick snapMULTI when you want **multi-room + Pi-DIY + zero cloud + zero subscript
 Manage speakers at `http://hostname.local:1780`
 Check system health at `http://hostname.local:8083`
 
+> **Full port reference**: see [`docs/USAGE.md#services--ports`](docs/USAGE.md#services--ports) for the complete list of ports, protocols, and what each container exposes.
+
 ## Quick Start
 
 **[QUICKSTART.md](QUICKSTART.md)** — zero to music in 5 minutes.
@@ -120,6 +122,12 @@ See [Usage Guide — Updating](docs/USAGE.md#updating) for advanced options.
 | [Usage & Ops](docs/USAGE.md) | Architecture, services, MPD, mDNS, updating |
 | [Audio Sources](docs/SOURCES.md) | Source config, parameters, JSON-RPC API |
 | [Changelog](CHANGELOG.md) | Version history |
+
+## Contributing
+
+PRs, bug reports, and "show your setup" posts are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+For security issues, follow the private-disclosure flow in [SECURITY.md](SECURITY.md).
 
 ## Acknowledgments
 
