@@ -17,6 +17,7 @@ import sys
 import time
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from threading import Thread
+from typing import Any
 
 METADATA_PIPE = os.environ.get("METADATA_PIPE", "/audio/shairport-metadata")
 COVER_ART_PORT = int(os.environ.get("COVER_ART_PORT", "5858"))
@@ -294,9 +295,19 @@ def main() -> None:
 
     log("info", "Entering main loop")
 
+    # Track whether stdin has been closed so we don't re-include it in the
+    # select watch list — otherwise select.select() on a closed FD raises
+    # OSError(EBADF) immediately, the except clause swallows it, and the
+    # outer while-True loop spins at 100% CPU. The plugin must keep running
+    # after stdin closes (snapserver may have restarted) to continue
+    # forwarding pipe metadata.
+    stdin_closed = False
+
     while True:
         # Build list of file descriptors to watch
-        read_fds = [sys.stdin]
+        read_fds: list[Any] = []
+        if not stdin_closed:
+            read_fds.append(sys.stdin)
 
         # Try to open pipe if not open, but not too frequently
         now = time.time()
@@ -308,6 +319,12 @@ def main() -> None:
 
         if pipe_fd is not None:
             read_fds.append(pipe_fd)
+
+        # Nothing to watch (stdin closed AND pipe not open yet) — sleep so
+        # the loop doesn't spin while we wait for the pipe to come back.
+        if not read_fds:
+            time.sleep(1.0)
+            continue
 
         try:
             readable, _, _ = select.select(read_fds, [], [], 1.0)
@@ -332,10 +349,13 @@ def main() -> None:
                         # Would-block — leave stdin open, retry next select
                         continue
                     if not chunk:
-                        # stdin EOF - snapserver closed connection
-                        # Keep running to continue reading metadata
+                        # stdin EOF - snapserver closed connection.
+                        # Set the flag so the next iteration's read_fds
+                        # build skips stdin entirely — otherwise select
+                        # on the closed FD raises EBADF and the loop
+                        # busy-spins at 100% CPU.
                         log("info", "stdin EOF, continuing...")
-                        # Remove stdin from future selects by making it invalid
+                        stdin_closed = True
                         try:
                             sys.stdin.close()
                         except Exception:

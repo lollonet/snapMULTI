@@ -21,6 +21,7 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -413,10 +414,27 @@ class MetadataService:
         # Exact match first
         if client_id in self._client_stream_map:
             return self._client_stream_map[client_id]
-        # Substring match (CLIENT_ID might be "snapclient-snapvideo" while
-        # Snapserver has "snapvideo")
-        for identifier, stream_id in self._client_stream_map.items():
-            if client_id in identifier or identifier in client_id:
+        # Token-bounded substring match. The previous bare-substring check
+        # (`a in b or b in a`) collided on prefix names: client "Cucina"
+        # would match identifier "Cucinino" because "Cucina" is a substring
+        # of "Cucinino" — order-dependent on dict iteration. We require a
+        # word boundary (\b) so "snapvideo" still matches inside
+        # "snapclient-snapvideo" (the "-" is a non-word char) but "Cucina"
+        # does NOT match inside "Cucinino" (both ends are word chars).
+        # Iterate longest identifier first so the most specific match wins
+        # on legitimate ties.
+        sorted_items = sorted(
+            self._client_stream_map.items(),
+            key=lambda kv: -len(kv[0]),
+        )
+        for identifier, stream_id in sorted_items:
+            if not identifier or not client_id:
+                continue
+            id_pattern = r"\b" + re.escape(identifier) + r"\b"
+            client_pattern = r"\b" + re.escape(client_id) + r"\b"
+            if re.search(id_pattern, client_id) or re.search(
+                client_pattern, identifier
+            ):
                 logger.debug(
                     f"Fuzzy match: client '{client_id}' matched identifier '{identifier}'"
                 )
