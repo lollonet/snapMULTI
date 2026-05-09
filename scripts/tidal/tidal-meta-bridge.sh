@@ -37,8 +37,18 @@ extract_field() {
     while IFS= read -r line; do
         if [[ "$line" == "${prefix}"* ]]; then
             value="${line#"$prefix"}"   # strip prefix
-            value="${value%%xx*}"       # strip from first 'xx' onward
-            value="${value%% x}"        # strip trailing ' x'
+            # Strip the trailing TUI panel marker. The TUI renders
+            #   "<field-content>  ...padding...  xx"
+            # where the panel-end "xx" is preceded by AT LEAST 2 spaces
+            # of column padding. Artist names like "Jamie xx" or song
+            # titles containing "xx" have at most one space inside, so
+            # the 2-space discriminator distinguishes panel marker from
+            # content. The previous `${value%%xx*}` matched the FIRST
+            # "xx" anywhere and truncated names like "Jamie xx" → "Jamie ".
+            if [[ "$value" =~ ^(.*[^[:space:]])[[:space:]]{2,}xx[[:space:]]*$ ]]; then
+                value="${BASH_REMATCH[1]}"
+            fi
+            value="${value% x}"          # also strip trailing ' x' (half-panel)
             value="${value%"${value##*[! ]}"}"  # rtrim whitespace
             printf '%s' "$value"
             return
