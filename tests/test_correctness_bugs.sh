@@ -165,10 +165,17 @@ for client, expected, desc in cases:
 sys.exit(fail)
 PY
 rc=$?
+# Python helper exits with the failure count (rc==0 means all 5 passed,
+# rc==2 means 2 failed and 3 passed). The previous code added 5 to pass
+# only on rc==0 and otherwise added rc to fail without crediting the
+# successful subset, undercounting `pass` in the summary line. Overall
+# CI exit (`[[ "$fail" -eq 0 ]]`) was still correct, but the printed
+# totals lied.
 if [[ "$rc" -eq 0 ]]; then
     pass=$((pass + 5))
 else
     fail=$((fail + rc))
+    pass=$((pass + 5 - rc))
 fi
 
 echo
