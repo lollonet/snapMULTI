@@ -281,6 +281,12 @@ def main() -> None:
         for fd in readable:
             try:
                 chunk = fd.read(4096)
+                # Non-blocking TextIOWrapper.read() returns None on
+                # would-block (partial UTF-8 in buffer), "" on TRUE EOF.
+                # `if not chunk:` matched both, prematurely closing stdin.
+                if chunk is None:
+                    # Would-block — keep stdin open, retry next select
+                    continue
                 if not chunk:
                     log("info", "stdin EOF, continuing...")
                     try:
