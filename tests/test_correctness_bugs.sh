@@ -16,10 +16,14 @@
 #   Fix: require 2+ spaces of column padding before the panel "xx".
 #
 # Bug C — metadata-service.py fuzzy match collides on prefix names
-#   `client in identifier or identifier in client` matched "Cucina" in
-#   "Cucinino". Fix: require a \b word boundary so "Cucina" doesn't
-#   match across "i" but "snapvideo" still matches inside
-#   "snapclient-snapvideo" (the "-" is a non-word char).
+#   Original bug (PR #330): `client in identifier or identifier in client`
+#   matched "Cucina" in "Cucinino". The first fix used \b word boundary,
+#   but \b still allowed "Sala" to collide with "Sala Grande" because the
+#   space between the words is itself a word boundary. The second fix
+#   (PR #333) removed fuzzy matching entirely: exact match + the
+#   documented `snapclient-` prefix strip is the only resolution path.
+#   Detailed assertions live in test_metadata_hardening.sh; here we just
+#   sanity-check that no fuzzy regex remains.
 
 set -euo pipefail
 
@@ -116,67 +120,19 @@ result=$(extract_field "xtitle: " "xtitle: Normal Track              xx")
 assert_eq "$result" "Normal Track" "extract_field strips panel marker for plain title"
 
 echo
-echo "=== Bug C — metadata-service.py fuzzy-match word boundary ==="
+echo "=== Bug C — metadata-service.py fuzzy match removed ==="
 
-# Static: re module is imported and \b boundary is used.
-assert 'grep -qE "^import re$" "$METADATA"' \
-       're module is imported in metadata-service.py'
+# Static: the fuzzy-match path is gone. No `re` import, no `\b` regex,
+# no `re.escape` — the resolver is now exact-match + snapclient- prefix.
+# Behavioural coverage lives in tests/test_metadata_hardening.sh.
+assert '! grep -qE "^import re$" "$METADATA"' \
+       '`import re` is gone (fuzzy regex removed)'
 
-assert 'grep -qE "re\\.escape\\(identifier\\)" "$METADATA"' \
-       '_resolve_client_stream uses re.escape(identifier) for safety'
+assert '! grep -qF "re.escape" "$METADATA"' \
+       'no re.escape() calls remain in metadata-service.py'
 
-assert 'grep -qF "r\"\\b\" + re.escape" "$METADATA"' \
-       '_resolve_client_stream uses \\b word-boundary marker'
-
-# Functional: replicate the fixed resolver and verify edge cases.
-python3 - <<'PY'
-import re
-import sys
-
-def resolve(client_id, mapping):
-    if client_id in mapping:
-        return mapping[client_id]
-    sorted_items = sorted(mapping.items(), key=lambda kv: -len(kv[0]))
-    for identifier, stream_id in sorted_items:
-        if not identifier or not client_id:
-            continue
-        id_pattern = r"\b" + re.escape(identifier) + r"\b"
-        client_pattern = r"\b" + re.escape(client_id) + r"\b"
-        if re.search(id_pattern, client_id) or re.search(client_pattern, identifier):
-            return stream_id
-    return None
-
-mapping = {"Cucinino": "A", "snapvideo": "B", "Living-Room": "C"}
-cases = [
-    ("Cucina", None, "Cucina must NOT collide with Cucinino"),
-    ("Cucinino", "A", "Cucinino exact match"),
-    ("snapclient-snapvideo", "B", "snapvideo matches inside snapclient-snapvideo"),
-    ("snapvideoXYZ", None, "snapvideo NOT matched in snapvideoXYZ (no boundary)"),
-    ("Living-Room", "C", "Living-Room exact match"),
-]
-fail = 0
-for client, expected, desc in cases:
-    got = resolve(client, mapping)
-    if got == expected:
-        print(f"  PASS: {desc}")
-    else:
-        print(f"  FAIL: {desc} (got {got!r}, expected {expected!r})")
-        fail += 1
-sys.exit(fail)
-PY
-rc=$?
-# Python helper exits with the failure count (rc==0 means all 5 passed,
-# rc==2 means 2 failed and 3 passed). The previous code added 5 to pass
-# only on rc==0 and otherwise added rc to fail without crediting the
-# successful subset, undercounting `pass` in the summary line. Overall
-# CI exit (`[[ "$fail" -eq 0 ]]`) was still correct, but the printed
-# totals lied.
-if [[ "$rc" -eq 0 ]]; then
-    pass=$((pass + 5))
-else
-    fail=$((fail + rc))
-    pass=$((pass + 5 - rc))
-fi
+assert '! grep -qF "r\"\\b\"" "$METADATA"' \
+       'no \\b word-boundary regex remains'
 
 echo
 echo "=== Python syntax ==="
