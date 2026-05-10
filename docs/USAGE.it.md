@@ -126,7 +126,7 @@ Snapserver supporta più codec (configurabili in `config/snapserver.conf`):
 | 8083 | HTTP | File copertine, JSON metadati, health check, pagina di stato sistema (`/status`) |
 
 **Configurazione**: variabili d'ambiente (default: localhost per connessioni Snapserver/MPD)
-- Interroga Snapserver JSON-RPC ogni 2s per i metadati degli stream
+- Interroga Snapserver JSON-RPC ogni 3s per i metadati degli stream (alzato da 2s nella PR #95 per ridurre il carico CPU su Pi 4 / Zero 2W)
 - Catena copertine: MPD embedded → iTunes → MusicBrainz → Radio-Browser
 - I client si iscrivono via WebSocket con `{"subscribe": "CLIENT_ID"}` per ricevere i metadati del loro stream
 - Copertine servite su `http://<server>:8083/artwork/<filename>`

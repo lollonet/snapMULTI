@@ -222,7 +222,7 @@ Host mode is recommended for single-server deployments.
 | 8083 | HTTP | Cover art files, metadata JSON, health check, system status page (`/status`) |
 
 **Configuration**: environment variables (defaults to localhost for Snapserver/MPD connections)
-- Polls Snapserver JSON-RPC every 2s for stream metadata
+- Polls Snapserver JSON-RPC every 3s for stream metadata (raised from 2s in PR #95 to reduce CPU on Pi 4 / Zero 2W)
 - Cover art chain: MPD embedded → iTunes → MusicBrainz → Radio-Browser
 - Clients subscribe via WebSocket with `{"subscribe": "CLIENT_ID"}` to receive their stream's metadata
 - Artwork served at `http://<server>:8083/artwork/<filename>`

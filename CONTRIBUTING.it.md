@@ -36,6 +36,12 @@ Usa il [template Feature Request](https://github.com/lollonet/snapMULTI/issues/n
    # Script shell: lint con shellcheck
    shellcheck scripts/*.sh scripts/**/*.sh
 
+   # Test bash (34 suite, 500+ assert)
+   bash tests/run-all-tests.sh
+
+   # Test Python dei plugin (pytest auto-discovera test_*.py sotto tests/)
+   pytest tests/ -v
+
    # Docker: verifica la sintassi compose
    docker compose config --quiet
 
