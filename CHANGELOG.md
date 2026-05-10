@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-05-10
+
+Community-launch release. Folds 14 PRs (#321–#335) on top of v0.6.6:
+boot-pipeline hardening (lazy automount for NFS/SMB, non-blocking reboot,
+single mount-authority via systemd .mount units), metadata-plugin bug
+hunt (3 latent races + 1 thread-safety + 1 fuzzy-match collision),
+Tidal progress-bar fix, install-flow alignment (Windows parity, docker/
+copy, cmdline ordering), community-launch artifacts (CONTRIBUTING.md +
+.it.md, CODE_OF_CONDUCT.md, THIRD-PARTY-NOTICES.md, hardware table,
+architecture diagram), and one round of doc-vs-code reconciliation
+(SECURITY.md SMB credentials line, USAGE.md polling interval, port
+SSOT). Reflash recommended over in-place upgrade (DEC-003).
+
 ### Added
 - **Pre-flight port-conflict check covers 5 more host-bound ports** — `deploy.sh:start_services` previously only probed 1704 / 1705 / 1780 / 6600 / 8082 / 8083 / 8180. With `network_mode: host` for the whole stack, a foreign daemon already listening on a snapMULTI port surfaces as a mysterious container crash at compose-up. The check now also covers 2019 (tidal-connect TCP control), 4953 (snapserver TCP input source), 5000 (shairport-sync RTSP), 5858 (`meta_shairport` cover-art HTTP), and 24879 (go-librespot WebSocket API — localhost only but listed for completeness). Mirrors exactly the port list documented in `docs/USAGE.md` "Port conflicts". Comment block in the loop header points future readers at the same SSOT
 - **`CONTRIBUTING.md` test commands** — both English and Italian versions now include `bash tests/run-all-tests.sh` (the BATS-style bash suite, 34 files, 500+ assertions) and `pytest tests/ -v` (Python plugin tests under `tests/conftest.py` + `tests/test_meta_*.py`) in the local pre-commit checklist. Aligns the contributor onboarding with the test pipeline that actually runs in CI. `ruff` was deliberately NOT added — there is no `pyproject.toml` / `ruff.toml` configuring rules, so a bare `ruff check .` would surface arbitrary defaults rather than the project's chosen style. A separate PR is needed to land a ruff config first
