@@ -95,8 +95,23 @@ Documentation=man:systemd.automount(5)
 # is fired on first access to Where=. This decouples server startup
 # from NAS reachability — snapserver / Spotify / AirPlay run regardless
 # of whether the music share is currently mountable.
-After=network-online.target nss-lookup.target
-Wants=network-online.target
+#
+# DO NOT add After=network-online.target / Wants=network-online.target
+# here. The .automount is a watch on the directory entry — it does not
+# itself need the network. Only the .mount unit it triggers needs the
+# network ordering, and that's already declared above.
+#
+# Adding network ordering on the .automount creates a systemd ordering
+# cycle (sysinit.target → local-fs.target → this .automount →
+# network-online.target → network.target → ... → sysinit.target).
+# systemd resolves the cycle by deleting local-fs.target /
+# sockets.target / systemd-update-done.service — degrading the first
+# post-overlayroot boot in ways that surface as "device came up
+# without network" and force the user to power-cycle. Verified
+# empirically on snapvideo + snapdigi (2026-05-10 v0.7.0 reflash);
+# pi3hat (minimal headless) survived the same cycle by chance.
+# Pattern matches systemd-fstab-generator: ordering only on .mount,
+# never on .automount.
 
 [Automount]
 Where=${where}

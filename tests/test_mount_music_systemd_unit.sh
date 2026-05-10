@@ -70,6 +70,33 @@ assert 'grep -qE "systemd-escape -p --suffix=automount" "$MOUNT_SH"' \
 assert 'grep -qE "\\[Automount\\]" "$MOUNT_SH"' \
        'helper writes an [Automount] section to the companion unit'
 
+# CRITICAL: the .automount companion must NOT carry network ordering.
+# An `After=network-online.target` / `Wants=network-online.target`
+# inside the .automount block creates a systemd ordering cycle
+# (sysinit → local-fs → automount → network-online → network →
+# sysinit). systemd resolves the cycle by DELETING local-fs.target
+# and sockets.target — first post-overlayroot boot comes up degraded,
+# user observes "device without network", manual power-cycle ensues.
+# Verified live 2026-05-10 on snapvideo + snapdigi.
+#
+# This regression guard parses the .automount heredoc only (between
+# `cat > "$automount_path" << EOF` and the closing `EOF`) and asserts
+# no executable line in that block carries `network-online.target`.
+# The .mount heredoc above legitimately has the directive.
+automount_block=$(awk '
+    /cat > "\$automount_path" << EOF/ {in_block=1; next}
+    in_block && /^EOF$/ {in_block=0; next}
+    in_block {print}
+' "$MOUNT_SH")
+
+if echo "$automount_block" | grep -v "^[[:space:]]*#" | grep -qE "network-online\\.target|nss-lookup\\.target"; then
+    echo "  FAIL: .automount unit carries network-online.target dependency (creates ordering cycle)"
+    fail=$((fail + 1))
+else
+    echo "  PASS: .automount unit has no network-online.target dependency (avoids ordering cycle)"
+    pass=$((pass + 1))
+fi
+
 # Idempotency: helper must disable a pre-existing .mount enable before
 # enabling the .automount, so devices that ran earlier versions of
 # mount-music.sh (with systemctl enable on the .mount) end up in a
