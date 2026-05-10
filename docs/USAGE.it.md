@@ -126,7 +126,7 @@ Snapserver supporta più codec (configurabili in `config/snapserver.conf`):
 | 8083 | HTTP | File copertine, JSON metadati, health check, pagina di stato sistema (`/status`) |
 
 **Configurazione**: variabili d'ambiente (default: localhost per connessioni Snapserver/MPD)
-- Interroga Snapserver JSON-RPC ogni 2s per i metadati degli stream
+- Interroga Snapserver JSON-RPC ogni 3s per i metadati degli stream (alzato da 2s nella PR #95 per ridurre il carico CPU su Pi 4 / Zero 2W)
 - Catena copertine: MPD embedded → iTunes → MusicBrainz → Radio-Browser
 - I client si iscrivono via WebSocket con `{"subscribe": "CLIENT_ID"}` per ricevere i metadati del loro stream
 - Copertine servite su `http://<server>:8083/artwork/<filename>`
@@ -249,7 +249,7 @@ Lo streaming audio richiede una rete consistente e a bassa latenza. La modalità
 
 ### Implicazioni
 
-1. **Conflitti di porte**: I servizi si collegano direttamente alle porte dell'host (1704, 1705, 1780, 2019, 5000, 5858, 6600, 8000, 8082, 8083, 8180)
+1. **Conflitti di porte**: I servizi si collegano direttamente alle porte dell'host (1704, 1705, 1780, 2019, 4953, 5000, 5858, 6600, 8000, 8082, 8083, 8180)
 2. **Regole firewall**: È necessario consentire il traffico sulle porte dei servizi (vedi [HARDWARE.it.md](HARDWARE.it.md))
 3. **Istanza singola**: Non è possibile eseguire più stack snapMULTI sullo stesso host
 

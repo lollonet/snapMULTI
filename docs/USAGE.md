@@ -172,7 +172,7 @@ Audio streaming requires consistent, low-latency networking. Host mode eliminate
 
 ### Implications
 
-1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 2019, 5000, 5858, 6600, 8000, 8082, 8083, 8180)
+1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 2019, 4953, 5000, 5858, 6600, 8000, 8082, 8083, 8180)
 2. **Firewall rules**: Must allow traffic on service ports (see [HARDWARE.md](HARDWARE.md))
 3. **Single instance**: Cannot run multiple snapMULTI stacks on the same host
 
@@ -222,7 +222,7 @@ Host mode is recommended for single-server deployments.
 | 8083 | HTTP | Cover art files, metadata JSON, health check, system status page (`/status`) |
 
 **Configuration**: environment variables (defaults to localhost for Snapserver/MPD connections)
-- Polls Snapserver JSON-RPC every 2s for stream metadata
+- Polls Snapserver JSON-RPC every 3s for stream metadata (raised from 2s in PR #95 to reduce CPU on Pi 4 / Zero 2W)
 - Cover art chain: MPD embedded → iTunes → MusicBrainz → Radio-Browser
 - Clients subscribe via WebSocket with `{"subscribe": "CLIENT_ID"}` to receive their stream's metadata
 - Artwork served at `http://<server>:8083/artwork/<filename>`

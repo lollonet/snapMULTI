@@ -839,9 +839,27 @@ start_services() {
     step "Starting services"
     cd "$PROJECT_ROOT"
 
-    # Pre-flight: check key ports are available (host networking)
+    # Pre-flight: check host ports are available before compose up.
+    # All snapMULTI services bind directly to the host (network_mode: host),
+    # so a port collision with a foreign daemon manifests as a mysterious
+    # container crash at startup. Catch it early with a friendly message.
+    #
+    # Ports covered (must mirror docs/USAGE.md "Port conflicts" list):
+    #   1704  snapcast streaming
+    #   1705  snapcast JSON-RPC
+    #   1780  snapweb UI
+    #   2019  tidal-connect TCP control
+    #   4953  snapserver TCP input source
+    #   5000  shairport-sync RTSP
+    #   5858  meta_shairport cover-art HTTP
+    #   6600  MPD
+    #   8000  MPD HTTP audio stream (direct access)
+    #   8082  metadata-service WebSocket
+    #   8083  metadata-service HTTP
+    #   8180  myMPD
+    #   24879 go-librespot WebSocket API (localhost only, but listed for completeness)
     local _port_conflict=false
-    for port in 1704 1705 1780 6600 8082 8083 8180; do
+    for port in 1704 1705 1780 2019 4953 5000 5858 6600 8000 8082 8083 8180 24879; do
         if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
             local _holder
             _holder=$(ss -tlnp 2>/dev/null | grep ":${port} " | awk '{print $NF}' | head -1)
