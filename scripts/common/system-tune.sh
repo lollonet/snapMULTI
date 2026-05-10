@@ -382,21 +382,22 @@ SYSDEOF
     if command -v raspi-config &>/dev/null; then
         if raspi-config nonint do_overlayfs 0; then
             if persist_overlayroot_enabled; then
-                # Force initramfs rebuild even if raspi-config thinks it's
-                # current — first-boot post-install sometimes shows
-                # "press Enter to continue / console not available" because
-                # the initramfs lacks overlay support (race between apt
-                # installing kernel modules and raspi-config rebuilding).
-                # update-initramfs is idempotent; the extra invocation is
-                # cheap insurance against a transient first-boot fail that
-                # the user can only "fix with a manual reboot".
-                if command -v update-initramfs &>/dev/null; then
-                    if update-initramfs -u -k all >/dev/null 2>&1; then
-                        ok "initramfs rebuilt for overlay support"
-                    else
-                        warn "update-initramfs -u failed — first boot may need manual reboot"
-                    fi
-                fi
+                # NOTE: an explicit `update-initramfs -u -k all` used to live
+                # here as "cheap insurance" (PR #317). It backfired:
+                # raspi-config has already installed the overlayroot package
+                # and its initramfs hooks are partially live by the time we
+                # get here, so `update-initramfs -u` calls into mkinitramfs
+                # which can no longer determine the underlying device for
+                # `/` and aborts with `failed to determine device for /`.
+                # The fail was silent (`>/dev/null 2>&1`), the on-disk
+                # initramfs from raspi-config's own `update-initramfs -c -k
+                # all` is fine, BUT the WARN message it printed was
+                # auto-realising: snapvideo + snapdigi both required a
+                # manual power-cycle at first boot post-2026-05-10 v0.7.0.
+                # Trusting raspi-config's internal rebuild fixes the
+                # symptom on both devices. If a future race re-emerges,
+                # the right fix is to capture output and apply MODULES=most
+                # — NOT to reintroduce a silent extra rebuild.
                 ok "Read-only filesystem enabled (activates after reboot)"
             else
                 rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf

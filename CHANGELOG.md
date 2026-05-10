@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **First-boot post-overlayroot required manual power-cycle on every device** — verified live on snapvideo (Pi 4, server+client) and snapdigi (Pi 3B+, client) after the v0.7.0 reflash on 2026-05-10. Both came up "without network" / unreachable until a manual hard reboot. Root cause: `scripts/common/system-tune.sh` had an explicit `update-initramfs -u -k all` after `raspi-config nonint do_overlayfs 0` (added in PR #317 as "cheap insurance"), but by that point raspi-config has already installed the `overlayroot` package and its initramfs hooks are partially live — `mkinitramfs` then aborts with `failed to determine device for /` because it sees the overlay instead of the underlying ext4. The fail was silent (`>/dev/null 2>&1`) AND raspi-config's own `update-initramfs -c -k all` had already produced a working initramfs on disk, BUT the WARN message ("first boot may need manual reboot") was self-realising on every device tested. Fix: remove the extra `update-initramfs -u -k all` block; trust raspi-config's internal `-c -k all`. If a future race re-emerges the right path is to capture mkinitramfs output and apply MODULES=most — NOT a silent extra rebuild. Test `test_mount_music_systemd_unit.sh` extended with a regression guard so the extra rebuild cannot come back
+
 ## [0.7.0] — 2026-05-10
 
 Community-launch release. Folds 14 PRs (#321–#335) on top of v0.6.6:

@@ -21,9 +21,13 @@
 # overwritten idempotently on retry.
 #
 # Also tests the defensive companion in system-tune.sh:
-#   - update-initramfs is forced after raspi-config do_overlayfs (closes
-#     a transient race where the rebuild lags the kernel modules apt
-#     installed milliseconds earlier).
+#   - The extra `update-initramfs -u -k all` after `do_overlayfs 0` was
+#     REMOVED — verified 2026-05-10 to cause a self-realising
+#     "first-boot needs manual reboot" WARN on both snapvideo and
+#     snapdigi (mkinitramfs aborts because raspi-config has already
+#     activated the overlay). raspi-config's internal `-c -k all` does
+#     the rebuild correctly. Regression guard asserts the extra rebuild
+#     does NOT come back.
 #   - cmdline.txt is sanity-checked for `console=tty1`.
 
 set -euo pipefail
@@ -148,24 +152,20 @@ assert 'grep -qE "RequiresMountsFor=\\\${PROJECT_ROOT} \\\${PROJECT_ROOT}/audio\
 echo
 echo "=== system-tune.sh — defensive overlayroot setup ==="
 
-assert 'grep -qE "update-initramfs -u -k all" "$SYSTEM_TUNE_SH"' \
-       'setup_readonly_fs forces update-initramfs after raspi-config'
+# Verified 2026-05-10 on snapvideo + snapdigi: an explicit
+# `update-initramfs -u -k all` after `do_overlayfs 0` calls into
+# mkinitramfs which can no longer determine the device for `/`
+# (raspi-config has already activated the overlay) and aborts. The
+# fail was silent BUT the WARN message it emitted was self-realising
+# — both devices required a manual power-cycle on first boot. The
+# correct path is to trust raspi-config's internal `-c -k all` and
+# NOT add an extra `-u` after it. This assertion enforces that the
+# extra rebuild does not come back as a regression.
+assert '! grep -qE "^[[:space:]]*if update-initramfs -u -k all" "$SYSTEM_TUNE_SH"' \
+       'setup_readonly_fs does NOT call extra update-initramfs after raspi-config (regression guard)'
 
 assert 'grep -qE "console=tty1" "$SYSTEM_TUNE_SH"' \
        'setup_readonly_fs sanity-checks cmdline.txt for console=tty1'
-
-# update-initramfs must run AFTER raspi-config nonint do_overlayfs 0,
-# otherwise the rebuild misses the overlay support raspi-config just
-# enabled.
-raspi_line=$(grep -nE "raspi-config nonint do_overlayfs 0" "$SYSTEM_TUNE_SH" | head -1 | cut -d: -f1)
-initramfs_line=$(grep -nE "update-initramfs -u -k all" "$SYSTEM_TUNE_SH" | head -1 | cut -d: -f1)
-if [[ -n "$raspi_line" && -n "$initramfs_line" && "$initramfs_line" -gt "$raspi_line" ]]; then
-    echo "  PASS: update-initramfs runs AFTER raspi-config do_overlayfs (line $initramfs_line > $raspi_line)"
-    pass=$((pass + 1))
-else
-    echo "  FAIL: update-initramfs ordering wrong (raspi=$raspi_line, initramfs=$initramfs_line)"
-    fail=$((fail + 1))
-fi
 
 echo
 echo "=== Functional smoke test (helper invocation in a sandbox) ==="
