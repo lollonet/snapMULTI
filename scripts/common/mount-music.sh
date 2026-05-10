@@ -72,9 +72,11 @@ Description=Mount music share at ${where} (snapMULTI, overlayroot-safe)
 Documentation=man:systemd.mount(5)
 After=network-online.target nss-lookup.target
 Wants=network-online.target
-# Ordering only — NOT Requires=. A slow NAS must not block the unit
-# graph or route systemd into emergency.target on a transient miss.
-Before=snapmulti-server.service snapclient.service
+# No Before= here: with the lazy automount companion, this .mount unit
+# fires on first access from inside MPD's container — well after
+# snapmulti-server.service / snapclient.service are running. Boot-time
+# ordering would have no effect AND mislead future readers about the
+# topology.
 
 [Mount]
 What=${what}
@@ -104,6 +106,17 @@ TimeoutIdleSec=0
 WantedBy=multi-user.target
 EOF
     chmod 644 "$automount_path"
+
+    # Idempotent enable: ensure the final state is exactly { .automount
+    # enabled, .mount NOT enabled }. Earlier versions of this helper
+    # called `systemctl enable "$mount_name"` directly, which created
+    # a `multi-user.target.wants/<name>.mount` symlink. Without this
+    # explicit disable, that symlink would survive `daemon-reload` and
+    # the eager .mount would still start at boot in parallel with the
+    # new lazy .automount — re-introducing the exact regression this
+    # PR fixes (snapserver hanging on a slow NAS). The disable is a
+    # no-op when the symlink doesn't exist (e.g. fresh install).
+    systemctl disable "$mount_name" >/dev/null 2>&1 || true
 
     if systemctl daemon-reload 2>/dev/null \
        && systemctl enable "$automount_name" >/dev/null 2>&1; then

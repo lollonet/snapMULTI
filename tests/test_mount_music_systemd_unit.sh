@@ -66,8 +66,19 @@ assert 'grep -qE "systemd-escape -p --suffix=automount" "$MOUNT_SH"' \
 assert 'grep -qE "\\[Automount\\]" "$MOUNT_SH"' \
        'helper writes an [Automount] section to the companion unit'
 
-assert 'grep -qE "^Before=snapmulti-server\\.service snapclient\\.service" "$MOUNT_SH"' \
-       'unit declares Before= ordering vs snapMULTI services (no Requires)'
+# Idempotency: helper must disable a pre-existing .mount enable before
+# enabling the .automount, so devices that ran earlier versions of
+# mount-music.sh (with systemctl enable on the .mount) end up in a
+# clean state — only .automount in multi-user.target.wants/.
+assert 'grep -qE "systemctl disable .\\\$mount_name" "$MOUNT_SH"' \
+       'helper disables a pre-existing .mount enable before enabling .automount (idempotent)'
+
+# With lazy automount the .mount fires on first access from inside MPD,
+# well after snapmulti-server.service is already running. A boot-time
+# Before= ordering directive in the .mount unit would be dead and
+# mislead readers about the topology.
+assert '! grep -qE "^Before=snapmulti-server\\.service snapclient\\.service" "$MOUNT_SH"' \
+       '.mount unit no longer carries a dead Before= directive (lazy automount makes it irrelevant)'
 
 # Both NFS and SMB branches must call the helper (and NOT write fstab
 # lines for these network shares).
