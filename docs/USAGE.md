@@ -172,7 +172,7 @@ Audio streaming requires consistent, low-latency networking. Host mode eliminate
 
 ### Implications
 
-1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 2019, 5000, 5858, 6600, 8000, 8082, 8083, 8180)
+1. **Port conflicts**: Services bind directly to host ports (1704, 1705, 1780, 2019, 4953, 5000, 5858, 6600, 8000, 8082, 8083, 8180)
 2. **Firewall rules**: Must allow traffic on service ports (see [HARDWARE.md](HARDWARE.md))
 3. **Single instance**: Cannot run multiple snapMULTI stacks on the same host
 

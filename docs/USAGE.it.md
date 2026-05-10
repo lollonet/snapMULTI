@@ -249,7 +249,7 @@ Lo streaming audio richiede una rete consistente e a bassa latenza. La modalità
 
 ### Implicazioni
 
-1. **Conflitti di porte**: I servizi si collegano direttamente alle porte dell'host (1704, 1705, 1780, 2019, 5000, 5858, 6600, 8000, 8082, 8083, 8180)
+1. **Conflitti di porte**: I servizi si collegano direttamente alle porte dell'host (1704, 1705, 1780, 2019, 4953, 5000, 5858, 6600, 8000, 8082, 8083, 8180)
 2. **Regole firewall**: È necessario consentire il traffico sulle porte dei servizi (vedi [HARDWARE.it.md](HARDWARE.it.md))
 3. **Istanza singola**: Non è possibile eseguire più stack snapMULTI sullo stesso host
 

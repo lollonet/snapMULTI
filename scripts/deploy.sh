@@ -853,12 +853,13 @@ start_services() {
     #   5000  shairport-sync RTSP
     #   5858  meta_shairport cover-art HTTP
     #   6600  MPD
+    #   8000  MPD HTTP audio stream (direct access)
     #   8082  metadata-service WebSocket
     #   8083  metadata-service HTTP
     #   8180  myMPD
     #   24879 go-librespot WebSocket API (localhost only, but listed for completeness)
     local _port_conflict=false
-    for port in 1704 1705 1780 2019 4953 5000 5858 6600 8082 8083 8180 24879; do
+    for port in 1704 1705 1780 2019 4953 5000 5858 6600 8000 8082 8083 8180 24879; do
         if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
             local _holder
             _holder=$(ss -tlnp 2>/dev/null | grep ":${port} " | awk '{print $NF}' | head -1)
