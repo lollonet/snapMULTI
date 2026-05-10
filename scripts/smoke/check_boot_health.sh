@@ -65,8 +65,26 @@ check_boot_health() {
     fi
 
     # systemd's overall verdict on the boot. `running` is healthy,
-    # `degraded` means some unit failed (caught by --failed below), and
+    # `degraded` means at least one unit is in failed state, and
     # anything else (e.g. `starting`, `maintenance`) is an outright fail.
+    #
+    # `degraded` is too noisy as-is: several upstream Pi OS units
+    # legitimately fail on a read-only / overlayroot filesystem — we
+    # cannot fix them and they don't impact snapMULTI behaviour. Treat
+    # them as an allowlist; only fail when a unit OUTSIDE that list is
+    # in failed state. The allowlist matches both the bare unit name
+    # ("rpi-resize-swap-file.service") and the variant systemd prints
+    # in --failed output (just the prefix, with ".service" appended).
+    local _expected_failures=(
+        # Pi OS swap resize: skipped on overlayroot (target FS is RO).
+        "rpi-resize-swap-file.service"
+        # cloud-init runs once at first boot; its main service often
+        # finishes "failed" because of timeouts/race conditions even
+        # when firstboot.sh succeeded. snapmulti's own checkpoint files
+        # are the real source of truth for install completion.
+        "cloud-init-main.service"
+    )
+
     local sys_state
     sys_state=$(systemctl is-system-running 2>/dev/null || true)
     case "$sys_state" in
@@ -74,10 +92,42 @@ check_boot_health() {
             pass_check "systemd is-system-running: running"
             ;;
         degraded)
-            local failed_count failed_list
-            failed_count=$(systemctl --failed --no-legend --no-pager 2>/dev/null | wc -l | tr -d ' ')
-            failed_list=$(systemctl --failed --no-legend --no-pager --plain 2>/dev/null | awk '{print $1}' | head -3 | tr '\n' ',' | sed 's/,$//')
-            fail_check "systemd state degraded — ${failed_count:-?} failed unit(s) (${failed_list:-none})"
+            # Build the actual failed-unit list, then subtract the
+            # allowlist. `--no-legend --plain` produces one unit name
+            # per line (with possible trailing column noise we strip
+            # via awk).
+            local all_failed unexpected_failed
+            all_failed=$(systemctl --failed --no-legend --no-pager --plain 2>/dev/null | awk '{print $1}' || true)
+            unexpected_failed=""
+            local unit
+            while IFS= read -r unit; do
+                [[ -z "$unit" ]] && continue
+                local skip=false
+                local allowed
+                for allowed in "${_expected_failures[@]}"; do
+                    if [[ "$unit" == "$allowed" ]]; then
+                        skip=true
+                        break
+                    fi
+                done
+                if [[ "$skip" != "true" ]]; then
+                    unexpected_failed+="$unit"$'\n'
+                fi
+            done <<< "$all_failed"
+
+            local unexpected_count expected_count
+            unexpected_count=$(printf '%s' "$unexpected_failed" | grep -c . || true)
+            expected_count=$(printf '%s\n' "$all_failed" | grep -c . || true)
+            unexpected_count="${unexpected_count:-0}"
+            expected_count="${expected_count:-0}"
+
+            if (( unexpected_count == 0 )); then
+                pass_check "systemd is-system-running: degraded (only expected failures: ${expected_count} unit(s) on the readonly-FS allowlist)"
+            else
+                local first_three
+                first_three=$(printf '%s' "$unexpected_failed" | tr '\n' ',' | sed 's/,*$//' | cut -c-200)
+                fail_check "systemd state degraded — ${unexpected_count} unexpected failed unit(s): ${first_three}"
+            fi
             ;;
         *)
             fail_check "systemd state unexpected: '${sys_state:-unknown}'"

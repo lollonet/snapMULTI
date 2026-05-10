@@ -31,8 +31,16 @@ done
 # ── WiFi auto-disable when Ethernet is connected ─────────────────
 # Avoids dual mDNS announcements (clients might connect to the wrong IP).
 # If Ethernet is unplugged or has no IP, WiFi stays active as fallback.
+#
+# `|| true` is required: on WiFi-only devices (Pi Zero 2W, Pi 5 wireless,
+# anything without an `eth0` device) `ip -4 addr show eth0` returns
+# exit 1 ("Device 'eth0' does not exist"). Under `set -euo pipefail`
+# that propagates through the pipeline and the assignment kills the
+# script before reaching the rest of the boot-time tuning. Verified
+# 2026-05-10 on pizero — snapmulti-boot-tune.service was failing in
+# 87 ms with no diagnostic in the journal, every boot.
 if command -v nmcli &>/dev/null; then
-    eth_ip=$(ip -4 addr show eth0 2>/dev/null | awk '/inet /{print $2; exit}')
+    eth_ip=$(ip -4 addr show eth0 2>/dev/null | awk '/inet /{print $2; exit}' || true)
     if [[ -n "$eth_ip" ]]; then
         # Ethernet has an IP — safe to disable WiFi
         nmcli radio wifi off 2>/dev/null \

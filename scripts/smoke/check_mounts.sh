@@ -74,6 +74,37 @@ check_mounts() {
         fail_check "$mount_name unit file missing"
     fi
 
+    # 1.5 Unit-file CONTENT regression guard for the `.automount`
+    # ordering cycle that caused the v0.7.0 first-boot failure on
+    # snapvideo and snapdigi (PR #337). Adding `After=network-online.target`
+    # or `Wants=network-online.target` to the .automount section creates
+    # a cycle (sysinit → local-fs → automount → network-online → ... →
+    # sysinit). systemd resolves it by deleting local-fs.target and
+    # sockets.target — the device boots in a degraded state.
+    #
+    # The systemd-fstab-generator pattern is: ordering on the .mount,
+    # NEVER on the .automount. This assertion enforces that pattern.
+    # `is-enabled` / `is-active` checks above don't catch this — they
+    # would pass even with the wrong directives in the file.
+    if [[ -f "/etc/systemd/system/$automount_name" ]]; then
+        # Strip comments before grepping so a comment that mentions
+        # the directive (e.g. our own NOTE explaining why it must NOT
+        # be there) doesn't false-fail the check.
+        local automount_active_lines
+        automount_active_lines=$(grep -v '^[[:space:]]*#' "/etc/systemd/system/$automount_name" 2>/dev/null || true)
+        if echo "$automount_active_lines" | grep -qE '^[[:space:]]*(After|Wants|Requires|BindsTo)=.*network-online\.target'; then
+            fail_check "$automount_name carries network-online.target ordering (PR #334 regression — boot-time ordering cycle)"
+        else
+            pass_check "$automount_name has no network-online ordering (no boot-time cycle)"
+        fi
+        # nss-lookup is a similar trap — DNS lookups are not needed
+        # before the actual mount fires, only the .mount unit itself
+        # benefits from waiting for nss.
+        if echo "$automount_active_lines" | grep -qE '^[[:space:]]*(After|Wants|Requires|BindsTo)=.*nss-lookup\.target'; then
+            warn "$automount_name carries nss-lookup.target ordering — moving it to .mount avoids unnecessary boot-time dependency"
+        fi
+    fi
+
     # 2. The .automount must be enabled. The .mount must NOT be —
     # eager .mount enable is the regression PR #334 closed.
     local am_state mount_state
