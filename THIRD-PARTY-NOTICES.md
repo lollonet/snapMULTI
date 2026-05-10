@@ -57,20 +57,29 @@ recipe.
 - Note: Spotify Connect protocol is reverse-engineered; snapMULTI does not
   bundle any Spotify proprietary code
 
-### tidal-connect — Tidal Connect receiver (ARM only)
+### tidal-connect — Tidal Connect receiver (ARM only, opt-in)
 
 - Project: <https://github.com/edgecrush3r/tidal-connect-docker>
 - Upstream binary: `ifi-companion` (proprietary, distributed by upstream image)
 - Author of Docker wrapper: edgecrush3r
 - License of the Docker wrapper: GPL-3.0
-- Version: `edgecrush3r/tidal-connect:latest` extended by snapMULTI
-  (`Dockerfile.tidal`)
-- snapMULTI usage: rebuilt with extra runtime libs (libasound2-plugins, tmux)
-  into `lollonet/snapmulti-tidal`
-- **Note**: the underlying `ifi-companion` binary is proprietary Tidal /
-  iFi software shipped by the upstream Docker image; snapMULTI does NOT
-  redistribute it directly. Users who want a 100 % free-software stack should
-  not enable the Tidal source
+- Base image: `edgecrush3r/tidal-connect:latest` (ARM only)
+- snapMULTI build: `Dockerfile.tidal` extends the upstream image with
+  `libasound2-plugins` and `tmux`; the result is published as
+  `lollonet/snapmulti-tidal` (linux/arm64 only)
+- **Distribution disclosure**: `lollonet/snapmulti-tidal` is a derived
+  image. It contains the proprietary `ifi-companion` binary inherited
+  from the upstream layer — snapMULTI does not extract, modify, or
+  re-package the binary, but the published image layer set does include
+  it. Users pulling `lollonet/snapmulti-tidal` are receiving the same
+  binary that ships in `edgecrush3r/tidal-connect:latest`, with snapMULTI's
+  runtime additions on top
+- **Default profile**: Tidal is opt-in and is NOT started by the default
+  `docker compose up`. The service is gated behind the `tidal` profile
+  in `docker-compose.yml` and must be enabled explicitly
+- **For a 100 % free-software stack**: do not enable the `tidal` profile;
+  the other six containers (snapserver, mpd, shairport-sync, go-librespot,
+  metadata, mympd) ship from sources without proprietary binaries
 
 ## Display & visualisation
 

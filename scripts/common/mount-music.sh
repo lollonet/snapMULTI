@@ -29,11 +29,21 @@ if ! declare -F log_info &>/dev/null; then
     }
 fi
 
-# Write a hand-crafted systemd .mount unit for a network share. Unlike
-# /etc/fstab, files in /etc/systemd/system/ are immune to the overlayroot
-# initramfs hook that rewrites paths and strips `nofail` — so the unit
-# survives the first post-overlayroot boot intact and will not promote
-# a transient NFS/SMB miss into a `local-fs.target` failure.
+# Write a hand-crafted systemd .mount + .automount pair for a network share.
+# Unlike /etc/fstab, files in /etc/systemd/system/ are immune to the
+# overlayroot initramfs hook that rewrites paths and strips `nofail` — so
+# the units survive the first post-overlayroot boot intact and will not
+# promote a transient NFS/SMB miss into a `local-fs.target` failure.
+#
+# The `.automount` companion is what is `WantedBy=multi-user.target`. The
+# `.mount` itself is NOT enabled directly — it fires on first access to
+# Where=. This matters for the snapMULTI server unit, which lists
+# `RequiresMountsFor=` only for the project root and audio FIFO dir, NOT
+# for the music library: a lazy automount means snapserver / Spotify /
+# AirPlay / Snapcast start even with the NAS unreachable. MPD inside its
+# container triggers the mount on its first `find /music ...` scan; if
+# the NAS is down the directory stays empty (logged warning, not a unit
+# failure). See PR adding automount for community-launch readiness.
 #
 # Args:
 #   $1 — fs type (nfs, cifs)
@@ -43,7 +53,7 @@ fi
 #   $5 — TimeoutSec value (seconds)
 _write_systemd_mount_unit() {
     local fstype="$1" what="$2" where="$3" options="$4" timeout="${5:-45}"
-    local unit_name unit_path
+    local mount_name automount_name unit_path automount_path
 
     # systemd-escape ships with systemd — hard-fail, do NOT fall back to fstab (see PR #325).
     if ! command -v systemd-escape &>/dev/null; then
@@ -51,8 +61,10 @@ _write_systemd_mount_unit() {
         return 1
     fi
 
-    unit_name="$(systemd-escape -p --suffix=mount "$where")"
-    unit_path="/etc/systemd/system/${unit_name}"
+    mount_name="$(systemd-escape -p --suffix=mount "$where")"
+    automount_name="$(systemd-escape -p --suffix=automount "$where")"
+    unit_path="/etc/systemd/system/${mount_name}"
+    automount_path="/etc/systemd/system/${automount_name}"
 
     cat > "$unit_path" << EOF
 [Unit]
@@ -60,10 +72,8 @@ Description=Mount music share at ${where} (snapMULTI, overlayroot-safe)
 Documentation=man:systemd.mount(5)
 After=network-online.target nss-lookup.target
 Wants=network-online.target
-# Order before the snapMULTI services so MPD/snapserver/snapclient see
-# the share when they start. This is ordering only — not Requires= —
-# so a slow NAS does NOT block the unit graph and cannot route systemd
-# into emergency.target on a transient first-boot miss.
+# Ordering only — NOT Requires=. A slow NAS must not block the unit
+# graph or route systemd into emergency.target on a transient miss.
 Before=snapmulti-server.service snapclient.service
 
 [Mount]
@@ -72,17 +82,34 @@ Where=${where}
 Type=${fstype}
 Options=${options}
 TimeoutSec=${timeout}
+EOF
+    chmod 644 "$unit_path"
+
+    cat > "$automount_path" << EOF
+[Unit]
+Description=Automount music share at ${where} (snapMULTI, lazy)
+Documentation=man:systemd.automount(5)
+# Companion to ${mount_name}. Enabled in [Install]; the .mount itself
+# is fired on first access to Where=. This decouples server startup
+# from NAS reachability — snapserver / Spotify / AirPlay run regardless
+# of whether the music share is currently mountable.
+After=network-online.target nss-lookup.target
+Wants=network-online.target
+
+[Automount]
+Where=${where}
+TimeoutIdleSec=0
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    chmod 644 "$unit_path"
+    chmod 644 "$automount_path"
 
     if systemctl daemon-reload 2>/dev/null \
-       && systemctl enable "$unit_name" >/dev/null 2>&1; then
-        log_info "systemd .mount unit installed: $unit_name"
+       && systemctl enable "$automount_name" >/dev/null 2>&1; then
+        log_info "systemd .mount + .automount installed: $mount_name (lazy)"
     else
-        log_warn "systemd .mount unit installed but enable failed: $unit_name"
+        log_warn "systemd units written but automount enable failed: $automount_name"
     fi
 }
 

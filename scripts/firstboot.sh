@@ -1028,4 +1028,14 @@ for i in 5 4 3 2 1; do
     _tty "  Rebooting in $i..."
     sleep 1
 done
-reboot
+
+# Use `systemctl reboot --no-block` instead of bare `reboot`. firstboot.sh is
+# invoked from cloud-init's runcmd, which runs as a systemd unit
+# (`cloud-final.service`); a synchronous `reboot` from inside an active unit
+# can deadlock against systemd's own shutdown sequencing. `--no-block`
+# returns immediately and lets systemd schedule the reboot through the
+# normal job manager. `sync` first to flush write-back cache; explicit
+# `exit 0` so cloud-init records a successful runcmd.
+sync
+systemctl reboot --no-block
+exit 0
