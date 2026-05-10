@@ -17,6 +17,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common/logging.sh
 source "$SCRIPT_DIR/common/logging.sh"
 
+# Modular check files — sourced after the helper functions are defined
+# (see "Source modular checks" block further down). Each module exposes
+# a single `check_<name>` function and reuses the helpers from this
+# parent script (section, pass_check, fail_check, warn, info). Adding a
+# new check is a matter of dropping a `scripts/smoke/check_*.sh` file
+# and one source + invocation line below.
+SMOKE_MODULES_DIR="$SCRIPT_DIR/smoke"
+
 MODE="auto"
 SERVER_DIR=""
 CLIENT_DIR=""
@@ -263,6 +271,27 @@ require_cmd docker
 require_cmd python3
 require_cmd systemctl
 require_cmd mount
+
+# ── Source modular checks ────────────────────────────────────────────
+# Each file under $SMOKE_MODULES_DIR/check_<name>.sh exposes a single
+# `check_<name>` function. Sourced unconditionally; mode-gating is done
+# inside each module so the wiring here stays declarative.
+if [[ -d "$SMOKE_MODULES_DIR" ]]; then
+    for _smoke_mod in \
+        check_boot_health.sh \
+        check_mounts.sh \
+        check_qos.sh \
+        check_timers.sh \
+        check_system.sh \
+        check_audio_modules.sh \
+    ; do
+        if [[ -f "$SMOKE_MODULES_DIR/$_smoke_mod" ]]; then
+            # shellcheck source=/dev/null
+            source "$SMOKE_MODULES_DIR/$_smoke_mod"
+        fi
+    done
+    unset _smoke_mod
+fi
 
 section "Host"
 info "Mode: $MODE"
@@ -738,6 +767,16 @@ if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
         warn "curl not installed — skipping JSON-RPC + /health + /status checks"
     fi
 fi
+
+# ── Modular checks (boot health, mounts, QoS, timers, system, audio) ──
+# Each function is defined in scripts/smoke/check_<name>.sh and was
+# sourced near the top of this file. Mode-gating happens inside each.
+declare -F check_boot_health    >/dev/null && check_boot_health
+declare -F check_mounts         >/dev/null && check_mounts
+declare -F check_qos            >/dev/null && check_qos
+declare -F check_timers         >/dev/null && check_timers
+declare -F check_system         >/dev/null && check_system
+declare -F check_audio_modules  >/dev/null && check_audio_modules
 
 section "Recent Errors"
 _error_count=0
