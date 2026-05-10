@@ -933,6 +933,19 @@ install_systemd_service() {
     #      clause for exactly the case we wanted to cover.
     #   2. is_network_mount runtime probe — fallback for manual deploys
     #      without mount-music.sh (no MUSIC_SOURCE recorded).
+    # Music library mount handling:
+    #   - Network sources (nfs / smb): use systemd .automount (set up by
+    #     mount-music.sh). These are LAZY — the actual mount fires on first
+    #     access from inside MPD's container, not at boot. Do NOT add the
+    #     mount path to RequiresMountsFor: a hard dependency would block
+    #     snapserver / Spotify / AirPlay / Snapcast startup whenever the
+    #     NAS is slow or unreachable, even though those services don't
+    #     touch the music library at all.
+    #   - Local sources (usb / direct): the kernel mounts these at boot,
+    #     no extra wait required for compose start.
+    #   - Manual / unknown: a runtime probe used to add network-backed
+    #     paths to RequiresMountsFor; that path is now also handled by
+    #     the automount and intentionally left out of the unit clause.
     local music_mount_clause=""
     local music_path_from_env=""
     local music_source_from_env=""
@@ -944,19 +957,15 @@ install_systemd_service() {
        && [[ "$music_path_from_env" != "${PROJECT_ROOT}"* ]]; then
         case "$music_source_from_env" in
             nfs|smb|network)
-                music_mount_clause=" $music_path_from_env"
-                info "Adding $music_path_from_env to RequiresMountsFor (MUSIC_SOURCE=$music_source_from_env)"
+                info "MUSIC_SOURCE=$music_source_from_env — using systemd .automount (lazy), NOT adding $music_path_from_env to RequiresMountsFor"
                 ;;
             "")
-                # No MUSIC_SOURCE persisted — fall back to runtime probe
                 if is_network_mount "$music_path_from_env"; then
-                    music_mount_clause=" $music_path_from_env"
-                    info "Adding $music_path_from_env to RequiresMountsFor (runtime probe: network-backed)"
+                    info "Runtime probe: $music_path_from_env is network-backed — using lazy mount, NOT adding to RequiresMountsFor"
                 fi
                 ;;
             *)
-                # Local source (usb / local) — kernel mounts these at boot,
-                # no extra wait required for compose start.
+                # Local source (usb / local) — kernel mounts these at boot.
                 ;;
         esac
     fi

@@ -57,11 +57,28 @@ assert 'grep -qE "systemd-escape -p --suffix=mount" "$MOUNT_SH"' \
 assert 'grep -qE "/etc/systemd/system/" "$MOUNT_SH"' \
        'unit is written under /etc/systemd/system (overlayroot-safe)'
 
-assert 'grep -qE "systemctl enable.*unit_name" "$MOUNT_SH"' \
-       'helper enables the unit after writing it'
+assert 'grep -qE "systemctl enable.*automount_name" "$MOUNT_SH"' \
+       'helper enables the .automount companion (lazy mount, NOT the .mount itself)'
 
-assert 'grep -qE "^Before=snapmulti-server\\.service snapclient\\.service" "$MOUNT_SH"' \
-       'unit declares Before= ordering vs snapMULTI services (no Requires)'
+assert 'grep -qE "systemd-escape -p --suffix=automount" "$MOUNT_SH"' \
+       'helper computes a sibling .automount unit name'
+
+assert 'grep -qE "\\[Automount\\]" "$MOUNT_SH"' \
+       'helper writes an [Automount] section to the companion unit'
+
+# Idempotency: helper must disable a pre-existing .mount enable before
+# enabling the .automount, so devices that ran earlier versions of
+# mount-music.sh (with systemctl enable on the .mount) end up in a
+# clean state — only .automount in multi-user.target.wants/.
+assert 'grep -qE "systemctl disable .\\\$mount_name" "$MOUNT_SH"' \
+       'helper disables a pre-existing .mount enable before enabling .automount (idempotent)'
+
+# With lazy automount the .mount fires on first access from inside MPD,
+# well after snapmulti-server.service is already running. A boot-time
+# Before= ordering directive in the .mount unit would be dead and
+# mislead readers about the topology.
+assert '! grep -qE "^Before=snapmulti-server\\.service snapclient\\.service" "$MOUNT_SH"' \
+       '.mount unit no longer carries a dead Before= directive (lazy automount makes it irrelevant)'
 
 # Both NFS and SMB branches must call the helper (and NOT write fstab
 # lines for these network shares).
@@ -110,6 +127,23 @@ assert 'echo "$helper_block" | grep -qE "return 1"' \
 # snapMULTI uses reflash as primary update strategy (DEC-003), so there is
 # never a "legacy fstab line" to migrate. The unit file in
 # /etc/systemd/system/ is overwritten idempotently on retry.
+
+echo
+echo "=== deploy.sh — RequiresMountsFor must NOT include music for network sources ==="
+
+# After the lazy-automount fix, snapmulti-server.service no longer has a
+# hard dependency on the network music share. snapserver / Spotify /
+# AirPlay / Snapcast must start regardless of whether the NAS is up.
+DEPLOY_SH="$SCRIPT_DIR/../scripts/deploy.sh"
+
+assert '! grep -qE "music_mount_clause=. \\\$music_path_from_env" "$DEPLOY_SH"' \
+       'deploy.sh does NOT add MUSIC_PATH to RequiresMountsFor for network sources'
+
+assert 'grep -qE "using systemd \\.automount" "$DEPLOY_SH"' \
+       'deploy.sh logs that lazy automount is used for network sources'
+
+assert 'grep -qE "RequiresMountsFor=\\\${PROJECT_ROOT} \\\${PROJECT_ROOT}/audio\\\${music_mount_clause}" "$DEPLOY_SH"' \
+       'RequiresMountsFor template still includes only project_root + audio (clause stays empty for network)'
 
 echo
 echo "=== system-tune.sh — defensive overlayroot setup ==="
