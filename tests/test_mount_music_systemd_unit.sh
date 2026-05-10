@@ -21,9 +21,13 @@
 # overwritten idempotently on retry.
 #
 # Also tests the defensive companion in system-tune.sh:
-#   - update-initramfs is forced after raspi-config do_overlayfs (closes
-#     a transient race where the rebuild lags the kernel modules apt
-#     installed milliseconds earlier).
+#   - The extra `update-initramfs -u -k all` after `do_overlayfs 0` was
+#     REMOVED — verified 2026-05-10 to cause a self-realising
+#     "first-boot needs manual reboot" WARN on both snapvideo and
+#     snapdigi (mkinitramfs aborts because raspi-config has already
+#     activated the overlay). raspi-config's internal `-c -k all` does
+#     the rebuild correctly. Regression guard asserts the extra rebuild
+#     does NOT come back.
 #   - cmdline.txt is sanity-checked for `console=tty1`.
 
 set -euo pipefail
@@ -65,6 +69,33 @@ assert 'grep -qE "systemd-escape -p --suffix=automount" "$MOUNT_SH"' \
 
 assert 'grep -qE "\\[Automount\\]" "$MOUNT_SH"' \
        'helper writes an [Automount] section to the companion unit'
+
+# CRITICAL: the .automount companion must NOT carry network ordering.
+# An `After=network-online.target` / `Wants=network-online.target`
+# inside the .automount block creates a systemd ordering cycle
+# (sysinit → local-fs → automount → network-online → network →
+# sysinit). systemd resolves the cycle by DELETING local-fs.target
+# and sockets.target — first post-overlayroot boot comes up degraded,
+# user observes "device without network", manual power-cycle ensues.
+# Verified live 2026-05-10 on snapvideo + snapdigi.
+#
+# This regression guard parses the .automount heredoc only (between
+# `cat > "$automount_path" << EOF` and the closing `EOF`) and asserts
+# no executable line in that block carries `network-online.target`.
+# The .mount heredoc above legitimately has the directive.
+automount_block=$(awk '
+    /cat > "\$automount_path" << EOF/ {in_block=1; next}
+    in_block && /^EOF$/ {in_block=0; next}
+    in_block {print}
+' "$MOUNT_SH")
+
+if echo "$automount_block" | grep -v "^[[:space:]]*#" | grep -qE "network-online\\.target|nss-lookup\\.target"; then
+    echo "  FAIL: .automount unit carries network-online.target dependency (creates ordering cycle)"
+    fail=$((fail + 1))
+else
+    echo "  PASS: .automount unit has no network-online.target dependency (avoids ordering cycle)"
+    pass=$((pass + 1))
+fi
 
 # Idempotency: helper must disable a pre-existing .mount enable before
 # enabling the .automount, so devices that ran earlier versions of
@@ -148,24 +179,26 @@ assert 'grep -qE "RequiresMountsFor=\\\${PROJECT_ROOT} \\\${PROJECT_ROOT}/audio\
 echo
 echo "=== system-tune.sh — defensive overlayroot setup ==="
 
-assert 'grep -qE "update-initramfs -u -k all" "$SYSTEM_TUNE_SH"' \
-       'setup_readonly_fs forces update-initramfs after raspi-config'
+# Verified 2026-05-10 on snapvideo + snapdigi: an explicit
+# `update-initramfs -u -k all` after `do_overlayfs 0` calls into
+# mkinitramfs which can no longer determine the device for `/`
+# (raspi-config has already activated the overlay) and aborts. The
+# fail was silent BUT the WARN message it emitted was self-realising
+# — both devices required a manual power-cycle on first boot. The
+# correct path is to trust raspi-config's internal `-c -k all` and
+# NOT add an extra `-u` after it. This assertion enforces that the
+# extra rebuild does not come back as a regression.
+# Regression guard: any UNCOMMENTED line invoking `update-initramfs -u -k
+# all` reintroduces the failure mode. Filter shell comments first, then
+# fixed-string match on the call — catches the previous `if update-initramfs
+# ...; then` form, a bare call, a call inside a subshell or variable
+# assignment, etc. The current file legitimately mentions the string in a
+# NOTE comment explaining why the call was removed; that is filtered out.
+assert '! grep -v "^[[:space:]]*#" "$SYSTEM_TUNE_SH" | grep -qF "update-initramfs -u -k all"' \
+       'setup_readonly_fs does NOT call extra update-initramfs after raspi-config (regression guard)'
 
 assert 'grep -qE "console=tty1" "$SYSTEM_TUNE_SH"' \
        'setup_readonly_fs sanity-checks cmdline.txt for console=tty1'
-
-# update-initramfs must run AFTER raspi-config nonint do_overlayfs 0,
-# otherwise the rebuild misses the overlay support raspi-config just
-# enabled.
-raspi_line=$(grep -nE "raspi-config nonint do_overlayfs 0" "$SYSTEM_TUNE_SH" | head -1 | cut -d: -f1)
-initramfs_line=$(grep -nE "update-initramfs -u -k all" "$SYSTEM_TUNE_SH" | head -1 | cut -d: -f1)
-if [[ -n "$raspi_line" && -n "$initramfs_line" && "$initramfs_line" -gt "$raspi_line" ]]; then
-    echo "  PASS: update-initramfs runs AFTER raspi-config do_overlayfs (line $initramfs_line > $raspi_line)"
-    pass=$((pass + 1))
-else
-    echo "  FAIL: update-initramfs ordering wrong (raspi=$raspi_line, initramfs=$initramfs_line)"
-    fail=$((fail + 1))
-fi
 
 echo
 echo "=== Functional smoke test (helper invocation in a sandbox) ==="
