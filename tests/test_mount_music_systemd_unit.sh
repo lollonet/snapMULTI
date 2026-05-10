@@ -161,7 +161,13 @@ echo "=== system-tune.sh — defensive overlayroot setup ==="
 # correct path is to trust raspi-config's internal `-c -k all` and
 # NOT add an extra `-u` after it. This assertion enforces that the
 # extra rebuild does not come back as a regression.
-assert '! grep -qE "^[[:space:]]*if update-initramfs -u -k all" "$SYSTEM_TUNE_SH"' \
+# Regression guard: any UNCOMMENTED line invoking `update-initramfs -u -k
+# all` reintroduces the failure mode. Filter shell comments first, then
+# fixed-string match on the call — catches the previous `if update-initramfs
+# ...; then` form, a bare call, a call inside a subshell or variable
+# assignment, etc. The current file legitimately mentions the string in a
+# NOTE comment explaining why the call was removed; that is filtered out.
+assert '! grep -v "^[[:space:]]*#" "$SYSTEM_TUNE_SH" | grep -qF "update-initramfs -u -k all"' \
        'setup_readonly_fs does NOT call extra update-initramfs after raspi-config (regression guard)'
 
 assert 'grep -qE "console=tty1" "$SYSTEM_TUNE_SH"' \
