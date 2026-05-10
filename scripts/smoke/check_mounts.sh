@@ -34,8 +34,14 @@ check_mounts() {
         info "Server .env not found — mount unit checks skipped"
         return 0
     fi
-    music_source=$(grep '^MUSIC_SOURCE=' "$server_env" 2>/dev/null | cut -d= -f2 | sed 's/[[:space:]]*$//' || true)
-    music_path=$(grep '^MUSIC_PATH=' "$server_env" 2>/dev/null | cut -d= -f2 | sed 's/[[:space:]]*$//' || true)
+    # Strip surrounding quotes — `.env` may store values as
+    # `MUSIC_SOURCE="nfs"` (a sibling .env writer quotes by default).
+    # Without `tr -d '"'` the case match below silently misses and the
+    # entire mount-unit section returns "not network-backed" with no
+    # signal — same pattern used in check_audio_modules.sh and check_qos.sh.
+    # `cut -d= -f2-` (not `-f2`) preserves any '=' inside the value.
+    music_source=$(grep '^MUSIC_SOURCE=' "$server_env" 2>/dev/null | cut -d= -f2- | tr -d '"' | sed 's/[[:space:]]*$//' || true)
+    music_path=$(grep '^MUSIC_PATH=' "$server_env" 2>/dev/null | cut -d= -f2- | tr -d '"' | sed 's/[[:space:]]*$//' || true)
 
     case "$music_source" in
         nfs|smb|network)

@@ -18,10 +18,13 @@
 
 # shellcheck disable=SC2154
 
-# HAT name → list of kernel modules that MUST be loaded (regex per
-# module). Add entries when a new HAT is supported. The regex form
-# allows "snd_soc_pcm512x" to match both `snd_soc_pcm512x` and
-# `snd_soc_pcm512x_i2c` (lsmod normalises underscores).
+# HAT name → list of kernel-module name prefixes that MUST appear in
+# `lsmod` output. Add entries when a new HAT is supported. The lookup
+# at line 78 uses `grep -qF` (fixed-string substring match), so
+# `snd_soc_pcm512x` matches both `snd_soc_pcm512x` and
+# `snd_soc_pcm512x_i2c` (lsmod normalises underscores). Patterns that
+# require real regex (alternation, anchors, character classes) are
+# NOT supported here — `-F` treats brackets etc. as literals.
 declare -A _HAT_MODULES=(
     ["hifiberry-dacplus"]="snd_soc_hifiberry_dacplus snd_soc_pcm512x"
     ["hifiberry-dacplusadc"]="snd_soc_hifiberry_dacplusadc snd_soc_pcm512x"
@@ -74,6 +77,12 @@ check_audio_modules() {
     fi
 
     local missing=() found=()
+    # Word-splitting on $expected is intentional — the value is a
+    # space-separated list of module-name prefixes (see _HAT_MODULES
+    # above). Storing as an array would require a parallel parser for
+    # the literal table; the current form is simpler and safe because
+    # all values are controlled by this file.
+    # shellcheck disable=SC2086
     for mod in $expected; do
         if echo "$lsmod_dump" | awk '{print $1}' | grep -qF "$mod"; then
             found+=("$mod")
