@@ -34,7 +34,7 @@ Scegli una delle due. Entrambe producono una cartella `snapMULTI` accanto al tuo
 
 1. Apri <https://github.com/lollonet/snapMULTI/releases/latest>
 2. In **Assets**, scarica **`Source code (zip)`**
-3. Scompatta. La cartella si chiamerà tipo `snapMULTI-0.7.3` — rinominala in **`snapMULTI`** così i comandi sotto funzionano senza modifiche.
+3. Scompatta. La cartella si chiamerà `snapMULTI-<versione>` (es. `snapMULTI-0.7.3`) — rinominala in **`snapMULTI`** così i comandi sotto funzionano senza modifiche.
 
 **B. Clona con git** (consigliato se hai già git installato — aggiornamenti più facili):
 

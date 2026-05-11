@@ -34,7 +34,7 @@ Pick one. Both end up with a folder called `snapMULTI` next to your prompt.
 
 1. Open <https://github.com/lollonet/snapMULTI/releases/latest>
 2. Under **Assets**, download **`Source code (zip)`**
-3. Unzip it. The folder will be named like `snapMULTI-0.7.3` — rename it to **`snapMULTI`** so the commands below work as-is.
+3. Unzip it. The folder will be named `snapMULTI-<version>` (e.g. `snapMULTI-0.7.3`) — rename it to **`snapMULTI`** so the commands below work as-is.
 
 **B. Clone with git** (recommended if you already have git — easy to update later):
 

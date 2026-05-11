@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Expanded QUICKSTART: ZIP download path, Windows/PowerShell instructions, SSH explainer, HTTP endpoints reference (#348)
+
+### Fixed
+- `prepare-sd.ps1` now copies `docker-driver-reconcile.sh` to the client SD card alongside the bash script — parity fix preventing Docker from silently regressing to `overlay2` on Windows-prepared SDs (#348)
+
 ## [0.7.3] — 2026-05-11
 
 Maintenance release. Closes the upstream go-librespot loadContext crash

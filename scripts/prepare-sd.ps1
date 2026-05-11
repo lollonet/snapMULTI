@@ -496,9 +496,7 @@ function Copy-ClientFiles {
     if (Test-Path $bootTune) {
         Copy-Item $bootTune -Destination $scriptsDest
     }
-    # docker-driver-reconcile.sh — sh side includes it in copy_client_files;
-    # client also needs it for fuse-overlayfs / daemon.json reconciliation
-    # on every boot (prevents Docker silently regressing to overlay2).
+    # client also needs it to prevent Docker silently regressing to overlay2
     $reconcileSh = Join-Path $ScriptDir 'docker-driver-reconcile.sh'
     if (Test-Path $reconcileSh) {
         Copy-Item $reconcileSh -Destination $scriptsDest
