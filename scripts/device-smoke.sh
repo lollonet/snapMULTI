@@ -494,33 +494,64 @@ fi
 # PR #300 (PartOf=avahi-daemon.service) is our workaround. avahi-browse
 # itself is a strict client: a "+" line means PTR-only, "=" means
 # fully resolved with SRV+TXT. Same logic for AirPlay + Spotify.
+# Smoke is per-device validation: this device must publish its own
+# Snapcast / AirPlay / Spotify records on the LAN. Peer servers
+# publishing the same protocols are NOT a substitute — green smoke
+# on snapvideo must mean snapvideo itself is up, not "some other
+# snapMULTI server happens to be visible from here". Filter every
+# protocol to entries whose mDNS hostname (field 7 of avahi-browse
+# `-rpt` output) matches this host's `.local` name.
+#
+# Also closes the AirPlay / Spotify over-count from non-snapMULTI
+# devices: macOS "AirPlay Receiver" on port 7000, Apple TVs, HomePods,
+# AVRs, Echos, Sonos all publish those protocols and would inflate
+# an unfiltered count.
 _check_mdns_service() {
-    local service="$1" label="$2" hint="$3"
-    local resolved_count ptr_count
-    resolved_count=$(timeout 8 avahi-browse -rpt "$service" 2>/dev/null | grep -c '^=' || true)
-    if [[ "$resolved_count" -ge 1 ]]; then
-        pass_check "$label mDNS fully resolves ($resolved_count entry/entries with SRV+TXT)"
+    local service="$1" label="$2" hint="$3" own_host="$4"
+    local browse_out resolved_count ptr_count
+    browse_out=$(timeout 8 avahi-browse -rpt "$service" 2>/dev/null | { grep '^=' || true; })
+    # Keep only `=` lines whose field 7 (hostname, e.g. "snapvideo.local")
+    # equals this device's own .local name. avahi-browse output format:
+    #   =;iface;family;name;type;domain;HOST;addr;port;txt...
+    # Match is case-insensitive: avahi normally lowercases but a custom
+    # hostname with uppercase chars could trip an exact-match filter.
+    local kept="" line host own_lc
+    own_lc=$(tr '[:upper:]' '[:lower:]' <<< "$own_host")
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        host=$(awk -F';' '{print tolower($7)}' <<< "$line")
+        [[ "$host" == "$own_lc" ]] && kept+="$line"$'\n'
+    done <<< "$browse_out"
+    resolved_count=$(printf '%s' "$kept" | { grep -c . || true; })
+    if [[ "${resolved_count:-0}" -ge 1 ]]; then
+        pass_check "$label mDNS fully resolves ($resolved_count entry/entries with SRV+TXT — own record)"
         return
     fi
-    ptr_count=$(timeout 5 avahi-browse -pt "$service" 2>/dev/null | grep -c '^+' || true)
-    if [[ "$ptr_count" -ge 1 ]]; then
-        fail_check "$label mDNS publishes PTR but NO SRV+TXT — strict clients fail. Try \`$hint\`"
+    # Same filter on the PTR-only browse, so we don't surface a peer's
+    # broken PTR-only state as a failure on this device.
+    ptr_count=$(timeout 5 avahi-browse -pt "$service" 2>/dev/null \
+        | awk -F';' -v h="$own_lc" '/^\+/ && tolower($7) == h' \
+        | { grep -c . || true; })
+    if [[ "${ptr_count:-0}" -ge 1 ]]; then
+        fail_check "$label mDNS publishes PTR but NO SRV+TXT for $own_host — strict clients fail. Try \`$hint\`"
     else
         # AirPlay/Spotify can legitimately be invisible if the matching
         # source is disabled in compose-profiles or hasn't been reached
         # by a client yet — demote to warn (not fail) for those.
         if [[ "$service" == "_snapcast._tcp" ]]; then
-            fail_check "$label mDNS not visible at all — check snapserver container + avahi-daemon"
+            fail_check "$label mDNS not visible for $own_host — check snapserver container + avahi-daemon"
         else
-            warn "$label mDNS not visible — service may be disabled or no client has paired yet"
+            warn "$label mDNS not visible for $own_host — service may be disabled or no client has paired yet"
         fi
     fi
 }
 if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
     if command -v avahi-browse >/dev/null 2>&1; then
-        _check_mdns_service "_snapcast._tcp"          "Snapcast" "docker compose restart snapserver"
-        _check_mdns_service "_raop._tcp"              "AirPlay"  "docker compose restart shairport-sync"
-        _check_mdns_service "_spotify-connect._tcp"   "Spotify"  "docker compose restart librespot"
+        _own_mdns_host="$(hostname).local"
+        _check_mdns_service "_snapcast._tcp"        "Snapcast" "docker compose restart snapserver"     "$_own_mdns_host"
+        _check_mdns_service "_raop._tcp"            "AirPlay"  "docker compose restart shairport-sync" "$_own_mdns_host"
+        _check_mdns_service "_spotify-connect._tcp" "Spotify"  "docker compose restart librespot"      "$_own_mdns_host"
+        unset _own_mdns_host
     else
         warn "avahi-browse not installed — skipping all mDNS strict-client checks"
     fi
