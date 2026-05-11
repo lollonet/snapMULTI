@@ -112,12 +112,20 @@ install_dependencies() {
     # quotes/newlines from journalctl/arping output) — jq handles this correctly.
     command -v jq &>/dev/null || pkgs+=(jq)
 
-    # Server: monitoring tools for operational visibility
-    if [[ "$role" == "server" || "$role" == "both" ]]; then
-        command -v sar   &>/dev/null || pkgs+=(sysstat)
-        command -v iotop &>/dev/null || pkgs+=(iotop-c)
-        command -v dstat &>/dev/null || pkgs+=(dstat)
-    fi
+    # Monitoring tools (sar, iostat, mpstat, pidstat from sysstat; iotop-c;
+    # dstat) — useful for ad-hoc troubleshooting on any role. Total cost
+    # is ~4 MB (sysstat ~3 MB, iotop-c ~600 KB, dstat ~80 KB). The Pi Zero
+    # 2W is the device that most needs `iostat -x 1` and `sar -r` during
+    # SD-pressure or RAM-pressure debugging, and it was the only one
+    # without these tools installed.
+    #
+    # Sysstat's *binaries* go everywhere; its *cron collector* (writing
+    # /var/log/sysstat/ every 10 min) stays server-only — see the
+    # systemctl enable block lower in this file. This keeps overlay
+    # tmpfs pressure low on Pi Zero / Pi 3 1 GB.
+    command -v sar   &>/dev/null || pkgs+=(sysstat)
+    command -v iotop &>/dev/null || pkgs+=(iotop-c)
+    command -v dstat &>/dev/null || pkgs+=(dstat)
 
     # Client: audio + HAT detection tools
     if [[ "$role" == "client" || "$role" == "both" ]]; then
@@ -188,8 +196,12 @@ install_dependencies() {
         fi
     fi
 
-    # Enable sysstat data collection (server monitoring)
-    if [[ -f /etc/default/sysstat ]]; then
+    # Enable sysstat data collection (cron collector → /var/log/sysstat/
+    # every 10 min). Server / both only — keeps overlay tmpfs pressure
+    # low on Pi Zero 2W (already at 71 % on freshly-reflashed devices).
+    # The `sar` / `iostat` / `mpstat` binaries are installed everywhere
+    # for ad-hoc operator use; only the continuous writer is role-gated.
+    if [[ "$role" == "server" || "$role" == "both" ]] && [[ -f /etc/default/sysstat ]]; then
         sed -i 's/^ENABLED="false"/ENABLED="true"/' /etc/default/sysstat
         systemctl enable --now sysstat >> "${UNIFIED_LOG:-/dev/null}" 2>&1 || true
     fi
