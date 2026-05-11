@@ -494,16 +494,45 @@ fi
 # PR #300 (PartOf=avahi-daemon.service) is our workaround. avahi-browse
 # itself is a strict client: a "+" line means PTR-only, "=" means
 # fully resolved with SRV+TXT. Same logic for AirPlay + Spotify.
+# `_raop._tcp` and `_spotify-connect._tcp` are NOT snapMULTI-exclusive
+# protocols — any AirPlay receiver (Apple TV, HomePod, macOS "AirPlay
+# Receiver" on port 7000, AVRs, smart speakers) and any Spotify Connect
+# device (Echo, Sonos, IoT smart speakers) on the LAN will inflate the
+# count. The previous form counted ALL resolved entries and produced
+# asymmetric output like "Snapcast=6 / AirPlay=7" — the +1 was a
+# Mac Studio's AirPlay receiver, not a snapMULTI publishing fault.
+#
+# Fix: use `_snapcast._tcp` (only snapMULTI publishes this on the LAN)
+# as the anchor to enumerate snapMULTI hostnames, then filter the
+# AirPlay / Spotify browse output to entries whose mDNS hostname
+# matches one of those — counting only the snapMULTI publications.
 _check_mdns_service() {
-    local service="$1" label="$2" hint="$3"
-    local resolved_count ptr_count
-    resolved_count=$(timeout 8 avahi-browse -rpt "$service" 2>/dev/null | grep -c '^=' || true)
-    if [[ "$resolved_count" -ge 1 ]]; then
-        pass_check "$label mDNS fully resolves ($resolved_count entry/entries with SRV+TXT)"
+    local service="$1" label="$2" hint="$3" filter_hosts="${4:-}"
+    local browse_out resolved_count ptr_count
+    browse_out=$(timeout 8 avahi-browse -rpt "$service" 2>/dev/null | { grep '^=' || true; })
+    if [[ -n "$filter_hosts" && -n "$browse_out" ]]; then
+        # Keep only `=` lines whose field 7 (hostname, e.g. "snapvideo.local")
+        # appears in $filter_hosts (one hostname per line). Format:
+        #   =;iface;family;name;type;domain;HOST;addr;port;txt...
+        local kept="" line host
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            host=$(awk -F';' '{print $7}' <<< "$line")
+            if grep -qxF -- "$host" <<< "$filter_hosts"; then
+                kept+="$line"$'\n'
+            fi
+        done <<< "$browse_out"
+        browse_out="$kept"
+    fi
+    resolved_count=$(printf '%s' "$browse_out" | { grep -c . || true; })
+    if [[ "${resolved_count:-0}" -ge 1 ]]; then
+        local scope=""
+        [[ -n "$filter_hosts" ]] && scope=" (snapMULTI only)"
+        pass_check "$label mDNS fully resolves ($resolved_count entry/entries with SRV+TXT$scope)"
         return
     fi
-    ptr_count=$(timeout 5 avahi-browse -pt "$service" 2>/dev/null | grep -c '^+' || true)
-    if [[ "$ptr_count" -ge 1 ]]; then
+    ptr_count=$(timeout 5 avahi-browse -pt "$service" 2>/dev/null | { grep -c '^+' || true; })
+    if [[ "${ptr_count:-0}" -ge 1 ]]; then
         fail_check "$label mDNS publishes PTR but NO SRV+TXT — strict clients fail. Try \`$hint\`"
     else
         # AirPlay/Spotify can legitimately be invisible if the matching
@@ -518,9 +547,17 @@ _check_mdns_service() {
 }
 if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
     if command -v avahi-browse >/dev/null 2>&1; then
+        # Enumerate snapMULTI hostnames via `_snapcast._tcp` (no filter —
+        # only snapMULTI publishes this protocol). The hostnames are then
+        # used as a filter for the non-exclusive AirPlay / Spotify protocols.
+        # If snapcast itself is invisible the filter is empty AND the
+        # snapcast check below fails loudly — no silent degradation.
+        _snapmulti_mdns_hosts=$(timeout 8 avahi-browse -rpt _snapcast._tcp 2>/dev/null \
+            | awk -F';' '/^=/ {print $7}' | sort -u || true)
         _check_mdns_service "_snapcast._tcp"          "Snapcast" "docker compose restart snapserver"
-        _check_mdns_service "_raop._tcp"              "AirPlay"  "docker compose restart shairport-sync"
-        _check_mdns_service "_spotify-connect._tcp"   "Spotify"  "docker compose restart librespot"
+        _check_mdns_service "_raop._tcp"              "AirPlay"  "docker compose restart shairport-sync" "$_snapmulti_mdns_hosts"
+        _check_mdns_service "_spotify-connect._tcp"   "Spotify"  "docker compose restart librespot"      "$_snapmulti_mdns_hosts"
+        unset _snapmulti_mdns_hosts
     else
         warn "avahi-browse not installed — skipping all mDNS strict-client checks"
     fi
