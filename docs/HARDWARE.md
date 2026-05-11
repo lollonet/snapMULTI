@@ -302,12 +302,12 @@ These hardware combinations have been verified end-to-end (firstboot → smoke t
 
 | Hostname | Pi Model | Audio HAT | DAC chip | Mode | Display | Music Source | Validated | Status |
 |---|---|---|---|---|---|---|---|---|
-| snapvideo | Pi 4 B (8 GB) | HiFiBerry DAC+ | PCM5122 (analog) | both | HDMI 800×600 (cover art display) | local | 2026-04-27 | Working |
-| moniaserver | Pi 4 B (2 GB) | HiFiBerry DAC+ Standard | PCM5122 (analog) | both | headless | USB | 2026-04-27 | Working |
-| snapdigi | Pi 4 B (2 GB) | HiFiBerry Digi+ | WM8804 (S/PDIF) | client | HDMI to LG 50" TV | n/a | 2026-04-27 | Working |
-| piotto | Pi 4 B (2 GB) | none (bcm2835 onboard) | — | client | headless | n/a | 2026-04-27 | Working |
-| moniaclient | Pi 3 B+ (1 GB) | InnoMaker HIFI DAC HAT | PCM5122 (analog) | client | headless | n/a | 2026-04-27 | Working |
-| pizero | Pi Zero 2 W (512 MB) | InnoMaker DAC | PCM5122 (analog) | client | headless | n/a | 2026-04-27 | Working |
+| pi-server | Pi 4 B (8 GB) | HiFiBerry DAC+ | PCM5122 (analog) | both | HDMI 800×600 (cover art display) | local | 2026-04-27 | Working |
+| pi4-2gb-srv | Pi 4 B (2 GB) | HiFiBerry DAC+ Standard | PCM5122 (analog) | both | headless | USB | 2026-04-27 | Working |
+| pi-display | Pi 4 B (2 GB) | HiFiBerry Digi+ | WM8804 (S/PDIF) | client | HDMI to LG 50" TV | n/a | 2026-04-27 | Working |
+| pi4-2gb-cli | Pi 4 B (2 GB) | none (bcm2835 onboard) | — | client | headless | n/a | 2026-04-27 | Working |
+| pi3-1gb-cli | Pi 3 B+ (1 GB) | InnoMaker HIFI DAC HAT | PCM5122 (analog) | client | headless | n/a | 2026-04-27 | Working |
+| pi-zero | Pi Zero 2 W (512 MB) | InnoMaker DAC | PCM5122 (analog) | client | headless | n/a | 2026-04-27 | Working |
 
 **Coverage achieved on 2026-04-27**:
 
@@ -360,7 +360,7 @@ These hardware combinations have been verified end-to-end (firstboot → smoke t
 | tidal-connect | 32 MiB | 64M | 96M | 128M |
 | **Total** | **~309 MiB** | **592M** | **1,056M** | **1,376M** |
 
-> Measured values are idle baselines from snapvideo (Pi 4 8 GB) with all services running and 2 clients connected. Actual usage rises during active playback (librespot can reach ~180 MiB during Spotify streaming) and MPD library scans (proportional to library size — 90 MiB idle with 6,418 songs).
+> Measured values are idle baselines from pi-server (Pi 4 8 GB) with all services running and 2 clients connected. Actual usage rises during active playback (librespot can reach ~180 MiB during Spotify streaming) and MPD library scans (proportional to library size — 90 MiB idle with 6,418 songs).
 
 ### Client Memory Limits by Profile
 
@@ -432,7 +432,7 @@ Two production systems measured in March 2026. Both on 5 GHz WiFi, 64-bit Pi OS,
 
 > CPU % figures are point-in-time samples and vary with playback activity. RAM figures are more stable. The totals below represent a typical streaming-idle state with all services running.
 
-### snapvideo — Server + Client Colocated
+### pi-server — Server + Client Colocated
 
 | Attribute | Value |
 |-----------|-------|
@@ -463,7 +463,7 @@ Two production systems measured in March 2026. Both on 5 GHz WiFi, 64-bit Pi OS,
 
 ---
 
-### snapdigi — Client Only (4K Display)
+### pi-display — Client Only (4K Display)
 
 | Attribute | Value |
 |-----------|-------|
@@ -499,4 +499,4 @@ Two production systems measured in March 2026. Both on 5 GHz WiFi, 64-bit Pi OS,
 | Client only, with display (1080p) | Pi 3 **1 GB** | 1 GB | fb-display + visualizer: ~140 MiB |
 | Client only, with display (4K) | Pi 4 **2 GB** | 2 GB | fb-display at 4K: ~114 MiB, ~66% CPU |
 
-**Thermal:** Both Pi 4 boards ran continuously for days at 58–65°C without thermal throttling (snapvideo 57.9°C, snapdigi 64.7°C). Passive cooling (heatsink case) is sufficient; active cooling (fan) is not required for typical home use.
+**Thermal:** Both Pi 4 boards ran continuously for days at 58–65°C without thermal throttling (pi-server 57.9°C, pi-display 64.7°C). Passive cooling (heatsink case) is sufficient; active cooling (fan) is not required for typical home use.

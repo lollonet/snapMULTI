@@ -302,12 +302,12 @@ Queste combinazioni hardware sono state verificate end-to-end (firstboot → smo
 
 | Hostname | Modello Pi | HAT Audio | Chip DAC | Modalità | Display | Sorgente Musica | Validato | Stato |
 |---|---|---|---|---|---|---|---|---|
-| snapvideo | Pi 4 B (8 GB) | HiFiBerry DAC+ | PCM5122 (analogico) | both | HDMI 800×600 (display cover art) | locale | 2026-04-27 | Funzionante |
-| moniaserver | Pi 4 B (2 GB) | HiFiBerry DAC+ Standard | PCM5122 (analogico) | both | headless | USB | 2026-04-27 | Funzionante |
-| snapdigi | Pi 4 B (2 GB) | HiFiBerry Digi+ | WM8804 (S/PDIF) | client | HDMI verso TV LG 50" | n/d | 2026-04-27 | Funzionante |
-| piotto | Pi 4 B (2 GB) | nessuno (bcm2835 onboard) | — | client | headless | n/d | 2026-04-27 | Funzionante |
-| moniaclient | Pi 3 B+ (1 GB) | InnoMaker HIFI DAC HAT | PCM5122 (analogico) | client | headless | n/d | 2026-04-27 | Funzionante |
-| pizero | Pi Zero 2 W (512 MB) | InnoMaker DAC | PCM5122 (analogico) | client | headless | n/d | 2026-04-27 | Funzionante |
+| pi-server | Pi 4 B (8 GB) | HiFiBerry DAC+ | PCM5122 (analogico) | both | HDMI 800×600 (display cover art) | locale | 2026-04-27 | Funzionante |
+| pi4-2gb-srv | Pi 4 B (2 GB) | HiFiBerry DAC+ Standard | PCM5122 (analogico) | both | headless | USB | 2026-04-27 | Funzionante |
+| pi-display | Pi 4 B (2 GB) | HiFiBerry Digi+ | WM8804 (S/PDIF) | client | HDMI verso TV LG 50" | n/d | 2026-04-27 | Funzionante |
+| pi4-2gb-cli | Pi 4 B (2 GB) | nessuno (bcm2835 onboard) | — | client | headless | n/d | 2026-04-27 | Funzionante |
+| pi3-1gb-cli | Pi 3 B+ (1 GB) | InnoMaker HIFI DAC HAT | PCM5122 (analogico) | client | headless | n/d | 2026-04-27 | Funzionante |
+| pi-zero | Pi Zero 2 W (512 MB) | InnoMaker DAC | PCM5122 (analogico) | client | headless | n/d | 2026-04-27 | Funzionante |
 
 **Copertura raggiunta il 2026-04-27**:
 
@@ -360,7 +360,7 @@ Queste combinazioni hardware sono state verificate end-to-end (firstboot → smo
 | tidal-connect | 32 MiB | 64M | 96M | 128M |
 | **Totale** | **~309 MiB** | **592M** | **1.056M** | **1.376M** |
 
-> I valori misurati sono baseline a riposo da snapvideo (Pi 4 8 GB) con tutti i servizi attivi e 2 client collegati. L'utilizzo effettivo aumenta durante la riproduzione attiva (librespot può raggiungere ~180 MiB durante lo streaming Spotify) e le scansioni della libreria MPD (proporzionale alla dimensione della libreria — 90 MiB a riposo con 6.418 brani).
+> I valori misurati sono baseline a riposo da pi-server (Pi 4 8 GB) con tutti i servizi attivi e 2 client collegati. L'utilizzo effettivo aumenta durante la riproduzione attiva (librespot può raggiungere ~180 MiB durante lo streaming Spotify) e le scansioni della libreria MPD (proporzionale alla dimensione della libreria — 90 MiB a riposo con 6.418 brani).
 
 ### Limiti Memoria Client per Profilo
 
@@ -432,7 +432,7 @@ Due sistemi di produzione misurati a marzo 2026. Entrambi su WiFi 5 GHz, Pi OS 6
 
 > Le percentuali CPU sono campioni puntuali e variano con l'attività di riproduzione. I valori RAM sono più stabili. I totali sotto rappresentano un tipico stato idle con streaming e tutti i servizi attivi.
 
-### snapvideo — Server + Client in Co-locazione
+### pi-server — Server + Client in Co-locazione
 
 | Attributo | Valore |
 |-----------|--------|
@@ -463,7 +463,7 @@ Due sistemi di produzione misurati a marzo 2026. Entrambi su WiFi 5 GHz, Pi OS 6
 
 ---
 
-### snapdigi — Solo Client (Display 4K)
+### pi-display — Solo Client (Display 4K)
 
 | Attributo | Valore |
 |-----------|--------|
@@ -499,4 +499,4 @@ Due sistemi di produzione misurati a marzo 2026. Entrambi su WiFi 5 GHz, Pi OS 6
 | Solo client, con display (1080p) | Pi 3 **1 GB** | 1 GB | fb-display + visualizer: ~140 MiB |
 | Solo client, con display (4K) | Pi 4 **2 GB** | 2 GB | fb-display a 4K: ~114 MiB, ~66% CPU |
 
-**Termico:** Entrambe le schede Pi 4 hanno funzionato continuativamente per giorni a 58–65°C senza throttling termico (snapvideo 57,9°C, snapdigi 64,7°C). Il raffreddamento passivo (case con dissipatore) è sufficiente; il raffreddamento attivo (ventola) non è necessario per l'uso domestico tipico.
+**Termico:** Entrambe le schede Pi 4 hanno funzionato continuativamente per giorni a 58–65°C senza throttling termico (pi-server 57,9°C, pi-display 64,7°C). Il raffreddamento passivo (case con dissipatore) è sufficiente; il raffreddamento attivo (ventola) non è necessario per l'uso domestico tipico.

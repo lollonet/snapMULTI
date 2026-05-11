@@ -37,7 +37,7 @@ done
 # exit 1 ("Device 'eth0' does not exist"). Under `set -euo pipefail`
 # that propagates through the pipeline and the assignment kills the
 # script before reaching the rest of the boot-time tuning. Verified
-# 2026-05-10 on pizero — snapmulti-boot-tune.service was failing in
+# 2026-05-10 on pi-zero — snapmulti-boot-tune.service was failing in
 # 87 ms with no diagnostic in the journal, every boot.
 if command -v nmcli &>/dev/null; then
     eth_ip=$(ip -4 addr show eth0 2>/dev/null | awk '/inet /{print $2; exit}' || true)

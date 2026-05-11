@@ -14,7 +14,7 @@
 # (server+display + multiple containers) the user observes "device came
 # up without network" and force-reboots to recover.
 #
-# Verified live 2026-05-10 on snapvideo + snapdigi after the v0.7.0
+# Verified live 2026-05-10 on pi-server + pi-display after the v0.7.0
 # reflash: PR #334's `.automount` template carried network ordering it
 # should not have, creating exactly this cycle. PR #337 fixed the root
 # cause; this module makes the cycle observable in the smoke gate so a
@@ -86,7 +86,7 @@ check_boot_health() {
         # Debian's daily man-page index regeneration races with the
         # fuse-overlayfs upper layer on /var/cache/man — `mandb` aborts
         # with "Resource temporarily unavailable" (EAGAIN) on overlayroot.
-        # Caught on pi4nohat 2026-05-10: the per-locale subdir creation
+        # Caught on pi4-test 2026-05-10: the per-locale subdir creation
         # (/var/cache/man/pt_BR/<PID>) races with fuse-overlayfs file
         # ops. Not snapMULTI-related and we don't ship man pages anyway.
         "man-db.service"

@@ -82,7 +82,7 @@ check_mounts() {
 
     # 1.5 Unit-file CONTENT regression guard for the `.automount`
     # ordering cycle that caused the v0.7.0 first-boot failure on
-    # snapvideo and snapdigi (PR #337). Adding `After=network-online.target`
+    # pi-server and pi-display (PR #337). Adding `After=network-online.target`
     # or `Wants=network-online.target` to the .automount section creates
     # a cycle (sysinit → local-fs → automount → network-online → ... →
     # sysinit). systemd resolves it by deleting local-fs.target and

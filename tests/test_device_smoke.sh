@@ -112,7 +112,7 @@ chmod +x "$MOCK_BIN/mount"
 
 cat > "$MOCK_BIN/hostname" <<'MOCK'
 #!/usr/bin/env bash
-echo snapvideo
+echo pi-server
 MOCK
 chmod +x "$MOCK_BIN/hostname"
 

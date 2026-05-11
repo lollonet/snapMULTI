@@ -125,7 +125,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.13] — 2026-03-17
 
 ### CI/CD
-- **Fix HOST secret in reusable workflow deploys** ([#fix](https://github.com/lollonet/snapclient-pi)) — GitHub Actions does not expose environment-scoped secrets to `workflow_call` reusable workflows (only `workflow_dispatch`). Changed to explicit `HOST_SNAPVIDEO` / `HOST_SNAPDIGI` repo-level secrets passed via the `secrets:` block. Environment declarations retained for protection rules and deployment tracking.
+- **Fix HOST secret in reusable workflow deploys** ([#fix](https://github.com/lollonet/snapclient-pi)) — GitHub Actions does not expose environment-scoped secrets to `workflow_call` reusable workflows (only `workflow_dispatch`). Changed to explicit `HOST_PI_SERVER` / `HOST_PI_DISPLAY` repo-level secrets passed via the `secrets:` block. Environment declarations retained for protection rules and deployment tracking.
 
 ## [0.2.12] — 2026-03-17
 
@@ -146,7 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Non-root Docker images** ([#86](https://github.com/lollonet/snapclient-pi/pull/86)) — added `USER 1000` and `--chown=1000:1000` to `snapclient`, `audio-visualizer`, and `fb-display` Dockerfiles; pinned `uv:latest` → `uv:0.6.3`
 
 ### CI/CD
-- **GitHub Environments for deploy** ([#85](https://github.com/lollonet/snapclient-pi/pull/85)) — `HOST_SNAPVIDEO`/`HOST_SNAPDIGI` secrets moved to environment-scoped `snapvideo`/`snapdigi` environments; `deploy.yml` declares `environment:` for automatic secret resolution; concurrency group prevents concurrent deploys to same device
+- **GitHub Environments for deploy** ([#85](https://github.com/lollonet/snapclient-pi/pull/85)) — `HOST_PI_SERVER`/`HOST_PI_DISPLAY` secrets moved to environment-scoped `pi-server`/`pi-display` environments; `deploy.yml` declares `environment:` for automatic secret resolution; concurrency group prevents concurrent deploys to same device
 - **Trivy container scanning** ([#87](https://github.com/lollonet/snapclient-pi/pull/87)) — added vulnerability scanning to all build jobs (HIGH/CRITICAL, exit-code 0)
 
 ## [0.2.9] — 2026-03-16
@@ -161,7 +161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.8] — 2026-03-10
 
 ### Added
-- **Automated CI deploy with overlayroot bake** ([#80](https://github.com/lollonet/snapclient-pi/pull/80)) — `deploy.yml` reusable workflow: copies files, pulls images, bakes deployment to SD card lower layer (`/media/root-ro`) so updates survive Pi reboots; `docker-build.yml` calls it for both `snapvideo` and `snapdigi` after all build jobs pass
+- **Automated CI deploy with overlayroot bake** ([#80](https://github.com/lollonet/snapclient-pi/pull/80)) — `deploy.yml` reusable workflow: copies files, pulls images, bakes deployment to SD card lower layer (`/media/root-ro`) so updates survive Pi reboots; `docker-build.yml` calls it for both `pi-server` and `pi-display` after all build jobs pass
 
 ## [0.2.7] - 2026-03-10
 
@@ -176,7 +176,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.5] - 2026-03-10
 
 ### Fixed
-- **Both Versions in Status Line** ([#77](https://github.com/lollonet/snapclient-pi/pull/77)) — Status bar now shows client *and* server versions simultaneously (e.g. `192.168.x.x → snapvideo • v0.2.5 / srv 0.3.7`). Previously only one was shown (fallback logic). Displays whichever subset is available.
+- **Both Versions in Status Line** ([#77](https://github.com/lollonet/snapclient-pi/pull/77)) — Status bar now shows client *and* server versions simultaneously (e.g. `192.0.2.x → pi-server • v0.2.5 / srv 0.3.7`). Previously only one was shown (fallback logic). Displays whichever subset is available.
 
 ### Documentation
 - **Docs Suite Updated to v0.2.4** — Corrected field names (`elapsed`/`playing`/`artwork` replacing stale names), added `server_info` message type, fixed spectrum wire format (semicolon-delimited, not JSON), added new env vars, updated test counts (109 pytest + 22 shell), updated WBS with v0.2.2–v0.2.4 features.
@@ -184,7 +184,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.4] - 2026-03-09
 
 ### Added
-- **Server version in status bar** ([#76](https://github.com/lollonet/snapclient-pi/pull/76)) — Bottom bar now shows the snapMULTI server version received via WebSocket `server_info` message (e.g. `192.168.x.x  →  snapvideo  v0.3.7`). Falls back to `APP_VERSION` env var when no WS data is available yet
+- **Server version in status bar** ([#76](https://github.com/lollonet/snapclient-pi/pull/76)) — Bottom bar now shows the snapMULTI server version received via WebSocket `server_info` message (e.g. `192.0.2.x  →  pi-server  v0.3.7`). Falls back to `APP_VERSION` env var when no WS data is available yet
 - **App version in status bar** ([#75](https://github.com/lollonet/snapclient-pi/pull/75)) — `APP_VERSION` env var (set by `setup.sh` from git tag) shown in bottom bar as fallback when server version is not yet available
 
 ## [0.2.3] - 2026-03-07
@@ -208,7 +208,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.2] - 2026-03-07
 
 ### Added
-- **LAN IP and Snapserver in Display** ([#68](https://github.com/lollonet/snapclient-pi/pull/68)) - Status line in bottom bar shows `192.168.63.5 → snapvideo.local` for easy identification of client and server
+- **LAN IP and Snapserver in Display** ([#68](https://github.com/lollonet/snapclient-pi/pull/68)) - Status line in bottom bar shows `192.0.2.5 → pi-server.local` for easy identification of client and server
 - **mDNS Auto-Discovery for Server Failover** ([#70](https://github.com/lollonet/snapclient-pi/pull/70)) - fb-display discovers alternative snapservers via `_snapcast._tcp` mDNS after 3 failed reconnects; switches server and updates status line automatically
 
 ### Fixed
@@ -307,7 +307,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Python 3.13** - Upgraded all Python Docker images from 3.11-slim to 3.13-slim (metadata-service, audio-visualizer, fb-display)
-- **CI Parallelization** - All 4 Docker image builds now run in parallel (removed sequential dependencies). Deployed 4 self-hosted runners on raspy for faster builds (~3 min vs ~12 min)
+- **CI Parallelization** - All 4 Docker image builds now run in parallel (removed sequential dependencies). Deployed 4 self-hosted runners on ci-runner-x86 for faster builds (~3 min vs ~12 min)
 - **Documentation Updates** - Synced README, CLAUDE.md, and CHANGELOG with current project state
 - **Code Architecture** ([#36](https://github.com/lollonet/snapclient-pi/pull/36)) - Consolidated code duplication across three areas:
   - Removed dead font wrapper functions (simplified API)

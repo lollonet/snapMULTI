@@ -485,10 +485,10 @@ class TestGetLanIp:
             "getaddrinfo",
             lambda *a, **kw: [
                 (socket.AF_INET, socket.SOCK_DGRAM, 0, "", ("127.0.0.1", 0)),
-                (socket.AF_INET, socket.SOCK_DGRAM, 0, "", ("192.168.63.104", 0)),
+                (socket.AF_INET, socket.SOCK_DGRAM, 0, "", ("192.0.2.104", 0)),
             ],
         )
-        assert fb_display._get_lan_ip() == "192.168.63.104"
+        assert fb_display._get_lan_ip() == "192.0.2.104"
 
     def test_fallback_on_total_failure(self, monkeypatch):
         import socket
@@ -514,7 +514,7 @@ class TestDiscoverSnapservers:
 
         class FakeZeroconf:
             def get_service_info(self, type_, name):
-                return FakeServiceInfo([b"\xc0\xa8\x3f\x68"])  # 192.168.63.104
+                return FakeServiceInfo([b"\xc0\xa8\x3f\x68"])  # 192.0.2.104
 
             def close(self):
                 pass
@@ -533,7 +533,7 @@ class TestDiscoverSnapservers:
         monkeypatch.setitem(sys.modules, "zeroconf", fake_zeroconf_mod)
 
         servers = asyncio.run(fb_display.discover_snapservers(timeout=0.1))
-        assert "192.168.63.104" in servers
+        assert "192.0.2.104" in servers
 
     def test_empty_discovery(self, monkeypatch):
         """No servers found returns empty list."""
@@ -647,8 +647,8 @@ class TestVersionSuffix:
     def test_status_text_format(self):
         """Full status_text assembles correctly."""
         suffix = self._compute_suffix("v0.2.4", "0.3.7")
-        status = f"192.168.1.1  →  snapvideo{suffix}"
-        assert status == "192.168.1.1  →  snapvideo  •  v0.2.4  /  srv 0.3.7"
+        status = f"192.168.1.1  →  pi-server{suffix}"
+        assert status == "192.168.1.1  →  pi-server  •  v0.2.4  /  srv 0.3.7"
 
 
 class TestIsSpectrumActive:

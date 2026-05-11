@@ -108,8 +108,8 @@ Documentation=man:systemd.automount(5)
 # sockets.target / systemd-update-done.service — degrading the first
 # post-overlayroot boot in ways that surface as "device came up
 # without network" and force the user to power-cycle. Verified
-# empirically on snapvideo + snapdigi (2026-05-10 v0.7.0 reflash);
-# pi3hat (minimal headless) survived the same cycle by chance.
+# empirically on pi-server + pi-display (2026-05-10 v0.7.0 reflash);
+# pi3-1gb (minimal headless) survived the same cycle by chance.
 # Pattern matches systemd-fstab-generator: ordering only on .mount,
 # never on .automount.
 

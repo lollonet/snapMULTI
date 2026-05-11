@@ -139,7 +139,7 @@ assert 'echo "$quiet_block" | grep -qE "if ! grep -qE.*CMDLINE_FILE"' \
 # CRITICAL ORDERING #1: the quiet-boot block MUST run BEFORE
 # `bash scripts/setup.sh`. setup.sh itself runs `raspi-config nonint
 # do_overlayfs 0` (around setup.sh:1369) which remounts /boot/firmware
-# READ-ONLY immediately. Verified live on snapvideo (post-PR-#320
+# READ-ONLY immediately. Verified live on pi-server (post-PR-#320
 # reflash): patcher logged `cmdline: failed to add '<flag>'` × 5 with
 # /boot/firmware already ro because setup.sh had run first.
 quiet_line=$(grep -nE "^[[:space:]]*for flag in .*systemd\\.show_status" "$FIRSTBOOT" | head -1 | cut -d: -f1)

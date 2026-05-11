@@ -28,7 +28,7 @@ The framebuffer display uses a fixed layout with four main areas:
 │   │  ━━━━━━━━━━━━━━━━━━━━━━━━░░░░░░░  1:23 / 5:54       │   │
 │   └─────────────────────────────────────────────────────┘   │
 │                                                             │
-│      192.168.12.5  →  snapvideo  •  v0.2.19  /  srv 0.3.14  │
+│      192.0.2.5  →  pi-server  •  v0.2.19  /  srv 0.3.14  │
 │   ┌──────┐        Thu 05 Mar · 14:32:18        ┌────────┐   │
 │   │ LOGO │                                     │ VOL 90 │   │
 │   └──────┘                                     └────────┘   │
@@ -63,7 +63,7 @@ Format string: `CODEC · SAMPLE_RATE · BIT_DEPTH` (e.g., `FLAC · 44.1kHz · 16
 Centered above the bottom bar, shows client identity and version in dim text:
 
 ```
-192.168.63.104  →  snapvideo  •  v0.2.19  /  srv 0.3.14
+192.0.2.104  →  pi-server  •  v0.2.19  /  srv 0.3.14
 ```
 
 | Part | Source | Fallback |

@@ -2,12 +2,12 @@ name: Deploy to Home Server
 
 on:
   workflow_dispatch:
-    # Manual dispatch: HOST comes from the HOST_SNAPVIDEO repo-level secret (environment: still applies for protection rules).
+    # Manual dispatch: HOST comes from the HOST_PI_SERVER repo-level secret (environment: still applies for protection rules).
     inputs:
       environment_name:
         description: 'Target environment'
         required: false
-        default: 'snapvideo'
+        default: 'pi-server'
   workflow_call:
     inputs:
       environment_name:
