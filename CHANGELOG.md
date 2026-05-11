@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Snapweb builder base image bumped from `node:24-alpine3.21` to `node:24-alpine3.23`** — the snapweb (Snapcast web UI) build stage in `Dockerfile.snapserver` was the only image in the stack still on Alpine 3.21; every other layer (`Dockerfile.snapserver` final stage, `Dockerfile.mpd`, `Dockerfile.shairport-sync`, `Dockerfile.metadata` base) is on Alpine 3.23. Internal inconsistency, not a security issue — the snapweb-builder stage is discarded after `npm run build` and only its `/build/dist` output is copied into the final image — but the version skew showed up during a 2026-05-11 upstream survey and there's no reason to keep two Alpine majors in the same build. New digest pinned: `sha256:d1b3b4da11eefd5941e7f0b9cf17783fc99d9c6fc34884a665f40a06dbdfc94f` (multi-arch OCI manifest index covering amd64 + arm64/v8 + s390x). The npm workaround comment for npm/cli#4828 (delete `package-lock.json` + `npm install` to avoid cross-arch rollup/swc native binding fail) remains valid on Node 24 / Alpine 3.23
+
 ## [0.7.2] — 2026-05-11
 
 Bug-fix release on top of v0.7.1. v0.7.1 shipped Docker images correctly
