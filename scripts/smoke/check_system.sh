@@ -244,14 +244,29 @@ check_system() {
         fi
     fi
 
-    # 7. WiFi rekey / disconnect rate. The BCM43430 driver on Pi Zero 2W
-    # and Pi 3B+ has a known pattern where mesh-WiFi networks (multiple
-    # APs with the same SSID) trigger "nl80211: kernel reports: key
-    # addition failed" → CTRL-EVENT-DISCONNECTED → reassociate ~every
-    # 10-20 min. Snapclient interprets the brief outage as "server
-    # gone" and the user perceives it as "device rebooting". Count
-    # these events in the last hour: 0-3 normal, 4-10 noisy mesh,
-    # >10 sustained issue.
+    # 7. WiFi rekey / disconnect rate. Warn-only metric.
+    #
+    # Counts CTRL-EVENT-DISCONNECTED / key addition failed / Failed to
+    # set GTK in wpa_supplicant journal over the last hour. The events
+    # are caused by GTK rotation timeouts in the Broadcom firmware
+    # (brcmfmac43430b0-sdio.bin on Pi Zero 2W is the prime example);
+    # they're independent of WiFi power_save (system-tune.sh already
+    # disables that at firstboot via NetworkManager dispatcher hook).
+    #
+    # Each event is a ~1-2s WiFi blip — snapclient TCP recovers,
+    # multiroom audio resyncs. So this check is for *operator
+    # visibility*, not for gating: a high count points at either a
+    # mesh network with aggressive rekey schedule or a firmware bug
+    # the operator can't fix from the smoke. Never fail — fail would
+    # block release-gate on hardware/network conditions outside our
+    # control.
+    #
+    # Thresholds:
+    #   0           → pass
+    #   1-3         → info (normal residential mesh)
+    #   4-10        → warn (noisy mesh / aggressive AP rekey)
+    #   >10         → warn (sustained — points at BCM43430 + mesh,
+    #                       consider pinning bssid in wpa_supplicant.conf)
     if [[ "$wlan_state" == "up" ]] && command -v journalctl >/dev/null 2>&1; then
         local disconnect_count
         disconnect_count=$(journalctl -u wpa_supplicant.service \
@@ -263,9 +278,9 @@ check_system() {
         elif (( disconnect_count <= 3 )); then
             info "WiFi: $disconnect_count rekey/disconnect events in last hour (normal range)"
         elif (( disconnect_count <= 10 )); then
-            warn "WiFi: $disconnect_count rekey/disconnect events in last hour — noisy mesh or roaming (snapclient may see brief outages)"
+            warn "WiFi: $disconnect_count rekey/disconnect events in last hour — noisy mesh or aggressive AP rekey (snapclient brief blips, TCP recovers)"
         else
-            fail_check "WiFi: $disconnect_count rekey/disconnect events in last hour — driver instability (BCM43430 + mesh pattern). Consider pinning bssid in wpa_supplicant.conf"
+            warn "WiFi: $disconnect_count rekey/disconnect events in last hour — sustained (likely BCM43430 firmware + mesh roaming; consider pinning bssid in wpa_supplicant.conf)"
         fi
     fi
 }
