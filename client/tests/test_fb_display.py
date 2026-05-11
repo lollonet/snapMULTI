@@ -514,7 +514,7 @@ class TestDiscoverSnapservers:
 
         class FakeZeroconf:
             def get_service_info(self, type_, name):
-                return FakeServiceInfo([b"\xc0\xa8\x3f\x68"])  # 192.0.2.104
+                return FakeServiceInfo([b"\xc0\x00\x02\x68"])  # 192.0.2.104 (0xc0.0x00.0x02.0x68)
 
             def close(self):
                 pass
