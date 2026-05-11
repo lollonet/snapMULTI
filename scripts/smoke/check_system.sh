@@ -132,7 +132,12 @@ check_system() {
     if (( total_mb >= 3500 )); then
         floor_warn=1024; floor_fail=800;  expected_class="≥4 GB Pi"
     elif (( total_mb >= 900 )); then
-        floor_warn=200;  floor_fail=150;  expected_class="1-2 GB Pi"
+        # Pi 3B+ 1 GB on a clean reflash gets 191 MB (~20% of 955 MB MemTotal);
+        # boot-tune.sh does not remount /run (only the overlayroot tmpfs) and
+        # systemd-default has been observed adequate for the containerd
+        # self-heal pattern. 180 MB lets the systemd default pass cleanly
+        # while still catching genuine misconfiguration (<150 MB = fail).
+        floor_warn=180;  floor_fail=150;  expected_class="1-2 GB Pi"
     else
         floor_warn=80;   floor_fail=60;   expected_class="<1 GB Pi (Zero/Zero 2W)"
     fi
