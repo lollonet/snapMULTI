@@ -205,7 +205,10 @@ else
     smoke_json="{}"
 fi
 [ -z "$smoke_json" ] && smoke_json="{}"
-printf '{"srv":"%s","cli":"%s","smoke":%s}\n' "$srv" "$cli" "$smoke_json"
+# Use jq -n to safely escape srv/cli/smoke_json — printf would emit broken
+# JSON if VERSION contains a double-quote or backslash.
+printf '%s' "$smoke_json" | jq -nc --arg srv "$srv" --arg cli "$cli" \
+    '{srv:$srv, cli:$cli, smoke:(input // {})}'
 REMOTE
     ); then
         # SSH or smoke timed out / failed
@@ -240,16 +243,24 @@ done
 mapfile -t RECORDS < <(cat "$TMP"/*.json 2>/dev/null)
 ALL=$(printf '%s\n' "${RECORDS[@]}" | jq -s '.')
 
+# ── Compute overall pass/fail (shared by text + JSON output) ─────
+# A host counts as a failure if it's unreachable OR if smoke recorded at
+# least one fail. Calculated up-front so --json consumers get a proper
+# exit code (was 0 unconditionally before).
+overall_fail=$(jq '
+    [.[] | select(.reachable==false or ([.smoke.records[]? | select(.status=="fail")] | length > 0))]
+    | length > 0 | if . then 1 else 0 end' <<<"$ALL")
+
 # ── Render ───────────────────────────────────────────────────────
 if [[ "$OUTPUT" == "json" ]]; then
     jq --arg server "$SERVER" \
        '{server:$server, generated_at: (now | todate), hosts:.}' <<<"$ALL"
+    exit "$overall_fail"
 else
     printf '\nFleet smoke against %s — %s\n\n' "$SERVER" "$(date -u +%FT%TZ)"
     printf '%-20s %-7s %-15s %-7s %-6s %-30s\n' "HOST" "ROLE" "VERSION" "SMOKE" "FAILS" "NOTES"
     printf '%-20s %-7s %-15s %-7s %-6s %-30s\n' \
         "--------------------" "-------" "---------------" "-------" "------" "------------------------------"
-    overall_fail=0
     while IFS= read -r rec; do
         host=$(jq -r '.host' <<<"$rec")
         role=$(jq -r '.role' <<<"$rec")
@@ -257,7 +268,6 @@ else
         if [[ "$reachable" != "true" ]]; then
             printf '%-20s %-7s %-15s %-7s %-6s %-30s\n' \
                 "$host" "$role" "—" "UNREACH" "—" "$(jq -r '.error // .parse_error // "?"' <<<"$rec")"
-            overall_fail=1
             continue
         fi
         srv=$(jq -r '.versions.server // ""' <<<"$rec")
@@ -282,7 +292,6 @@ else
             status="PASS"
         else
             status="FAIL"
-            overall_fail=1
         fi
         notes=""
         if [[ "$fails" != "0" ]]; then
