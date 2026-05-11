@@ -388,6 +388,13 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         cp "$SNAP_BOOT/server/boot-tune.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/status.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/device-smoke.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
+        # Modular smoke checks dir — device-smoke.sh sources
+        # $SCRIPT_DIR/smoke/check_*.sh at runtime; without -r the
+        # subdirectory never reaches /opt/snapmulti/scripts/ and the
+        # 6 new check modules silently fail to load.
+        if [[ -d "$SNAP_BOOT/server/smoke" ]]; then
+            cp -r "$SNAP_BOOT/server/smoke" "$SERVER_DIR/scripts/" 2>/dev/null || true
+        fi
         cp "$SNAP_BOOT/server/docker-driver-reconcile.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/ro-mode.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/.version" "$SERVER_DIR/" 2>/dev/null || true

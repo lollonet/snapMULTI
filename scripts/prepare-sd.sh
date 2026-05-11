@@ -333,6 +333,13 @@ copy_server_files() {
     cp "$SCRIPT_DIR/boot-tune.sh" "$dest/" 2>/dev/null || true
     cp "$SCRIPT_DIR/status.sh" "$dest/" 2>/dev/null || true
     cp "$SCRIPT_DIR/device-smoke.sh" "$dest/" 2>/dev/null || true
+    # Modular smoke checks (scripts/smoke/check_*.sh) — sourced by
+    # device-smoke.sh at runtime. v0.7.1 shipped device-smoke.sh aware
+    # of $SMOKE_MODULES_DIR but forgot to copy the dir itself, so the
+    # 6 new sections (Boot Health, Mounts content, QoS, System,
+    # Timers, Audio Modules) silently never ran. Without `-r` the
+    # subdirectory is missed.
+    [[ -d "$SCRIPT_DIR/smoke" ]] && cp -r "$SCRIPT_DIR/smoke" "$dest/" 2>/dev/null || true
     cp "$SCRIPT_DIR/docker-driver-reconcile.sh" "$dest/" 2>/dev/null || true
     # ro-mode helper (client has its own copy, server needs one too)
     [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/"
@@ -400,6 +407,11 @@ copy_client_files() {
     [[ -f "$SCRIPT_DIR/boot-tune.sh" ]] && cp "$SCRIPT_DIR/boot-tune.sh" "$dest/scripts/"
     [[ -f "$SCRIPT_DIR/docker-driver-reconcile.sh" ]] && cp "$SCRIPT_DIR/docker-driver-reconcile.sh" "$dest/scripts/"
     [[ -f "$SCRIPT_DIR/device-smoke.sh" ]] && cp "$SCRIPT_DIR/device-smoke.sh" "$dest/scripts/"
+    # Modular smoke checks (see copy_server_files for context). Client
+    # firstboot path does `cp -r .../client/*` recursively so once
+    # smoke/ lands in the boot/client/scripts/ tree it propagates
+    # automatically to /opt/snapclient/scripts/smoke/.
+    [[ -d "$SCRIPT_DIR/smoke" ]] && cp -r "$SCRIPT_DIR/smoke" "$dest/scripts/" 2>/dev/null || true
     [[ -f "$CLIENT_DIR/common/scripts/audio-hat-detect.sh" ]] && cp "$CLIENT_DIR/common/scripts/audio-hat-detect.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/discover-server.sh" ]] && cp "$CLIENT_DIR/common/scripts/discover-server.sh" "$dest/scripts/"
