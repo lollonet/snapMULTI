@@ -52,7 +52,7 @@ recipe.
 - Project: <https://github.com/devgianlu/go-librespot>
 - Author: devgianlu
 - License: LGPL-3.0
-- Version pinned: `v0.7.0` (`ghcr.io/devgianlu/go-librespot:v0.7.0` in
+- Version pinned: `v0.7.1` (`ghcr.io/devgianlu/go-librespot:v0.7.1` in
   `docker-compose.yml`, image used as-is, not rebuilt)
 - Note: Spotify Connect protocol is reverse-engineered; snapMULTI does not
   bundle any Spotify proprietary code

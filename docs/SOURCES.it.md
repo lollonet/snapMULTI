@@ -216,7 +216,7 @@ SPOTIFY_NAME="Spotify Salotto"
 3. Tocca **Connetti a un dispositivo**
 4. Seleziona **"<hostname> Spotify"** (es. "raspberrypi Spotify")
 
-**Immagine Docker:** `ghcr.io/devgianlu/go-librespot:v0.7.0` (upstream, nessuna build personalizzata)
+**Immagine Docker:** `ghcr.io/devgianlu/go-librespot:v0.7.1` (upstream, nessuna build personalizzata)
 
 ---
 
