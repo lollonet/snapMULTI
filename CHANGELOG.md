@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`scripts/fleet-smoke.sh` — single-command fleet smoke from operator machine** — discovers a snapMULTI cluster from one server (mDNS auto-discovery via `_snapcast._tcp`, or explicit `--server HOST`), walks the Snapcast JSON-RPC `Server.GetStatus` to enumerate every currently-connected client, then SSHs in parallel to every reachable host to read `/opt/snapmulti/VERSION` + `/opt/snapclient/VERSION` and invoke `device-smoke.sh --json --no-fail-on-warn`. Output is a single text table (host / role / version / smoke / failures / notes) or one structured JSON object with `--json` for piping to a dashboard or alerting system. Non-snapMULTI peers that wander into the snapcast client list (e.g. macOS "AirPlay Receiver" hosts mistakenly published as `_snapcast._tcp`-adjacent) are auto-flagged "non-snapMULTI" instead of failing the smoke. No Ansible / Salt / config-management dependency — pure bash + curl + jq + ssh, runs from macOS or any Linux. Handles macOS's missing `timeout` by falling back to `gtimeout` (if `brew install coreutils`) or running without a hard kill (SSH `ConnectTimeout` still bounds the connect phase). Useful for: post-reflash sanity (compare versions across the fleet), spotting hot-deploy drift (a device still on the old smoke version after PRs landed), and routine health checks before a release tag.
+
 ## [0.7.3] — 2026-05-11
 
 Maintenance release. Closes the upstream go-librespot loadContext crash
