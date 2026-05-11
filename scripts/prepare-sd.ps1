@@ -496,6 +496,11 @@ function Copy-ClientFiles {
     if (Test-Path $bootTune) {
         Copy-Item $bootTune -Destination $scriptsDest
     }
+    # client also needs it to prevent Docker silently regressing to overlay2
+    $reconcileSh = Join-Path $ScriptDir 'docker-driver-reconcile.sh'
+    if (Test-Path $reconcileSh) {
+        Copy-Item $reconcileSh -Destination $scriptsDest
+    }
     $smokeSh = Join-Path $ScriptDir 'device-smoke.sh'
     if (Test-Path $smokeSh) {
         Copy-Item $smokeSh -Destination $scriptsDest
