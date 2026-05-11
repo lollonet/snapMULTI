@@ -1,0 +1,184 @@
+name: Upstream Release Check
+
+# Watches upstream projects we pin (Snapcast, go-librespot, myMPD,
+# shairport-sync) for new releases. Dependabot only handles Dockerfile
+# FROM lines — it does NOT scan ARG-pinned versions
+# (e.g. Dockerfile.snapserver:ARG SNAPCAST_TAG=v0.35.0) nor the
+# image:tag pins inside docker-compose.yml (e.g. go-librespot).
+#
+# When a pinned project ships a new release we open (or re-open) a
+# single tracking issue labelled `upstream-bump`. The issue includes
+# the current pin, the new tag, and a link to upstream release notes.
+# The reviewer can then decide whether to land a bump PR (manual,
+# since each upstream needs different care: Snapcast pinned
+# deliberately, go-librespot crashes need real testing, etc.).
+#
+# This is intentionally conservative — we file an issue and stop,
+# rather than auto-opening a PR like Dependabot. Avoids surprise
+# breakage on a project with hardware-in-the-loop validation.
+#
+# Security note: matrix values are static and workflow-controlled,
+# but we still route every value through `env:` so a future edit
+# that pulls from PR / comment context can't introduce injection.
+
+on:
+  schedule:
+    # Mondays 06:00 UTC — early enough that the issue is visible
+    # at the start of the work week and not racing with timezone
+    # release cadences (most upstream releases land mid-week).
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: snapcast
+            repo: badaix/snapcast
+          - name: go-librespot
+            repo: devgianlu/go-librespot
+          - name: myMPD
+            repo: jcorporation/myMPD
+          - name: shairport-sync
+            repo: mikebrady/shairport-sync
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve latest upstream and pinned versions
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ matrix.name }}
+          REPO: ${{ matrix.repo }}
+        run: |
+          set -euo pipefail
+
+          # `releases/latest` excludes pre-releases; switch to
+          # `releases?per_page=1` if a project starts using pre-releases
+          # we want to track.
+          latest=$(gh api "repos/${REPO}/releases/latest" --jq .tag_name)
+
+          # Per-upstream extraction logic. Kept as a case statement
+          # (not a matrix field) so untrusted input can never reach
+          # the shell — every branch is reviewable in one place.
+          case "${NAME}" in
+            snapcast)
+              # ARG SNAPCAST_TAG=v0.35.0 in Dockerfile.snapserver
+              pinned=$(grep -oE 'SNAPCAST_TAG=v[0-9.]+' Dockerfile.snapserver \
+                       | head -1 | cut -d= -f2)
+              ;;
+            go-librespot)
+              # image: ghcr.io/devgianlu/go-librespot:v0.7.1
+              pinned=$(grep -oE 'devgianlu/go-librespot:v[0-9.]+' docker-compose.yml \
+                       | head -1 | cut -d: -f2)
+              ;;
+            myMPD)
+              # Pinned as `:latest` — always flag the upstream tag as
+              # informational so reviewer can decide if reproducibility
+              # is worth pinning.
+              pinned=':latest'
+              ;;
+            shairport-sync)
+              # Installed via Alpine apk — upstream tag rarely matches
+              # Alpine's bundled version. Surface upstream cadence so
+              # reviewer can decide when to bump Alpine vs. switch to
+              # a source build.
+              pinned='alpine-apk'
+              ;;
+            *)
+              echo "::error::Unknown matrix name: ${NAME}"
+              exit 1
+              ;;
+          esac
+
+          notes_url="https://github.com/${REPO}/releases/tag/${latest}"
+
+          {
+            echo "latest=${latest}"
+            echo "pinned=${pinned}"
+            echo "notes_url=${notes_url}"
+          } >> "$GITHUB_OUTPUT"
+          echo "latest=${latest} pinned=${pinned}"
+
+          # Stale = pinned doesn't equal the upstream tag. For the
+          # `:latest` and `alpine-apk` pseudo-pins we always flag
+          # stale (the issue is informational, not blocking).
+          if [[ "${pinned}" == "${latest}" ]]; then
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Look up existing open tracking issue for this version
+        id: existing
+        if: steps.resolve.outputs.stale == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ matrix.name }}
+          LATEST: ${{ steps.resolve.outputs.latest }}
+        run: |
+          set -euo pipefail
+          # De-dupe on title — search for "[upstream] <name> <latest>"
+          # in the issue title; if found, skip filing a duplicate.
+          # Restrict to open issues with the upstream-bump label so we
+          # don't reopen something the user already closed as "won't bump".
+          existing=$(gh issue list \
+            --state open \
+            --label upstream-bump \
+            --search "in:title [upstream] ${NAME} ${LATEST}" \
+            --json number --jq '.[0].number // ""')
+          echo "num=${existing}" >> "$GITHUB_OUTPUT"
+          if [[ -n "${existing}" ]]; then
+            echo "Already tracked: #${existing}"
+          fi
+
+      - name: Open tracking issue
+        if: steps.resolve.outputs.stale == 'true' && steps.existing.outputs.num == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ matrix.name }}
+          REPO: ${{ matrix.repo }}
+          LATEST: ${{ steps.resolve.outputs.latest }}
+          PINNED: ${{ steps.resolve.outputs.pinned }}
+          NOTES: ${{ steps.resolve.outputs.notes_url }}
+        run: |
+          set -euo pipefail
+          body=$(cat <<'TEMPLATE'
+          ## __NAME__ new release: __LATEST__
+
+          - **Latest upstream:** [__LATEST__](__NOTES__)
+          - **Pinned in snapMULTI:** `__PINNED__`
+          - **Upstream repo:** https://github.com/__REPO__
+
+          ### Decide
+
+          - [ ] Read release notes
+          - [ ] Decide bump / hold (Snapcast is intentionally pinned for stability)
+          - [ ] If bumping: open PR updating all pin references (`docker-compose.yml`, `THIRD-PARTY-NOTICES.md`, `docs/SOURCES.md`, `docs/SOURCES.it.md`, `CLAUDE.md`)
+          - [ ] Live-test on at least one device before merging
+
+          _Auto-created by `.github/workflows/upstream-release-check.yml`. New issues are de-duplicated by title (`[upstream] __NAME__ __LATEST__`)._
+          TEMPLATE
+          )
+          # Substitute via the env vars (NOT via ${{ … }}) to keep
+          # untrusted-input handling consistent even though matrix
+          # values are workflow-controlled today.
+          body=${body//__NAME__/${NAME}}
+          body=${body//__LATEST__/${LATEST}}
+          body=${body//__PINNED__/${PINNED}}
+          body=${body//__NOTES__/${NOTES}}
+          body=${body//__REPO__/${REPO}}
+
+          gh issue create \
+            --title "[upstream] ${NAME} ${LATEST} available (pinned ${PINNED})" \
+            --label upstream-bump \
+            --body "${body}"
