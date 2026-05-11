@@ -174,4 +174,35 @@ check_containers() {
     else
         pass_check "All $checked snapMULTI container(s) have memory limit applied"
     fi
+
+    # 4. Metadata plugin liveness — the snapserver container forks
+    # one meta_*.py per audio source (meta_mpd, meta_go-librespot,
+    # meta_tidal, meta_shairport-sync). They feed cover-art + track
+    # info to the snapserver via stdin. When one crashes — typically
+    # a Python traceback that systemd doesn't restart — the cover
+    # art and "now playing" string for that source vanish silently;
+    # the audio keeps playing. Container healthcheck doesn't catch
+    # this because snapserver itself is fine.
+    #
+    # The check is server-only (client containers don't run metadata
+    # plugins) and depends on snapserver being one of the running
+    # containers we already enumerated.
+    if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
+        if echo "$running" | grep -qw snapserver; then
+            # BusyBox pgrep (Alpine base) lacks `-c`, so count via wc.
+            # Match `meta_` prefix — covers meta_mpd.py, meta_tidal.py,
+            # meta_shairport.py, meta_go-librespot.py (and any future
+            # plugins keeping the convention).
+            local plugin_count
+            plugin_count=$($docker_cmd exec snapserver pgrep -f 'meta_' 2>/dev/null | wc -l | tr -d ' ')
+            plugin_count=${plugin_count:-0}
+            if (( plugin_count == 0 )); then
+                fail_check "No meta_*.py plugins running in snapserver — cover art + 'now playing' will be empty for all sources"
+            elif (( plugin_count == 1 )); then
+                warn "Only 1 meta_*.py plugin running in snapserver — most snapMULTI installs run 4 (mpd, librespot, tidal, shairport)"
+            else
+                pass_check "$plugin_count meta_*.py plugin(s) running in snapserver"
+            fi
+        fi
+    fi
 }
