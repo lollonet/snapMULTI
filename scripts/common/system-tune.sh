@@ -167,8 +167,13 @@ tune_bcm43430_firmware_workaround() {
 options brcmfmac roamoff=1 feature_disable=0x80000
 BCMEOF
     then
+        # Best-effort write — common failure is overlayroot post-install
+        # re-runs where /etc is read-only. Return 0 so the caller (run
+        # under `set -e`) doesn't abort: a missing workaround is a
+        # warn-level issue, not a fatal one, and the warn above is
+        # surfaced through the normal logging chain.
         is_overlayroot && warn "BCM43430 workaround: $conf not writable (overlayroot — write before ro-mode enable)"
-        return 1
+        return 0
     fi
 
     ok "BCM43430 firmware workaround installed at $conf (effective on next module reload)"
