@@ -53,9 +53,11 @@ _mpc_status() {
     # image ships mpc as a debug tool. This is best-effort; if not
     # available the check skips with info, not warn.
     if command -v docker >/dev/null 2>&1; then
-        local sudo_p=""
-        [[ $EUID -ne 0 ]] && sudo -n true 2>/dev/null && sudo_p="sudo -n"
-        $sudo_p docker exec mpd mpc status 2>/dev/null || true
+        if [[ $EUID -ne 0 ]] && sudo -n true 2>/dev/null; then
+            sudo -n docker exec mpd mpc status 2>/dev/null || true
+        else
+            docker exec mpd mpc status 2>/dev/null || true
+        fi
     fi
 }
 

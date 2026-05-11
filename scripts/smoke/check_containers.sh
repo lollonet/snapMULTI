@@ -69,10 +69,11 @@ check_containers() {
 
     # Use sudo -n: device-smoke is typically invoked as root, but if
     # called from a regular shell during dev, fall back gracefully.
-    local docker_cmd="docker"
+    # Array pattern avoids SC2086 when expanding into command position.
+    local -a docker_cmd=(docker)
     if [[ $EUID -ne 0 ]]; then
         if sudo -n true 2>/dev/null; then
-            docker_cmd="sudo -n docker"
+            docker_cmd=(sudo -n docker)
         else
             warn "Not root and sudo unavailable — container checks skipped"
             return
@@ -81,7 +82,7 @@ check_containers() {
 
     # List of running containers, one per line.
     local running
-    running=$($docker_cmd ps --format '{{.Names}}' 2>/dev/null || true)
+    running=$("${docker_cmd[@]}" ps --format '{{.Names}}' 2>/dev/null || true)
     if [[ -z "$running" ]]; then
         info "No running containers — smoke is probably on a fresh device pre-install"
         return
@@ -102,7 +103,7 @@ check_containers() {
         # 1. Crash-loop detection. RestartCount is the lifetime restart
         # counter; non-zero means the container has died at least once.
         local rc
-        rc=$($docker_cmd inspect "$name" --format '{{.RestartCount}}' 2>/dev/null || echo "?")
+        rc=$("${docker_cmd[@]}" inspect "$name" --format '{{.RestartCount}}' 2>/dev/null || echo "?")
         if [[ "$rc" =~ ^[0-9]+$ ]] && (( rc > 0 )); then
             crashing+=("$name(RC=$rc)")
         fi
@@ -112,7 +113,7 @@ check_containers() {
         # has a limit in docker-compose.yml. If we see 0, deploy.sh
         # didn't --force-recreate after writing .env.
         local mem
-        mem=$($docker_cmd inspect "$name" --format '{{.HostConfig.Memory}}' 2>/dev/null || echo "?")
+        mem=$("${docker_cmd[@]}" inspect "$name" --format '{{.HostConfig.Memory}}' 2>/dev/null || echo "?")
         if [[ "$mem" == "0" ]]; then
             no_limit+=("$name")
         fi
@@ -121,7 +122,7 @@ check_containers() {
         # is empty string if no healthcheck. After start_period grace
         # the status stabilises at `healthy` or `unhealthy`.
         local health started_at uptime_s
-        health=$($docker_cmd inspect "$name" --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null || echo "")
+        health=$("${docker_cmd[@]}" inspect "$name" --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null || echo "")
         if [[ -n "$health" ]]; then
             case "$health" in
                 healthy)
@@ -134,7 +135,7 @@ check_containers() {
                     # If container has been up more than 5 min and still
                     # starting, the healthcheck is stuck — warn but don't
                     # fail (could be a slow first MPD scan).
-                    started_at=$($docker_cmd inspect "$name" --format '{{.State.StartedAt}}' 2>/dev/null || echo "")
+                    started_at=$("${docker_cmd[@]}" inspect "$name" --format '{{.State.StartedAt}}' 2>/dev/null || echo "")
                     uptime_s=0
                     if [[ -n "$started_at" ]]; then
                         uptime_s=$(( $(date +%s) - $(date -d "$started_at" +%s 2>/dev/null || echo 0) ))
@@ -194,7 +195,7 @@ check_containers() {
             # meta_shairport.py, meta_go-librespot.py (and any future
             # plugins keeping the convention).
             local plugin_count
-            plugin_count=$($docker_cmd exec snapserver pgrep -f 'meta_' 2>/dev/null | wc -l | tr -d ' ')
+            plugin_count=$("${docker_cmd[@]}" exec snapserver pgrep -f 'meta_' 2>/dev/null | wc -l | tr -d ' ')
             plugin_count=${plugin_count:-0}
             if (( plugin_count == 0 )); then
                 fail_check "No meta_*.py plugins running in snapserver — cover art + 'now playing' will be empty for all sources"

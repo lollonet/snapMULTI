@@ -44,7 +44,11 @@ _mdns_run_browse() {
 check_mdns() {
     section "mDNS Publish"
 
-    if ! _mdns_run_browse >/dev/null 2>&1; then
+    # Tool-availability probe is a quick PATH lookup — using
+    # _mdns_run_browse here would cost up to 5 s of wall-clock for
+    # nothing. Reserve the actual browse call for the second step.
+    if ! command -v avahi-browse >/dev/null 2>&1 \
+        && ! command -v dns-sd >/dev/null 2>&1; then
         warn "Neither avahi-browse nor dns-sd installed — mDNS check skipped"
         return
     fi
