@@ -497,7 +497,7 @@ fi
 # Smoke is per-device validation: this device must publish its own
 # Snapcast / AirPlay / Spotify records on the LAN. Peer servers
 # publishing the same protocols are NOT a substitute — green smoke
-# on snapvideo must mean snapvideo itself is up, not "some other
+# on pi-server must mean pi-server itself is up, not "some other
 # snapMULTI server happens to be visible from here". Filter every
 # protocol to entries whose mDNS hostname (field 7 of avahi-browse
 # `-rpt` output) matches this host's `.local` name.
@@ -510,7 +510,7 @@ _check_mdns_service() {
     local service="$1" label="$2" hint="$3" own_host="$4"
     local browse_out resolved_count ptr_count
     browse_out=$(timeout 8 avahi-browse -rpt "$service" 2>/dev/null | { grep '^=' || true; })
-    # Keep only `=` lines whose field 7 (hostname, e.g. "snapvideo.local")
+    # Keep only `=` lines whose field 7 (hostname, e.g. "pi-server.local")
     # equals this device's own .local name. avahi-browse output format:
     #   =;iface;family;name;type;domain;HOST;addr;port;txt...
     # Match is case-insensitive: avahi normally lowercases but a custom

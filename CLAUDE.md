@@ -140,7 +140,7 @@ Uses `ghcr.io/devgianlu/go-librespot` (Go reimplementation of Spotify Connect).
 - **Audio routing**: Spotify app → go-librespot → pipe backend → `/audio/spotify_fifo` → snapserver
 - **Metadata**: WebSocket API on port 24879 → `meta_go-librespot.py` (ships with Snapcast) → JSON-RPC to snapserver
 - **Playback control**: Bidirectional — play/pause/next/seek from Snapcast clients back to Spotify
-- **Device naming**: Uses hostname by default (e.g., "snapvideo Spotify"). Override with `SPOTIFY_NAME` env var
+- **Device naming**: Uses hostname by default (e.g., "pi-server Spotify"). Override with `SPOTIFY_NAME` env var
 - **Requires**: Spotify Premium (Connect is a Premium feature)
 - **Architectures**: amd64 + arm64
 
@@ -151,7 +151,7 @@ ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian 
 - **Dockerfile.tidal**: Extends base image with `libasound2-plugins` (ALSA FIFO routing), `ca-certificates` (TLS), and `tmux` (metadata scraping) from Debian Stretch archive. Base image is EOL Raspbian Stretch — packages come from `archive.debian.org`
 - **Audio routing**: Tidal app → ALSA default device → `config/tidal-asound.conf` (rate converter + FIFO plugin) → `/audio/tidal_fifo` named pipe → snapserver
 - **config/tidal-asound.conf**: speex rate converter (44100 Hz) → FIFO output. Validated by `deploy.sh` on ARM systems
-- **Device naming**: Uses hostname by default (e.g., "snapvideo Tidal"). Override with `TIDAL_NAME` env var
+- **Device naming**: Uses hostname by default (e.g., "pi-server Tidal"). Override with `TIDAL_NAME` env var
 - **scripts/tidal/entrypoint.sh**: Sanitizes `FRIENDLY_NAME`, starts `speaker_controller_application` in tmux (for metadata), launches `tidal-meta-bridge.sh`, configures ALSA
 - **scripts/tidal/common.sh**: Bind-mounted at `/common.sh` to override the image's baked-in copy. Writes ALSA config to `/tmp/asound.conf` (via `ALSA_CONFIG_PATH`) with system config include for read-only container support
 - **scripts/tidal/tidal-meta-bridge.sh**: Runs inside tidal-connect container, scrapes tmux output from `speaker_controller_application` TUI, writes JSON to `/audio/tidal-metadata.json`
@@ -162,7 +162,7 @@ ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian 
 ## Conventions
 
 - **Docker images**: `lollonet/snapmulti-{server,airplay,mpd,metadata}:latest` (Docker Hub, built in CI) + `ghcr.io/devgianlu/go-librespot:v0.7.0` (upstream) + `lollonet/snapmulti-tidal:latest` (ARM only)
-- **Multi-arch**: linux/amd64 (studio) + linux/arm64 (raspy), native builds on self-hosted runners
+- **Multi-arch**: linux/amd64 (studio) + linux/arm64 (ci-runner-x86), native builds on self-hosted runners
 - **Config paths**: all config in `config/`, all scripts in `scripts/`, shared libs in `scripts/common/`
 - **Deployment**: tag push (`v*`) triggers build → manifest → deploy
 - **Release gate**: every tag requires `device-smoke.sh --both` green on real Pi (ADR-005)

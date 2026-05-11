@@ -5,7 +5,7 @@
 # overlayroot (with the recurse=0 setting we use to avoid ordering cycles)
 # is supposed to leave _netdev fstab entries alone. In practice, the
 # initramfs script still rewrites them: an NFS line like
-#   raspy:/music /media/nfs-music nfs ... _netdev,nofail
+#   ci-runner-x86:/music /media/nfs-music nfs ... _netdev,nofail
 # ends up mounted at /media/root-ro/media/nfs-music in the running system,
 # AND a non-functional overlay wrap is added at /media/nfs-music whose
 # upper/work dirs do not exist, so that overlay mount silently fails

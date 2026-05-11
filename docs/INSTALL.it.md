@@ -49,7 +49,7 @@ Compila la tab **General**:
 
 | Campo | Cosa inserire |
 |-------|---------------|
-| **Set hostname** | Un nome per questo Pi — es. `snapvideo` (server), `snapdigi` (speaker) |
+| **Set hostname** | Un nome per questo Pi — es. `pi-server` (server), `pi-display` (speaker) |
 | **Set username and password** | Qualsiasi username/password — li userai per SSH |
 | **Configure wireless LAN** | Il tuo SSID WiFi, password e **paese** (richiesto per le bande 5 GHz) |
 | **Set locale** | Il tuo fuso orario e layout tastiera |
@@ -262,16 +262,16 @@ Il Pi **si riavvia automaticamente** quando l'installazione è completa. Dopo il
 Dal tuo computer, fai ping al Pi usando il suo hostname:
 
 ```bash
-ping snapvideo.local     # sostituisci con l'hostname che hai scelto in Imager
+ping pi-server.local     # sostituisci con l'hostname che hai scelto in Imager
 ```
 
 Se il ping funziona, collegati via SSH:
 
 ```bash
-ssh <username>@snapvideo.local
+ssh <username>@pi-server.local
 ```
 
-> **Utenti Windows:** Usa Windows Terminal, PowerShell o [PuTTY](https://putty.org) con `snapvideo.local` come host.
+> **Utenti Windows:** Usa Windows Terminal, PowerShell o [PuTTY](https://putty.org) con `pi-server.local` come host.
 
 > **Se `.local` non si risolve:** Usa l'indirizzo IP invece. Trovalo nella lista client DHCP del tuo router, o controlla l'output HDMI dopo il riavvio — il Pi stampa il suo IP sulla console.
 
@@ -307,7 +307,7 @@ fb-display         Up X minutes (healthy)
 Apri il tuo browser e vai a:
 
 ```
-http://snapvideo.local:8180
+http://pi-server.local:8180
 ```
 
 Questo è **myMPD** — naviga la tua libreria musicale, crea playlist, controlla la riproduzione.
@@ -315,7 +315,7 @@ Questo è **myMPD** — naviga la tua libreria musicale, crea playlist, controll
 L'**interfaccia web Snapcast** (controlla quale speaker riproduce cosa) è a:
 
 ```
-http://snapvideo.local:1780
+http://pi-server.local:1780
 ```
 
 ---
@@ -324,11 +324,11 @@ http://snapvideo.local:1780
 
 | Sorgente | Cosa fare dopo l'installazione |
 |----------|--------------------------------|
-| **Spotify** | Apri l'app Spotify → Dispositivi → seleziona **"snapvideo Spotify"** (Premium richiesto) |
-| **AirPlay** | iPhone/iPad/Mac → icona AirPlay → seleziona **"snapvideo AirPlay"** |
-| **Tidal** | Apri l'app Tidal → Cast → seleziona **"snapvideo Tidal"** (solo ARM/Pi) |
-| **Libreria musicale** | Apri `http://snapvideo.local:8180` e naviga i tuoi file |
-| **App Snapcast** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) — connetti a `snapvideo.local` |
+| **Spotify** | Apri l'app Spotify → Dispositivi → seleziona **"pi-server Spotify"** (Premium richiesto) |
+| **AirPlay** | iPhone/iPad/Mac → icona AirPlay → seleziona **"pi-server AirPlay"** |
+| **Tidal** | Apri l'app Tidal → Cast → seleziona **"pi-server Tidal"** (solo ARM/Pi) |
+| **Libreria musicale** | Apri `http://pi-server.local:8180` e naviga i tuoi file |
+| **App Snapcast** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) — connetti a `pi-server.local` |
 
 ---
 
@@ -337,12 +337,12 @@ http://snapvideo.local:1780
 Per ogni speaker aggiuntivo:
 
 1. Flasha una nuova scheda SD con Raspberry Pi Imager
-   - Imposta un **hostname unico** (es. `snapdigi`, `kitchen`, `bedroom`)
+   - Imposta un **hostname unico** (es. `pi-display`, `kitchen`, `bedroom`)
    - Stesso user/password del tuo server è comodo ma non richiesto
 2. Reinserisci → esegui `prepare-sd.sh` → scegli **1) Audio Player**
 3. Avvia → il Pi speaker trova automaticamente il server tramite mDNS
 
-Il nuovo speaker appare nell'interfaccia web Snapcast a `http://snapvideo.local:1780` entro ~30 secondi dall'avvio.
+Il nuovo speaker appare nell'interfaccia web Snapcast a `http://pi-server.local:1780` entro ~30 secondi dall'avvio.
 
 ---
 
@@ -350,8 +350,8 @@ Il nuovo speaker appare nell'interfaccia web Snapcast a `http://snapvideo.local:
 
 | Sintomo | Causa probabile | Soluzione |
 |---------|-----------------|-----------|
-| HDMI vuoto, nessun progresso | Normale su avvio headless | Aspetta 10 min; controlla con `ping snapvideo.local` |
-| `ping snapvideo.local` fallisce | Pi non ancora in rete | Aspetta 2 min; se ancora fallisce, controlla impostazione paese WiFi in Imager. I canali 5 GHz 100+ (DFS) possono fallire al primo avvio — prova il 2.4 GHz o un canale 5 GHz non-DFS (36–48) |
+| HDMI vuoto, nessun progresso | Normale su avvio headless | Aspetta 10 min; controlla con `ping pi-server.local` |
+| `ping pi-server.local` fallisce | Pi non ancora in rete | Aspetta 2 min; se ancora fallisce, controlla impostazione paese WiFi in Imager. I canali 5 GHz 100+ (DFS) possono fallire al primo avvio — prova il 2.4 GHz o un canale 5 GHz non-DFS (36–48) |
 | `.local` si risolve ma SSH rifiutato | SSH non ancora avviato | Aspetta altri 1–2 min |
 | SSH funziona ma container mancanti | Installazione ancora in corso | Esegui `sudo journalctl -u cloud-init -f` per guardare il progresso |
 | Container in loop di restart | Download immagini fallito (rete) | Esegui `sudo docker compose logs -f` in `/opt/snapmulti` |

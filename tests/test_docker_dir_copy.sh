@@ -13,7 +13,7 @@
 #   not a directory: Are you trying to mount a directory onto a file
 #   (or vice-versa)?
 #
-# Verified live on snapvideo post-PR-#319 reflash. Install module
+# Verified live on pi-server post-PR-#319 reflash. Install module
 # `deploy` exited 1 with this exact message.
 #
 # Fix: prepare-sd.sh's copy_server_files() now `cp -r` the docker/

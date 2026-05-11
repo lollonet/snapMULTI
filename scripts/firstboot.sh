@@ -752,7 +752,7 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     # ~1369) which remounts /boot/firmware READ-ONLY immediately. PR #320
     # moved the patcher before firstboot's own `setup_readonly_fs` call —
     # but missed that setup.sh activates overlayroot ITSELF, ahead of
-    # firstboot's call. Verified live on snapvideo (post-PR-#320 reflash):
+    # firstboot's call. Verified live on pi-server (post-PR-#320 reflash):
     # the patcher logged `cmdline: failed to add 'quiet'` × 5 with
     # /boot/firmware already ro. The fix is to patch BEFORE setup.sh runs
     # at all — for server-only installs the gate (/dev/fb0) is false anyway.

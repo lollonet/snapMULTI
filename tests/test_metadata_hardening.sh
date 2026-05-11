@@ -89,7 +89,7 @@ cases = [
     ("Sala Grande",{"Sala Grande": "B"},                 "B",      "Sala Grande exact match"),
     ("Sala",       {"Sala": "A", "Sala Grande": "B"},   "A",      "Sala matches its own stream when both exist"),
     # snapclient- prefix convention preserved
-    ("snapclient-snapvideo", {"snapvideo": "S"},        "S",      "snapclient- prefix stripping still works"),
+    ("snapclient-pi-server", {"pi-server": "S"},        "S",      "snapclient- prefix stripping still works"),
     # Cucina / Cucinino — previously the test case for #330
     ("Cucina",     {"Cucinino": "C"},                    None,     "Cucina no longer collides with Cucinino"),
     # No match

@@ -23,8 +23,8 @@
 # Also tests the defensive companion in system-tune.sh:
 #   - The extra `update-initramfs -u -k all` after `do_overlayfs 0` was
 #     REMOVED — verified 2026-05-10 to cause a self-realising
-#     "first-boot needs manual reboot" WARN on both snapvideo and
-#     snapdigi (mkinitramfs aborts because raspi-config has already
+#     "first-boot needs manual reboot" WARN on both pi-server and
+#     pi-display (mkinitramfs aborts because raspi-config has already
 #     activated the overlay). raspi-config's internal `-c -k all` does
 #     the rebuild correctly. Regression guard asserts the extra rebuild
 #     does NOT come back.
@@ -77,7 +77,7 @@ assert 'grep -qE "\\[Automount\\]" "$MOUNT_SH"' \
 # sysinit). systemd resolves the cycle by DELETING local-fs.target
 # and sockets.target — first post-overlayroot boot comes up degraded,
 # user observes "device without network", manual power-cycle ensues.
-# Verified live 2026-05-10 on snapvideo + snapdigi.
+# Verified live 2026-05-10 on pi-server + pi-display.
 #
 # This regression guard parses the .automount heredoc only (between
 # `cat > "$automount_path" << EOF` and the closing `EOF`) and asserts
@@ -179,7 +179,7 @@ assert 'grep -qE "RequiresMountsFor=\\\${PROJECT_ROOT} \\\${PROJECT_ROOT}/audio\
 echo
 echo "=== system-tune.sh — defensive overlayroot setup ==="
 
-# Verified 2026-05-10 on snapvideo + snapdigi: an explicit
+# Verified 2026-05-10 on pi-server + pi-display: an explicit
 # `update-initramfs -u -k all` after `do_overlayfs 0` calls into
 # mkinitramfs which can no longer determine the device for `/`
 # (raspi-config has already activated the overlay) and aborts. The

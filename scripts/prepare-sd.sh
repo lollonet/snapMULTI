@@ -350,7 +350,7 @@ copy_server_files() {
     # and the container fails to start with `not a directory: Are you
     # trying to mount a directory onto a file (or vice-versa)?`.
     # See PR #319 (which added the bind-mount) and the post-merge
-    # install failure on snapvideo that surfaced this gap.
+    # install failure on pi-server that surfaced this gap.
     # `cp -r src dst/` is NOT idempotent: when `dst/docker/` already
     # exists from a prior run, the source directory is copied INTO it,
     # creating `dst/docker/docker/`. macOS `cp` lacks the `-T` flag, so

@@ -392,7 +392,7 @@ SYSDEOF
                 # The fail was silent (`>/dev/null 2>&1`), the on-disk
                 # initramfs from raspi-config's own `update-initramfs -c -k
                 # all` is fine, BUT the WARN message it printed was
-                # auto-realising: snapvideo + snapdigi both required a
+                # auto-realising: pi-server + pi-display both required a
                 # manual power-cycle at first boot post-2026-05-10 v0.7.0.
                 # Trusting raspi-config's internal rebuild fixes the
                 # symptom on both devices. If a future race re-emerges,

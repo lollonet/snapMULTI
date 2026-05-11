@@ -23,7 +23,7 @@ See the [Supported Audio HATs](README.md#supported-audio-hats) table in the READ
 2. Select **Raspberry Pi OS Lite (64-bit)**
 3. Choose your SD card as the target
 4. Click **Next** → **Edit Settings** to configure:
-   - Set hostname (e.g. `snapdigi`)
+   - Set hostname (e.g. `pi-display`)
    - Set username and password
    - Configure WiFi (SSID, password, and country)
    - Enable SSH (Services tab)

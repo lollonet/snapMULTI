@@ -410,7 +410,7 @@ function Copy-ServerFiles {
     # and the container fails to start with `not a directory: Are you
     # trying to mount a directory onto a file (or vice-versa)?`.
     # See PR #319 (which added the bind-mount), PR #321 (the Linux side
-    # of this fix), and the post-merge install failure on snapvideo.
+    # of this fix), and the post-merge install failure on pi-server.
     # Copy-Item -Recurse is idempotent on Windows when the destination
     # tree already exists (it merges contents) — no `cp -rT` needed.
     $dockerSrc = Join-Path $ProjectDir 'docker'
