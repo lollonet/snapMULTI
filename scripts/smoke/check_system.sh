@@ -228,11 +228,11 @@ check_system() {
                 (( past_bits & 0x8 )) && past_msgs+=("soft temp limit occurred")
                 if (( ${#now_msgs[@]} > 0 )); then
                     local joined
-                    joined=$(IFS=', '; echo "${now_msgs[*]}")
+                    printf -v joined "%s, " "${now_msgs[@]}"; joined="${joined%, }"
                     fail_check "Pi is currently degraded ($throttled_raw): $joined — check PSU current rating"
                 elif (( ${#past_msgs[@]} > 0 )); then
                     local joined
-                    joined=$(IFS=', '; echo "${past_msgs[*]}")
+                    printf -v joined "%s, " "${past_msgs[@]}"; joined="${joined%, }"
                     warn "Pi degraded earlier this boot ($throttled_raw): $joined — may indicate brownout or PSU undersized"
                 fi
             fi

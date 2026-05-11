@@ -105,19 +105,19 @@ check_env() {
 
     if (( ${#empty_keys[@]} > 0 )); then
         local joined
-        joined=$(IFS=', '; echo "${empty_keys[*]}")
+        printf -v joined "%s, " "${empty_keys[@]}"; joined="${joined%, }"
         fail_check ".env has empty limit key(s) (Compose treats as unset → no limit applied): $joined"
     fi
 
     if (( ${#bad_mem[@]} > 0 )); then
         local joined
-        joined=$(IFS=', '; echo "${bad_mem[*]}")
+        printf -v joined "%s, " "${bad_mem[@]}"; joined="${joined%, }"
         fail_check ".env has malformed memory limit(s) (expected NNN[K|M|G]): $joined"
     fi
 
     if (( ${#bad_cpu[@]} > 0 )); then
         local joined
-        joined=$(IFS=', '; echo "${bad_cpu[*]}")
+        printf -v joined "%s, " "${bad_cpu[@]}"; joined="${joined%, }"
         fail_check ".env has malformed CPU limit(s) (expected positive float, no comma): $joined"
     fi
 

@@ -161,7 +161,7 @@ check_containers() {
     # Aggregate crash-loop report.
     if (( ${#crashing[@]} > 0 )); then
         local joined
-        joined=$(IFS=', '; echo "${crashing[*]}")
+        printf -v joined "%s, " "${crashing[@]}"; joined="${joined%, }"
         fail_check "Container(s) with RestartCount > 0 (crash-loop): $joined"
     else
         pass_check "All $checked snapMULTI container(s) have RestartCount=0"
@@ -170,7 +170,7 @@ check_containers() {
     # Aggregate memory-limit drift report.
     if (( ${#no_limit[@]} > 0 )); then
         local joined
-        joined=$(IFS=', '; echo "${no_limit[*]}")
+        printf -v joined "%s, " "${no_limit[@]}"; joined="${joined%, }"
         fail_check "Container(s) with HostConfig.Memory=0 (limit drift — deploy.sh must --force-recreate): $joined"
     else
         pass_check "All $checked snapMULTI container(s) have memory limit applied"
