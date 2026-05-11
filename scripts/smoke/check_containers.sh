@@ -195,7 +195,12 @@ check_containers() {
             # meta_shairport.py, meta_go-librespot.py (and any future
             # plugins keeping the convention).
             local plugin_count
-            plugin_count=$("${docker_cmd[@]}" exec snapserver pgrep -f 'meta_' 2>/dev/null | wc -l | tr -d ' ')
+            # pgrep exits 1 when 0 processes match. Under the parent's
+            # `set -euo pipefail` the plain assignment would abort the
+            # smoke here — which is exactly the scenario this check is
+            # meant to catch. `|| echo 0` collapses both "match nothing"
+            # and "docker exec failed" into a counted zero.
+            plugin_count=$("${docker_cmd[@]}" exec snapserver pgrep -f 'meta_' 2>/dev/null | wc -l | tr -d ' ' || echo 0)
             plugin_count=${plugin_count:-0}
             if (( plugin_count == 0 )); then
                 fail_check "No meta_*.py plugins running in snapserver — cover art + 'now playing' will be empty for all sources"

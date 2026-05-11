@@ -115,7 +115,12 @@ check_snapcast() {
         fail_check "MPD reports an error: $err_line"
     else
         local state
-        state=$(grep -oE "^\[(playing|paused|stopped)\]" <<<"$mpc_out" | tr -d '[]' | head -1)
+        # grep -o exits 1 if no match. MPD in `stopped` state (no
+        # playlist) doesn't emit a bracket-state line at all, so grep
+        # finds nothing — a normal operational case. `|| true` keeps
+        # the pipeline from triggering pipefail; the :-unknown fallback
+        # handles the resulting empty $state.
+        state=$(grep -oE "^\[(playing|paused|stopped)\]" <<<"$mpc_out" | tr -d '[]' | head -1 || true)
         state=${state:-unknown}
         pass_check "MPD reachable, state: $state"
     fi
