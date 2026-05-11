@@ -74,15 +74,26 @@ Lo script chiede cosa installare:
 
 Espelli la SD, inseriscila nel Pi, accendi. Attendi ~10 minuti. Fatto.
 
+## URL dopo l'installazione
+
+Tutti sul Pi server — sostituisci `hostname` con quello impostato al Passo 1:
+
+| URL | Cosa fa |
+|-----|---------|
+| `http://hostname.local:1780` | **Snapweb** — regola volumi delle stanze, mute, raggruppa/sposta altoparlanti, vedi cosa sta suonando |
+| `http://hostname.local:8180` | **myMPD** — sfoglia e riproduci la libreria musicale (NFS / USB / file locali) |
+| `http://hostname.local:8083/status` | **Pagina stato sistema** — salute container, presenza sorgenti, ultimi risultati smoke (aggiornata ogni 5 min) |
+| `http://hostname.local:8083/health` | **Health check** — restituisce `{"status":"ok"}` quando il server è su; utile per probe di uptime / monitoring |
+
+Salva `:1780` e `:8083/status` nei preferiti — coprono il 90% dell'uso quotidiano.
+
 ## Ascolta Musica
 
 | Sorgente | Come |
 |----------|------|
 | **Spotify** | Apri l'app, seleziona dispositivo: "*hostname* Spotify" |
 | **AirPlay** | Icona AirPlay, seleziona "*hostname* AirPlay" |
-| **Libreria musicale** | Naviga su `http://hostname.local:8180` |
-
-Gestisci gli altoparlanti su `http://hostname.local:1780`
+| **Libreria musicale** | Apri `http://hostname.local:8180` (myMPD) |
 
 ## Aggiungi Altri Altoparlanti
 

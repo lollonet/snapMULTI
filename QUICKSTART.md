@@ -74,15 +74,26 @@ The script asks what to install:
 
 Eject the SD card, insert it in the Pi, power on. Wait ~10 minutes. Done.
 
+## URLs after install
+
+All on the server Pi — replace `hostname` with what you set in Step 1:
+
+| URL | What it does |
+|-----|--------------|
+| `http://hostname.local:1780` | **Snapweb** — control room volumes, mute, group/move speakers, see what's playing |
+| `http://hostname.local:8180` | **myMPD** — browse and play the music library (NFS / USB / local files) |
+| `http://hostname.local:8083/status` | **System status page** — container health, source presence, last smoke results (refreshed every 5 min) |
+| `http://hostname.local:8083/health` | **Health check** — returns `{"status":"ok"}` when the server is up; handy for uptime probes / monitoring |
+
+Bookmark `:1780` and `:8083/status` — they cover 90% of day-to-day use.
+
 ## Play Music
 
 | Source | How |
 |--------|-----|
 | **Spotify** | Open app, select device: "*hostname* Spotify" |
 | **AirPlay** | AirPlay icon, select "*hostname* AirPlay" |
-| **Music library** | Browse at `http://hostname.local:8180` |
-
-Manage speakers at `http://hostname.local:1780`
+| **Music library** | Open `http://hostname.local:8180` (myMPD) |
 
 ## Add More Speakers
 
