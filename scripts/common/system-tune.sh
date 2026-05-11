@@ -116,6 +116,67 @@ tune_usb_autosuspend() {
     fi
 }
 
+# ── BCM43430 firmware workaround (Pi Zero 2W) ─────────────────────
+# Disables firmware-side 4-way handshake offload on BCM43430. The
+# proprietary firmware blob brcmfmac43430b0-sdio.bin (Broadcom, last
+# updated Mar 2022) has a known bug: GTK rotation messages from the
+# AP fail with `wsec_key error -52` (ETIMEDOUT) when the driver tries
+# to push the new key via send_key_to_dongle. On mesh WPA2 networks
+# (multiple BSSIDs with the same SSID) this fires every ~15 min,
+# causing 1-2 s WiFi blips that snapclient sees as brief reconnects.
+#
+# Issue: https://github.com/RPi-Distro/firmware-nonfree/issues/23
+# (BCM43430/2 lacks 4WAY_HANDSHAKE_STA_PSK, 4WAY_HANDSHAKE_STA_1X,
+# SAE_OFFLOAD — firmware doesn't actually support the offload it
+# claims to support to the driver)
+#
+# Fix: feature_disable=0x80000 clears BRCMF_FEAT_FWSUP at module
+# load, forcing wpa_supplicant userspace 4-way handshake instead.
+# Validated on 2026-05-12: 0 wsec_key -52 in 28+ min vs ~12/h
+# baseline pre-fix.
+#
+# Detection: check /proc/device-tree/model for "Zero 2 W". Other Pi
+# models use BCM43455 / CYW43455 which have working firmware
+# supplicant; applying feature_disable=0x80000 to them would disable
+# a working feature (regression). Pi Zero 2W only.
+tune_bcm43430_firmware_workaround() {
+    local model_file=/proc/device-tree/model
+    [[ -f "$model_file" ]] || return 0
+    local model
+    model=$(tr -d '\0' <"$model_file" 2>/dev/null) || return 0
+    # "Raspberry Pi Zero 2 W Rev 1.0" / "... Rev 1.1" etc.
+    if [[ "$model" != *"Zero 2 W"* ]]; then
+        return 0  # not BCM43430 — fix would disable a working feature
+    fi
+
+    local conf=/etc/modprobe.d/snapmulti-brcmfmac.conf
+    local expected_payload='options brcmfmac roamoff=1 feature_disable=0x80000'
+
+    # Idempotent: only write if missing or content drifted.
+    if [[ -f "$conf" ]] && grep -qF "$expected_payload" "$conf"; then
+        ok "BCM43430 firmware workaround already configured ($conf)"
+        return 0
+    fi
+
+    if ! cat > "$conf" <<'BCMEOF'
+# Workaround for BCM43430/2 firmware GTK rekey timeout (wsec_key error -52)
+# Disables firmware-side 4-way handshake offload — forces wpa_supplicant
+# userspace handshake which works correctly on Pi Zero 2W.
+# See: https://github.com/RPi-Distro/firmware-nonfree/issues/23
+# Applied by snapMULTI system-tune.sh on Pi Zero 2W only.
+options brcmfmac roamoff=1 feature_disable=0x80000
+BCMEOF
+    then
+        is_overlayroot && warn "BCM43430 workaround: $conf not writable (overlayroot — write before ro-mode enable)"
+        return 1
+    fi
+
+    ok "BCM43430 firmware workaround installed at $conf (effective on next module reload)"
+    # Note: deliberately NOT reloading brcmfmac here — that would tear
+    # down WiFi mid-install. Effective on the next reboot, which
+    # firstboot already schedules at the end of setup.
+}
+
 # ── WiFi power save ───────────────────────────────────────────────
 # Disables WiFi power management to prevent connection drops.
 # Uses NetworkManager dispatcher script for persistence — this

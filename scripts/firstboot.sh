@@ -197,6 +197,9 @@ fi
 if command -v tune_wifi_powersave &>/dev/null; then
     tune_wifi_powersave
 fi
+if command -v tune_bcm43430_firmware_workaround &>/dev/null; then
+    tune_bcm43430_firmware_workaround
+fi
 
 # ── Module tracking ──────────────────────────────────────────────
 # Sourced modules overwrite LOG_SOURCE — reset it after each call
