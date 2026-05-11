@@ -873,8 +873,18 @@ start_services() {
 
     # COMPOSE_PROFILES in .env controls which services are active.
     # docker compose up -d starts all services matching active profiles.
-    info "Starting containers..."
-    if ! docker compose up -d; then
+    #
+    # --force-recreate is required: deploy.sh writes (or rewrites) .env
+    # right before this call, and Docker Compose does NOT consider
+    # deploy.resources.limits.memory part of the recreate-hash. Without
+    # --force-recreate, a container that's already running keeps the
+    # memory limit it had at first creation (often unlimited from the
+    # initial firstboot), and subsequent .env tweaks silently never
+    # apply. CPU limits go through HostConfig.NanoCpus and ARE applied,
+    # which made the drift invisible until inspected with
+    # `docker inspect ... HostConfig.Memory`.
+    info "Starting containers (force-recreate to apply .env)..."
+    if ! docker compose up -d --force-recreate; then
         error "Failed to start services"
         exit 1
     fi

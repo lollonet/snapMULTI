@@ -284,6 +284,7 @@ if [[ -d "$SMOKE_MODULES_DIR" ]]; then
         check_timers.sh \
         check_system.sh \
         check_audio_modules.sh \
+        check_containers.sh \
     ; do
         if [[ -f "$SMOKE_MODULES_DIR/$_smoke_mod" ]]; then
             # shellcheck source=/dev/null
@@ -808,6 +809,7 @@ declare -F check_qos            >/dev/null && check_qos
 declare -F check_timers         >/dev/null && check_timers
 declare -F check_system         >/dev/null && check_system
 declare -F check_audio_modules  >/dev/null && check_audio_modules
+declare -F check_containers     >/dev/null && check_containers
 
 section "Recent Errors"
 _error_count=0
