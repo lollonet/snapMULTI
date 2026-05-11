@@ -161,7 +161,7 @@ ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian 
 
 ## Conventions
 
-- **Docker images**: `lollonet/snapmulti-{server,airplay,mpd,metadata}:latest` (Docker Hub, built in CI) + `ghcr.io/devgianlu/go-librespot:v0.7.0` (upstream) + `lollonet/snapmulti-tidal:latest` (ARM only)
+- **Docker images**: `lollonet/snapmulti-{server,airplay,mpd,metadata}:latest` (Docker Hub, built in CI) + `ghcr.io/devgianlu/go-librespot:v0.7.1` (upstream) + `lollonet/snapmulti-tidal:latest` (ARM only)
 - **Multi-arch**: linux/amd64 (studio) + linux/arm64 (ci-runner-x86), native builds on self-hosted runners
 - **Config paths**: all config in `config/`, all scripts in `scripts/`, shared libs in `scripts/common/`
 - **Deployment**: tag push (`v*`) triggers build → manifest → deploy

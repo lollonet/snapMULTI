@@ -216,7 +216,7 @@ SPOTIFY_NAME="Living Room Spotify"
 3. Tap **Connect to a device**
 4. Select **"<hostname> Spotify"** (e.g., "raspberrypi Spotify")
 
-**Docker image:** `ghcr.io/devgianlu/go-librespot:v0.7.0` (upstream, no custom build)
+**Docker image:** `ghcr.io/devgianlu/go-librespot:v0.7.1` (upstream, no custom build)
 
 ---
 
