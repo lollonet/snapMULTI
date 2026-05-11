@@ -212,6 +212,11 @@ EOF
 # For: Pi 4 2GB, systems with 2-4GB RAM
 # Measured baseline (idle): snapserver 87M, shairport 18M, librespot 22M,
 #   mpd 90M (6k songs), mympd 8M, metadata 52M, tidal 32M
+# 2026-05-12 fleet measurements (pi4hatsrvusb, NFS library): MPD steady-state
+#   200 MB observed once cache warms → 256 MB limit → 78 % utilisation, too tight.
+#   Headroom check: 1895 MB total RAM, sum of limits previously 1120 MB +
+#   200 MB host overhead = 1320 MB worst-case; raising MPD by 128 MB still
+#   leaves ~450 MB free in the worst case. Bumped to 384 MB for safety.
 SNAPSERVER_MEM_LIMIT=192M
 SNAPSERVER_MEM_RESERVE=96M
 SNAPSERVER_CPU_LIMIT=1.0
@@ -221,8 +226,8 @@ AIRPLAY_CPU_LIMIT=0.5
 SPOTIFY_MEM_LIMIT=256M
 SPOTIFY_MEM_RESERVE=128M
 SPOTIFY_CPU_LIMIT=0.5
-MPD_MEM_LIMIT=256M
-MPD_MEM_RESERVE=128M
+MPD_MEM_LIMIT=384M
+MPD_MEM_RESERVE=192M
 MPD_CPU_LIMIT=1.0
 MYMPD_MEM_LIMIT=64M
 MYMPD_MEM_RESERVE=32M
