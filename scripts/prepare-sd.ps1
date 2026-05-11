@@ -390,6 +390,14 @@ function Copy-ServerFiles {
     if (Test-Path $smokeSh) {
         Copy-Item $smokeSh -Destination $serverDest
     }
+    # Modular smoke checks (scripts/smoke/check_*.sh) — sourced by
+    # device-smoke.sh at runtime. Without -Recurse the subdirectory
+    # is never copied and the 6 new check modules silently fail to
+    # load on the device. Mirrors prepare-sd.sh copy_server_files.
+    $smokeDir = Join-Path $ScriptDir 'smoke'
+    if (Test-Path $smokeDir) {
+        Copy-Item $smokeDir -Destination $serverDest -Recurse
+    }
     $reconcileSh = Join-Path $ScriptDir 'docker-driver-reconcile.sh'
     if (Test-Path $reconcileSh) {
         Copy-Item $reconcileSh -Destination $serverDest
@@ -491,6 +499,13 @@ function Copy-ClientFiles {
     $smokeSh = Join-Path $ScriptDir 'device-smoke.sh'
     if (Test-Path $smokeSh) {
         Copy-Item $smokeSh -Destination $scriptsDest
+    }
+    # Modular smoke checks dir — mirrors prepare-sd.sh copy_client_files.
+    # Client firstboot path is recursive so once smoke/ lands here it
+    # propagates to /opt/snapclient/scripts/smoke/ automatically.
+    $smokeDir = Join-Path $ScriptDir 'smoke'
+    if (Test-Path $smokeDir) {
+        Copy-Item $smokeDir -Destination $scriptsDest -Recurse
     }
 
     $roMode = Join-Path $ClientDir 'common\scripts\ro-mode.sh'
