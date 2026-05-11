@@ -83,6 +83,13 @@ check_boot_health() {
         # when firstboot.sh succeeded. snapmulti's own checkpoint files
         # are the real source of truth for install completion.
         "cloud-init-main.service"
+        # Debian's daily man-page index regeneration races with the
+        # fuse-overlayfs upper layer on /var/cache/man — `mandb` aborts
+        # with "Resource temporarily unavailable" (EAGAIN) on overlayroot.
+        # Caught on pi4nohat 2026-05-10: the per-locale subdir creation
+        # (/var/cache/man/pt_BR/<PID>) races with fuse-overlayfs file
+        # ops. Not snapMULTI-related and we don't ship man pages anyway.
+        "man-db.service"
     )
 
     local sys_state
