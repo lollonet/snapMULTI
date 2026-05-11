@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-05-11
+
+Bug-fix release on top of v0.7.1. v0.7.1 shipped Docker images correctly
+but its install pipeline (`prepare-sd.sh` + `firstboot.sh`) silently
+dropped the new `scripts/smoke/check_*.sh` modular directory: every
+reflashed device had `device-smoke.sh` aware of `$SMOKE_MODULES_DIR`
+but no modules to source. The six new check sections (Boot Health,
+Mounts content, Network QoS, System, Timers, Audio Modules) never
+ran — including the PR #337 `.automount` regression guard. v0.7.2
+closes that, plus two smoke false-positive families uncovered during
+the fleet sweep on 2026-05-11.
+
+Validated on 6 devices (snapvideo --both, snapdigi --client, pi3hat
+--client, pi4hatsrvusb --both, pizero --client, mrbike --both):
+all 13 smoke sections run, mDNS section reports own-record counts
+only (Snapcast=2 / AirPlay=2 / Spotify=2 = IPv4+IPv6 of self).
+
 ### Fixed
 - **Smoke mDNS section validated peer servers instead of own publications** — `device-smoke.sh:_check_mdns_service()` counted all `^=` resolved entries from `avahi-browse -rpt _snapcast._tcp` / `_raop._tcp` / `_spotify-connect._tcp`. Two issues compounded: (1) AirPlay / Spotify are not snapMULTI-exclusive — macOS "AirPlay Receiver" (port 7000), Apple TVs, HomePods, Echos, Sonos all publish them and inflated the count (mrbike 2026-05-11: 7 AirPlay vs 6 Snapcast, the +1 was `jupiter.local:7000` macOS AirPlay receiver); (2) more fundamentally, smoke is per-device validation — a green smoke on snapvideo must mean snapvideo itself is publishing, not "some other snapMULTI server happens to be visible from here". A broken snapvideo with a healthy pi4hatsrvusb on the same LAN would falsely pass. Fix: filter every protocol to entries whose mDNS hostname (field 7 of `avahi-browse -rpt` output) equals `$(hostname).local`. Case-insensitive compare since avahi normally lowercases. Same filter applies to the PTR-only fallback (`-pt`) so a peer's broken state can't surface as a failure on this device. Post-fix on mrbike (--both): Snapcast=2 / AirPlay=2 / Spotify=2 (IPv4 + IPv6 of own records), with `— own record` suffix on every OK line
 - **`scripts/smoke/check_*.sh` modules not deployed to device in v0.7.1** — v0.7.1's `device-smoke.sh` sources modules from `$SCRIPT_DIR/smoke/check_*.sh` at runtime, but `scripts/prepare-sd.sh` (`copy_server_files` + `copy_client_files`) and `scripts/firstboot.sh` server branch (~L390) copied only the wrapper file via `cp` — no `-r`. The subdirectory never reached `/opt/snapmulti/scripts/smoke/` or `/opt/snapclient/scripts/smoke/` on any reflashed device. Result: the installed `device-smoke.sh --both` silently ran the 7 inline sections (Host, Systemd, Compose, Network, Audio, Operations, Recent Errors) and reported `[OK] Smoke check passed` while skipping all 6 new sections — including the PR #337 `.automount` regression guard and the boot-tune `|| true` validation that v0.7.1 was named to enforce. Caught on **mrbike** (Pi 4 2GB --both, fresh v0.7.1 reflash 2026-05-11): `/opt/snapmulti/scripts/smoke/` did not exist; after manual `cp -r scripts/smoke/ /opt/snapmulti/scripts/` the smoke ran all 13 sections and surfaced the man-db.service allowlist gap closed in PR #339. Fix: switch to `cp -r "$SCRIPT_DIR/smoke" "$dest/"` (server) and `cp -r "$SCRIPT_DIR/smoke" "$dest/scripts/"` (client) in `prepare-sd.sh`; add `cp -r "$SNAP_BOOT/server/smoke" "$SERVER_DIR/scripts/"` in `firstboot.sh` server branch (client branch already does recursive `cp -r "$SNAP_BOOT/client/"*` and propagates the dir automatically); `Copy-Item smoke -Recurse` parity in `prepare-sd.ps1`. PR #340
