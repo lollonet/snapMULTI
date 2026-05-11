@@ -174,4 +174,98 @@ check_system() {
             info "Network state: eth0=$eth_state, wlan0=$wlan_state"
             ;;
     esac
+
+    # 5. Overlayroot tmpfs usage. The root overlay's writable layer is
+    # on tmpfs (overlayroot=tmpfs in cmdline); when it fills, Docker
+    # silently fails to write to /var/lib/docker scratch and the system
+    # becomes unbootable on next restart (read-only root + full tmpfs =
+    # no recovery short of reflash). boot-tune.sh logs WARN at 70 % and
+    # CRIT at 90 % but only in journald — surface it in smoke so the
+    # fleet-smoke aggregator sees it. Skip on writable-root systems.
+    if mount | grep -q ' on / type overlay'; then
+        local root_pcent root_used root_total
+        root_pcent=$(df / --output=pcent 2>/dev/null | tail -1 | tr -cd '0-9')
+        root_used=$(df -m / --output=used 2>/dev/null | tail -1 | tr -cd '0-9')
+        root_total=$(df -m / --output=size 2>/dev/null | tail -1 | tr -cd '0-9')
+        if [[ -n "$root_pcent" ]] && [[ -n "$root_used" ]] && [[ -n "$root_total" ]]; then
+            if (( root_pcent >= 90 )); then
+                fail_check "Overlay tmpfs ${root_pcent}% full (${root_used}/${root_total} MB) — system will fail next boot. Run: sudo ro-mode disable && sudo reboot"
+            elif (( root_pcent >= 70 )); then
+                warn "Overlay tmpfs ${root_pcent}% full (${root_used}/${root_total} MB) — approaching limit (90% = unbootable)"
+            else
+                pass_check "Overlay tmpfs ${root_pcent}% full (${root_used}/${root_total} MB)"
+            fi
+        fi
+    fi
+
+    # 6. Throttle / under-voltage history. vcgencmd get_throttled
+    # returns a hex bitmask:
+    #   0x1     currently under-voltage detected
+    #   0x2     ARM frequency currently capped
+    #   0x4     currently throttled
+    #   0x8     soft temp limit active now
+    #   0x10000 under-voltage has occurred since boot
+    #   0x20000 ARM frequency cap has occurred since boot
+    #   0x40000 throttling has occurred since boot
+    #   0x80000 soft temp limit has occurred since boot
+    # 0x0 = clean. Anything in the low nibble = currently in trouble
+    # (fail). Anything only in the high nibble = transient in the past
+    # (warn — could be a brownout, power-on inrush, or a load spike).
+    if command -v vcgencmd >/dev/null 2>&1; then
+        local throttled_raw throttled_int
+        throttled_raw=$(vcgencmd get_throttled 2>/dev/null | sed -n 's/^throttled=//p')
+        if [[ -n "$throttled_raw" ]]; then
+            # Convert hex to decimal in a portable way.
+            throttled_int=$(( throttled_raw ))
+            if (( throttled_int == 0 )); then
+                pass_check "No throttling or under-voltage history ($throttled_raw)"
+            else
+                local now_bits=$(( throttled_int & 0xF ))
+                local past_bits=$(( (throttled_int >> 16) & 0xF ))
+                local now_msgs=() past_msgs=()
+                (( now_bits & 0x1 )) && now_msgs+=("under-voltage NOW")
+                (( now_bits & 0x2 )) && now_msgs+=("ARM freq capped NOW")
+                (( now_bits & 0x4 )) && now_msgs+=("throttled NOW")
+                (( now_bits & 0x8 )) && now_msgs+=("soft temp limit NOW")
+                (( past_bits & 0x1 )) && past_msgs+=("under-voltage occurred")
+                (( past_bits & 0x2 )) && past_msgs+=("ARM freq capping occurred")
+                (( past_bits & 0x4 )) && past_msgs+=("throttling occurred")
+                (( past_bits & 0x8 )) && past_msgs+=("soft temp limit occurred")
+                if (( ${#now_msgs[@]} > 0 )); then
+                    local joined
+                    printf -v joined "%s, " "${now_msgs[@]}"; joined="${joined%, }"
+                    fail_check "Pi is currently degraded ($throttled_raw): $joined — check PSU current rating"
+                elif (( ${#past_msgs[@]} > 0 )); then
+                    local joined
+                    printf -v joined "%s, " "${past_msgs[@]}"; joined="${joined%, }"
+                    warn "Pi degraded earlier this boot ($throttled_raw): $joined — may indicate brownout or PSU undersized"
+                fi
+            fi
+        fi
+    fi
+
+    # 7. WiFi rekey / disconnect rate. The BCM43430 driver on Pi Zero 2W
+    # and Pi 3B+ has a known pattern where mesh-WiFi networks (multiple
+    # APs with the same SSID) trigger "nl80211: kernel reports: key
+    # addition failed" → CTRL-EVENT-DISCONNECTED → reassociate ~every
+    # 10-20 min. Snapclient interprets the brief outage as "server
+    # gone" and the user perceives it as "device rebooting". Count
+    # these events in the last hour: 0-3 normal, 4-10 noisy mesh,
+    # >10 sustained issue.
+    if [[ "$wlan_state" == "up" ]] && command -v journalctl >/dev/null 2>&1; then
+        local disconnect_count
+        disconnect_count=$(journalctl -u wpa_supplicant.service \
+            --since "1 hour ago" --no-pager -q 2>/dev/null \
+            | grep -cE "CTRL-EVENT-DISCONNECTED|key addition failed|Failed to set GTK" || true)
+        disconnect_count=${disconnect_count:-0}
+        if (( disconnect_count == 0 )); then
+            pass_check "WiFi stable: 0 rekey/disconnect events in last hour"
+        elif (( disconnect_count <= 3 )); then
+            info "WiFi: $disconnect_count rekey/disconnect events in last hour (normal range)"
+        elif (( disconnect_count <= 10 )); then
+            warn "WiFi: $disconnect_count rekey/disconnect events in last hour — noisy mesh or roaming (snapclient may see brief outages)"
+        else
+            fail_check "WiFi: $disconnect_count rekey/disconnect events in last hour — driver instability (BCM43430 + mesh pattern). Consider pinning bssid in wpa_supplicant.conf"
+        fi
+    fi
 }
