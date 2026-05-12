@@ -46,9 +46,11 @@ _compose_healthy_count() {
 # the sum across consecutive attempts catches the increment.
 _compose_restart_count_sum() {
     local compose_file="$1"
+    # `|| true` guards against pipefail when `docker compose ps` exits
+    # non-zero (daemon briefly unresponsive). Mirrors _compose_healthy_count.
     docker compose -f "$compose_file" ps -q 2>/dev/null \
         | xargs -r docker inspect --format '{{.RestartCount}}' 2>/dev/null \
-        | awk '{s+=$1} END {print s+0}'
+        | awk '{s+=$1} END {print s+0}' || true
 }
 
 # Verify all services in a compose stack are running and healthy.
@@ -74,11 +76,12 @@ verify_compose_stack() {
     local total hc_total running healthy attempt
     local rc_current=0
 
-    # Reject calls with attempts < 1 — they would silently no-op the
-    # loop and emit a misleading "services not all healthy after 0s"
-    # error. Caller passed a bug; surface it.
-    if [[ "$attempts" -lt 1 ]]; then
-        log_error "verify_compose_stack: attempts must be >= 1 (got '$attempts')"
+    # Reject calls with attempts < 2 — the rc_prev=-1 sentinel requires
+    # at least one baseline iteration plus one comparison iteration to
+    # claim stability, so success is impossible with attempts<2. Caller
+    # passed a bug; surface it rather than silently always-failing.
+    if [[ "$attempts" -lt 2 ]]; then
+        log_error "verify_compose_stack: attempts must be >= 2 (two samples required for RestartCount stability; got '$attempts')"
         return 1
     fi
 

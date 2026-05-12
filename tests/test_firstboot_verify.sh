@@ -143,11 +143,12 @@ run_case 2 1 2 1 0 "transient restart (RC=0,1,1) passes once stable" "0,1,1" 3
 # been a false-positive success under the old logic).
 run_case 2 1 2 1 1 "perpetual crash-loop (RC=0,1) attempts=2 fails" "0,1" 2
 
-# Regression guard for attempts=0: the loop body never runs and rc_current
-# is never assigned by the loop. The local rc_current=0 initialisation
-# above prevents `set -u` from killing the post-loop diagnostic
-# `[[ "$rc_current" -gt 0 ]]`.
-run_case 2 1 2 1 1 "attempts=0 fails cleanly (rc_current pre-initialised)" "0,0" 0
+# Guard: attempts<2 is rejected — the rc_prev=-1 sentinel requires two
+# samples (baseline + comparison) before stability can be claimed, so
+# success is impossible with attempts<2. Surface the caller's bug rather
+# than silently always-failing with a misleading "after 0s" message.
+run_case 2 1 2 1 1 "attempts=0 rejected (need >= 2 samples)" "0,0" 0
+run_case 2 1 2 1 1 "attempts=1 rejected (need >= 2 samples)" "0,0" 1
 
 echo ""
 if [[ "$fail" -gt 0 ]]; then
