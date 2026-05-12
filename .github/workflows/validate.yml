@@ -190,7 +190,11 @@ jobs:
           # the unit via a heredoc) and validate with systemd-analyze.
           set -e
           if ! command -v systemd-analyze >/dev/null 2>&1; then
-            apt-get update && apt-get install -y systemd
+            # systemd pulls tzdata which prompts for timezone selection
+            # interactively when DEBIAN_FRONTEND is unset — would hang
+            # the runner. Force noninteractive.
+            DEBIAN_FRONTEND=noninteractive apt-get update -qq && \
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -q systemd
           fi
           tmpdir=$(mktemp -d)
           mkdir -p "$tmpdir/snapclient.service.d"

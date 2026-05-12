@@ -795,9 +795,23 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     # unsupported with display in docs/HARDWARE.md. The native path
     # installs snapclient via the upstream .deb and skips Docker entirely.
     model_local=$(tr -d '\0' </proc/device-tree/model 2>/dev/null || echo "")
-    if [[ "$model_local" == *"Zero 2 W"* ]] && [[ -x scripts/setup-zero2w.sh ]]; then
-        log_info "Pi Zero 2W detected — using native snapclient install (scripts/setup-zero2w.sh)"
-        setup_script="scripts/setup-zero2w.sh"
+    if [[ "$model_local" == *"Zero 2 W"* ]]; then
+        if [[ -x scripts/setup-zero2w.sh ]]; then
+            log_info "Pi Zero 2W detected — using native snapclient install (scripts/setup-zero2w.sh)"
+            setup_script="scripts/setup-zero2w.sh"
+        else
+            # Fail loud rather than silently fall through to the Docker
+            # path: setup.sh on a Pi Zero 2W exceeds the 512 MB RAM
+            # budget and reproduces the infinite-reboot loop this PR
+            # was created to fix. The script is missing (or has lost
+            # its exec bit on a FAT32 → ext4 copy), which means
+            # prepare-sd.sh ran against an older snapMULTI tree —
+            # require operator intervention.
+            log_error "Pi Zero 2W detected but scripts/setup-zero2w.sh is missing or not executable."
+            log_error "Refusing to fall back to the Docker setup.sh — it will exceed the 512 MB RAM budget."
+            log_error "Re-flash the SD card with a current snapMULTI (scripts/prepare-sd.sh) and retry."
+            exit 1
+        fi
     else
         setup_script="scripts/setup.sh"
     fi
