@@ -145,6 +145,34 @@ COMMON="$SNAP_BOOT/common"
 # shellcheck source=common/unified-log.sh
 source "$COMMON/unified-log.sh"
 
+# Reject impossible hardware × profile combinations BEFORE doing any
+# irreversible work (apt installs, Docker pull, overlayroot toggle).
+# Pi Zero 2W (512 MB RAM, single-core SDIO storage) cannot run the
+# server stack: dockerd + 7 server containers + the 200 MB OS baseline
+# overflow the RAM budget — verified out-of-memory kills on snapcaster
+# and snap-zero attempts before the rule was discovered. The native
+# snapclient path (INSTALL_TYPE=client) is the only viable mode.
+# Surfacing the error at the start saves a 60-90 min wasted install
+# that would otherwise OOM during `docker compose pull` with a cryptic
+# "container failed to start" message that points away from the cause.
+_validate_profile_hardware() {
+    local model
+    model=$(tr -d '\0' </proc/device-tree/model 2>/dev/null || echo "")
+    if [[ "$model" == *"Zero 2 W"* ]]; then
+        case "$INSTALL_TYPE" in
+            server|both)
+                log_error "Pi Zero 2W (512 MB RAM) cannot host the snapMULTI server stack."
+                log_error "Detected model: $model"
+                log_error "INSTALL_TYPE=$INSTALL_TYPE requires a Pi 3B+, Pi 4, or Pi 5 (>=1 GB RAM)."
+                log_error "Reflash this SD with INSTALL_TYPE=client (Audio Player) for Pi Zero 2W."
+                log_error "See docs/HARDWARE.md for the supported hardware matrix."
+                exit 1
+                ;;
+        esac
+    fi
+}
+_validate_profile_hardware
+
 # Configure progress steps based on install type
 # shellcheck disable=SC2034
 case "$INSTALL_TYPE" in
