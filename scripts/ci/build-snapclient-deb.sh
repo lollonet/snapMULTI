@@ -60,7 +60,7 @@ mkdir -p "$PKG_ROOT/usr/bin" "$PKG_ROOT/DEBIAN" \
          "$PKG_ROOT/lib/systemd/system" "$PKG_ROOT/etc/default" \
          "$PKG_ROOT/usr/share/doc/snapclient"
 
-install -m 755 src/build/client/snapclient "$PKG_ROOT/usr/bin/snapclient"
+install -m 755 src/bin/snapclient "$PKG_ROOT/usr/bin/snapclient"
 
 cat > "$PKG_ROOT/DEBIAN/control" <<EOF
 Package: snapclient
