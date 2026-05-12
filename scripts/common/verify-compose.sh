@@ -65,7 +65,22 @@ verify_compose_stack() {
     local stack_name="$2"
     local attempts="$3"
     local delay="$4"
-    local total hc_total running healthy attempt rc_current
+    # rc_current must be initialised to 0: if the for-loop body never
+    # runs (attempts<1, or a future caller passes a malformed value) the
+    # post-loop diagnostic `[[ "$rc_current" -gt 0 ]]` would trip
+    # `nounset` (set -u in callers) or yield "integer expression
+    # expected" under set +u, masking the real "services not healthy"
+    # error message.
+    local total hc_total running healthy attempt
+    local rc_current=0
+
+    # Reject calls with attempts < 1 — they would silently no-op the
+    # loop and emit a misleading "services not all healthy after 0s"
+    # error. Caller passed a bug; surface it.
+    if [[ "$attempts" -lt 1 ]]; then
+        log_error "verify_compose_stack: attempts must be >= 1 (got '$attempts')"
+        return 1
+    fi
 
     total=$(docker compose -f "$compose_file" config --services 2>/dev/null | wc -l)
     if [[ "$total" -eq 0 ]]; then
@@ -81,7 +96,9 @@ verify_compose_stack() {
     # hasn't grown.
     local rc_prev=-1
 
-    for attempt in $(seq 1 "$attempts"); do
+    # C-style for: BSD `seq 1 0` on macOS counts backwards (1, 0) and
+    # GNU `seq 1 0` is empty — keep the loop count portable across both.
+    for (( attempt=1; attempt<=attempts; attempt++ )); do
         running=$(docker compose -f "$compose_file" ps --status running -q 2>/dev/null | wc -l)
         healthy=$(_compose_healthy_count "$compose_file")
         rc_current=$(_compose_restart_count_sum "$compose_file")
