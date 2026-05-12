@@ -94,6 +94,10 @@ assert 'grep -qF "dtparam=audio=off" "$SETUP"' \
     "config.txt block disables on-board HDMI audio (dtparam=audio=off)"
 assert 'grep -qE "SNAPCLIENT ZERO2W AUDIO HAT START" "$SETUP"' \
     "config.txt edits are wrapped in a marker block (idempotent)"
+assert 'grep -qE "sed -i .s/\\^dtparam=audio=on/" "$SETUP"' \
+    "factory dtparam=audio=on is commented out before adding audio=off"
+assert 'grep -qE "grep -qE .\\^dtparam=audio=on. \"\\\$BOOT_CONFIG\"" "$SETUP"' \
+    "comment-out is guarded by grep for idempotency on re-run"
 
 # 9. /etc/asound.conf write referencing HAT_CARD_NAME
 assert 'grep -qE "/etc/asound\\.conf" "$SETUP"' \

@@ -291,6 +291,14 @@ if [[ -n "$HAT_OVERLAY" ]]; then
         if grep -qF "$MARKER_START" "$BOOT_CONFIG"; then
             sed -i "/$MARKER_START/,/$MARKER_END/d" "$BOOT_CONFIG"
         fi
+        # Comment out factory `dtparam=audio=on` so the firmware doesn't
+        # emit `snd_bcm2835.enable_*` to /proc/cmdline twice (once from the
+        # factory line, once from the `dtparam=audio=off` added below).
+        # Audio runtime is unaffected (`audio=off` wins last anyway); this
+        # only cleans the kernel cmdline. Idempotent via grep guard.
+        if grep -qE '^dtparam=audio=on' "$BOOT_CONFIG"; then
+            sed -i 's/^dtparam=audio=on/#dtparam=audio=on  # disabled by snapMULTI (HAT installed)/' "$BOOT_CONFIG"
+        fi
         {
             echo ""
             echo "$MARKER_START"
