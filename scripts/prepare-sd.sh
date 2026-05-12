@@ -399,6 +399,9 @@ copy_client_files() {
     # Setup scripts + shared modules
     mkdir -p "$dest/scripts" "$dest/scripts/common"
     cp "$CLIENT_DIR/common/scripts/setup.sh" "$dest/scripts/"
+    # Pi Zero 2W native snapclient install path (firstboot.sh selects
+    # this script when /proc/device-tree/model matches "Zero 2 W").
+    [[ -f "$CLIENT_DIR/common/scripts/setup-zero2w.sh" ]] && cp "$CLIENT_DIR/common/scripts/setup-zero2w.sh" "$dest/scripts/"
     # Shared modules from server scripts/common/ that setup.sh needs
     for _shared in install-deps.sh install-docker.sh system-tune.sh unified-log.sh logging.sh sanitize.sh; do
         [[ -f "$SCRIPT_DIR/common/$_shared" ]] && cp "$SCRIPT_DIR/common/$_shared" "$dest/scripts/common/"

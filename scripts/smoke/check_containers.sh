@@ -59,8 +59,33 @@ _is_snapmulti_container() {
     return 1
 }
 
+_is_pi_zero_2w_smoke() {
+    local model
+    [[ -f /proc/device-tree/model ]] || return 1
+    model=$(tr -d '\0' </proc/device-tree/model 2>/dev/null) || return 1
+    [[ "$model" == *"Zero 2 W"* ]]
+}
+
 check_containers() {
     section "Containers"
+
+    # Pi Zero 2W runs snapclient natively (no Docker — see
+    # client/common/scripts/setup-zero2w.sh). On this device the
+    # container checks must yield to a systemd-based liveness
+    # probe of snapclient.service. The other smoke modules
+    # (mDNS, snapcast, env, system) still apply.
+    if _is_pi_zero_2w_smoke && [[ "${MODE:-}" == "client" || "${MODE:-}" == "" ]]; then
+        if command -v systemctl >/dev/null 2>&1; then
+            if systemctl is-active --quiet snapclient.service; then
+                pass_check "snapclient.service active (Pi Zero 2W native install)"
+            else
+                fail_check "snapclient.service not active on Pi Zero 2W native install"
+            fi
+        else
+            warn "systemctl not available — cannot verify native snapclient on Pi Zero 2W"
+        fi
+        return  # skip the rest of the Docker-oriented checks
+    fi
 
     if ! command -v docker >/dev/null 2>&1; then
         info "docker not installed — container checks skipped"

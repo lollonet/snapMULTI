@@ -176,10 +176,50 @@ jobs:
       - name: Client bash tests
         run: |
           bash -n client/common/scripts/setup.sh
+          bash -n client/common/scripts/setup-zero2w.sh
           bash client/tests/test_hat_configs.sh
           bash client/tests/test_entrypoint.sh
           bash client/tests/test_resource_profiles.sh
           bash client/tests/test_pull_hardening.sh
+
+      - name: Validate systemd drop-in syntax
+        run: |
+          # The Pi Zero 2W native install ships a drop-in override at
+          # /etc/systemd/system/snapclient.service.d/snapmulti-override.conf.
+          # Extract its contents from setup-zero2w.sh (the script embeds
+          # the unit via a heredoc) and validate with systemd-analyze.
+          set -e
+          if ! command -v systemd-analyze >/dev/null 2>&1; then
+            apt-get update && apt-get install -y systemd
+          fi
+          tmpdir=$(mktemp -d)
+          mkdir -p "$tmpdir/snapclient.service.d"
+          awk '
+            /cat > "\$DROPIN_DIR\/snapmulti-override.conf" <</ { in_heredoc=1; next }
+            in_heredoc && /^EOF$/ { in_heredoc=0; next }
+            in_heredoc { print }
+          ' client/common/scripts/setup-zero2w.sh > "$tmpdir/snapclient.service.d/snapmulti-override.conf"
+          if [ ! -s "$tmpdir/snapclient.service.d/snapmulti-override.conf" ]; then
+            echo "ERROR: Could not extract systemd drop-in from setup-zero2w.sh"
+            exit 1
+          fi
+          # systemd-analyze verify needs the base unit; the upstream
+          # snapclient.service from the .deb provides it. Mock a minimal
+          # base unit since we can't fetch the .deb here.
+          cat > "$tmpdir/snapclient.service" <<'BASE'
+[Unit]
+Description=Snapcast client
+[Service]
+ExecStart=/usr/bin/snapclient
+[Install]
+WantedBy=multi-user.target
+BASE
+          systemd-analyze verify "$tmpdir/snapclient.service" || {
+            echo "ERROR: systemd drop-in failed verify"
+            exit 1
+          }
+          echo "✓ systemd drop-in valid"
+          rm -rf "$tmpdir"
 
       - name: Validate HAT config count
         run: |

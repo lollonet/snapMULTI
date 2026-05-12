@@ -200,6 +200,14 @@ fi
 if command -v tune_bcm43430_firmware_workaround &>/dev/null; then
     tune_bcm43430_firmware_workaround
 fi
+# Pi Zero 2W: disable zram swap to prevent overlay tmpfs fill from
+# rpi-zram-writeback writing to /var/swap (CoW into tmpfs upper
+# layer fills 256 MB tmpfs → kernel panic). MUST run before
+# setup.sh, which activates overlayroot via raspi-config and would
+# strand the systemctl mask symlinks in the volatile tmpfs upper.
+if command -v tune_pi_zero_2w_swap_safety &>/dev/null; then
+    tune_pi_zero_2w_swap_safety
+fi
 
 # ── Module tracking ──────────────────────────────────────────────
 # Sourced modules overwrite LOG_SOURCE — reset it after each call
@@ -781,13 +789,26 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
         done
     fi
 
-    # Run setup.sh — parse output through unified logger (same as deploy.sh).
+    # Pi Zero 2W gets the native snapclient install path (no Docker).
+    # Docker + visualizer + fb-display memory footprint (~352 MB containers
+    # + 200 MB OS/dockerd) exceeds the 512 MB RAM budget — confirmed
+    # unsupported with display in docs/HARDWARE.md. The native path
+    # installs snapclient via the upstream .deb and skips Docker entirely.
+    model_local=$(tr -d '\0' </proc/device-tree/model 2>/dev/null || echo "")
+    if [[ "$model_local" == *"Zero 2 W"* ]] && [[ -x scripts/setup-zero2w.sh ]]; then
+        log_info "Pi Zero 2W detected — using native snapclient install (scripts/setup-zero2w.sh)"
+        setup_script="scripts/setup-zero2w.sh"
+    else
+        setup_script="scripts/setup.sh"
+    fi
+
+    # Run setup script — parse output through unified logger (same as deploy.sh).
     # Tee a copy of every line so the failure path can dump full unfiltered
     # output (the case-statement filter drops most stderr noise on the
     # success path; on failure that's the noise we need).
     setup_log=$(mktemp /tmp/firstboot-setup-XXXXXX.log)
     set +eo pipefail
-    bash scripts/setup.sh "${setup_args[@]}" 2>&1 | tee "$setup_log" | while IFS= read -r line; do
+    bash "$setup_script" "${setup_args[@]}" 2>&1 | tee "$setup_log" | while IFS= read -r line; do
         if [[ "$VERBOSE_INSTALL" == "true" ]]; then
             log_msg INFO setup "${line:0:200}"
         else
