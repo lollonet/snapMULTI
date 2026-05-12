@@ -143,7 +143,10 @@ assert 'echo "$quiet_block" | grep -qE "if ! grep -qE.*CMDLINE_FILE"' \
 # reflash): patcher logged `cmdline: failed to add '<flag>'` × 5 with
 # /boot/firmware already ro because setup.sh had run first.
 quiet_line=$(grep -nE "^[[:space:]]*for flag in .*systemd\\.show_status" "$FIRSTBOOT" | head -1 | cut -d: -f1)
-setup_line=$(grep -nE "^[[:space:]]*bash scripts/setup\\.sh" "$FIRSTBOOT" | head -1 | cut -d: -f1)
+# After PR #355 the dispatcher resolved a `$setup_script` variable
+# (Pi Zero 2W → setup-zero2w.sh, others → setup.sh) — accept either
+# `bash scripts/setup.sh` or `bash "$setup_script"` as the call site.
+setup_line=$(grep -nE "^[[:space:]]*bash (scripts/setup\\.sh|\"\\\$setup_script\")" "$FIRSTBOOT" | head -1 | cut -d: -f1)
 if [[ -n "$quiet_line" && -n "$setup_line" && "$quiet_line" -lt "$setup_line" ]]; then
     echo "  PASS: quiet-boot block (line $quiet_line) runs BEFORE bash scripts/setup.sh (line $setup_line)"
     pass=$((pass + 1))
