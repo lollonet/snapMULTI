@@ -1138,6 +1138,12 @@ fi
 if [[ "$CONNECTION_TYPE" == "wifi" ]]; then
     tune_wifi_powersave
     log_progress "WiFi power management: disabled"
+
+    # Pi Zero 2W (BCM43430) firmware GTK-rekey workaround. No-op on
+    # other Pi models. Persistent across reboots via /etc/modprobe.d/.
+    if command -v tune_bcm43430_firmware_workaround &>/dev/null; then
+        tune_bcm43430_firmware_workaround
+    fi
 else
     echo "Ethernet detected — no WiFi optimization needed"
     log_progress "Network: ethernet (no WiFi tuning)"
