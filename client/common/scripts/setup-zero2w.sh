@@ -20,14 +20,13 @@
 
 set -euo pipefail
 
-SNAPCLIENT_VERSION="0.35.0"
-SNAPCLIENT_DEB_REV="0.35.0-1"
-SNAPCLIENT_DEB_BASEURL="https://github.com/badaix/snapcast/releases/download/v${SNAPCLIENT_VERSION}"
-# SHA256 of the upstream .deb assets (pinned 2026-05-12).
-# Re-pin on every snapcast release bump.
-SNAPCLIENT_SHA256_ARM64="83afa0910cce99c0e6d4a52ec1849240c9956f5147e0743d60d4dd5f3b11af1a"
-SNAPCLIENT_SHA256_ARMHF="b532928974d5fa1bef8aa44e7400fb47ee3e91cede319c90cf830d23cf18ddb2"
-
+# Distro apt is the install source: Trixie ships snapclient 0.31.0,
+# Bookworm ships 0.27.0. The badaix .deb release (v0.35) is Bookworm-
+# bound by its libflac12 dependency and breaks on Trixie. The Snapcast
+# wire protocol is stable across these minor versions, so the older
+# apt build is acceptable for the Pi Zero 2W client. setup-zero2w.sh
+# previously downloaded the .deb directly and pinned an SHA256; that
+# path is removed (commit log for the rationale).
 INSTALL_DIR="/opt/snapclient"
 CLIENT_ID="snapclient-$(hostname)"
 
@@ -91,7 +90,6 @@ done
 
 step "Pi Zero 2W native snapclient setup"
 info "Client ID: $CLIENT_ID"
-info "snapclient version: v${SNAPCLIENT_VERSION}"
 
 # ── Detect arch ──────────────────────────────────────────────────
 if ! command -v dpkg >/dev/null 2>&1; then
@@ -99,15 +97,6 @@ if ! command -v dpkg >/dev/null 2>&1; then
     exit 1
 fi
 ARCH="$(dpkg --print-architecture)"
-case "$ARCH" in
-    arm64) EXPECTED_SHA="$SNAPCLIENT_SHA256_ARM64" ;;
-    armhf) EXPECTED_SHA="$SNAPCLIENT_SHA256_ARMHF" ;;
-    *)
-        error "Unsupported architecture for snapclient .deb: $ARCH"
-        exit 1
-        ;;
-esac
-DEB_URL="${SNAPCLIENT_DEB_BASEURL}/snapclient_${SNAPCLIENT_DEB_REV}_${ARCH}_bookworm.deb"
 info "Architecture: $ARCH"
 
 # ── Install runtime deps via shared install-deps.sh ──────────────
@@ -121,60 +110,29 @@ if _source_first_match "install-deps.sh"; then
     fi
 fi
 
-# Extra runtime deps specific to native snapclient (the .deb declares
-# these as Depends but apt-get install -f resolves them anyway; we
-# pre-install to keep the dpkg -i call fast and idempotent).
-step "Pre-installing snapclient runtime libraries"
-DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    libasound2 libavahi-client3 libavahi-common3 libflac12 \
-    libogg0 libopus0 libsoxr0 libssl3 libvorbis0a \
-    alsa-utils avahi-daemon curl ca-certificates adduser
-
-# ── Install snapclient .deb (idempotent) ─────────────────────────
-install_snapclient_deb() {
-    local installed_ver=""
-    if command -v snapclient >/dev/null 2>&1; then
-        installed_ver="$(/usr/bin/snapclient --version 2>&1 | head -1 || true)"
-        if echo "$installed_ver" | grep -qE "v?${SNAPCLIENT_VERSION//./\\.}"; then
-            ok "snapclient v${SNAPCLIENT_VERSION} already installed"
-            return 0
-        fi
-        info "snapclient currently installed: $installed_ver (will upgrade)"
+# ── Install snapclient from distro apt (idempotent) ──────────────
+# Trixie ships 0.31.0, Bookworm ships 0.27.0. apt-get resolves the
+# library deps automatically — no per-release pinning needed.
+install_snapclient_apt() {
+    if dpkg-query -W -f='${Status}' snapclient 2>/dev/null | grep -q "install ok installed"; then
+        local v
+        v=$(dpkg-query -W -f='${Version}' snapclient 2>/dev/null || echo "?")
+        ok "snapclient already installed (apt package, version $v)"
+        return 0
     fi
 
-    local deb_path=/tmp/snapclient.deb
-    info "Downloading $DEB_URL"
-    if ! curl -fL --retry 3 --max-time 180 -o "$deb_path" "$DEB_URL"; then
-        error "snapclient .deb download failed — firstboot will retry on next boot"
-        rm -f "$deb_path"
+    info "Installing snapclient from distro apt"
+    if ! DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends snapclient; then
+        error "apt-get install snapclient failed — firstboot will retry on next boot"
         exit 1
     fi
-
-    local actual_sha
-    actual_sha="$(sha256sum "$deb_path" | awk '{print $1}')"
-    if [[ "$actual_sha" != "$EXPECTED_SHA" ]]; then
-        error "snapclient .deb SHA256 mismatch:"
-        error "  expected: $EXPECTED_SHA"
-        error "  actual:   $actual_sha"
-        rm -f "$deb_path"
-        exit 1
-    fi
-    ok "SHA256 verified ($actual_sha)"
-
-    if ! DEBIAN_FRONTEND=noninteractive dpkg -i "$deb_path"; then
-        info "dpkg -i reported missing deps — resolving with apt-get install -f"
-        if ! DEBIAN_FRONTEND=noninteractive apt-get install -f -y; then
-            error "snapclient .deb dependency resolution failed"
-            rm -f "$deb_path"
-            exit 1
-        fi
-    fi
-    rm -f "$deb_path"
-    ok "snapclient v${SNAPCLIENT_VERSION} installed"
+    local v
+    v=$(dpkg-query -W -f='${Version}' snapclient 2>/dev/null || echo "?")
+    ok "snapclient installed (apt package, version $v)"
 }
 
-step "Installing snapclient .deb"
-install_snapclient_deb
+step "Installing snapclient"
+install_snapclient_apt
 
 # ── Detect audio HAT (sets SOUNDCARD / MIXER / ALSA_*) ───────────
 SOUNDCARD="default"
@@ -253,13 +211,15 @@ fi
 
 # ── Install snapMULTI install dir marker (for smoke checks) ─────
 mkdir -p "$INSTALL_DIR"
+_apt_snapclient_ver=$(dpkg-query -W -f='${Version}' snapclient 2>/dev/null || echo "unknown")
 cat > "$INSTALL_DIR/install.conf" <<EOF
 # snapMULTI install marker — written by setup-zero2w.sh
 INSTALL_TYPE=client-native
 CLIENT_ID=${CLIENT_ID}
-SNAPCLIENT_VERSION=${SNAPCLIENT_VERSION}
+SNAPCLIENT_VERSION=${_apt_snapclient_ver}
 ARCH=${ARCH}
 EOF
+unset _apt_snapclient_ver
 
 # ── Strip Docker-only assets staged by prepare-sd.sh ─────────────
 # prepare-sd.sh ships the full client tree without knowing the

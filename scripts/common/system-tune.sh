@@ -209,6 +209,23 @@ tune_pi_zero_2w_swap_safety() {
         return 0  # other Pi models keep zram (sufficient RAM)
     fi
 
+    # Authoritative kill switch for Pi OS Bookworm's rpi-swap package:
+    # /lib/systemd/system-generators/rpi-swap-generator reads
+    # /etc/rpi/swap.conf at every boot and regenerates dev-zram0.swap
+    # + the writeback timer in /run/systemd/generator/. systemctl mask
+    # symlinks under /etc/systemd/system/ should outrank /run/... but
+    # were observed live on pizero to leave /dev/zram0 attached as
+    # swap after reboot. Replacing /etc/rpi/swap.conf with a config
+    # that has neither a [File] nor a [Zram] section makes the
+    # generator emit zero swap units — the root-cause fix. systemctl
+    # mask is kept as a defense-in-depth measure for kernels and
+    # distros that bypass the rpi-swap generator entirely.
+    local swap_conf=/etc/rpi/swap.conf
+    local swap_conf_payload='# snapMULTI Pi Zero 2W: zram and file swap disabled to keep
+# overlay tmpfs from filling (see tune_pi_zero_2w_swap_safety
+# in scripts/common/system-tune.sh). Re-add [File] / [Zram]
+# sections to re-enable.'
+
     local units=(
         dev-zram0.swap
         systemd-zram-setup@zram0.service
@@ -223,7 +240,13 @@ tune_pi_zero_2w_swap_safety() {
             break
         fi
     done
-    if (( all_masked == 1 )) && [[ ! -f /var/swap ]]; then
+    local conf_ok=0
+    if [[ -f "$swap_conf" ]] && grep -qF "snapMULTI Pi Zero 2W" "$swap_conf"; then
+        conf_ok=1
+    elif [[ ! -f "$swap_conf" ]]; then
+        conf_ok=1  # nothing to disable
+    fi
+    if (( all_masked == 1 )) && (( conf_ok == 1 )) && [[ ! -f /var/swap ]]; then
         ok "Pi Zero 2W zram swap safety already configured"
         return 0
     fi
@@ -231,10 +254,15 @@ tune_pi_zero_2w_swap_safety() {
     for u in "${units[@]}"; do
         systemctl mask "$u" >/dev/null 2>&1 || true
     done
+    if [[ -d /etc/rpi ]]; then
+        if ! printf '%s\n' "$swap_conf_payload" > "$swap_conf" 2>/dev/null; then
+            is_overlayroot && warn "rpi-swap-generator config not writable (overlayroot — write before ro-mode enable)"
+        fi
+    fi
     rm -f /var/swap 2>/dev/null || true
 
     if systemctl list-unit-files dev-zram0.swap --no-legend 2>/dev/null | grep -q masked; then
-        ok "Pi Zero 2W zram swap safety applied (units masked, /var/swap removed)"
+        ok "Pi Zero 2W zram swap safety applied (units masked, swap.conf cleared, /var/swap removed)"
         return 0
     fi
 

@@ -461,19 +461,34 @@ fi
 set_module "deps"
 next_step "Installing git and dependencies..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
+# Pi Zero 2W + client mode goes through the native snapclient path
+# (setup-zero2w.sh, no Docker). Skip every Docker-related step in
+# this orchestrator: repo setup, Docker install, fuse-overlayfs
+# switch. The model detection here must mirror the dispatch
+# decision made later in the CLIENT INSTALL block.
+SKIP_DOCKER=false
+_model_check=$(tr -d '\0' </proc/device-tree/model 2>/dev/null || echo "")
+if [[ "$_model_check" == *"Zero 2 W"* ]] && [[ "$INSTALL_TYPE" == "client" ]]; then
+    SKIP_DOCKER=true
+    log_info "Pi Zero 2W client install — skipping Docker repo, Docker daemon and fuse-overlayfs steps"
+fi
+unset _model_check
+
 DOCKER_REPO_PRECONFIGURED=false
 if checkpoint_reached "deps"; then
     log_info "Dependencies already installed (checkpoint), skipping"
 else
-    # Pre-add Docker apt repo so install-deps.sh's apt-get update covers
-    # both Debian + Docker sources in one shot. The repo file write only
-    # needs curl (preinstalled on RPi OS Lite + Debian Bookworm/Trixie).
-    # shellcheck source=common/install-docker.sh
-    source "$COMMON/install-docker.sh"
-    if setup_docker_repo; then
-        DOCKER_REPO_PRECONFIGURED=true
-    else
-        log_warn "Docker repo setup failed (curl/network) — install-docker will retry with its own update"
+    if [[ "$SKIP_DOCKER" == "false" ]]; then
+        # Pre-add Docker apt repo so install-deps.sh's apt-get update covers
+        # both Debian + Docker sources in one shot. The repo file write only
+        # needs curl (preinstalled on RPi OS Lite + Debian Bookworm/Trixie).
+        # shellcheck source=common/install-docker.sh
+        source "$COMMON/install-docker.sh"
+        if setup_docker_repo; then
+            DOCKER_REPO_PRECONFIGURED=true
+        else
+            log_warn "Docker repo setup failed (curl/network) — install-docker will retry with its own update"
+        fi
     fi
 
     # shellcheck source=common/install-deps.sh
@@ -487,24 +502,29 @@ milestone "$CURRENT_STEP" "System dependencies installed" 2 2>/dev/null || true
 # STEP 4: Docker
 # ══════════════════════════════════════════════════════════════════
 set_module "docker"
-next_step "Installing Docker..."
-start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-if checkpoint_reached "docker"; then
-    log_info "Docker already installed (checkpoint), skipping"
+if [[ "$SKIP_DOCKER" == "true" ]]; then
+    log_info "Skipping Docker install (Pi Zero 2W native snapclient path)"
+    next_step "Skipping Docker (native install)..."
 else
-    # shellcheck source=common/setup-docker.sh
-    source "$COMMON/setup-docker.sh"
-    # Skip redundant apt-get update only when install-deps.sh's update already
-    # saw the Docker repo. If pre-configuration failed, install_docker_apt must
-    # run its own update after the recovery attempt at setup_docker_repo.
-    if [[ "$DOCKER_REPO_PRECONFIGURED" == "true" ]]; then
-        SKIP_APT_UPDATE=true setup_docker
+    next_step "Installing Docker..."
+    start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
+    if checkpoint_reached "docker"; then
+        log_info "Docker already installed (checkpoint), skipping"
     else
-        setup_docker
+        # shellcheck source=common/setup-docker.sh
+        source "$COMMON/setup-docker.sh"
+        # Skip redundant apt-get update only when install-deps.sh's update already
+        # saw the Docker repo. If pre-configuration failed, install_docker_apt must
+        # run its own update after the recovery attempt at setup_docker_repo.
+        if [[ "$DOCKER_REPO_PRECONFIGURED" == "true" ]]; then
+            SKIP_APT_UPDATE=true setup_docker
+        else
+            setup_docker
+        fi
+        checkpoint_done "docker"
     fi
-    checkpoint_done "docker"
+    milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
 fi
-milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
 
 # ── Pre-configure fuse-overlayfs when readonly is planned ─────────
 # On first boot root is still writable ext4, so setup-docker.sh keeps
@@ -528,7 +548,7 @@ milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
 # next boot — even when valid images already exist under fuse-overlayfs.
 # The checkpoint is set ONLY after the new daemon is up under the new
 # driver, so an interrupted switch correctly retries from scratch.
-if [[ "${ENABLE_READONLY}" == "true" ]]; then
+if [[ "${ENABLE_READONLY}" == "true" ]] && [[ "$SKIP_DOCKER" == "false" ]]; then
     if checkpoint_reached "fuse-overlayfs-switched"; then
         log_info "fuse-overlayfs switch already complete (checkpoint), skipping"
     else
@@ -881,16 +901,28 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     #     TUI competing for fb0.
     # This makes the previous chvt 8 workaround unnecessary — TUI on tty3
     # stays visible until the explicit reboot countdown.
-    log_info "Starting snapclient container (fb-display deferred to post-reboot)..."
-    if ! ( cd "$CLIENT_DIR" && COMPOSE_PROFILES="" docker compose up -d ); then
-        log_warn "docker compose up -d snapclient failed"
-    fi
+    if [[ "$SKIP_DOCKER" == "true" ]]; then
+        # Native snapclient install: setup-zero2w.sh already enabled
+        # and started snapclient.service. No docker compose, no
+        # compose verify — verify the systemd unit instead.
+        log_info "Verifying native snapclient.service..."
+        if ! systemctl is-active --quiet snapclient.service; then
+            log_error "snapclient.service not active after setup-zero2w.sh — will retry on next boot"
+            exit 1
+        fi
+        log_info "snapclient.service active"
+    else
+        log_info "Starting snapclient container (fb-display deferred to post-reboot)..."
+        if ! ( cd "$CLIENT_DIR" && COMPOSE_PROFILES="" docker compose up -d ); then
+            log_warn "docker compose up -d snapclient failed"
+        fi
 
-    # Verify only the unprofiled service set (just snapclient) — the
-    # framebuffer services come up at the next boot.
-    if ! COMPOSE_PROFILES="" verify_compose_stack "$CLIENT_DIR/docker-compose.yml" "client" 12 5; then
-        log_error "Client verify failed — will retry on next boot"
-        exit 1
+        # Verify only the unprofiled service set (just snapclient) — the
+        # framebuffer services come up at the next boot.
+        if ! COMPOSE_PROFILES="" verify_compose_stack "$CLIENT_DIR/docker-compose.yml" "client" 12 5; then
+            log_error "Client verify failed — will retry on next boot"
+            exit 1
+        fi
     fi
     checkpoint_done "setup"
   fi  # checkpoint guard
