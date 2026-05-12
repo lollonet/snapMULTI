@@ -209,15 +209,16 @@ jobs:
           fi
           # systemd-analyze verify needs the base unit; the upstream
           # snapclient.service from the .deb provides it. Mock a minimal
-          # base unit since we can't fetch the .deb here.
-          cat > "$tmpdir/snapclient.service" <<'BASE'
-[Unit]
-Description=Snapcast client
-[Service]
-ExecStart=/usr/bin/snapclient
-[Install]
-WantedBy=multi-user.target
-BASE
+          # base unit (printf used instead of heredoc to keep the unit
+          # lines inside the YAML block scalar indentation).
+          {
+            printf '[Unit]\n'
+            printf 'Description=Snapcast client\n'
+            printf '[Service]\n'
+            printf 'ExecStart=/usr/bin/snapclient\n'
+            printf '[Install]\n'
+            printf 'WantedBy=multi-user.target\n'
+          } > "$tmpdir/snapclient.service"
           systemd-analyze verify "$tmpdir/snapclient.service" || {
             echo "ERROR: systemd drop-in failed verify"
             exit 1
