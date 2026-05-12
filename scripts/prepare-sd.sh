@@ -561,6 +561,14 @@ case "$INSTALL_TYPE" in
         ;;
 esac
 
+# Strip Python bytecode caches that `cp -r` drags along from the host
+# tree (the recursive copies under copy_*_files don't filter — and
+# .gitignore-listed dirs like __pycache__/ can exist in the working
+# tree even though they're never committed). Running the strip once
+# at the end of the staging keeps the per-cp-call paths simple.
+find "$DEST" -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+find "$DEST" -type f -name '*.pyc' -delete 2>/dev/null || true
+
 # Bake version files so installer scripts can set version vars without a git repo on device.
 # Format difference is intentional: server strips "v" (deploy.sh + metadata-service expect
 # Both use the same version tag from the monorepo (with "v" prefix).

@@ -261,6 +261,30 @@ SNAPCLIENT_VERSION=${SNAPCLIENT_VERSION}
 ARCH=${ARCH}
 EOF
 
+# ── Strip Docker-only assets staged by prepare-sd.sh ─────────────
+# prepare-sd.sh ships the full client tree without knowing the
+# target model. On Pi Zero 2W the native path uses none of the
+# Docker artefacts (compose file, Dockerfiles, bind-mount sources
+# for visualizer/fb-display, display-detect helpers). Removing
+# them after the install keeps the device tree honest: a smoke
+# check or operator browsing /opt/snapclient/ won't be misled by
+# obsolete config that would not actually be honoured.
+step "Pruning Docker-only assets (not used by native install)"
+for unused in \
+    "$INSTALL_DIR/docker-compose.yml" \
+    "$INSTALL_DIR/.env.example" \
+    "$INSTALL_DIR/docker" \
+    "$INSTALL_DIR/public" \
+    "$INSTALL_DIR/scripts/discover-server.sh" \
+    "$INSTALL_DIR/scripts/display.sh" \
+    "$INSTALL_DIR/scripts/display-detect.sh" \
+    "$INSTALL_DIR/scripts/docker-driver-reconcile.sh" \
+    "$INSTALL_DIR/scripts/common/install-docker.sh" \
+    "$INSTALL_DIR/systemd/snapclient-display.service"; do
+    rm -rf "$unused" 2>/dev/null || true
+done
+ok "Docker-only assets pruned"
+
 # ── Read-only filesystem ─────────────────────────────────────────
 # Defer overlayroot activation to firstboot.sh's setup_readonly_fs
 # step — same as the Docker path. setup-zero2w.sh deliberately does

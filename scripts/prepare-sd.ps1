@@ -666,6 +666,14 @@ switch ($InstallType) {
     'both'   { Copy-ServerFiles -Dest $Dest; Copy-ClientFiles -Dest $Dest }
 }
 
+# Strip Python bytecode caches dragged along from the host tree
+# (mirrors prepare-sd.sh post-copy cleanup).
+Get-ChildItem -Path $Dest -Recurse -Force -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -eq '__pycache__' } |
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+Get-ChildItem -Path $Dest -Recurse -Force -File -Filter '*.pyc' -ErrorAction SilentlyContinue |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+
 # ── Write version files ──────────────────────────────────────────
 # Both use the same version tag from the monorepo (with "v" prefix)
 try {
