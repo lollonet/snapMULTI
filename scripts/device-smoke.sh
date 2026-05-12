@@ -146,8 +146,39 @@ detect_dir() {
     return 1
 }
 
+# Pi Zero 2W native install path — install.conf marks the role but
+# there's no docker-compose.yml / .env (snapclient runs as systemd unit
+# directly from the distro apt package). detect_dir() would miss it
+# because of the compose-file gate, so look for install.conf separately.
+detect_native_client_dir() {
+    local explicit="$1"
+    if [[ -n "$explicit" ]]; then
+        printf '%s\n' "$explicit"
+        return 0
+    fi
+    local candidate
+    for candidate in /opt/snapclient "${SCRIPT_DIR}/../client/common"; do
+        if [[ -f "$candidate/install.conf" ]] && \
+           grep -qE '^INSTALL_TYPE=client-native' "$candidate/install.conf" 2>/dev/null; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
 SERVER_DIR="$(detect_dir "$SERVER_DIR" snapserver /opt/snapmulti "${SCRIPT_DIR}/.." || true)"
 CLIENT_DIR="$(detect_dir "$CLIENT_DIR" snapclient /opt/snapclient "${SCRIPT_DIR}/../client/common" || true)"
+NATIVE_CLIENT_DIR=""
+INSTALL_TYPE_NATIVE_CLIENT="false"
+if [[ -z "$CLIENT_DIR" ]]; then
+    NATIVE_CLIENT_DIR="$(detect_native_client_dir "" || true)"
+    if [[ -n "$NATIVE_CLIENT_DIR" ]]; then
+        CLIENT_DIR="$NATIVE_CLIENT_DIR"
+        INSTALL_TYPE_NATIVE_CLIENT="true"
+    fi
+fi
+export INSTALL_TYPE_NATIVE_CLIENT  # consumed by smoke modules (check_containers etc.)
 
 if [[ "$MODE" == "auto" ]]; then
     if [[ -n "$SERVER_DIR" && -n "$CLIENT_DIR" ]]; then
@@ -267,7 +298,12 @@ check_compose_stack() {
     done
 }
 
-require_cmd docker
+# Docker is mandatory for every install path EXCEPT the Pi Zero 2W
+# native client (snapclient runs as a systemd unit; no daemon).
+# Skip the docker require when only that path is present.
+if [[ "$INSTALL_TYPE_NATIVE_CLIENT" != "true" || "$MODE" != "client" ]]; then
+    require_cmd docker
+fi
 require_cmd python3
 require_cmd systemctl
 require_cmd mount
