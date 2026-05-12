@@ -110,29 +110,102 @@ if _source_first_match "install-deps.sh"; then
     fi
 fi
 
-# ── Install snapclient from distro apt (idempotent) ──────────────
-# Trixie ships 0.31.0, Bookworm ships 0.27.0. apt-get resolves the
-# library deps automatically — no per-release pinning needed.
+# ── snapclient install source ────────────────────────────────────
+# Preferred: snapMULTI-built v0.35 .deb from GitHub releases (matches
+# the server's snapcast version). Fallback: distro apt (Trixie 0.31,
+# Bookworm 0.27 — wire-protocol compatible but older).
+#
+# The custom .deb release is named `snapclient-deb/<tag>` and ships
+# four assets: snapclient_<ver>-snapmulti1_<arch>_<codename>.deb for
+# trixie+bookworm × arm64+armhf. SHA256 verification is built into
+# the release asset (`SHA256SUMS-*.txt`).
+SNAPCLIENT_DEB_RELEASE_TAG="snapclient-deb/v0.35.0-snapmulti1"
+SNAPCLIENT_DEB_RELEASE_BASEURL="https://github.com/lollonet/snapMULTI/releases/download/${SNAPCLIENT_DEB_RELEASE_TAG}"
+
+_get_codename() {
+    # shellcheck disable=SC1091
+    if [[ -r /etc/os-release ]] && (. /etc/os-release && [[ -n "${VERSION_CODENAME:-}" ]]); then
+        # shellcheck disable=SC1091
+        (. /etc/os-release && printf '%s' "$VERSION_CODENAME")
+        return 0
+    fi
+    return 1
+}
+
 install_snapclient_apt() {
     if dpkg-query -W -f='${Status}' snapclient 2>/dev/null | grep -q "install ok installed"; then
         local v
         v=$(dpkg-query -W -f='${Version}' snapclient 2>/dev/null || echo "?")
-        ok "snapclient already installed (apt package, version $v)"
+        ok "snapclient already installed (version $v)"
         return 0
     fi
 
-    info "Installing snapclient from distro apt"
+    info "Installing snapclient from distro apt (fallback)"
     if ! DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends snapclient; then
         error "apt-get install snapclient failed — firstboot will retry on next boot"
         exit 1
     fi
     local v
     v=$(dpkg-query -W -f='${Version}' snapclient 2>/dev/null || echo "?")
-    ok "snapclient installed (apt package, version $v)"
+    ok "snapclient installed (apt fallback, version $v)"
+}
+
+install_snapclient_custom_deb() {
+    # Returns 0 on successful install of snapMULTI .deb; non-zero
+    # signals the caller to fall back to apt distro.
+    if dpkg-query -W -f='${Version}' snapclient 2>/dev/null | grep -q "snapmulti"; then
+        local v
+        v=$(dpkg-query -W -f='${Version}' snapclient 2>/dev/null || echo "?")
+        ok "snapMULTI snapclient .deb already installed (version $v)"
+        return 0
+    fi
+
+    local codename
+    codename=$(_get_codename) || { warn "no /etc/os-release VERSION_CODENAME — fallback to apt"; return 1; }
+
+    local deb_name="snapclient_0.35.0-snapmulti1_${ARCH}_${codename}.deb"
+    local sums_name="SHA256SUMS-${codename}-${ARCH}.txt"
+    local deb_url="${SNAPCLIENT_DEB_RELEASE_BASEURL}/${deb_name}"
+    local sums_url="${SNAPCLIENT_DEB_RELEASE_BASEURL}/${sums_name}"
+    local tmp_dir
+    tmp_dir=$(mktemp -d /tmp/snapclient-deb-XXXXX)
+    # Best-effort cleanup on any exit path.
+    # shellcheck disable=SC2064
+    trap "rm -rf '$tmp_dir'" RETURN
+
+    info "Trying snapMULTI .deb: $deb_url"
+    if ! curl -fL --retry 2 --max-time 90 -o "$tmp_dir/$deb_name" "$deb_url" 2>/dev/null; then
+        info "snapMULTI .deb not available for ${codename}/${ARCH} — fallback to apt"
+        return 1
+    fi
+    if ! curl -fL --retry 2 --max-time 30 -o "$tmp_dir/$sums_name" "$sums_url" 2>/dev/null; then
+        warn "checksum file not available — refusing unsigned .deb, fallback to apt"
+        return 1
+    fi
+
+    if ! ( cd "$tmp_dir" && grep "  ./${deb_name}\$" "$sums_name" | sha256sum -c --quiet ); then
+        warn "snapMULTI .deb SHA256 mismatch — fallback to apt"
+        return 1
+    fi
+    ok "SHA256 verified for $deb_name"
+
+    if ! DEBIAN_FRONTEND=noninteractive dpkg -i "$tmp_dir/$deb_name"; then
+        info "dpkg -i had missing deps — resolving with apt-get install -f"
+        if ! DEBIAN_FRONTEND=noninteractive apt-get install -f -y; then
+            warn "snapMULTI .deb dependency resolution failed — fallback to apt"
+            return 1
+        fi
+    fi
+    local v
+    v=$(dpkg-query -W -f='${Version}' snapclient 2>/dev/null || echo "?")
+    ok "snapclient installed from snapMULTI .deb (version $v)"
+    return 0
 }
 
 step "Installing snapclient"
-install_snapclient_apt
+if ! install_snapclient_custom_deb; then
+    install_snapclient_apt
+fi
 
 # ── Detect audio HAT (sets SOUNDCARD / MIXER / ALSA_*) ───────────
 SOUNDCARD="default"
