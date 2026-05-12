@@ -59,12 +59,21 @@ _is_snapmulti_container() {
     return 1
 }
 
-_is_pi_zero_2w_smoke() {
-    local model
-    [[ -f /proc/device-tree/model ]] || return 1
-    model=$(tr -d '\0' </proc/device-tree/model 2>/dev/null) || return 1
-    [[ "$model" == *"Zero 2 W"* ]]
-}
+# is_pi_zero_2w lives in scripts/common/device-detect.sh. Source it
+# if device-smoke.sh hasn't already, so this module is callable
+# standalone (e.g. ad-hoc operator runs) without surprises.
+if ! command -v is_pi_zero_2w &>/dev/null; then
+    _CC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -f "$_CC_DIR/../common/device-detect.sh" ]]; then
+        # shellcheck source=../common/device-detect.sh
+        source "$_CC_DIR/../common/device-detect.sh"
+    fi
+    unset _CC_DIR
+fi
+
+# Backwards-compat alias — older invocations / tests may still call
+# this name. Implementation moved to device-detect.sh:is_pi_zero_2w.
+_is_pi_zero_2w_smoke() { is_pi_zero_2w; }
 
 check_containers() {
     section "Containers"

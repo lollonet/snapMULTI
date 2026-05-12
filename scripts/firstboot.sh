@@ -145,6 +145,37 @@ COMMON="$SNAP_BOOT/common"
 # shellcheck source=common/unified-log.sh
 source "$COMMON/unified-log.sh"
 
+# Source device-detect.sh — single source of truth for hardware probes
+# (is_pi_zero_2w, device_model). Used by the hardware guard immediately
+# below and by the client → client-native profile promotion right after.
+# shellcheck source=common/device-detect.sh
+source "$COMMON/device-detect.sh"
+
+# Promote profile based on hardware. The prepare-sd.sh menu offers
+# three user-facing choices (client / server / both) — `client-native`
+# is derived: it is what the user really gets on a Pi Zero 2W when they
+# picked `Audio Player`. Doing the promotion HERE — before the case
+# statement, the hardware guard, the SKIP_DOCKER detection, and the
+# setup-script dispatch — means every downstream branch reads the
+# final INSTALL_TYPE value and no other module has to re-derive it.
+# This replaces the older flow where setup-zero2w.sh rewrote
+# install.conf at the END of its run, leaving firstboot's in-process
+# $INSTALL_TYPE stale at "client" while disk said "client-native".
+if [[ "$INSTALL_TYPE" == "client" ]] && is_pi_zero_2w; then
+    log_info "Pi Zero 2W detected — promoting profile: client -> client-native"
+    INSTALL_TYPE="client-native"
+fi
+
+# is_client_install — true for any profile that brings up the audio
+# player (containerised on Pi 3/4/5, native on Pi Zero 2W, plus the
+# both-mode that has the client stack alongside the server stack).
+is_client_install() {
+    case "$INSTALL_TYPE" in
+        client|client-native|both) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # Reject impossible hardware × profile combinations BEFORE doing any
 # irreversible work (apt installs, Docker pull, overlayroot toggle).
 # Pi Zero 2W (512 MB RAM, single-core SDIO storage) cannot run the
@@ -183,6 +214,19 @@ case "$INSTALL_TYPE" in
                     "Verify services healthy")
         STEP_WEIGHTS=(5 2 10 30 48 5)
         PROGRESS_TITLE="snapMULTI Audio Player"
+        ;;
+    client-native)
+        # Pi Zero 2W native install: same audio-player UX as `client`
+        # but no Docker engine. Reusing the "client" step labels keeps
+        # the TUI consistent — the "Install Docker engine" step is a
+        # short no-op when SKIP_DOCKER is true, which is what the
+        # promote rule above guarantees on this profile.
+        STEP_NAMES=("Wait for network" "Copy project files"
+                    "Install system packages" "(skipped) Docker engine"
+                    "Setup audio player (native snapclient + HAT detect)"
+                    "Verify snapclient.service healthy")
+        STEP_WEIGHTS=(5 2 12 2 50 5)
+        PROGRESS_TITLE="snapMULTI Audio Player (native)"
         ;;
     server)
         STEP_NAMES=("Wait for network" "Copy project files"
@@ -459,7 +503,7 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     log_info "Server files copied to $SERVER_DIR"
 fi
 
-if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+if is_client_install; then
     mkdir -p "$CLIENT_DIR/scripts"
     cp -r "$SNAP_BOOT/common" "$CLIENT_DIR/scripts/" 2>/dev/null || true
     if [[ -d "$SNAP_BOOT/client" ]]; then
@@ -489,22 +533,16 @@ fi
 set_module "deps"
 next_step "Installing git and dependencies..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-# Shared dispatch predicate — used both here (to skip Docker
-# orchestration) and at the CLIENT INSTALL block (to actually
-# invoke setup-zero2w.sh). Keeping the two sites in sync means
-# they read from the same function: if the helper returns false
-# at the dispatch site, the verify path is gated correctly too.
-_is_pi_zero_2w_native_path() {
-    [[ "$INSTALL_TYPE" == "client" ]] || return 1
-    local m
-    m=$(tr -d '\0' </proc/device-tree/model 2>/dev/null || echo "")
-    [[ "$m" == *"Zero 2 W"* ]]
-}
-
+# Skip Docker on the native profile. The promote step above set
+# INSTALL_TYPE=client-native iff (a) the user chose `client` in the
+# prepare-sd.sh menu, AND (b) is_pi_zero_2w returned true. So this
+# single check is now the canonical "are we on the native path?"
+# predicate — used here to skip Docker orchestration and downstream
+# (search for `client-native`) to dispatch to setup-zero2w.sh.
 SKIP_DOCKER=false
-if _is_pi_zero_2w_native_path; then
+if [[ "$INSTALL_TYPE" == "client-native" ]]; then
     SKIP_DOCKER=true
-    log_info "Pi Zero 2W client install — skipping Docker repo, Docker daemon and fuse-overlayfs steps"
+    log_info "client-native install — skipping Docker repo, Docker daemon and fuse-overlayfs steps"
 fi
 
 DOCKER_REPO_PRECONFIGURED=false
@@ -743,7 +781,7 @@ fi
 # ══════════════════════════════════════════════════════════════════
 # CLIENT INSTALL
 # ══════════════════════════════════════════════════════════════════
-if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+if is_client_install; then
   if checkpoint_reached "setup"; then
     set_module "setup"
     log_info "Client setup already complete (checkpoint), skipping"
@@ -845,15 +883,17 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
         done
     fi
 
-    # Pi Zero 2W gets the native snapclient install path (no Docker).
-    # Docker + visualizer + fb-display memory footprint (~352 MB containers
-    # + 200 MB OS/dockerd) exceeds the 512 MB RAM budget — confirmed
-    # unsupported with display in docs/HARDWARE.md. The native path
-    # installs snapclient via apt (Trixie 0.31 / Bookworm 0.27) and
-    # skips Docker entirely (gated by SKIP_DOCKER earlier in this script).
-    if _is_pi_zero_2w_native_path; then
+    # client-native gets setup-zero2w.sh (no Docker). The promote step
+    # near the top of firstboot.sh already turned INSTALL_TYPE=client
+    # into client-native when is_pi_zero_2w returned true — so this
+    # check is the single dispatch point. Docker + visualizer + fb-display
+    # memory footprint (~352 MB containers + 200 MB OS/dockerd) exceeds
+    # the 512 MB RAM budget; the native path installs snapclient via
+    # apt (Trixie 0.31 / Bookworm 0.27) and SKIP_DOCKER (set above)
+    # short-circuits the Docker-engine step.
+    if [[ "$INSTALL_TYPE" == "client-native" ]]; then
         if [[ -x scripts/setup-zero2w.sh ]]; then
-            log_info "Pi Zero 2W detected — using native snapclient install (scripts/setup-zero2w.sh)"
+            log_info "client-native install — using native snapclient (scripts/setup-zero2w.sh)"
             setup_script="scripts/setup-zero2w.sh"
         else
             # Fail loud rather than silently fall through to the Docker
@@ -862,7 +902,7 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
             # against an older snapMULTI tree. SKIP_DOCKER was already
             # set true above, so the only sane path is to surface the
             # mismatch and require a re-flash.
-            log_error "Pi Zero 2W detected but scripts/setup-zero2w.sh is missing or not executable."
+            log_error "client-native profile but scripts/setup-zero2w.sh is missing or not executable."
             log_error "SKIP_DOCKER was set so Docker is unavailable — cannot fall back."
             log_error "Re-flash the SD card with a current snapMULTI (scripts/prepare-sd.sh) and retry."
             exit 1
