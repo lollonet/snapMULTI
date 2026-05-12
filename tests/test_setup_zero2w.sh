@@ -76,6 +76,31 @@ assert 'echo "$help_out" | grep -qi "usage"' \
 assert '[[ "$help_out" != *"apt-get install -y --no-install-recommends snapclient"* ]]' \
     "--help path does not invoke apt-get install snapclient"
 
+# 7. Audio HAT detection wiring
+assert 'grep -qE "command -v detect_hat" "$SETUP"' \
+    "calls detect_hat (not the nonexistent detect_audio_hat)"
+assert 'grep -qE "resolve_hat_config_name" "$SETUP"' \
+    "normalises HAT_CONFIG via resolve_hat_config_name"
+assert 'grep -qF "audio-hats" "$SETUP"' \
+    "loads HAT_CARD_NAME / HAT_OVERLAY from audio-hats/*.conf"
+
+# 8. config.txt write: dtoverlay line must have NO inline comment
+#    (bootloader treats anything after `=` as part of the value).
+assert 'awk '\''/echo "dtoverlay=\$HAT_OVERLAY"/'\'' "$SETUP" | grep -vqE "#"' \
+    "dtoverlay line emitted to config.txt has no trailing inline comment"
+assert 'grep -qF "dtparam=i2s=on" "$SETUP"' \
+    "config.txt block enables I2S bus (dtparam=i2s=on)"
+assert 'grep -qF "dtparam=audio=off" "$SETUP"' \
+    "config.txt block disables on-board HDMI audio (dtparam=audio=off)"
+assert 'grep -qE "SNAPCLIENT ZERO2W AUDIO HAT START" "$SETUP"' \
+    "config.txt edits are wrapped in a marker block (idempotent)"
+
+# 9. /etc/asound.conf write referencing HAT_CARD_NAME
+assert 'grep -qE "/etc/asound\\.conf" "$SETUP"' \
+    "writes /etc/asound.conf"
+assert 'grep -qE "hw:CARD=\\\$HAT_CARD_NAME" "$SETUP"' \
+    "asound.conf slave.pcm points to hw:CARD=\$HAT_CARD_NAME"
+
 echo
 echo "Results: $pass passed, $fail failed"
 exit $(( fail > 0 ? 1 : 0 ))

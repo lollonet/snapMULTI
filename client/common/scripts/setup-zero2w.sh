@@ -134,21 +134,136 @@ install_snapclient_apt() {
 step "Installing snapclient"
 install_snapclient_apt
 
-# ── Detect audio HAT (sets SOUNDCARD / MIXER / ALSA_*) ───────────
+# ── Detect audio HAT ─────────────────────────────────────────────
+# Resolves SOUNDCARD / MIXER from /proc/device-tree/hat (EEPROM) or
+# the I2C bus scan in audio-hat-detect.sh. Without this, snapclient
+# tries to open the bare "default" ALSA device which on a headless
+# Pi Zero 2W is the HDMI controller — error 524.
 SOUNDCARD="default"
 MIXER="software"
 ALSA_BUFFER_TIME="150"
 ALSA_FRAGMENTS="4"
+HAT_OVERLAY=""
+HAT_NAME=""
+HAT_CARD_NAME=""
+
+_ensure_hat_detect_tools() {
+    local missing=()
+    command -v aplay     &>/dev/null || missing+=(alsa-utils)
+    command -v i2cdetect &>/dev/null || missing+=(i2c-tools)
+    command -v modprobe  &>/dev/null || missing+=(kmod)
+    if (( ${#missing[@]} > 0 )); then
+        info "Installing HAT detection tools: ${missing[*]}"
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}" >/dev/null 2>&1 || \
+            warn "Could not install ${missing[*]} — HAT detection may fall back to internal-audio"
+    fi
+}
 
 if _source_first_match "audio-hat-detect.sh"; then
-    if command -v detect_audio_hat &>/dev/null; then
+    if command -v detect_hat &>/dev/null; then
         step "Detecting audio HAT"
-        # detect_audio_hat exports SOUNDCARD / MIXER / ALSA_BUFFER_TIME /
-        # ALSA_FRAGMENTS based on the EEPROM / I2C scan results.
-        detect_audio_hat || warn "Audio HAT detection failed — using default ALSA device"
+        _ensure_hat_detect_tools
+        # detect_hat prints the HAT_CONFIG name on stdout (the basename of
+        # an audio-hats/*.conf file). Side-effects HAT_DETECTION_SOURCE.
+        _hat_config=$(detect_hat 2>/dev/null || echo "internal-audio")
+        _hat_config=$(resolve_hat_config_name "$_hat_config" 2>/dev/null || echo "$_hat_config")
+        info "Detected HAT config: ${_hat_config} (source: ${HAT_DETECTION_SOURCE:-unknown})"
+
+        # Load the per-HAT config file (HAT_NAME, HAT_OVERLAY, HAT_CARD_NAME,
+        # HAT_MIXER, HAT_TYPE, HAT_FORMAT, HAT_RATE).
+        _hat_conf_dirs=(
+            "$SCRIPT_DIR/../audio-hats"
+            "$SCRIPT_DIR/../../audio-hats"
+            "/opt/snapclient/audio-hats"
+        )
+        _hat_conf_file=""
+        for _d in "${_hat_conf_dirs[@]}"; do
+            if [[ -f "$_d/${_hat_config}.conf" ]]; then
+                _hat_conf_file="$_d/${_hat_config}.conf"
+                break
+            fi
+        done
+        if [[ -n "$_hat_conf_file" ]]; then
+            # shellcheck disable=SC1090
+            source "$_hat_conf_file"
+            SOUNDCARD="${HAT_CARD_NAME:-$SOUNDCARD}"
+            MIXER="${HAT_MIXER:-$MIXER}"
+            ok "Loaded $_hat_conf_file (overlay=$HAT_OVERLAY, card=$HAT_CARD_NAME)"
+        else
+            warn "HAT config file not found for '${_hat_config}' — using ALSA defaults"
+        fi
     fi
 fi
 info "SOUNDCARD=$SOUNDCARD MIXER=$MIXER ALSA_BUFFER_TIME=$ALSA_BUFFER_TIME ALSA_FRAGMENTS=$ALSA_FRAGMENTS"
+
+# ── Configure /boot/firmware/config.txt for the HAT ──────────────
+# Write the device-tree overlay so the kernel binds the audio HAT
+# at next boot. Uses a marker-delimited block for idempotency.
+# CRITICAL: bootloader parses config.txt WITHOUT supporting inline
+# comments on `dtoverlay=` / `dtparam=` lines. Anything after the
+# value (`# comment ...`) is treated as part of the value, and
+# the overlay silently fails to load (only learned this the hard
+# way on pizero 2026-05-12 — no overlay = HDMI-only audio =
+# snapclient ALSA error 524 on headless).
+if [[ -n "$HAT_OVERLAY" ]]; then
+    step "Writing audio HAT overlay to /boot/firmware/config.txt"
+    BOOT_CONFIG=""
+    [[ -f /boot/firmware/config.txt ]] && BOOT_CONFIG=/boot/firmware/config.txt
+    [[ -z "$BOOT_CONFIG" && -f /boot/config.txt ]] && BOOT_CONFIG=/boot/config.txt
+
+    if [[ -n "$BOOT_CONFIG" ]]; then
+        MARKER_START="# --- SNAPCLIENT ZERO2W AUDIO HAT START ---"
+        MARKER_END="# --- SNAPCLIENT ZERO2W AUDIO HAT END ---"
+        # Idempotent: strip any prior block, then re-emit.
+        if grep -qF "$MARKER_START" "$BOOT_CONFIG"; then
+            sed -i "/$MARKER_START/,/$MARKER_END/d" "$BOOT_CONFIG"
+        fi
+        {
+            echo ""
+            echo "$MARKER_START"
+            echo "# Audio HAT: $HAT_NAME"
+            echo "# DO NOT add inline comments to dtoverlay/dtparam lines below — bootloader doesn't parse them."
+            echo "dtparam=i2s=on"
+            echo "dtoverlay=$HAT_OVERLAY"
+            # Disable on-board HDMI audio so ALSA "default" doesn't latch to it.
+            echo "dtparam=audio=off"
+            echo "$MARKER_END"
+        } >> "$BOOT_CONFIG"
+        ok "Audio HAT overlay block written to $BOOT_CONFIG"
+
+        # Best-effort runtime load so the smoke check + audio test in this
+        # boot cycle see the card. If it fails, next reboot picks it up.
+        if command -v dtoverlay &>/dev/null; then
+            if dtoverlay "$HAT_OVERLAY" 2>/dev/null; then
+                ok "Loaded $HAT_OVERLAY at runtime"
+            else
+                info "Runtime dtoverlay load skipped — overlay active after reboot"
+            fi
+        fi
+    else
+        warn "No /boot/firmware/config.txt found — HAT overlay not persisted"
+    fi
+fi
+
+# ── /etc/asound.conf ─────────────────────────────────────────────
+# Set the HAT card as the ALSA default so any client (snapclient or
+# diagnostic tools like aplay) opens the right device without an
+# explicit -D flag.
+if [[ -n "$HAT_CARD_NAME" ]]; then
+    step "Writing /etc/asound.conf"
+    cat > /etc/asound.conf <<EOF
+# Generated by snapMULTI setup-zero2w.sh — Audio HAT: $HAT_NAME
+pcm.!default {
+    type plug
+    slave.pcm "hw:CARD=$HAT_CARD_NAME,DEV=0"
+}
+ctl.!default {
+    type hw
+    card $HAT_CARD_NAME
+}
+EOF
+    ok "/etc/asound.conf points to $HAT_CARD_NAME"
+fi
 
 # ── Configure /etc/default/snapclient ────────────────────────────
 # The .deb ships /etc/default/snapclient as a conffile. We rewrite
