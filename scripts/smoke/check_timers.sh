@@ -65,5 +65,13 @@ check_timers() {
     # Client-side scheduled features. snapclient-discover.timer drives
     # the multi-server failover mechanism (PR #285); without it, a
     # client that loses its server cannot rediscover.
-    _check_timer "snapclient-discover.timer"    "mDNS server discovery (PR #285 multi-server failover)" client
+    #
+    # Native client (Pi Zero 2W) does not install this timer — snapclient
+    # itself uses libavahi-client for mDNS discovery, so no host-side
+    # rediscovery script is needed. Skip the check on that path.
+    if [[ "${INSTALL_TYPE_NATIVE_CLIENT:-false}" == "true" ]]; then
+        info "Timer snapclient-discover.timer skipped on native client (libavahi-client used instead)"
+    else
+        _check_timer "snapclient-discover.timer"    "mDNS server discovery (PR #285 multi-server failover)" client
+    fi
 }

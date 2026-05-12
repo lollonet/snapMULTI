@@ -79,7 +79,13 @@ check_system() {
             # As a last-resort cmdline check — useful diagnostic when
             # /sys layout is unfamiliar but we want to flag the boot
             # parameter explicitly.
-            if grep -qE '(^| )(cgroup_memory=1|cgroup_enable=memory)( |$)' /proc/cmdline; then
+            #
+            # Native client install (Pi Zero 2W) has no Docker, so a missing
+            # memory cgroup is fine — there are no container memory limits
+            # to enforce. Downgrade fail → info so the smoke stays green.
+            if [[ "${INSTALL_TYPE_NATIVE_CLIENT:-false}" == "true" ]]; then
+                info "Cgroup memory not enabled — fine on native client (no Docker memory limits to enforce)"
+            elif grep -qE '(^| )(cgroup_memory=1|cgroup_enable=memory)( |$)' /proc/cmdline; then
                 fail_check "Cgroup memory in cmdline but kernel did not enable it — Docker memory limits will not enforce"
             else
                 fail_check "Cgroup memory NOT enabled (no /sys hierarchy AND no cmdline opt-in) — Docker memory limits will not enforce, host OOM possible"

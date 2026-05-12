@@ -346,25 +346,32 @@ fi
 info "Root mount: ${root_mount:-unknown}"
 info "Overlayroot active: $overlay_active"
 
-docker_driver="$(docker info --format '{{.Driver}}' 2>/dev/null || echo unknown)"
-daemon_storage="default"
-if [[ -f /etc/docker/daemon.json ]]; then
-    daemon_storage=$(
-        python3 -c "import json; import sys; cfg=json.load(open('/etc/docker/daemon.json')); print(cfg.get('storage-driver','default'))" \
-            2>/dev/null || echo unreadable
-    )
-fi
-info "Docker driver: $docker_driver"
-info "daemon.json storage-driver: $daemon_storage"
-
-if [[ "$overlay_active" == true ]]; then
-    [[ "$docker_driver" == "fuse-overlayfs" ]] \
-        && pass_check "overlayroot active -> Docker driver is fuse-overlayfs" \
-        || fail_check "overlayroot active but Docker driver is $docker_driver"
+# Native client install (Pi Zero 2W path) has no Docker — skip the
+# driver / daemon.json / fuse-overlayfs checks entirely. fuse-overlayfs
+# is only needed when Docker stacks live on an overlayroot tmpfs.
+if [[ "$INSTALL_TYPE_NATIVE_CLIENT" == "true" ]]; then
+    info "Native client install (no Docker) — Docker driver / overlay check skipped"
 else
-    [[ "$docker_driver" != "fuse-overlayfs" ]] \
-        && pass_check "writable root -> Docker driver is not fuse-overlayfs" \
-        || fail_check "writable root but Docker driver is fuse-overlayfs"
+    docker_driver="$(docker info --format '{{.Driver}}' 2>/dev/null || echo unknown)"
+    daemon_storage="default"
+    if [[ -f /etc/docker/daemon.json ]]; then
+        daemon_storage=$(
+            python3 -c "import json; import sys; cfg=json.load(open('/etc/docker/daemon.json')); print(cfg.get('storage-driver','default'))" \
+                2>/dev/null || echo unreadable
+        )
+    fi
+    info "Docker driver: $docker_driver"
+    info "daemon.json storage-driver: $daemon_storage"
+
+    if [[ "$overlay_active" == true ]]; then
+        [[ "$docker_driver" == "fuse-overlayfs" ]] \
+            && pass_check "overlayroot active -> Docker driver is fuse-overlayfs" \
+            || fail_check "overlayroot active but Docker driver is $docker_driver"
+    else
+        [[ "$docker_driver" != "fuse-overlayfs" ]] \
+            && pass_check "writable root -> Docker driver is not fuse-overlayfs" \
+            || fail_check "writable root but Docker driver is fuse-overlayfs"
+    fi
 fi
 
 section "Systemd"
@@ -376,28 +383,52 @@ case "$MODE" in
     client)
         [[ -n "$CLIENT_DIR" ]] || fail_check "client install directory missing"
         check_unit "snapclient.service"
-        check_unit "snapclient-discover.timer"
+        # snapclient-discover.timer drives the Docker-based multi-server
+        # failover mechanism (PR #285). Native client (Pi Zero 2W) uses
+        # the libavahi-client mDNS discovery built into snapclient itself,
+        # so the timer is not installed and not expected.
+        if [[ "$INSTALL_TYPE_NATIVE_CLIENT" != "true" ]]; then
+            check_unit "snapclient-discover.timer"
+        fi
         ;;
     both)
         [[ -n "$SERVER_DIR" ]] || fail_check "server install directory missing"
         [[ -n "$CLIENT_DIR" ]] || fail_check "client install directory missing"
         check_unit "snapmulti-server.service"
         check_unit "snapclient.service"
-        check_unit "snapclient-discover.timer"
+        # See `client)` comment above. `both` mode is impossible on Pi
+        # Zero 2W (server stack exceeds 512 MB RAM), so the guard is
+        # belt-and-braces here.
+        if [[ "$INSTALL_TYPE_NATIVE_CLIENT" != "true" ]]; then
+            check_unit "snapclient-discover.timer"
+        fi
         ;;
 esac
 
 section "Compose"
+# Native client install has no docker-compose.yml — the file was pruned
+# by setup-zero2w.sh — so `docker compose config` would return empty and
+# fail the check. Skip the client compose stack on native client. Server
+# checks still run when MODE=both (impossible combination on Pi Zero 2W
+# but kept declarative).
 case "$MODE" in
     server)
         [[ -n "$SERVER_DIR" ]] && check_compose_stack "$SERVER_DIR/docker-compose.yml" "server"
         ;;
     client)
-        [[ -n "$CLIENT_DIR" ]] && check_compose_stack "$CLIENT_DIR/docker-compose.yml" "client"
+        if [[ "$INSTALL_TYPE_NATIVE_CLIENT" == "true" ]]; then
+            info "Native client install — Docker Compose stack check skipped"
+        elif [[ -n "$CLIENT_DIR" ]]; then
+            check_compose_stack "$CLIENT_DIR/docker-compose.yml" "client"
+        fi
         ;;
     both)
         [[ -n "$SERVER_DIR" ]] && check_compose_stack "$SERVER_DIR/docker-compose.yml" "server"
-        [[ -n "$CLIENT_DIR" ]] && check_compose_stack "$CLIENT_DIR/docker-compose.yml" "client"
+        if [[ "$INSTALL_TYPE_NATIVE_CLIENT" == "true" ]]; then
+            info "Native client install — Docker Compose stack check skipped (client)"
+        elif [[ -n "$CLIENT_DIR" ]]; then
+            check_compose_stack "$CLIENT_DIR/docker-compose.yml" "client"
+        fi
         ;;
 esac
 
