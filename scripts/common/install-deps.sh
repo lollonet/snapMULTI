@@ -123,9 +123,20 @@ install_dependencies() {
     # /var/log/sysstat/ every 10 min) stays server-only — see the
     # systemctl enable block lower in this file. This keeps overlay
     # tmpfs pressure low on Pi Zero / Pi 3 1 GB.
-    command -v sar   &>/dev/null || pkgs+=(sysstat)
-    command -v iotop &>/dev/null || pkgs+=(iotop-c)
-    command -v dstat &>/dev/null || pkgs+=(dstat)
+    #
+    # NOTE: these go through a separate `--no-install-recommends` pass
+    # below so `sysstat` does NOT pull its `pcp` Recommends. pcp is a
+    # ~50 MB multi-daemon stack we don't use; on Pi OS it also ships a
+    # SysV init script that floods journald with
+    # `systemd-sysv-generator: SysV service '/etc/init.d/pcp' lacks a
+    # native systemd unit file` on every `systemctl daemon-reload`
+    # (observed during pizero install: 6+ events per second across the
+    # 10-min apt-upgrade phase). The base `apt-get install -y` call
+    # below installs the always-want packages WITH Recommends.
+    local -a monitoring_pkgs=()
+    command -v sar   &>/dev/null || monitoring_pkgs+=(sysstat)
+    command -v iotop &>/dev/null || monitoring_pkgs+=(iotop-c)
+    command -v dstat &>/dev/null || monitoring_pkgs+=(dstat)
 
     # Client: audio + HAT detection tools
     if [[ "$role" == "client" || "$role" == "both" ]]; then
@@ -151,6 +162,16 @@ install_dependencies() {
     log_info "Installing: ${pkgs[*]}"
     if ! _apt_install_with_recovery "${pkgs[@]}"; then
         return 1
+    fi
+
+    # Monitoring tools: separate pass with --no-install-recommends so
+    # sysstat doesn't drag in pcp (see comment further up). Failure is
+    # not fatal — operator can still install them manually.
+    if (( ${#monitoring_pkgs[@]} > 0 )); then
+        log_info "Installing monitoring tools (no-recommends): ${monitoring_pkgs[*]}"
+        if ! apt-get install -y --no-install-recommends "${monitoring_pkgs[@]}" >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
+            log_warn "Monitoring tools install failed — continuing without sar/iotop/dstat"
+        fi
     fi
 
     # Generate locales (lightweight alternative to locales-all)
