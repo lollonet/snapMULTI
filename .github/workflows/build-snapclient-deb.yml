@@ -1,0 +1,137 @@
+name: Build snapclient .deb
+
+# Builds a custom snapclient .deb from upstream badaix/snapcast for
+# Pi OS Trixie + Bookworm × arm64 + armhf. Bridges the gap until
+# badaix ships official trixie .deb assets.
+#
+# Trigger:
+#   - Manual via workflow_dispatch (pass snapcast_tag).
+#   - Tag push `snapclient-deb/v*` to publish a release.
+#
+# The release tag is namespaced (`snapclient-deb/v...`) so it
+# never collides with the main snapMULTI release tags (`v*`).
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapcast_tag:
+        description: "Upstream snapcast tag to build (e.g. v0.35.0)"
+        required: true
+        default: "v0.35.0"
+  push:
+    tags:
+      - 'snapclient-deb/v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.codename }}/${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        codename: [trixie, bookworm]
+        arch: [arm64, armhf]
+    env:
+      INPUT_TAG: ${{ github.event.inputs.snapcast_tag }}
+      REF: ${{ github.ref }}
+      CODENAME: ${{ matrix.codename }}
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve snapcast tag
+        id: tag
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_TAG:-}" ]; then
+            value="$INPUT_TAG"
+          elif [[ "$REF" =~ ^refs/tags/snapclient-deb/(v[0-9.]+) ]]; then
+            value="${BASH_REMATCH[1]}"
+          else
+            value="v0.35.0"
+          fi
+          # Refuse anything that isn't a strict semver tag — guards
+          # against an attacker setting INPUT_TAG to a shell metachar
+          # payload via workflow_dispatch.
+          case "$value" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "ERROR: invalid snapcast tag '$value'"; exit 1 ;;
+          esac
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        if: matrix.arch != 'amd64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: ${{ matrix.arch == 'arm64' && 'linux/arm64' || 'linux/arm/v7' }}
+
+      - name: Build .deb in debian:${{ matrix.codename }}
+        env:
+          SNAPCAST_TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          case "$ARCH" in
+            arm64) platform_arg="--platform=linux/arm64" ;;
+            armhf) platform_arg="--platform=linux/arm/v7" ;;
+            amd64) platform_arg="" ;;
+            *) echo "unsupported arch: $ARCH"; exit 1 ;;
+          esac
+          docker run --rm $platform_arg \
+            -v "${PWD}:/workspace" \
+            -w /workspace \
+            -e CODENAME -e ARCH -e SNAPCAST_TAG \
+            "debian:${CODENAME}-slim" \
+            bash scripts/ci/build-snapclient-deb.sh "$CODENAME" "$ARCH" "$SNAPCAST_TAG"
+
+      - name: Compute checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum ./*.deb > "SHA256SUMS-${CODENAME}-${ARCH}.txt"
+          cat "SHA256SUMS-${CODENAME}-${ARCH}.txt"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapclient-deb-${{ matrix.codename }}-${{ matrix.arch }}
+          path: dist/*
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/snapclient-deb/')
+    runs-on: ubuntu-latest
+    env:
+      REF: ${{ github.ref }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Stage release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f \( -name '*.deb' -o -name 'SHA256SUMS*' \) -exec cp {} release/ \;
+          ls -la release/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${REF#refs/tags/}"
+          # Validate tag format before passing to gh (defense in depth).
+          case "$tag" in
+            snapclient-deb/v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "ERROR: unexpected tag '$tag'"; exit 1 ;;
+          esac
+          gh release create "$tag" \
+            --title "snapclient .deb $tag" \
+            --notes-file <(printf 'Custom snapclient .deb built by snapMULTI CI for Pi OS Trixie + Bookworm.\n\nBuilt from upstream [badaix/snapcast](https://github.com/badaix/snapcast). snapMULTI Pi Zero 2W native install (setup-zero2w.sh) prefers these .deb when available.\n') \
+            release/*
