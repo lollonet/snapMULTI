@@ -104,6 +104,22 @@ else
 fi
 
 echo
+echo "=== audio-hat-detect.sh: apt-failure surfaces a WARN instead of being swallowed ==="
+# Original `apt-get install ... >&2 || true` swallowed the failure silently.
+# Downstream guards still skip the I2C scan when the binary is missing, but
+# without a log line operators had to grep apt logs to understand WHY the
+# scan was skipped. Both i2c-tools and kmod install attempts now log a
+# distinct WARN line when apt fails — keeps the same control-flow but adds
+# observability. Replacing the WARN with a silent fallback would re-introduce
+# the regression.
+assert '! grep -qE "apt-get install -y -q (i2c-tools|kmod) >&2 *\\|\\| *true" "$HAT_DETECT"' \
+       "apt-get install fail is no longer silently swallowed with || true"
+assert 'grep -qE "apt-get install i2c-tools failed" "$HAT_DETECT"' \
+       "i2c-tools install failure logs an explicit WARN"
+assert 'grep -qE "apt-get install kmod failed" "$HAT_DETECT"' \
+       "kmod install failure logs an explicit WARN"
+
+echo
 if (( fail > 0 )); then
     echo "FAILED: $fail / $((pass + fail))"
     exit 1
