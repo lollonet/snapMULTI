@@ -455,107 +455,159 @@ esac
 unset -f _check_avahi_mount 2>/dev/null || true
 
 section "Network"
+# Network checks are independent (each issues one or more system probes
+# and exits) — run them in parallel so the slowest one (DNS retry: up
+# to 30 s on failure) doesn't serialise behind NTP / mDNS / arping. On
+# a healthy LAN this saves ~5 s; on a misconfigured one (DNS timing out)
+# the smoke section completes in ~30 s instead of ~45 s.
+#
+# Background subshells can't update FAILURES / JSON_RECORDS in the
+# parent, so each check writes its results to a tmpfile as TSV lines
+# `<status>\t<message>` and the parent replays them through
+# pass_check / fail_check / warn / info in canonical order.
+_NET_RESULTS_DIR=$(mktemp -d /tmp/snapmulti-smoke-net.XXXXXX)
+# shellcheck disable=SC2064  # expand now, on EXIT the dir we created
+trap "rm -rf '$_NET_RESULTS_DIR'" EXIT
+
 # DNS resolution must work — catches the NM dns-rc empty-resolv.conf
 # regression (see CHANGELOG entry for PR #287). 30s budget covers slow
 # DHCP + DNS warmup on Pi Zero 2W. Two neutral targets tried in sequence
 # so a single-vendor outage (or a network that blocks one of them) does
 # not produce a false-negative for the smoke test.
-_DNS_TARGETS=("cloudflare.com" "dns.google")
-_dns_ok=false
-for _dns_attempt in 1 2 3; do
-    for _target in "${_DNS_TARGETS[@]}"; do
-        if getent hosts "$_target" >/dev/null 2>&1; then
-            _dns_ok=true
-            _dns_target_ok="$_target"
-            break 2
-        fi
+_net_check_dns() {
+    local out="$_NET_RESULTS_DIR/dns"
+    local targets=("cloudflare.com" "dns.google") attempt target
+    for attempt in 1 2 3; do
+        # `attempt` is only the retry counter — used implicitly to bound the loop.
+        : "$attempt"
+        for target in "${targets[@]}"; do
+            if getent hosts "$target" >/dev/null 2>&1; then
+                printf 'pass\tDNS resolution working (%s)\n' "$target" > "$out"
+                return
+            fi
+        done
+        sleep 10
     done
-    sleep 10
-done
-if [[ "$_dns_ok" == "true" ]]; then
-    pass_check "DNS resolution working (${_dns_target_ok})"
-else
-    fail_check "DNS resolution failing on all targets (${_DNS_TARGETS[*]}) — check /etc/resolv.conf and 'nmcli general status'"
-fi
+    printf 'fail\tDNS resolution failing on all targets (%s) — check /etc/resolv.conf and "nmcli general status"\n' "${targets[*]}" > "$out"
+}
 
 # Time sync — Snapcast TimeProvider is NTP-immune, but log timestamps and
 # metadata-service rely on a sane wall clock. Pi Zero 2W's RTC sits at
 # epoch 0 until NTP completes, which can mask boot-time bugs in any
 # component that uses absolute timestamps.
-_ntp_synced=$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo "unknown")
-case "$_ntp_synced" in
-    yes)
-        pass_check "Time synchronised (NTP)"
-        ;;
-    no)
-        fail_check "Time NOT synchronised — \`timedatectl status\` for details, often resolves itself within 60s of boot"
-        ;;
-    *)
-        warn "Time sync state unknown (timedatectl returned '$_ntp_synced')"
-        ;;
-esac
+_net_check_ntp() {
+    local out="$_NET_RESULTS_DIR/ntp"
+    local synced
+    synced=$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo "unknown")
+    case "$synced" in
+        yes) printf 'pass\tTime synchronised (NTP)\n' > "$out" ;;
+        no)  printf 'fail\tTime NOT synchronised — `timedatectl status` for details, often resolves itself within 60s of boot\n' > "$out" ;;
+        *)   printf 'warn\tTime sync state unknown (timedatectl returned %q)\n' "$synced" > "$out" ;;
+    esac
+}
 
 # Hostname mDNS round-trip — the host's own hostname.local must resolve
 # to ONE OF the host's own IPs via avahi. On dual-homed hosts (eth0 +
 # wlan0 active) avahi may advertise on a different interface than the
 # arbitrary "first" one, so we accept any of the local addresses to
 # avoid false-failing the mismatch path.
-if command -v avahi-resolve >/dev/null 2>&1; then
-    _own_host="$(hostname).local"
-    _own_ips=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
-    _resolved=$(timeout 5 avahi-resolve -4 -n "$_own_host" 2>/dev/null | awk '{print $2}' | head -1)
-    if [[ -n "$_resolved" ]] && echo "$_own_ips" | grep -qF -- "$_resolved"; then
-        pass_check "mDNS hostname round-trip ($_own_host -> $_resolved)"
-    elif [[ -n "$_resolved" ]]; then
-        _own_ips_csv=$(echo "$_own_ips" | tr '\n' ',' | sed 's/,$//; s/,/, /g')
-        fail_check "mDNS hostname mismatch ($_own_host -> $_resolved, expected one of: $_own_ips_csv) — restart avahi-daemon"
-    else
-        fail_check "mDNS hostname does NOT resolve ($_own_host) — avahi-daemon publishing broken"
+_net_check_mdns_self() {
+    local out="$_NET_RESULTS_DIR/mdns_self"
+    if ! command -v avahi-resolve >/dev/null 2>&1; then
+        printf 'warn\tavahi-resolve not installed — skipping mDNS hostname check\n' > "$out"
+        return
     fi
-else
-    warn "avahi-resolve not installed — skipping mDNS hostname check"
-fi
+    local own_host own_ips resolved
+    own_host="$(hostname).local"
+    own_ips=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
+    resolved=$(timeout 5 avahi-resolve -4 -n "$own_host" 2>/dev/null | awk '{print $2}' | head -1)
+    if [[ -n "$resolved" ]] && echo "$own_ips" | grep -qF -- "$resolved"; then
+        printf 'pass\tmDNS hostname round-trip (%s -> %s)\n' "$own_host" "$resolved" > "$out"
+    elif [[ -n "$resolved" ]]; then
+        local ips_csv
+        ips_csv=$(echo "$own_ips" | tr '\n' ',' | sed 's/,$//; s/,/, /g')
+        printf 'fail\tmDNS hostname mismatch (%s -> %s, expected one of: %s) — restart avahi-daemon\n' "$own_host" "$resolved" "$ips_csv" > "$out"
+    else
+        printf 'fail\tmDNS hostname does NOT resolve (%s) — avahi-daemon publishing broken\n' "$own_host" > "$out"
+    fi
+}
 
-# IP conflict detection — duplicate-address probe. \`arping -D\` returns
+# IP conflict detection — duplicate-address probe. `arping -D` returns
 # exit 0 if NO replies (good: nobody else claims our IP) and exit 1 if
 # replies received (bad: another host on the LAN has our IP, will cause
 # intermittent packet loss like the F8:17:2D historic .95 case from
-# 2026-05-07). Requires \`iputils-arping\` (already installed by
+# 2026-05-07). Requires `iputils-arping` (already installed by
 # install-deps.sh on snapMULTI 0.6.4+).
-if command -v arping >/dev/null 2>&1; then
-    _own_iface=$(ip -4 -o route get 1.1.1.1 2>/dev/null | awk '{print $5; exit}')
-    _own_ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
-    if [[ -n "$_own_iface" ]] && [[ -n "$_own_ip" ]]; then
-        # \`arping -D\` exits 0 if no replies (no conflict) and 1 if replies
-        # received (conflict). It also fails with 1+stderr when missing
-        # CAP_NET_RAW. Probe sudo capability ONCE to choose the right
-        # invocation; never retry with a less-privileged invocation if
-        # the privileged one already returned a definitive answer
-        # (retry would silence a real conflict with a "permission" warn
-        # if the unprivileged retry then trips on cap_net_raw).
-        #
-        # \`|| _arping_rc=\$?\` pattern: under \`set -e\`, a bare
-        # \`var=\$(failing-cmd)\` would terminate the script without ever
-        # reaching the analysis branch below.
-        _arping_rc=0
-        if sudo -n true 2>/dev/null; then
-            _arping_out=$(sudo -n arping -D -c 3 -w 5 -I "$_own_iface" "$_own_ip" 2>&1) || _arping_rc=$?
-        else
-            _arping_out=$(arping -D -c 3 -w 5 -I "$_own_iface" "$_own_ip" 2>&1) || _arping_rc=$?
-        fi
-        if [[ $_arping_rc -eq 0 ]]; then
-            pass_check "No IP conflict on $_own_ip ($_own_iface)"
-        elif echo "$_arping_out" | grep -qiE 'permission|not permitted|capabilities|password is required'; then
-            warn "arping needs CAP_NET_RAW / sudo — IP-conflict check skipped (run as root, or 'setcap cap_net_raw+ep \$(command -v arping)')"
-        else
-            fail_check "Possible IP conflict on $_own_ip — another host replied to our ARP probe"
-        fi
-    else
-        warn "Could not determine own IP/iface for conflict check"
+_net_check_arping() {
+    local out="$_NET_RESULTS_DIR/arping"
+    if ! command -v arping >/dev/null 2>&1; then
+        printf 'warn\tarping not installed — skipping IP conflict check (apt-get install iputils-arping)\n' > "$out"
+        return
     fi
-else
-    warn "arping not installed — skipping IP conflict check (apt-get install iputils-arping)"
-fi
+    local own_iface own_ip
+    own_iface=$(ip -4 -o route get 1.1.1.1 2>/dev/null | awk '{print $5; exit}')
+    own_ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+    if [[ -z "$own_iface" ]] || [[ -z "$own_ip" ]]; then
+        printf 'warn\tCould not determine own IP/iface for conflict check\n' > "$out"
+        return
+    fi
+    # `arping -D` exits 0 if no replies (no conflict), 1 if replies
+    # received (conflict). Probe sudo capability ONCE to choose the
+    # right invocation; never retry with a less-privileged invocation
+    # if the privileged one returned a definitive answer.
+    local arping_rc=0 arping_out
+    if sudo -n true 2>/dev/null; then
+        arping_out=$(sudo -n arping -D -c 3 -w 5 -I "$own_iface" "$own_ip" 2>&1) || arping_rc=$?
+    else
+        arping_out=$(arping -D -c 3 -w 5 -I "$own_iface" "$own_ip" 2>&1) || arping_rc=$?
+    fi
+    if [[ $arping_rc -eq 0 ]]; then
+        printf 'pass\tNo IP conflict on %s (%s)\n' "$own_ip" "$own_iface" > "$out"
+    elif echo "$arping_out" | grep -qiE 'permission|not permitted|capabilities|password is required'; then
+        printf 'warn\tarping needs CAP_NET_RAW / sudo — IP-conflict check skipped (run as root, or "setcap cap_net_raw+ep $(command -v arping)")\n' > "$out"
+    else
+        printf 'fail\tPossible IP conflict on %s — another host replied to our ARP probe\n' "$own_ip" > "$out"
+    fi
+}
+
+# Dispatch a check's tmpfile result through the parent's pass_check /
+# fail_check / warn / info helpers. Multi-line tmpfiles are supported
+# (each line is `<status>\t<message>`); empty / missing files emit a
+# warn so we never silently swallow a backgrounded check.
+_net_emit_results() {
+    local check="$1"
+    local out="$_NET_RESULTS_DIR/$check"
+    if [[ ! -s "$out" ]]; then
+        warn "Network check '$check' produced no result — parallel job may have crashed"
+        return
+    fi
+    local status message
+    while IFS=$'\t' read -r status message; do
+        case "$status" in
+            pass) pass_check "$message" ;;
+            fail) fail_check "$message" ;;
+            warn) warn "$message" ;;
+            info) info "$message" ;;
+            *)    warn "Network check '$check' returned unknown status '$status': $message" ;;
+        esac
+    done < "$out"
+}
+
+# Run all four checks in parallel — the slowest (DNS retry, up to 30 s)
+# now overlaps with NTP/mDNS/arping (all <= 5 s) instead of serialising
+# behind them.
+_net_check_dns &
+_net_check_ntp &
+_net_check_mdns_self &
+_net_check_arping &
+wait
+
+# Replay results in canonical order so the human + JSON output looks
+# identical to the pre-parallel layout.
+_net_emit_results dns
+_net_emit_results ntp
+_net_emit_results mdns_self
+_net_emit_results arping
 
 # mDNS strict-client publishing (server-only) — services must answer
 # SRV+TXT, not just PTR. Strict clients (Python zeroconf, macOS
