@@ -182,6 +182,70 @@ BCMEOF
     # firstboot already schedules at the end of setup.
 }
 
+# ── Pi Zero 2W zram swap safety ──────────────────────────────────
+# Pi Zero 2W (512 MB RAM) on Pi OS Bookworm ships with
+# systemd-zram-generator + rpi-zram-writeback.service enabled. The
+# writeback service moves cold ZRAM pages to /var/swap (a swap file).
+# Under overlayroot=tmpfs, the /var path lives in the upper tmpfs
+# layer: any write to /var/swap allocates CoW pages from the
+# 256 MB tmpfs upper, which then fills until the kernel panics and
+# the device reboots. Observed on `pizero` 2026-05-11 (overlay tmpfs
+# at 97 % full, infinite reboot loop).
+#
+# Fix: mask the four zram units and remove any pre-existing
+# /var/swap file. MUST be invoked from firstboot.sh BEFORE setup.sh
+# runs (setup.sh calls `raspi-config nonint do_overlayfs 0` which
+# activates overlayroot, after which /etc/systemd/system writes go
+# to tmpfs upper and evaporate at reboot).
+#
+# Detection: same `Zero 2 W` model match as the bcm43430 workaround.
+# Other Pi models have enough RAM to use zram safely.
+tune_pi_zero_2w_swap_safety() {
+    local model_file=/proc/device-tree/model
+    [[ -f "$model_file" ]] || return 0
+    local model
+    model=$(tr -d '\0' <"$model_file" 2>/dev/null) || return 0
+    if [[ "$model" != *"Zero 2 W"* ]]; then
+        return 0  # other Pi models keep zram (sufficient RAM)
+    fi
+
+    local units=(
+        dev-zram0.swap
+        systemd-zram-setup@zram0.service
+        rpi-zram-writeback.service
+        rpi-zram-writeback.timer
+    )
+
+    local all_masked=1 u
+    for u in "${units[@]}"; do
+        if ! systemctl list-unit-files "$u" --no-legend 2>/dev/null | grep -q masked; then
+            all_masked=0
+            break
+        fi
+    done
+    if (( all_masked == 1 )) && [[ ! -f /var/swap ]]; then
+        ok "Pi Zero 2W zram swap safety already configured"
+        return 0
+    fi
+
+    for u in "${units[@]}"; do
+        systemctl mask "$u" >/dev/null 2>&1 || true
+    done
+    rm -f /var/swap 2>/dev/null || true
+
+    if systemctl list-unit-files dev-zram0.swap --no-legend 2>/dev/null | grep -q masked; then
+        ok "Pi Zero 2W zram swap safety applied (units masked, /var/swap removed)"
+        return 0
+    fi
+
+    if is_overlayroot; then
+        warn "zram mask not persisted: overlayroot already active (firstboot ordering bug?)"
+    else
+        warn "zram mask failed despite writable /etc; firstboot retry may resolve"
+    fi
+    return 0  # best-effort: never abort firstboot
+}
+
 # ── WiFi power save ───────────────────────────────────────────────
 # Disables WiFi power management to prevent connection drops.
 # Uses NetworkManager dispatcher script for persistence — this

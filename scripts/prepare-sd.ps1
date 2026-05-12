@@ -474,6 +474,12 @@ function Copy-ClientFiles {
     $scriptsDest = Join-Path $clientDest 'scripts'
     New-Item -ItemType Directory -Path $scriptsDest -Force | Out-Null
     Copy-Item (Join-Path $ClientDir 'common\scripts\setup.sh') -Destination $scriptsDest
+    # Pi Zero 2W native snapclient install path (firstboot.sh selects
+    # this script when /proc/device-tree/model matches "Zero 2 W").
+    $setupZero2w = Join-Path $ClientDir 'common\scripts\setup-zero2w.sh'
+    if (Test-Path $setupZero2w) {
+        Copy-Item $setupZero2w -Destination $scriptsDest
+    }
 
     # Audio HAT detection module (required by setup.sh)
     $hatDetect = Join-Path $ClientDir 'common\scripts\audio-hat-detect.sh'

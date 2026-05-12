@@ -78,6 +78,9 @@ The Pi Zero 2 W is the cheapest client option but has specific requirements:
 - **64-bit OS required** — Imager defaults to 32-bit for this model. Select "Raspberry Pi OS Lite (64-bit)" explicitly
 - **2.4 GHz WiFi only** — no 5 GHz. Use your 2.4 GHz SSID when configuring WiFi in Imager
 - **512 MB RAM** — headless audio only (no display). Cannot run fb-display or server
+- **Native snapclient (no Docker)** — `firstboot.sh` detects the Pi Zero 2 W and runs `client/common/scripts/setup-zero2w.sh`, which installs snapclient v0.35 from the upstream badaix `.deb` and skips Docker entirely. This keeps the 512 MB RAM budget viable. Other client models keep the standard Docker path
+- **Zram swap disabled** — `tune_pi_zero_2w_swap_safety()` in `scripts/common/system-tune.sh` masks `dev-zram0.swap` / `rpi-zram-writeback.service` and removes `/var/swap` at first boot. Without this fix, `rpi-zram-writeback` writes to the swap file living in the 256 MB overlay tmpfs upper layer and the kernel panics when the tmpfs fills (observed 2026-05-11)
+- **Single-server mDNS only** — the native snapclient uses libavahi-client autodiscovery directly. The multi-server failover state machine from `discover-server.sh` (TCP probing, anti-flapping, smart IPv4 selection) is not available on Pi Zero 2 W. Acceptable for typical single-room headless setups; if you need failover, use a Pi 3 B+ or Pi 4 client
 - **I2S HAT compatibility** — works with PCM5122-based HATs (HiFiBerry DAC+, InnoMaker Mini). The USB `otg_mode=1` setting from Imager conflicts with I2S — `prepare-sd.sh` and `setup.sh` fix this automatically
 - **USB gadget mode** — for debugging without WiFi, connect the data USB port to your computer. Requires `dtoverlay=dwc2` under `[all]` in config.txt (not under `[cm5]`)
 
