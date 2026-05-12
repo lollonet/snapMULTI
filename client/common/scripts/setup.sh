@@ -755,6 +755,21 @@ if [ -n "$BOOT_CONFIG" ]; then
     DISPLAY_WIDTH="${DISPLAY_RESOLUTION%x*}"
     DISPLAY_WIDTH="${DISPLAY_WIDTH:-0}"
 
+    # Comment out the factory `dtparam=audio=on` when a HAT is confirmed.
+    # Without this, config.txt ends up with both `audio=on` (factory) and
+    # `audio=off` (added below). The firmware processes them in order and
+    # emits `snd_bcm2835.enable_headphones=` / `enable_hdmi=` to the kernel
+    # cmdline for each entry, leaving duplicate (and contradictory) values
+    # in /proc/cmdline. The audio runtime is unaffected — `audio=off` wins
+    # last and `snd_bcm2835` stays unloaded — but /proc/cmdline is noisier
+    # than necessary and harder to read in diagnostics. The grep guard
+    # makes this idempotent across reruns (line is already commented on
+    # second pass).
+    if [ -n "$HAT_OVERLAY" ] && [[ "$HAT_DETECTION_SOURCE" == "eeprom" || "$HAT_DETECTION_SOURCE" == "alsa" ]] \
+       && grep -qE '^dtparam=audio=on' "$BOOT_CONFIG"; then
+        sed -i 's/^dtparam=audio=on/#dtparam=audio=on  # disabled by snapMULTI (HAT installed)/' "$BOOT_CONFIG"
+    fi
+
     # Build new configuration block
     {
         echo ""
