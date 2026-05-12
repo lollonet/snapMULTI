@@ -501,17 +501,20 @@ install_docker() {
     fi
 
     # Enable cgroup memory controller for Docker resource limits on Pi.
-    # Without this, deploy.resources.limits.memory in docker-compose.yml is ignored.
-    local cmdline=""
-    if [[ -f /boot/firmware/cmdline.txt ]]; then
-        cmdline="/boot/firmware/cmdline.txt"
-    elif [[ -f /boot/cmdline.txt ]]; then
-        cmdline="/boot/cmdline.txt"
-    fi
-    if [[ -n "$cmdline" ]] && ! grep -q "cgroup_enable=memory" "$cmdline"; then
-        info "Enabling cgroup memory controller in $cmdline..."
-        sed -i '1s/$/ cgroup_enable=memory cgroup_memory=1/' "$cmdline"
-        warn "Reboot required for memory limits to take effect"
+    # Without this, deploy.resources.limits.memory in docker-compose.yml is
+    # ignored. The helper is idempotent (grep-before-sed); detect whether
+    # we actually mutated cmdline.txt by checking presence pre- and
+    # post-call so we don't emit the "reboot required" warn on re-runs.
+    local _cmdline _had_cgroup
+    _cmdline=$(cmdline_path 2>/dev/null || true)
+    if [[ -n "$_cmdline" ]]; then
+        _had_cgroup=0
+        grep -q "cgroup_enable=memory" "$_cmdline" 2>/dev/null && _had_cgroup=1
+        if (( _had_cgroup == 0 )); then
+            info "Enabling cgroup memory controller in $_cmdline..."
+            cmdline_ensure_memory_cgroup
+            warn "Reboot required for memory limits to take effect"
+        fi
     fi
 
     ok "Docker ready"
