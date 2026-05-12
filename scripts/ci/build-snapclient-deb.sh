@@ -68,8 +68,8 @@ Source: snapcast
 Version: ${PKG_VERSION}
 Architecture: ${ARCH}
 Maintainer: snapMULTI <noreply@github.com>
-Installed-Size: $(du -sk "$PKG_ROOT/usr/bin/snapclient" | cut -f1)
-Depends: libc6, libstdc++6, libasound2 | libasound2t64, libavahi-client3, libavahi-common3, libflac12 | libflac14, libogg0, libopus0, libsoxr0, libssl3, libvorbis0a, libboost-system1.74.0 | libboost-system1.83.0 | libboost-system1.88.0, adduser, alsa-utils
+Installed-Size: $(find "$PKG_ROOT" -path "$PKG_ROOT/DEBIAN" -prune -o -type f -exec du -k {} + 2>/dev/null | awk '{s+=$1}END{print s+0}')
+Depends: libc6, libstdc++6, libasound2 | libasound2t64, libavahi-client3, libavahi-common3, libflac12 | libflac14, libogg0, libopus0, libsoxr0, libssl3, libvorbis0a, libboost-system1.74.0 | libboost-system1.83.0, adduser, alsa-utils
 Section: sound
 Priority: optional
 Homepage: https://github.com/badaix/snapcast
@@ -115,7 +115,11 @@ chmod 755 "$PKG_ROOT/DEBIAN/postinst"
 cat > "$PKG_ROOT/DEBIAN/prerm" <<'PRE'
 #!/bin/sh
 set -e
-if [ -d /run/systemd/system ] && [ "$1" = remove ]; then
+# Stop the service on remove AND upgrade. Without the upgrade branch
+# dpkg places the new binary on disk while the old one keeps running,
+# so the .deb upgrade silently leaves stale code in memory until the
+# operator restarts the unit manually.
+if [ -d /run/systemd/system ] && { [ "$1" = remove ] || [ "$1" = upgrade ]; }; then
     deb-systemd-invoke stop snapclient.service >/dev/null || true
 fi
 PRE
