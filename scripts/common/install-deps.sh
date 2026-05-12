@@ -230,5 +230,20 @@ install_dependencies() {
     # Persist locale setting
     update-locale LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null || true
 
+    # Drop unused packages pulled in as Recommends earlier in the install
+    # (mesa/wayland/GL libs from a previous desktop image, locales, etc.).
+    # Observed live on a fresh pizero install: 19 packages flagged by apt
+    # as "automatically installed and are no longer required" — all of them
+    # mesa/wayland/X11 libraries irrelevant to snapMULTI's framebuffer-only
+    # display path. `--purge` also removes conffiles for a cleaner appliance
+    # state. Best-effort: a failure here must NOT abort the install (we've
+    # already done the meaningful work).
+    log_info "Removing unused dependencies (apt autoremove --purge)..."
+    if apt-get autoremove --purge -y >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
+        log_info "apt autoremove --purge complete"
+    else
+        log_warn "apt autoremove --purge failed (non-fatal — install proceeds)"
+    fi
+
     log_info "System dependencies installed"
 }
