@@ -69,12 +69,14 @@ _is_pi_zero_2w_smoke() {
 check_containers() {
     section "Containers"
 
-    # Pi Zero 2W runs snapclient natively (no Docker — see
-    # client/common/scripts/setup-zero2w.sh). On this device the
-    # container checks must yield to a systemd-based liveness
-    # probe of snapclient.service. The other smoke modules
-    # (mDNS, snapcast, env, system) still apply.
-    if _is_pi_zero_2w_smoke && [[ "${MODE:-}" == "client" || "${MODE:-}" == "" ]]; then
+    # Pi Zero 2W (or any future native client install) runs snapclient
+    # natively (no Docker — see client/common/scripts/setup-zero2w.sh).
+    # device-smoke.sh exports INSTALL_TYPE_NATIVE_CLIENT=true when it
+    # detects /opt/snapclient/install.conf with INSTALL_TYPE=client-native.
+    # The model-based heuristic stays as a fallback for setups where the
+    # env var is missing (e.g. invoking this module standalone).
+    if { [[ "${INSTALL_TYPE_NATIVE_CLIENT:-false}" == "true" ]] || _is_pi_zero_2w_smoke; } \
+       && [[ "${MODE:-}" == "client" || "${MODE:-}" == "" ]]; then
         if command -v systemctl >/dev/null 2>&1; then
             if systemctl is-active --quiet snapclient.service; then
                 pass_check "snapclient.service active (Pi Zero 2W native install)"
