@@ -211,11 +211,14 @@ jobs:
           # snapclient.service from the .deb provides it. Mock a minimal
           # base unit (printf used instead of heredoc to keep the unit
           # lines inside the YAML block scalar indentation).
+          # Use /bin/true as ExecStart so systemd-analyze doesn't fail
+          # on a missing /usr/bin/snapclient binary in the CI runner —
+          # we only care about the drop-in's syntactic validity.
           {
             printf '[Unit]\n'
             printf 'Description=Snapcast client\n'
             printf '[Service]\n'
-            printf 'ExecStart=/usr/bin/snapclient\n'
+            printf 'ExecStart=/bin/true\n'
             printf '[Install]\n'
             printf 'WantedBy=multi-user.target\n'
           } > "$tmpdir/snapclient.service"

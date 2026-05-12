@@ -222,12 +222,12 @@ cat > "$DROPIN_DIR/snapmulti-override.conf" <<'EOF'
 [Unit]
 After=network-online.target avahi-daemon.service sound.target
 Wants=network-online.target avahi-daemon.service
+StartLimitBurst=5
+StartLimitIntervalSec=300
 
 [Service]
 Restart=on-failure
 RestartSec=5
-StartLimitBurst=5
-StartLimitIntervalSec=300
 LimitRTPRIO=10
 LimitMEMLOCK=infinity
 EOF
