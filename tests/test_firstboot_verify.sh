@@ -26,6 +26,7 @@ source "$VERIFY_SH"
 MOCK_BIN=$(mktemp -d)
 cat > "$MOCK_BIN/docker" <<'MOCK'
 #!/usr/bin/env bash
+MOCK_BIN_DIR=$(dirname "$0")
 if [[ "$1" == "compose" ]]; then
     shift  # consume "compose"
     # Skip flags like -f <file>
@@ -54,11 +55,40 @@ print(json.dumps({'services': services}))
             ;;
     esac
 elif [[ "$1" == "inspect" ]]; then
-    # Called by xargs with container IDs as trailing args
-    for arg in "${@:2}"; do
-        [[ "$arg" == --* ]] && continue
-        echo "healthy"
+    # Determine which format is requested. The --format flag's argument
+    # tells us if we're being asked for Health.Status or RestartCount.
+    fmt=""
+    for ((i=2; i<=$#; i++)); do
+        if [[ "${!i}" == "--format" ]]; then
+            j=$((i+1))
+            fmt="${!j}"
+            break
+        fi
     done
+    case "$fmt" in
+        *RestartCount*)
+            # Walk MOCK_RC_SEQUENCE (comma-separated, one value per
+            # attempt loop) using a counter file scoped to this case.
+            counter_file="$MOCK_BIN_DIR/.rc_attempt"
+            attempt=0
+            [[ -f "$counter_file" ]] && attempt=$(cat "$counter_file")
+            sequence="${MOCK_RC_SEQUENCE:-0,0,0,0,0,0,0,0}"
+            rc=$(echo "$sequence" | awk -F, -v i="$((attempt + 1))" '{print ($i == "") ? 0 : $i}')
+            echo $((attempt + 1)) > "$counter_file"
+            # Return the RC value once per container id in args.
+            for arg in "${@:2}"; do
+                [[ "$arg" == --format || "$arg" == "$fmt" || "$arg" == --* ]] && continue
+                echo "$rc"
+            done
+            ;;
+        *)
+            # Default: Health.Status format → all containers healthy.
+            for arg in "${@:2}"; do
+                [[ "$arg" == --format || "$arg" == "$fmt" || "$arg" == --* ]] && continue
+                echo "healthy"
+            done
+            ;;
+    esac
 fi
 MOCK
 chmod +x "$MOCK_BIN/docker"
@@ -76,13 +106,19 @@ log_error() { :; }
 
 run_case() {
     local total="$1" hc_total="$2" running="$3" healthy="$4" expect_rc="$5" desc="$6"
+    local rc_seq="${7:-0,0,0,0,0,0,0,0}"
+    local attempts="${8:-2}"
     export MOCK_TOTAL="$total"
     export MOCK_HC_TOTAL="$hc_total"
     export MOCK_RUNNING="$running"
     export MOCK_HEALTHY="$healthy"
+    export MOCK_RC_SEQUENCE="$rc_seq"
+    # Reset the mock's per-case attempt counter so each case starts at
+    # sequence index 0.
+    rm -f "$MOCK_BIN/.rc_attempt"
 
     local rc=0
-    verify_compose_stack /tmp/stack.yml stack 2 0 || rc=$?
+    verify_compose_stack /tmp/stack.yml stack "$attempts" 0 || rc=$?
     assert_eq "$rc" "$expect_rc" "$desc"
 }
 
@@ -91,6 +127,28 @@ run_case 0 0 0 0 1 "zero services fails"
 run_case 2 1 2 1 0 "healthy stack passes"
 run_case 2 1 1 0 1 "incomplete stack fails"
 run_case 2 1 2 1 0 "health count via docker inspect passes"
+
+# RestartCount-based restart-loop detection (PR #348+: catch the bug
+# class where a container crashes faster than `delay` and verify sees
+# it `healthy` between crashes).
+echo ""
+echo "Testing RestartCount restart-loop detection..."
+# Stable stack: RC=0 across all attempts → passes
+run_case 2 1 2 1 0 "stable stack (RC=0,0) passes" "0,0" 2
+# Restart loop: RC increments every attempt → fails (never stabilises)
+run_case 2 1 2 1 1 "restart loop (RC=0,1,2,3) fails" "0,1,2,3" 3
+# Transient restart: RC jumps once then stabilises → passes once stable
+run_case 2 1 2 1 0 "transient restart (RC=0,1,1) passes once stable" "0,1,1" 3
+# Healthy + running but RC growing on EVERY sample → fails (would have
+# been a false-positive success under the old logic).
+run_case 2 1 2 1 1 "perpetual crash-loop (RC=0,1) attempts=2 fails" "0,1" 2
+
+# Guard: attempts<2 is rejected — the rc_prev=-1 sentinel requires two
+# samples (baseline + comparison) before stability can be claimed, so
+# success is impossible with attempts<2. Surface the caller's bug rather
+# than silently always-failing with a misleading "after 0s" message.
+run_case 2 1 2 1 1 "attempts=0 rejected (need >= 2 samples)" "0,0" 0
+run_case 2 1 2 1 1 "attempts=1 rejected (need >= 2 samples)" "0,0" 1
 
 echo ""
 if [[ "$fail" -gt 0 ]]; then

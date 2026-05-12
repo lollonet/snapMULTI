@@ -39,6 +39,20 @@ _compose_healthy_count() {
         | grep -c '^healthy$' || true
 }
 
+# Sum of `RestartCount` across all running containers in a compose project.
+# Used to detect restart loops during the verify window: a container that
+# crash-restarts faster than `delay` seconds can briefly reach `healthy`
+# state between crashes, fooling the count-based check above. Comparing
+# the sum across consecutive attempts catches the increment.
+_compose_restart_count_sum() {
+    local compose_file="$1"
+    # `|| true` guards against pipefail when `docker compose ps` exits
+    # non-zero (daemon briefly unresponsive). Mirrors _compose_healthy_count.
+    docker compose -f "$compose_file" ps -q 2>/dev/null \
+        | xargs -r docker inspect --format '{{.RestartCount}}' 2>/dev/null \
+        | awk '{s+=$1} END {print s+0}' || true
+}
+
 # Verify all services in a compose stack are running and healthy.
 #
 # Args:
@@ -53,7 +67,23 @@ verify_compose_stack() {
     local stack_name="$2"
     local attempts="$3"
     local delay="$4"
+    # rc_current must be initialised to 0: if the for-loop body never
+    # runs (attempts<1, or a future caller passes a malformed value) the
+    # post-loop diagnostic `[[ "$rc_current" -gt 0 ]]` would trip
+    # `nounset` (set -u in callers) or yield "integer expression
+    # expected" under set +u, masking the real "services not healthy"
+    # error message.
     local total hc_total running healthy attempt
+    local rc_current=0
+
+    # Reject calls with attempts < 2 — the rc_prev=-1 sentinel requires
+    # at least one baseline iteration plus one comparison iteration to
+    # claim stability, so success is impossible with attempts<2. Caller
+    # passed a bug; surface it rather than silently always-failing.
+    if [[ "$attempts" -lt 2 ]]; then
+        log_error "verify_compose_stack: attempts must be >= 2 (two samples required for RestartCount stability; got '$attempts')"
+        return 1
+    fi
 
     total=$(docker compose -f "$compose_file" config --services 2>/dev/null | wc -l)
     if [[ "$total" -eq 0 ]]; then
@@ -63,20 +93,47 @@ verify_compose_stack() {
 
     hc_total=$(_compose_hc_total "$compose_file")
 
-    for attempt in $(seq 1 "$attempts"); do
+    # Track RestartCount across attempts. A negative sentinel forces the
+    # first iteration to record the baseline without claiming "stable" —
+    # we need at least 2 samples (one delay apart) to know the count
+    # hasn't grown.
+    local rc_prev=-1
+
+    # C-style for: BSD `seq 1 0` on macOS counts backwards (1, 0) and
+    # GNU `seq 1 0` is empty — keep the loop count portable across both.
+    for (( attempt=1; attempt<=attempts; attempt++ )); do
         running=$(docker compose -f "$compose_file" ps --status running -q 2>/dev/null | wc -l)
         healthy=$(_compose_healthy_count "$compose_file")
+        rc_current=$(_compose_restart_count_sum "$compose_file")
 
-        if [[ "$running" -ge "$total" ]] && { [[ "$hc_total" -eq 0 ]] || [[ "$healthy" -ge "$hc_total" ]]; }; then
-            log_info "All $total ${stack_name} services running ($healthy/$hc_total healthy)"
+        # Success requires: every service running, healthchecked services
+        # are healthy, AND no container restarted between the previous
+        # sample and now. A restart loop (e.g. go-librespot loadContext
+        # crash) lets containers reach `healthy` between crashes — the
+        # rc_current == rc_prev check catches the increment.
+        if [[ "$running" -ge "$total" ]] \
+           && { [[ "$hc_total" -eq 0 ]] || [[ "$healthy" -ge "$hc_total" ]]; } \
+           && [[ "$rc_prev" -ge 0 ]] \
+           && [[ "$rc_current" -eq "$rc_prev" ]]; then
+            log_info "All $total ${stack_name} services running ($healthy/$hc_total healthy, RestartCount stable at $rc_current)"
             return 0
         fi
 
-        log_info "Attempt $attempt/$attempts: $running/$total running, $healthy/$hc_total healthy..."
+        # Diagnostic distinguishes "not yet up" from "restarting".
+        if [[ "$rc_prev" -ge 0 ]] && [[ "$rc_current" -gt "$rc_prev" ]]; then
+            log_info "Attempt $attempt/$attempts: $running/$total running, $healthy/$hc_total healthy, RestartCount $rc_prev->$rc_current (restart loop — waiting for stability)"
+        else
+            log_info "Attempt $attempt/$attempts: $running/$total running, $healthy/$hc_total healthy, RestartCount $rc_current..."
+        fi
+
+        rc_prev=$rc_current
         [[ "$attempt" -lt "$attempts" ]] && sleep "$delay"
     done
 
     log_error "$stack_name services not all healthy after $(( attempts * delay ))s"
+    if [[ "$rc_current" -gt 0 ]]; then
+        log_error "RestartCount sum at end of verify: $rc_current — at least one container is crash-looping"
+    fi
     docker compose -f "$compose_file" ps --format 'table {{.Name}}\t{{.Status}}' 2>/dev/null | while read -r line; do
         log_error "  $line"
     done
