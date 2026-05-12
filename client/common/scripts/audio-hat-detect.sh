@@ -153,13 +153,24 @@ detect_hat() {
 
     if [[ -z "$i2cdetect_bin" ]]; then
         # stdout to stderr: detect_hat() stdout is captured by callers for HAT name
-        apt-get install -y -q i2c-tools >&2 || true
+        if ! apt-get install -y -q i2c-tools >&2; then
+            # apt fail is non-fatal — the downstream `if [[ -n "$i2cdetect_bin" ]]`
+            # gate at line 176 falls back to "I2C: i2cdetect unavailable, skipping",
+            # so detection drops one fallback layer. Log the cause so operators
+            # don't have to grep apt logs to understand why I2C scan was skipped.
+            echo "WARN: apt-get install i2c-tools failed — I2C HAT scan will be skipped" >&2
+        fi
         i2cdetect_bin=$(command -v i2cdetect 2>/dev/null || true)
         [[ -z "$i2cdetect_bin" && -x /usr/sbin/i2cdetect ]] && i2cdetect_bin=/usr/sbin/i2cdetect
     fi
     if [[ -z "$modprobe_bin" ]]; then
         # stdout to stderr: same reason as above
-        apt-get install -y -q kmod >&2 || true
+        if ! apt-get install -y -q kmod >&2; then
+            # Downstream `[[ -n "$modprobe_bin" ]]` gate at line 169 short-circuits
+            # i2c-dev module load. Log the cause for parity with the i2c-tools
+            # branch above.
+            echo "WARN: apt-get install kmod failed — i2c-dev module will not be auto-loaded" >&2
+        fi
         modprobe_bin=$(command -v modprobe 2>/dev/null || true)
         [[ -z "$modprobe_bin" && -x /usr/sbin/modprobe ]] && modprobe_bin=/usr/sbin/modprobe
     fi
