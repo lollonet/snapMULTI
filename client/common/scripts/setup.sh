@@ -843,10 +843,12 @@ if [ -n "$BOOT_CONFIG" ]; then
         echo "Removed fbcon=map:9 from cmdline.txt (boot messages now visible)"
     fi
 
-    # Enable cgroup memory controller for Docker resource limits
-    # Required for cgroups v2 on newer kernels (Bookworm+/Trixie)
+    # Enable cgroup memory controller for Docker resource limits.
+    # Required for cgroups v2 on newer kernels (Bookworm+/Trixie). The
+    # helper is idempotent; emit the "Enabled" log only when we actually
+    # mutated cmdline.txt.
     if [ -n "$CMDLINE" ] && ! grep -q "cgroup_enable=memory" "$CMDLINE"; then
-        sed -i 's/$/ cgroup_enable=memory cgroup_memory=1/' "$CMDLINE"
+        cmdline_ensure_memory_cgroup
         echo "Enabled cgroup memory controller (cmdline.txt updated)"
     fi
 else

@@ -13,6 +13,23 @@ set -euo pipefail
 #   ro-mode status   - Check current mode
 # ============================================
 
+# cmdline-manager.sh provides the idempotent cmdline.txt helpers
+# (cmdline_path, cmdline_ensure_overlayroot, cmdline_remove_overlayroot).
+# Probe both the dev tree path and the on-device install path.
+_RO_MODE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for _cm_candidate in \
+    "$_RO_MODE_DIR/../../../scripts/common/cmdline-manager.sh" \
+    "$_RO_MODE_DIR/../../scripts/common/cmdline-manager.sh" \
+    "/opt/snapmulti/scripts/common/cmdline-manager.sh" \
+    "/opt/snapclient/scripts/common/cmdline-manager.sh"; do
+    # shellcheck disable=SC1090
+    if [[ -f "$_cm_candidate" ]]; then
+        source "$_cm_candidate"
+        break
+    fi
+done
+unset _cm_candidate
+
 usage() {
     cat << 'EOF'
 Usage: ro-mode <command>
@@ -47,37 +64,34 @@ get_status() {
     fi
 }
 
+# Backwards-compat alias — older callers / debugging snippets used
+# cmdline_file. New code calls cmdline_path() from cmdline-manager.sh.
 cmdline_file() {
-    local candidate
-    for candidate in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
-        [[ -f "$candidate" ]] && { echo "$candidate"; return 0; }
-    done
-    return 1
+    cmdline_path
 }
 
+# Persist overlayroot=tmpfs for next boot:
+#   1. Add the token to cmdline.txt (cmdline-manager.sh helper)
+#   2. Write /etc/overlayroot.local.conf with `tmpfs:recurse=0`
+#      (recurse=0 overlays only `/`, leaving NFS/USB fstab entries
+#      writable — prevents systemd ordering cycles).
+# Mirrors scripts/common/system-tune.sh:persist_overlayroot_enabled
+# (server side) so client and server boot configs stay byte-identical.
 persist_overlayroot_enabled() {
-    local cmdline
-    cmdline=$(cmdline_file) || return 1
-    if ! grep -q 'overlayroot=tmpfs' "$cmdline" 2>/dev/null; then
-        sed -i '1s#^#overlayroot=tmpfs #' "$cmdline" || return 1
-    fi
-    # recurse=0: overlay only `/`, leave other fstab entries (NFS, USB, etc.) untouched.
-    if ! cat > /etc/overlayroot.local.conf <<'OREOF'
+    cmdline_ensure_overlayroot || return 1
+    cat > /etc/overlayroot.local.conf <<'OREOF' || return 1
 overlayroot="tmpfs:recurse=0"
 overlayroot_cfgdisk="disabled"
 OREOF
-    then
-        return 1
-    fi
 }
 
+# Reverse of persist_overlayroot_enabled. `root_prefix` lets the caller
+# point at a non-default rootfs (used by recovery / installer images
+# that mount a target rootfs under e.g. /mnt — irrelevant for the
+# default on-device invocation).
 persist_overlayroot_disabled() {
     local root_prefix="${1:-}"
-    local cmdline
-    cmdline=$(cmdline_file) || return 1
-    if grep -q 'overlayroot=tmpfs' "$cmdline" 2>/dev/null; then
-        sed -i 's/\(^\| \)overlayroot=tmpfs\($\| \)/ /g; s/^ //; s/  */ /g; s/ $//' "$cmdline" || return 1
-    fi
+    cmdline_remove_overlayroot || return 1
     rm -f "${root_prefix}/etc/overlayroot.local.conf"
 }
 

@@ -7,11 +7,16 @@
 #
 # Requires: scripts/common/logging.sh (info, warn, ok, error)
 
-# Guard: source logging.sh if not already loaded
+# Guard: source logging.sh + cmdline-manager.sh if not already loaded
 if ! command -v info &>/dev/null; then
     TUNE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     # shellcheck source=logging.sh
     source "$TUNE_DIR/logging.sh"
+fi
+if ! command -v cmdline_path &>/dev/null; then
+    TUNE_DIR="${TUNE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+    # shellcheck source=cmdline-manager.sh
+    source "$TUNE_DIR/cmdline-manager.sh"
 fi
 
 # ── Overlayroot detection ─────────────────────────────────────────
@@ -19,26 +24,17 @@ is_overlayroot() {
     mount 2>/dev/null | grep -q " on / type overlay"
 }
 
+# Backwards-compat alias — historical name, kept so external callers
+# (operator scripts, ad-hoc debugging snippets) don't break. New code
+# should call cmdline_path() directly.
 overlayroot_cmdline_file() {
-    local candidate
-    for candidate in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
-        [[ -f "$candidate" ]] && { echo "$candidate"; return 0; }
-    done
-    return 1
+    cmdline_path
 }
 
 persist_overlayroot_enabled() {
-    local cmdline
-    cmdline=$(overlayroot_cmdline_file) || {
-        warn "overlayroot: no cmdline.txt found"
+    if ! cmdline_ensure_overlayroot; then
+        warn "overlayroot: failed to patch cmdline.txt (missing file or sed failed)"
         return 1
-    }
-
-    if ! grep -q 'overlayroot=tmpfs' "$cmdline" 2>/dev/null; then
-        sed -i '1s#^#overlayroot=tmpfs #' "$cmdline" || {
-            warn "overlayroot: failed to patch $cmdline"
-            return 1
-        }
     fi
 
     # recurse=0: overlay only `/`, leave NFS/USB fstab entries untouched (prevents systemd ordering cycles)
@@ -55,17 +51,9 @@ OREOF
 }
 
 persist_overlayroot_disabled() {
-    local cmdline
-    cmdline=$(overlayroot_cmdline_file) || {
-        warn "overlayroot: no cmdline.txt found"
+    if ! cmdline_remove_overlayroot; then
+        warn "overlayroot: failed to unpatch cmdline.txt (missing file or sed failed)"
         return 1
-    }
-
-    if grep -q 'overlayroot=tmpfs' "$cmdline" 2>/dev/null; then
-        sed -i 's/\(^\| \)overlayroot=tmpfs\($\| \)/ /g; s/^ //; s/  */ /g; s/ $//' "$cmdline" || {
-            warn "overlayroot: failed to unpatch $cmdline"
-            return 1
-        }
     fi
 
     rm -f /etc/overlayroot.local.conf
@@ -530,14 +518,14 @@ SYSDEOF
     # render emergency-mode messages on a console nobody sees, leaving
     # the user with a frozen black screen. Restore tty1 before enabling
     # overlayfs so a failure surface stays visible.
-    local cmdline=""
-    for candidate in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
-        [[ -f "$candidate" ]] && cmdline="$candidate" && break
-    done
-    if [[ -n "$cmdline" ]] && ! grep -qE '(^| )console=tty1( |$)' "$cmdline"; then
-        sed -i '1s/$/ console=tty1/' "$cmdline" 2>/dev/null \
-            && ok "Restored console=tty1 to cmdline.txt (was missing)" \
-            || warn "Could not restore console=tty1 — emergency mode messages may not be visible"
+    local _cmdline_check
+    _cmdline_check=$(cmdline_path 2>/dev/null || true)
+    if [[ -n "$_cmdline_check" ]] && ! grep -qE '(^| )console=tty1( |$)' "$_cmdline_check"; then
+        if cmdline_ensure_console_tty1; then
+            ok "Restored console=tty1 to cmdline.txt (was missing)"
+        else
+            warn "Could not restore console=tty1 — emergency mode messages may not be visible"
+        fi
     fi
 
     # Enable overlayfs via raspi-config (takes effect after reboot)
