@@ -243,8 +243,12 @@ tune_pi_zero_2w_swap_safety() {
     local conf_ok=0
     if [[ -f "$swap_conf" ]] && grep -qF "snapMULTI Pi Zero 2W" "$swap_conf"; then
         conf_ok=1
-    elif [[ ! -f "$swap_conf" ]]; then
-        conf_ok=1  # nothing to disable
+    elif [[ ! -d /etc/rpi ]]; then
+        # rpi-swap package not installed at all — nothing to neutralise.
+        # Note: an absent swap.conf with /etc/rpi/ still present means the
+        # generator runs with package defaults and would emit a zram unit,
+        # so we must still write the override in that case.
+        conf_ok=1
     fi
     if (( all_masked == 1 )) && (( conf_ok == 1 )) && [[ ! -f /var/swap ]]; then
         ok "Pi Zero 2W zram swap safety already configured"

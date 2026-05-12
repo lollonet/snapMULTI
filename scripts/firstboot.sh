@@ -461,18 +461,23 @@ fi
 set_module "deps"
 next_step "Installing git and dependencies..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-# Pi Zero 2W + client mode goes through the native snapclient path
-# (setup-zero2w.sh, no Docker). Skip every Docker-related step in
-# this orchestrator: repo setup, Docker install, fuse-overlayfs
-# switch. The model detection here must mirror the dispatch
-# decision made later in the CLIENT INSTALL block.
+# Shared dispatch predicate — used both here (to skip Docker
+# orchestration) and at the CLIENT INSTALL block (to actually
+# invoke setup-zero2w.sh). Keeping the two sites in sync means
+# they read from the same function: if the helper returns false
+# at the dispatch site, the verify path is gated correctly too.
+_is_pi_zero_2w_native_path() {
+    [[ "$INSTALL_TYPE" == "client" ]] || return 1
+    local m
+    m=$(tr -d '\0' </proc/device-tree/model 2>/dev/null || echo "")
+    [[ "$m" == *"Zero 2 W"* ]]
+}
+
 SKIP_DOCKER=false
-_model_check=$(tr -d '\0' </proc/device-tree/model 2>/dev/null || echo "")
-if [[ "$_model_check" == *"Zero 2 W"* ]] && [[ "$INSTALL_TYPE" == "client" ]]; then
+if _is_pi_zero_2w_native_path; then
     SKIP_DOCKER=true
     log_info "Pi Zero 2W client install — skipping Docker repo, Docker daemon and fuse-overlayfs steps"
 fi
-unset _model_check
 
 DOCKER_REPO_PRECONFIGURED=false
 if checkpoint_reached "deps"; then
@@ -505,6 +510,9 @@ set_module "docker"
 if [[ "$SKIP_DOCKER" == "true" ]]; then
     log_info "Skipping Docker install (Pi Zero 2W native snapclient path)"
     next_step "Skipping Docker (native install)..."
+    # Credit the step so the TUI progress bar closes step 4 instead
+    # of stalling at step 3's percentage until the next milestone.
+    milestone "$CURRENT_STEP" "Docker skipped (native install)" 2 2>/dev/null || true
 else
     next_step "Installing Docker..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
@@ -813,22 +821,21 @@ if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
     # Docker + visualizer + fb-display memory footprint (~352 MB containers
     # + 200 MB OS/dockerd) exceeds the 512 MB RAM budget — confirmed
     # unsupported with display in docs/HARDWARE.md. The native path
-    # installs snapclient via the upstream .deb and skips Docker entirely.
-    model_local=$(tr -d '\0' </proc/device-tree/model 2>/dev/null || echo "")
-    if [[ "$model_local" == *"Zero 2 W"* ]]; then
+    # installs snapclient via apt (Trixie 0.31 / Bookworm 0.27) and
+    # skips Docker entirely (gated by SKIP_DOCKER earlier in this script).
+    if _is_pi_zero_2w_native_path; then
         if [[ -x scripts/setup-zero2w.sh ]]; then
             log_info "Pi Zero 2W detected — using native snapclient install (scripts/setup-zero2w.sh)"
             setup_script="scripts/setup-zero2w.sh"
         else
             # Fail loud rather than silently fall through to the Docker
-            # path: setup.sh on a Pi Zero 2W exceeds the 512 MB RAM
-            # budget and reproduces the infinite-reboot loop this PR
-            # was created to fix. The script is missing (or has lost
-            # its exec bit on a FAT32 → ext4 copy), which means
-            # prepare-sd.sh ran against an older snapMULTI tree —
-            # require operator intervention.
+            # path. The script is missing (or has lost its exec bit on
+            # a FAT32 → ext4 copy), which means prepare-sd.sh ran
+            # against an older snapMULTI tree. SKIP_DOCKER was already
+            # set true above, so the only sane path is to surface the
+            # mismatch and require a re-flash.
             log_error "Pi Zero 2W detected but scripts/setup-zero2w.sh is missing or not executable."
-            log_error "Refusing to fall back to the Docker setup.sh — it will exceed the 512 MB RAM budget."
+            log_error "SKIP_DOCKER was set so Docker is unavailable — cannot fall back."
             log_error "Re-flash the SD card with a current snapMULTI (scripts/prepare-sd.sh) and retry."
             exit 1
         fi
