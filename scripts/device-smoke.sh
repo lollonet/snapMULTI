@@ -148,7 +148,7 @@ detect_dir() {
 
 # Pi Zero 2W native install path — install.conf marks the role but
 # there's no docker-compose.yml / .env (snapclient runs as systemd unit
-# directly from the badaix apt package). detect_dir() would miss it
+# directly from the distro apt package). detect_dir() would miss it
 # because of the compose-file gate, so look for install.conf separately.
 detect_native_client_dir() {
     local explicit="$1"
