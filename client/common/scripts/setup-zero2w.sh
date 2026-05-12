@@ -236,9 +236,23 @@ if _source_first_match "audio-hat-detect.sh"; then
     if command -v detect_hat &>/dev/null; then
         step "Detecting audio HAT"
         _ensure_hat_detect_tools
-        # detect_hat prints the HAT_CONFIG name on stdout (the basename of
-        # an audio-hats/*.conf file). Side-effects HAT_DETECTION_SOURCE.
-        _hat_config=$(detect_hat 2>/dev/null || echo "internal-audio")
+        # detect_hat prints the HAT_CONFIG name on stdout AND sets
+        # HAT_DETECTION_SOURCE as a side-effect. Command substitution
+        # `$(detect_hat)` would discard that side-effect (subshell scope),
+        # so the log line below would always read "source: none" even on
+        # a successful I2C / ALSA / EEPROM detection — observed live on
+        # pizero where the PCM5122 was correctly found via I2C but the
+        # log claimed the source was missing. Mirror the tempfile pattern
+        # already used by setup.sh:279-285 so the global survives.
+        _hat_tmp=$(mktemp /tmp/snapclient-hat-XXXXX)
+        # shellcheck disable=SC2064  # we want $_hat_tmp expanded now
+        trap "rm -f '$_hat_tmp'" RETURN EXIT
+        if ! detect_hat 2>/dev/null > "$_hat_tmp"; then
+            echo "internal-audio" > "$_hat_tmp"
+        fi
+        _hat_config=$(cat "$_hat_tmp")
+        rm -f "$_hat_tmp"
+        trap - RETURN EXIT
         _hat_config=$(resolve_hat_config_name "$_hat_config" 2>/dev/null || echo "$_hat_config")
         info "Detected HAT config: ${_hat_config} (source: ${HAT_DETECTION_SOURCE:-unknown})"
 

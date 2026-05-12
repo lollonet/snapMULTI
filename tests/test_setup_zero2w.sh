@@ -84,6 +84,16 @@ assert 'grep -qE "resolve_hat_config_name" "$SETUP"' \
 assert 'grep -qF "audio-hats" "$SETUP"' \
     "loads HAT_CARD_NAME / HAT_OVERLAY from audio-hats/*.conf"
 
+# 7a. detect_hat must NOT be called in $(...) command substitution.
+# Subshell scope discards HAT_DETECTION_SOURCE side-effect, so the
+# downstream log reads "source: none" even on a successful detection.
+# Use tempfile capture (same pattern as setup.sh:279-285) to preserve
+# the global. Observed live on pizero before this fix.
+assert '! grep -qE "_hat_config=\\\$\\(detect_hat" "$SETUP"' \
+    "detect_hat NOT called in command substitution (would lose HAT_DETECTION_SOURCE)"
+assert 'grep -qE "mktemp.*snapclient-hat" "$SETUP"' \
+    "detect_hat output captured via mktemp tempfile (preserves global side-effects)"
+
 # 8. config.txt write: dtoverlay line must have NO inline comment
 #    (bootloader treats anything after `=` as part of the value).
 assert 'awk '\''/echo "dtoverlay=\$HAT_OVERLAY"/'\'' "$SETUP" | grep -vqE "#"' \
