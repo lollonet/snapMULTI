@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+# Source guard: re-sourcing must be a no-op. Callers may source this
+# multiple times (e.g. firstboot sources it directly, then sources
+# common/logging.sh which transitively re-sources unified-log.sh).
+# Without the guard, function bodies are re-evaluated each time and
+# any module-level state (LOG_SOURCE, UNIFIED_LOG) would silently
+# reset to default values.
+if [[ "${_UNIFIED_LOG_SH_SOURCED:-0}" == "1" ]]; then
+    return 0
+fi
+_UNIFIED_LOG_SH_SOURCED=1
+
 # Unified logging for snapMULTI — single source of truth for all bash output.
 #
 # Two operating modes, auto-detected at source time:

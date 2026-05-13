@@ -151,6 +151,13 @@ source "$COMMON/unified-log.sh"
 # shellcheck source=common/device-detect.sh
 source "$COMMON/device-detect.sh"
 
+# Source cmdline-manager.sh — single owner of /boot/firmware/cmdline.txt
+# mutations. All token add/remove operations downstream route through
+# its helpers (cmdline_remove_token, cmdline_add_token, etc.) so a
+# single change to the file format is reflected everywhere.
+# shellcheck source=common/cmdline-manager.sh
+source "$COMMON/cmdline-manager.sh"
+
 # Source install-conf-mirror.sh — single owner of /opt/snap*/install.conf
 # writes. mirror_install_conf() copies $SNAP_BOOT/install.conf to a
 # destination directory atomically (temp-file + mv) so a concurrent
@@ -194,13 +201,11 @@ is_client_install() {
 # that would otherwise OOM during `docker compose pull` with a cryptic
 # "container failed to start" message that points away from the cause.
 _validate_profile_hardware() {
-    local model
-    model=$(tr -d '\0' </proc/device-tree/model 2>/dev/null || echo "")
-    if [[ "$model" == *"Zero 2 W"* ]]; then
+    if is_pi_zero_2w; then
         case "$INSTALL_TYPE" in
             server|both)
                 log_error "Pi Zero 2W (512 MB RAM) cannot host the snapMULTI server stack."
-                log_error "Detected model: $model"
+                log_error "Detected model: $(device_model)"
                 log_error "INSTALL_TYPE=$INSTALL_TYPE requires a Pi 3B+, Pi 4, or Pi 5 (>=1 GB RAM)."
                 log_error "Reflash this SD with INSTALL_TYPE=client (Audio Player) for Pi Zero 2W."
                 log_error "See docs/HARDWARE.md for the supported hardware matrix."
@@ -419,15 +424,12 @@ fi
 unset _DISPLAY_LIB _candidate
 
 # Make future boots verbose
-CMDLINE_FILE=""
-for candidate in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
-    [[ -f "$candidate" ]] && CMDLINE_FILE="$candidate" && break
-done
-if [[ -n "$CMDLINE_FILE" ]]; then
-    if grep -qE 'quiet|splash|fbcon=map:9' "$CMDLINE_FILE"; then
-        sed -i 's/ quiet//; s/ splash//; s/ fbcon=map:9//' "$CMDLINE_FILE"
-        log_info "Enabled verbose boot"
-    fi
+CMDLINE_FILE="$(cmdline_path 2>/dev/null || true)"
+if [[ -n "$CMDLINE_FILE" ]] && grep -qE 'quiet|splash|fbcon=map:9' "$CMDLINE_FILE"; then
+    cmdline_remove_token quiet
+    cmdline_remove_token splash
+    cmdline_remove_token 'fbcon=map:9'
+    log_info "Enabled verbose boot"
 fi
 
 # Initialize progress display
@@ -886,14 +888,14 @@ if is_client_install; then
     #   vt.global_cursor_default=0  — hide cursor blink behind fb-display
     #   logo.nologo                 — hide raspberry-pi boot logo
     if [[ -c /dev/fb0 ]] && [[ -n "${CMDLINE_FILE:-}" ]] && [[ -f "$CMDLINE_FILE" ]]; then
-        # Idempotent: only append flags that aren't already there.
+        # cmdline_add_token is idempotent (returns 0 with no write when
+        # the token already exists), so we can call it unconditionally
+        # and rely on the helper to deduplicate.
         for flag in "quiet" "loglevel=3" "systemd.show_status=false" "vt.global_cursor_default=0" "logo.nologo"; do
-            if ! grep -qE "(^| )${flag//./\\.}( |\$)" "$CMDLINE_FILE"; then
-                if sed -i "1s/\$/ ${flag}/" "$CMDLINE_FILE" 2>/dev/null; then
-                    log_info "cmdline: added '${flag}' (quiet boot for fb-display)"
-                else
-                    log_warn "cmdline: failed to add '${flag}' (is /boot/firmware mounted ro?)"
-                fi
+            if cmdline_add_token "$flag" 2>/dev/null; then
+                log_info "cmdline: ensured '${flag}' (quiet boot for fb-display)"
+            else
+                log_warn "cmdline: failed to add '${flag}' (is /boot/firmware mounted ro?)"
             fi
         done
     fi

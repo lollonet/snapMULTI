@@ -13,10 +13,21 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-info()  { echo -e "\033[34m[INFO]\033[0m  $*"; }
-ok()    { echo -e "\033[32m[OK]\033[0m    $*"; }
-warn()  { echo -e "\033[33m[WARN]\033[0m  $*"; }
-error() { echo -e "\033[31m[ERROR]\033[0m $*" >&2; }
+# Source the canonical logger. backup-from-sd.sh runs ON THE HOST (Mac
+# or Linux PC with the SD card mounted), not on the Pi. unified-log.sh
+# auto-detects interactive mode here ($UNIFIED_LOG is unwritable) and
+# falls back to coloured stderr — preserving the look-and-feel of the
+# previous inline definitions. The script REQUIRES being run from the
+# project bundle so the helper is reachable.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/common/unified-log.sh" ]]; then
+    # shellcheck source=common/unified-log.sh
+    source "$SCRIPT_DIR/common/unified-log.sh"
+else
+    echo "ERROR: $SCRIPT_DIR/common/unified-log.sh not found" >&2
+    echo "  backup-from-sd.sh must be run from the snapMULTI project bundle." >&2
+    exit 1
+fi
 
 # Find boot partition
 find_boot() {

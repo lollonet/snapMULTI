@@ -54,10 +54,14 @@ echo "== check_containers.sh: respects INSTALL_TYPE_NATIVE_CLIENT =="
 assert 'grep -qF "INSTALL_TYPE_NATIVE_CLIENT" "$CHECK_CONTAINERS"' \
     "check_containers checks INSTALL_TYPE_NATIVE_CLIENT env var"
 
-# The fallback model-detection idiom is still present (defense in
-# depth for standalone invocation when the env var is unset).
-assert 'grep -qF "_is_pi_zero_2w_smoke" "$CHECK_CONTAINERS"' \
-    "model-based fallback still present"
+# Defence-in-depth fallback for standalone invocation when the env var
+# is unset: Bundle B1 replaced the legacy `_is_pi_zero_2w_smoke` alias
+# with a direct call to `is_pi_zero_2w` from device-detect.sh (single
+# authority for hardware probes). Verify the direct call is wired into
+# the gate expression so a smoke run on a Pi Zero 2W without the env
+# var still detects native-client mode.
+assert 'grep -qE "INSTALL_TYPE_NATIVE_CLIENT.*\\|\\| is_pi_zero_2w" "$CHECK_CONTAINERS"' \
+    "model-based fallback uses is_pi_zero_2w from device-detect.sh"
 
 echo
 echo "== device-smoke.sh: Host / Compose / Systemd gates on native client =="

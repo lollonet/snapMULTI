@@ -96,3 +96,94 @@ cmdline_ensure_console_tty1() {
     fi
     sed -i '1s/$/ console=tty1/' "$cmdline"
 }
+
+# ── Generic token / pattern helpers ────────────────────────────────
+# These three helpers replace ad-hoc `sed -i 's/ token//'` calls in
+# callers (firstboot.sh, setup.sh). They operate on the cmdline.txt
+# single line as a list of whitespace-delimited fields — NOT regex
+# word-boundary matching — so tokens with punctuation (`fbcon=map:9`,
+# `cgroup_memory=1`, `video=HDMI-A-1:1920M@60`) work correctly. All
+# three are idempotent and validate input.
+
+# Internal: re-emit fields as a single space-separated line + newline.
+# Used by the three field-based helpers below.
+_cmdline_write_fields() {
+    local cmdline="$1"; shift
+    # Join args with single space, terminate with newline.
+    # The Pi bootloader requires the cmdline to live on one physical
+    # line; trailing newline is permitted (and standard in Pi OS).
+    printf '%s\n' "$*" > "$cmdline"
+}
+
+# Remove a token (exact field match). Idempotent: no-op if absent.
+# Rejects empty tokens and tokens containing whitespace (would not be
+# a single field anyway). Punctuation is fine.
+cmdline_remove_token() {
+    local token="$1"
+    if [[ -z "$token" || "$token" =~ [[:space:]] ]]; then
+        echo "ERROR: cmdline_remove_token: token must be non-empty and contain no whitespace" >&2
+        return 2
+    fi
+    local cmdline
+    cmdline=$(cmdline_path) || return 1
+    local -a fields=() filtered=()
+    # shellcheck disable=SC2034
+    read -r -a fields < "$cmdline"
+    local f present=0
+    for f in "${fields[@]}"; do
+        if [[ "$f" == "$token" ]]; then
+            present=1
+        else
+            filtered+=("$f")
+        fi
+    done
+    # Idempotent: skip write if nothing changed.
+    (( present == 0 )) && return 0
+    _cmdline_write_fields "$cmdline" "${filtered[@]}"
+}
+
+# Remove every field matching the given ERE. Used for parametric
+# tokens like `video=HDMI-A-1:.*` where the value part is variable.
+# Caller passes a plain ERE pattern (no leading slash, no anchors).
+cmdline_remove_pattern() {
+    local pattern="$1"
+    if [[ -z "$pattern" ]]; then
+        echo "ERROR: cmdline_remove_pattern: pattern must be non-empty" >&2
+        return 2
+    fi
+    local cmdline
+    cmdline=$(cmdline_path) || return 1
+    local -a fields=() filtered=()
+    # shellcheck disable=SC2034
+    read -r -a fields < "$cmdline"
+    local f matched=0
+    for f in "${fields[@]}"; do
+        if [[ "$f" =~ ^${pattern}$ ]]; then
+            matched=1
+        else
+            filtered+=("$f")
+        fi
+    done
+    (( matched == 0 )) && return 0
+    _cmdline_write_fields "$cmdline" "${filtered[@]}"
+}
+
+# Append a token (exact field) if not already present. Idempotent.
+cmdline_add_token() {
+    local token="$1"
+    if [[ -z "$token" || "$token" =~ [[:space:]] ]]; then
+        echo "ERROR: cmdline_add_token: token must be non-empty and contain no whitespace" >&2
+        return 2
+    fi
+    local cmdline
+    cmdline=$(cmdline_path) || return 1
+    local -a fields=()
+    # shellcheck disable=SC2034
+    read -r -a fields < "$cmdline"
+    local f
+    for f in "${fields[@]}"; do
+        [[ "$f" == "$token" ]] && return 0  # already present
+    done
+    fields+=("$token")
+    _cmdline_write_fields "$cmdline" "${fields[@]}"
+}

@@ -125,6 +125,13 @@ if [[ -n "$COMMON_MODULE_DIR" ]]; then
     [[ -f "$COMMON_MODULE_DIR/resource-detect.sh" ]] && source "$COMMON_MODULE_DIR/resource-detect.sh"
     # shellcheck source=common/pull-images.sh
     [[ -f "$COMMON_MODULE_DIR/pull-images.sh" ]] && source "$COMMON_MODULE_DIR/pull-images.sh"
+    # cmdline-manager.sh — single owner of cmdline.txt mutations. Required
+    # by the post-install cmdline cleanup (removes video=HDMI-A-1:* and
+    # fbcon=map:9 once fb-display has taken over). Missing only on stripped
+    # client bundles; in that case the legacy inline sed call site has
+    # already been removed and the cleanup is a no-op.
+    # shellcheck source=common/cmdline-manager.sh
+    [[ -f "$COMMON_MODULE_DIR/cmdline-manager.sh" ]] && source "$COMMON_MODULE_DIR/cmdline-manager.sh"
 fi
 
 echo "========================================="
@@ -726,15 +733,24 @@ if [ -n "$BOOT_CONFIG" ]; then
         sed -i '/# --- SNAPCLIENT SETUP DISPLAY ---/,/# --- SNAPCLIENT SETUP DISPLAY END ---/d' "$BOOT_CONFIG"
     fi
 
-    # Remove temporary video= parameter from cmdline.txt (KMS mode)
+    # Remove temporary video= parameter from cmdline.txt (KMS mode).
+    # cmdline_remove_pattern matches whole space-delimited fields, so a
+    # pattern like `video=HDMI-A-1:.*` strips the entire parametric token
+    # regardless of the resolution suffix (`:800x600`, `:1920M@60`, etc.).
     if [ -n "$CMDLINE" ] && grep -q "video=HDMI-A-1:800x600" "$CMDLINE"; then
-        echo "Removing temporary 800x600 video parameter..."
-        sed -i 's/ video=HDMI-A-1:[^ ]*//' "$CMDLINE"
-        NEEDS_REBOOT=true
-        if grep -q "video=HDMI-A-1:" "$CMDLINE"; then
-            echo "WARNING: Could not fully remove video= from cmdline.txt"
-            echo "  Manually edit: $CMDLINE"
-            NEEDS_REBOOT=false
+        if command -v cmdline_remove_pattern >/dev/null 2>&1; then
+            echo "Removing temporary 800x600 video parameter..."
+            cmdline_remove_pattern 'video=HDMI-A-1:[^[:space:]]*'
+            NEEDS_REBOOT=true
+            if grep -q "video=HDMI-A-1:" "$CMDLINE"; then
+                echo "WARNING: Could not fully remove video= from cmdline.txt"
+                echo "  Manually edit: $CMDLINE"
+                NEEDS_REBOOT=false
+            fi
+        else
+            echo "WARNING: cmdline-manager.sh not sourced — leaving 800x600 video="
+            echo "  param in $CMDLINE. Manual cleanup required, or re-run setup"
+            echo "  from a bundle that includes scripts/common/cmdline-manager.sh."
         fi
     fi
 
@@ -839,8 +855,13 @@ if [ -n "$BOOT_CONFIG" ]; then
     # console to nonexistent fb9). Kernel messages during boot are valuable
     # for diagnostics; fb-display overwrites fb0 once it starts.
     if [ -n "$CMDLINE" ] && grep -q "fbcon=map:9" "$CMDLINE"; then
-        sed -i 's/ fbcon=map:9//' "$CMDLINE"
-        echo "Removed fbcon=map:9 from cmdline.txt (boot messages now visible)"
+        if command -v cmdline_remove_token >/dev/null 2>&1; then
+            cmdline_remove_token 'fbcon=map:9'
+            echo "Removed fbcon=map:9 from cmdline.txt (boot messages now visible)"
+        else
+            echo "WARNING: cmdline-manager.sh not sourced — leaving fbcon=map:9"
+            echo "  in $CMDLINE. Manual cleanup required."
+        fi
     fi
 
     # Enable cgroup memory controller for Docker resource limits.

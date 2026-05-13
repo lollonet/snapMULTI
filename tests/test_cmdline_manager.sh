@@ -57,24 +57,13 @@ if command -v shellcheck >/dev/null 2>&1; then
     assert_eq "$(shellcheck -S warning "$CMDLINE_MGR" >/dev/null 2>&1 && echo OK)" "OK" "shellcheck -S warning clean"
 fi
 for fn in cmdline_path cmdline_ensure_overlayroot cmdline_remove_overlayroot \
-          cmdline_ensure_memory_cgroup cmdline_ensure_console_tty1; do
+          cmdline_ensure_memory_cgroup cmdline_ensure_console_tty1 \
+          cmdline_remove_token cmdline_remove_pattern cmdline_add_token; do
     assert_eq "$(grep -cE "^${fn}\\(\\) \\{" "$CMDLINE_MGR")" "1" "function $fn defined"
 done
 
 echo
-echo "=== Functional checks (helpers run against tmpfile) ==="
-
-# Helpers use `sed -i 'pat' file`, which is GNU sed semantics (Linux,
-# the production target). BSD sed (macOS default) interprets the second
-# arg as the backup suffix and corrupts the test. Skip the functional
-# block on Darwin unless `gsed` (GNU coreutils via brew) is available;
-# CI runners are Linux and exercise the real path.
-if [[ "$(uname -s)" == "Darwin" ]] && ! command -v gsed >/dev/null 2>&1; then
-    echo "  SKIP: BSD sed on macOS — functional helper tests run on Linux CI only"
-    echo
-    echo "Results: $pass passed, $fail failed"
-    exit $(( fail > 0 ? 1 : 0 ))
-fi
+echo "=== Functional setup ==="
 
 # shellcheck source=../scripts/common/cmdline-manager.sh
 source "$CMDLINE_MGR"
@@ -85,6 +74,81 @@ trap 'rm -f "$TMP_CMDLINE"' EXIT
 cmdline_path() {
     printf '%s\n' "$TMP_CMDLINE"
 }
+
+# ── Field-based helpers run on ALL platforms (no sed) ─────────────
+echo
+echo "=== Functional checks: cmdline_remove_token / _pattern / _add_token ==="
+
+# Input validation.
+if cmdline_remove_token "" 2>/dev/null; then
+    echo "  FAIL: cmdline_remove_token should reject empty token"; fail=$((fail + 1))
+else
+    echo "  PASS: cmdline_remove_token rejects empty token"; pass=$((pass + 1))
+fi
+if cmdline_add_token "two words" 2>/dev/null; then
+    echo "  FAIL: cmdline_add_token should reject whitespace token"; fail=$((fail + 1))
+else
+    echo "  PASS: cmdline_add_token rejects whitespace token"; pass=$((pass + 1))
+fi
+
+# Exact-field remove with punctuation tokens.
+echo "console=tty1 fbcon=map:9 quiet splash root=PARTUUID=abc-02" > "$TMP_CMDLINE"
+cmdline_remove_token 'fbcon=map:9'
+assert_not_contains "$(cat "$TMP_CMDLINE")" "fbcon=map:9" "remove_token strips punctuation token fbcon=map:9"
+assert_contains "$(cat "$TMP_CMDLINE")" "console=tty1" "remove_token preserves siblings (console=tty1)"
+assert_contains "$(cat "$TMP_CMDLINE")" "root=PARTUUID=abc-02" "remove_token preserves siblings (root=PARTUUID)"
+
+# Idempotent on missing.
+cmdline_remove_token 'fbcon=map:9'
+assert_not_contains "$(cat "$TMP_CMDLINE")" "fbcon=map:9" "remove_token idempotent when absent"
+
+# Multiple sequential calls.
+echo "quiet splash console=tty1 fbcon=map:9 rootwait" > "$TMP_CMDLINE"
+cmdline_remove_token quiet
+cmdline_remove_token splash
+cmdline_remove_token 'fbcon=map:9'
+result=$(cat "$TMP_CMDLINE")
+assert_not_contains "$result" "quiet" "sequential remove_token: quiet gone"
+assert_not_contains "$result" "splash" "sequential remove_token: splash gone"
+assert_not_contains "$result" "fbcon=map:9" "sequential remove_token: fbcon gone"
+assert_contains "$result" "console=tty1" "sequential remove_token: console preserved"
+assert_contains "$result" "rootwait" "sequential remove_token: rootwait preserved"
+
+# Pattern remove for parametric values.
+echo "console=tty1 video=HDMI-A-1:1920M@60 quiet" > "$TMP_CMDLINE"
+cmdline_remove_pattern 'video=HDMI-A-1:.*'
+assert_not_contains "$(cat "$TMP_CMDLINE")" "video=HDMI-A-1" "remove_pattern strips parametric video= token"
+assert_contains "$(cat "$TMP_CMDLINE")" "console=tty1" "remove_pattern preserves siblings"
+
+# add_token: append + idempotent.
+echo "console=tty1 quiet" > "$TMP_CMDLINE"
+cmdline_add_token 'newflag=1'
+assert_contains "$(cat "$TMP_CMDLINE")" "newflag=1" "add_token appends new token"
+cmdline_add_token 'newflag=1'
+count=$(grep -oE 'newflag=1' "$TMP_CMDLINE" | wc -l | tr -d ' ')
+assert_eq "$count" "1" "add_token idempotent (no duplicate)"
+
+# add_token preserves existing siblings exactly.
+echo "alpha beta gamma" > "$TMP_CMDLINE"
+cmdline_add_token delta
+result=$(cat "$TMP_CMDLINE")
+assert_eq "$(tr -d '\n' <<<"$result")" "alpha beta gamma delta" "add_token preserves order + appends"
+
+# ── Legacy sed-based helpers ──────────────────────────────────────
+echo
+echo "=== Legacy sed-based functional checks (Linux only) ==="
+
+# Helpers below use `sed -i 'pat' file`, which is GNU sed semantics
+# (Linux, the production target). BSD sed (macOS default) interprets
+# the second arg as the backup suffix and corrupts the test. Skip
+# this block on Darwin unless `gsed` is available; CI runners are
+# Linux and exercise the real path.
+if [[ "$(uname -s)" == "Darwin" ]] && ! command -v gsed >/dev/null 2>&1; then
+    echo "  SKIP: BSD sed on macOS — legacy sed helper tests run on Linux CI only"
+    echo
+    echo "Results: $pass passed, $fail failed"
+    exit $(( fail > 0 ? 1 : 0 ))
+fi
 
 PI_OS_DEFAULT='coherent_pool=1M 8250.nr_uarts=1 console=serial0,115200 console=tty1 root=PARTUUID=abc-02 rootfstype=ext4 fsck.repair=yes rootwait quiet'
 
