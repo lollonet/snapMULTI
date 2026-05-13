@@ -52,7 +52,7 @@ TIDAL_NAME="Tidal Soggiorno"
 
 ### Nota sicurezza Tidal Connect
 
-<a id="nota-sicurezza-tidal"></a>
+<a id="nota-sicurezza-tidal-connect"></a>
 Tidal Connect è **opt-in** (abilita il profilo Compose `tidal`). Il container upstream è costruito su Raspbian Stretch (EOL 2019), prende i pacchetti da `archive.debian.org` con `trusted=yes`, e contiene un binario proprietario non manutenuto. Solo ARM (non esiste una build x86_64). Leggi il blocco di disclosure in `docker-compose.yml` prima di abilitarlo.
 
 ### Streaming da Android (niente cast nativo)
