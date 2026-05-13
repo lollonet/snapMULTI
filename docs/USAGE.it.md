@@ -37,7 +37,7 @@ Default applicati a ogni container in `docker-compose.yml`:
 
 **Eccezione 1 — container D-Bus / Avahi** (`snapserver`, `shairport-sync`, `librespot`): hanno bisogno di `apparmor:unconfined` per accedere al socket D-Bus dell'host per l'annuncio mDNS (Avahi) e di `cap_add: DAC_OVERRIDE` per scrivere sulle named-pipe FIFO possedute dall'utente `PUID` dell'host. AppArmor nel profilo Ubuntu default blocca la connessione D-Bus altrimenti. `mpd` monta gli stessi socket Avahi/D-Bus ma mantiene il profilo AppArmor di default — non richiede `apparmor:unconfined`. Tutto il resto resta dropped.
 
-**Eccezione 2 — `tidal-connect`** (solo ARM, opt-in): gira come root perché il binario proprietario upstream lo richiede; il profilo Compose è **opt-out di default** (vedi [Nota sicurezza Tidal Connect](#nota-sicurezza-tidal-connect)). Se non abiliti il profilo `tidal`, il container non parte mai.
+**Eccezione 2 — `tidal-connect`** (solo ARM): gira come root perché il binario proprietario upstream lo richiede. Il profilo Compose è **opt-in** — `tidal-connect` parte solo se abiliti esplicitamente il profilo `tidal` (vedi [Nota sicurezza Tidal Connect](#nota-sicurezza-tidal-connect)).
 
 **Threat model**: snapMULTI è progettato per una LAN fidata — server e client sulla stessa sottorete dietro un router residenziale. Fuori scope: esposizione WAN (niente autenticazione su JSON-RPC, Snapweb o myMPD), scenari multi-tenant, client malevoli sulla LAN. Se ti serve uno di questi casi, metti davanti un reverse proxy con auth e usa `bind 127.0.0.1` in `config/snapserver.conf`.
 

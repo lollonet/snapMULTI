@@ -1043,11 +1043,26 @@ if is_client_install; then
         # and started snapclient.service. No docker compose, no
         # compose verify — verify the systemd unit instead.
         log_info "Verifying native snapclient.service..."
-        if ! systemctl is-active --quiet snapclient.service; then
-            log_error "snapclient.service not active after setup-zero2w.sh — will retry on next boot"
+        if systemctl is-active --quiet snapclient.service; then
+            log_info "snapclient.service active"
+        elif systemctl is-enabled --quiet snapclient.service; then
+            # Common transient on Pi Zero 2W first install: the audio HAT
+            # was detected via I2C / EEPROM, the dtoverlay line was written
+            # to /boot/firmware/config.txt, but the runtime `dtoverlay
+            # <name>` load failed because the bootloader-level changes only
+            # take effect after the reboot at the end of firstboot. The
+            # snapclient.service is enabled with the right --soundcard
+            # target; it will become active on the very next boot once the
+            # kernel picks up the HAT. Aborting firstboot here would loop
+            # the install forever, so accept "enabled + waiting for reboot"
+            # as a valid intermediate state. The post-reboot smoke gate
+            # catches the case where the HAT genuinely never registers.
+            log_warn "snapclient.service enabled but not yet active — likely waiting for audio HAT after reboot"
+            journalctl -u snapclient -n 10 --no-pager 2>&1 | sed 's/^/  journal: /' >&2 || true
+        else
+            log_error "snapclient.service neither active nor enabled after setup-zero2w.sh — will retry on next boot"
             exit 1
         fi
-        log_info "snapclient.service active"
     else
         log_info "Starting snapclient container (fb-display deferred to post-reboot)..."
         if ! ( cd "$CLIENT_DIR" && COMPOSE_PROFILES="" docker compose up -d ); then
