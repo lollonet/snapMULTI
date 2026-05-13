@@ -109,7 +109,7 @@ detect_music_library() {
         "/home/$real_user/music"
     )
 
-    echo -e "${BLUE}[INFO]${NC} Scanning for music libraries..." >&2
+    printf '[INFO] Scanning for music libraries...\n' >&2
 
     for pattern in "${search_paths[@]}"; do
         # shellcheck disable=SC2086
@@ -126,7 +126,7 @@ detect_music_library() {
             \) 2>/dev/null | head -1000 | wc -l)
 
             if [[ "$count" -gt 0 ]]; then
-                echo -e "${BLUE}[INFO]${NC}   Found: $dir ($count audio files)" >&2
+                printf '[INFO]   Found: %s (%s audio files)\n' "$dir" "$count" >&2
                 if [[ "$count" -gt "$best_count" ]]; then
                     best_count="$count"
                     best_path="$dir"
@@ -944,7 +944,6 @@ show_status() {
     ip=$(hostname -I 2>/dev/null | awk '{print $1}') || ip="<server-ip>"
 
     echo ""
-    echo -e "${GREEN}${BOLD}"
     echo "  ════════════════════════════════════════"
     echo "    snapMULTI is running!"
     echo "  ════════════════════════════════════════"
@@ -962,7 +961,6 @@ show_status() {
     echo "    Install dir:   ${PROJECT_ROOT}"
     echo "    Config:        ${PROJECT_ROOT}/.env"
     echo "  ════════════════════════════════════════"
-    echo -e "${NC}"
 }
 
 #######################################
