@@ -62,9 +62,10 @@ La documentazione vive in:
 | File | Contenuto |
 |------|-----------|
 | `README.md` | Cosa fa, come installare, come connettersi |
-| `docs/SOURCES.md` | Tipi di sorgenti audio, parametri, API JSON-RPC |
-| `docs/USAGE.md` | Architettura, servizi, deployment, CI/CD |
+| `docs/INSTALL.md` | Procedura di prima installazione |
 | `docs/HARDWARE.md` | Requisiti hardware, rete, setup consigliati |
+| `docs/USAGE.md` | Architettura, servizi, sorgenti audio, deployment, CI/CD |
+| `config/snapserver.conf` | Schema autorevole dei parametri sorgente (commenti inline) |
 
 Le traduzioni italiane (`*.it.md`) rispecchiano i documenti inglesi. Se aggiorni la documentazione inglese, segnalalo nella PR così che le traduzioni possano essere sincronizzate.
 

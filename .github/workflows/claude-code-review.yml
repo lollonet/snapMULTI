@@ -63,7 +63,7 @@ jobs:
             Only check items relevant to the files changed in this PR:
 
             **Documentation SSOT** (see CLAUDE.md table for topic ownership):
-            - Source changes → docs/SOURCES.md updated
+            - Source changes → config/snapserver.conf + docs/USAGE.md "Audio Sources" updated
             - Service/port changes → docs/USAGE.md updated
             - Italian translations (*.it.md) kept in sync
             - CHANGELOG.md updated under [Unreleased]

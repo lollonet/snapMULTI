@@ -69,9 +69,9 @@ Pick snapMULTI when you want **multi-room + Pi-DIY + zero cloud + zero subscript
 |--------|-----|
 | **Spotify** | Open app → select "*hostname* Spotify" (Premium) |
 | **AirPlay** | AirPlay icon → select "*hostname* AirPlay" |
-| **Tidal** | Open app → cast to "*hostname* Tidal" (ARM/Pi only, **opt-in** — see [security note](docs/SOURCES.md#2-tidal-connect-pipe-from-tidal-connect)) |
+| **Tidal** | Open app → cast to "*hostname* Tidal" (ARM/Pi only, **opt-in** — see [security note](docs/USAGE.md#tidal-connect-security-note)) |
 | **Music library** | Browse at `http://hostname.local:8180` |
-| **Any app** | Stream to port 4953 ([details](docs/SOURCES.md#5-tcp-input-tcp-server)) |
+| **Any app** | Stream to port 4953 ([details](docs/USAGE.md#streaming-from-android-no-native-cast)) |
 
 Manage speakers at `http://hostname.local:1780`
 Check system health at `http://hostname.local:8083`
@@ -119,8 +119,7 @@ See [Usage Guide — Updating](docs/USAGE.md#updating) for advanced options.
 | **[Quick Start](QUICKSTART.md)** | One-page install — zero to music in 5 minutes |
 | [Installation](docs/INSTALL.md) | Complete step-by-step with troubleshooting |
 | [Hardware](docs/HARDWARE.md) | Pi models, DAC HATs, network, tested combinations |
-| [Usage & Ops](docs/USAGE.md) | Architecture, services, MPD, mDNS, updating |
-| [Audio Sources](docs/SOURCES.md) | Source config, parameters, JSON-RPC API |
+| [Usage & Ops](docs/USAGE.md) | Architecture, audio sources, MPD, mDNS, deployment, troubleshooting |
 | [Changelog](CHANGELOG.md) | Version history |
 
 ## Contributing

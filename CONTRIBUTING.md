@@ -62,9 +62,10 @@ Documentation lives in:
 | File | Content |
 |------|---------|
 | `README.md` | What it does, how to install, how to connect |
-| `docs/SOURCES.md` | Audio source types, parameters, JSON-RPC API |
-| `docs/USAGE.md` | Architecture, services, deployment, CI/CD |
+| `docs/INSTALL.md` | First-time install procedure |
 | `docs/HARDWARE.md` | Hardware requirements, network, recommended setups |
+| `docs/USAGE.md` | Architecture, services, audio sources, deployment, CI/CD |
+| `config/snapserver.conf` | Authoritative source-parameter schema (inline comments) |
 
 Italian translations (`*.it.md`) mirror the English docs. If you update English docs, note it in your PR so translations can be synced.
 

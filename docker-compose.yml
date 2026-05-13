@@ -300,7 +300,7 @@ services:
   # We pull APT packages from archive.debian.org with `trusted=yes` and bypass
   # Valid-Until checks. The tidal-connect binary itself is proprietary and
   # unmaintained. This service is **opt-in** (Compose profile `tidal`):
-  # enable only if you accept the security trade-off. See docs/SOURCES.md.
+  # enable only if you accept the security trade-off. See docs/USAGE.md#tidal-connect-security-note.
   tidal-connect:
     image: lollonet/snapmulti-tidal:${IMAGE_TAG:-latest}
     container_name: tidal-connect
