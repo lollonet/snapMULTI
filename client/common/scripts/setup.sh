@@ -1270,7 +1270,7 @@ ExecStartPre=-/usr/local/bin/snapclient-discover
 # byte count once recreated, and empty when the container does not
 # yet exist (fresh reflash) — all three cases lead to the correct
 # decision (recreate only when memory == 0).
-ExecStartPre=-/bin/bash -c 'mem=\$(/usr/bin/docker inspect snapclient --format "{{.HostConfig.Memory}}" 2>/dev/null || true); if [[ "\$mem" == "0" ]]; then cd ${INSTALL_DIR} && /usr/bin/docker compose up -d --force-recreate; fi'
+ExecStartPre=-/bin/bash -c 'mem=\$(/usr/bin/docker inspect snapclient --format "{{.HostConfig.Memory}}" 2>/dev/null || true); if [[ "\$\$mem" == "0" ]]; then cd ${INSTALL_DIR} && /usr/bin/docker compose up -d --force-recreate; fi'
 ExecStart=/usr/bin/docker compose up -d
 ExecStop=/usr/bin/docker compose down
 TimeoutStartSec=180
