@@ -126,22 +126,27 @@ awk '
 # shellcheck disable=SC1090
 source "$ANON_EXTRACT"
 
+# NOTE: token-shaped strings below are synthetic fixtures (NOT real
+# credentials). They use placeholder words like "fake" / "synthetic" to
+# avoid tripping the gitleaks "generic-api-key" entropy heuristic in CI.
 scrubbed=$(anonymise <<'EOF'
 INSTALL_TYPE=client
 SMB_USER=alice
 SMB_PASS=hunter2
-SPOTIFY_TOKEN=AQABc1234567890abcdef
+SPOTIFY_TOKEN=fake-synthetic-token-not-real
 DATABASE_PASSWORD=correct horse battery staple
 NETWORK_SECRET=foo
 GH_PASSPHRASE=p@ssw0rd
 ssid="MyHomeWifi"
 psk="reallybadpassword"
-Authorization: Bearer eyJabcdef1234567890ghijklmnop.0123456789
+Authorization: Bearer fake-synthetic-bearer-not-real-token
 mac aa:bb:cc:dd:ee:ff seen
 peer 192.168.63.42 reached
 nas 10.0.0.5 mounted
 docker bridge 172.17.0.1 active
 container 172.20.5.8 active
+high-end 172.30.250.99 reached
+high-end 172.31.0.4 reached
 EOF
 )
 
@@ -165,6 +170,8 @@ assert_not_contains "$scrubbed" "192.168.63.42" "raw 192.168 IP gone"
 assert_not_contains "$scrubbed" "10.0.0.5" "raw 10.x IP gone"
 assert_not_contains "$scrubbed" "172.17.0.1" "raw 172.16/12 IP gone (low end)"
 assert_not_contains "$scrubbed" "172.20.5.8" "raw 172.16/12 IP gone (mid end)"
+assert_not_contains "$scrubbed" "172.30.250.99" "raw 172.16/12 IP gone (172.30.x.x)"
+assert_not_contains "$scrubbed" "172.31.0.4" "raw 172.16/12 IP gone (172.31.x.x)"
 
 # install_type is structural metadata, not credential — must survive
 assert_contains "$scrubbed" "INSTALL_TYPE=client" "INSTALL_TYPE preserved (not a credential)"
@@ -182,8 +189,8 @@ assert 'grep -qE "GitHub issue|/issues/new" "$FIRSTBOOT"' \
 
 # The diag invocation MUST live inside cleanup_on_failure so it only
 # fires when exit_code != 0 — verify by line ordering.
-cleanup_line=$(grep -nE "^cleanup_on_failure\\(\\) \\{" "$FIRSTBOOT" | head -1 | cut -d: -f1)
-diag_invoke_line=$(grep -nE 'diagnostic\.sh' "$FIRSTBOOT" | head -1 | cut -d: -f1)
+cleanup_line=$(grep -nE "^cleanup_on_failure\\(\\) \\{" "$FIRSTBOOT" | head -1 | cut -d: -f1 || true)
+diag_invoke_line=$(grep -nE 'diagnostic\.sh' "$FIRSTBOOT" | head -1 | cut -d: -f1 || true)
 if [[ -n "$cleanup_line" && -n "$diag_invoke_line" && "$diag_invoke_line" -gt "$cleanup_line" ]]; then
     echo "  PASS: diagnostic.sh invocation lives inside cleanup_on_failure() (line $diag_invoke_line > $cleanup_line)"
     pass=$((pass + 1))

@@ -33,7 +33,7 @@
 # anonymisation they can `tar tzf` the bundle and inspect/edit before
 # sharing.
 
-set -uo pipefail
+set -euo pipefail
 
 # ─── Args ────────────────────────────────────────────────────────────
 # diagnostic.sh [--reason <tag>] [--out-dir <path>]
@@ -174,8 +174,10 @@ if command -v jq >/dev/null 2>&1; then
     done
     if [[ -n "$smoke_path" ]]; then
         log "Running $smoke_path --json --no-fail-on-warn"
-        "$smoke_path" --json --no-fail-on-warn > "$STAGE_DIR/smoke.json" 2>"$STAGE_DIR/smoke.stderr"
-        echo "$?" > "$STAGE_DIR/smoke.exit"
+        # `|| smoke_rc=$?` so set -e doesn't kill us on warn/fail exit codes.
+        smoke_rc=0
+        "$smoke_path" --json --no-fail-on-warn > "$STAGE_DIR/smoke.json" 2>"$STAGE_DIR/smoke.stderr" || smoke_rc=$?
+        echo "$smoke_rc" > "$STAGE_DIR/smoke.exit"
     fi
 else
     echo "jq not installed — device-smoke --json skipped" > "$STAGE_DIR/smoke.skipped"
@@ -188,7 +190,7 @@ if command -v journalctl >/dev/null 2>&1; then
         journalctl --since "-1h" --no-pager -q \
             -u 'snapmulti-*' -u 'snapclient*' -u 'docker' -u 'avahi-daemon' \
             2>&1 | tail -2000 | anonymise
-    } > "$STAGE_DIR/journal.log"
+    } > "$STAGE_DIR/journal.log" || true
 fi
 
 # Docker compose logs — best-effort; only meaningful if docker is up.
@@ -204,9 +206,9 @@ if command -v docker >/dev/null 2>&1; then
     fi
     if [[ -n "$compose" ]] && docker info >/dev/null 2>&1; then
         docker compose -f "$compose" logs --tail=200 --no-color 2>&1 \
-            | anonymise > "$STAGE_DIR/docker.log"
+            | anonymise > "$STAGE_DIR/docker.log" || true
         # State snapshot (running, restartcount, healthcheck).
-        docker compose -f "$compose" ps --format json 2>/dev/null > "$STAGE_DIR/docker-ps.json"
+        docker compose -f "$compose" ps --format json 2>/dev/null > "$STAGE_DIR/docker-ps.json" || true
     fi
 fi
 
@@ -223,30 +225,32 @@ if command -v lsmod >/dev/null 2>&1; then
 fi
 
 # Hardware + cmdline snapshot. Everything here is small (<2 KB total).
+# Each collector tolerates failure via `|| true` — under set -e a missing
+# /proc file or grep with no matches would otherwise abort the bundle.
 {
     echo "=== /proc/cmdline ==="
-    cat /proc/cmdline 2>/dev/null
+    cat /proc/cmdline 2>/dev/null || true
     echo ""
     echo "=== /etc/asound.conf ==="
     [[ -f /etc/asound.conf ]] && cat /etc/asound.conf
     echo ""
     echo "=== vcgencmd ==="
     if command -v vcgencmd >/dev/null 2>&1; then
-        echo "throttled=$(vcgencmd get_throttled 2>/dev/null)"
-        echo "temp=$(vcgencmd measure_temp 2>/dev/null)"
-        echo "memory_split arm=$(vcgencmd get_mem arm 2>/dev/null)"
-        echo "memory_split gpu=$(vcgencmd get_mem gpu 2>/dev/null)"
+        echo "throttled=$(vcgencmd get_throttled 2>/dev/null || echo unknown)"
+        echo "temp=$(vcgencmd measure_temp 2>/dev/null || echo unknown)"
+        echo "memory_split arm=$(vcgencmd get_mem arm 2>/dev/null || echo unknown)"
+        echo "memory_split gpu=$(vcgencmd get_mem gpu 2>/dev/null || echo unknown)"
     fi
     echo ""
     echo "=== /proc/cpuinfo (Hardware/Model lines only) ==="
     grep -E '^(Model|Hardware|Revision|Serial)' /proc/cpuinfo 2>/dev/null \
-        | sed -E 's|(Serial[[:space:]]+:[[:space:]]+).*|\1[REDACTED]|'
+        | sed -E 's|(Serial[[:space:]]+:[[:space:]]+).*|\1[REDACTED]|' || true
     echo ""
     echo "=== overlayroot status ==="
-    mount 2>/dev/null | grep -E ' on (/|/var) ' | head -5
+    mount 2>/dev/null | grep -E ' on (/|/var) ' | head -5 || true
     echo ""
     echo "=== df / overlay tmpfs usage ==="
-    df -h / /var 2>/dev/null | head -5
+    df -h / /var 2>/dev/null | head -5 || true
 } > "$STAGE_DIR/hw.txt"
 
 # ─── Bundle ──────────────────────────────────────────────────────────
@@ -258,6 +262,6 @@ if ! tar -czf "$BUNDLE_PATH" -C "$WORK_DIR" "$BUNDLE_NAME" 2>"$WORK_DIR/tar.err"
 fi
 
 # Best-effort size + path on stdout so callers can capture it.
-size=$(du -h "$BUNDLE_PATH" 2>/dev/null | cut -f1)
+size=$(du -h "$BUNDLE_PATH" 2>/dev/null | cut -f1 || echo "?")
 log "Bundle written: $BUNDLE_PATH ($size)"
 echo "$BUNDLE_PATH"
