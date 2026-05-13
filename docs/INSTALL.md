@@ -404,5 +404,5 @@ sudo docker compose up -d           # NOT restart — restart doesn't reload .en
 
 - The Pi and your phone/computer must be on the **same subnet** (same router) for mDNS (`.local` hostnames) and auto-discovery to work
 - Most home networks work out of the box — no port forwarding or firewall changes needed
-- For the full list of ports and firewall rules, see [Hardware & Network Guide — Firewall Rules](HARDWARE.md#firewall-rules)
+- For the full list of ports and firewall rules, see [Advanced Guide — Firewall rules](ADVANCED.md#firewall-rules)
 - mDNS uses UDP 5353 — if you have multiple VLANs, you'll need an mDNS repeater or set static IPs in `.env`
