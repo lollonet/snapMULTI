@@ -36,11 +36,25 @@ assert 'grep -q "music_mount_clause" "$DEPLOY_SH"' \
 assert 'grep -q "music_source_from_env" "$DEPLOY_SH"' \
        "deploy.sh reads MUSIC_SOURCE from .env (authoritative at install time)"
 
+# Design invariant: network sources (nfs/smb/network) MUST NOT add the
+# music path to RequiresMountsFor — they use systemd .automount (lazy
+# mount on first access). Adding the path as a hard dep would block
+# snapserver/Spotify/AirPlay/Snapcast startup whenever the NAS is slow,
+# even though those services don't touch the music library at all.
 assert 'grep -qE "nfs\\|smb\\|network" "$DEPLOY_SH"' \
-       "MUSIC_SOURCE in {nfs,smb,network} adds path to RequiresMountsFor"
+       "deploy.sh has a case branch for nfs/smb/network MUSIC_SOURCE"
+
+assert 'grep -qE "NOT adding.*RequiresMountsFor" "$DEPLOY_SH"' \
+       "network-source branch explicitly does NOT add path to RequiresMountsFor (lazy automount)"
+
+# Initial state of music_mount_clause MUST be empty: only local sources
+# (usb / direct) get the path appended; network sources fall through
+# without changing it.
+assert 'grep -qE "local music_mount_clause=\"\"" "$DEPLOY_SH"' \
+       "music_mount_clause initialised empty (network sources never append)"
 
 assert 'grep -q "is_network_mount \"\$music_path_from_env\"" "$DEPLOY_SH"' \
-       "is_network_mount runtime probe kept as fallback for manual deploys"
+       "is_network_mount runtime probe kept as fallback when MUSIC_SOURCE is unset"
 
 assert 'grep -qE "RequiresMountsFor=.*\\\${PROJECT_ROOT}/audio\\\${music_mount_clause}" "$DEPLOY_SH"' \
        "RequiresMountsFor heredoc embeds music_mount_clause"

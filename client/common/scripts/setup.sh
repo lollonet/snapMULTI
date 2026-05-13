@@ -1257,15 +1257,20 @@ ExecStartPre=/bin/bash -c 'for i in \$(seq 1 60); do docker info >/dev/null 2>&1
 # in unusual setups).
 ExecStartPre=/bin/bash -c 'for i in \$(seq 1 30); do systemctl is-active --quiet avahi-daemon.service && [[ -S /run/avahi-daemon/socket ]] && break; sleep 1; done; sleep 2'
 ExecStartPre=-/usr/local/bin/snapclient-discover
-# First-start force-recreate: the snapclient container is created during
-# firstboot.sh BEFORE the final reboot that activates cgroup memory v2
-# (cmdline_ensure_memory_cgroup patches cmdline.txt but takes effect
-# only after reboot). \`docker compose up -d\` on second boot is
-# idempotent → existing container kept with HostConfig.Memory=0 → mem
-# limits silently unenforced. Sentinel file gates the recreate so it
-# runs exactly once after install. The leading \`-\` makes the
-# ExecStartPre non-fatal if /var/lib/snapclient/ is unwritable.
-ExecStartPre=-/bin/bash -c '[ -e /var/lib/snapclient/.mem-recreate-done ] || (cd ${INSTALL_DIR} && /usr/bin/docker compose up -d --force-recreate && mkdir -p /var/lib/snapclient && touch /var/lib/snapclient/.mem-recreate-done)'
+# Detect-and-recreate on mem_limit drift: the snapclient container is
+# created during firstboot.sh BEFORE the final reboot that activates
+# cgroup memory v2 (cmdline_ensure_memory_cgroup patches cmdline.txt
+# but takes effect only after reboot). \`docker compose up -d\` on
+# second boot is idempotent → existing container kept with
+# HostConfig.Memory=0 → mem limits silently unenforced. Probe
+# the live container instead of using a sentinel file: anything under
+# /var/lib/ lives in the overlayroot tmpfs upper layer and is wiped
+# at every reboot, which would force a recreate every boot. The
+# inspect call returns "0" only when the limit is missing, the actual
+# byte count once recreated, and empty when the container does not
+# yet exist (fresh reflash) — all three cases lead to the correct
+# decision (recreate only when memory == 0).
+ExecStartPre=-/bin/bash -c 'mem=\$(/usr/bin/docker inspect snapclient --format "{{.HostConfig.Memory}}" 2>/dev/null || true); if [[ "\$mem" == "0" ]]; then cd ${INSTALL_DIR} && /usr/bin/docker compose up -d --force-recreate; fi'
 ExecStart=/usr/bin/docker compose up -d
 ExecStop=/usr/bin/docker compose down
 TimeoutStartSec=180

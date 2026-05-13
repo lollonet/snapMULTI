@@ -18,6 +18,16 @@
 
 # shellcheck disable=SC2154
 
+# Associative arrays require Bash 4+. Pi OS Bookworm ships 5.2; macOS
+# `/bin/bash` is 3.2 and chokes on `declare -A`. Skip cleanly with a
+# clear message so contributor test-runs on macOS aren't drowned in
+# "unbound variable" failures — this module is only meaningful on a
+# real Pi anyway (it relies on `lsmod` and `/proc/asound`).
+if (( BASH_VERSINFO[0] < 4 )); then
+    echo "  SKIP: check_audio_modules.sh requires Bash 4+ (this is ${BASH_VERSION})" >&2
+    return 0 2>/dev/null || exit 0
+fi
+
 # HAT name → list of kernel-module name prefixes that MUST appear in
 # `lsmod` output. Add entries when a new HAT is supported. The lookup
 # at line 78 uses `grep -qF` (fixed-string substring match), so
