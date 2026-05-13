@@ -290,7 +290,7 @@ fi
     echo ""
     echo "=== df / overlay tmpfs usage ==="
     df -h / /var 2>/dev/null | head -5 || true
-} | anonymise > "$STAGE_DIR/hw.txt"
+} | anonymise > "$STAGE_DIR/hw.txt" || true
 # /proc/cmdline carries firmware-injected device identifiers — most
 # notably `smsc95xx.macaddr=<MAC>` on Pi 3 / 4 — that the file-level
 # anonymise pass must rewrite. Earlier versions of this script piped
