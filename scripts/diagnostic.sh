@@ -85,9 +85,10 @@ WORK_DIR=$(mktemp -d /run/snapmulti-diag.XXXXXX 2>/dev/null \
 STAGE_DIR="$WORK_DIR/$BUNDLE_NAME"
 mkdir -p "$STAGE_DIR"
 
-# Cleanup on exit. We deliberately use trap-not-EXIT so the bundle path
-# survives even if we hit an error mid-collection — partial bundles are
-# more useful than nothing.
+# Cleanup on exit. Each collector uses `|| true` (or explicit `|| rc=$?`)
+# so mid-collection errors don't abort the script under set -e and a
+# partial bundle is still useful. The trap removes the tmpfs work dir on
+# any exit path.
 cleanup() { rm -rf "$WORK_DIR" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 

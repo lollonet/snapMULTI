@@ -103,16 +103,11 @@ assert_contains "$bundle_list" "hw.txt" "bundle includes hw.txt"
 
 echo
 echo "=== Functional: anonymisation ==="
-# Drive the anonymise function directly. We can't call it without
-# sourcing the script, but the script runs `set -uo pipefail` (no -e),
-# so sourcing is safe — we just need to suppress the main collection
-# path. The cheapest way: source after exporting a sentinel that
-# nothing in the file actually reads, then call anonymise from the
-# parent shell.
-#
-# Bash quirk: sourcing diagnostic.sh runs its top-level body
-# (collection). To avoid that, we extract just the anonymise function
-# with awk and source the extract.
+# Drive the anonymise function directly by extracting it with awk —
+# sourcing diagnostic.sh would run its top-level collection body
+# (which assumes a Pi rootfs). Extracting only the `anonymise`
+# function body lets us unit-test the redaction logic in isolation
+# regardless of the script's set options.
 ANON_EXTRACT=$(mktemp /tmp/diag-anon-XXXXXX.sh)
 # shellcheck disable=SC2064
 trap "rm -rf '$OUT_DIR' '$ANON_EXTRACT'" EXIT

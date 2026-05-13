@@ -1,0 +1,16 @@
+# gitleaks configuration for snapMULTI
+# Extends the default rule set (https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml)
+# and adds an allowlist for synthetic test fixtures that may otherwise trip
+# entropy-based heuristics (generic-api-key etc.).
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic fixtures in tests/ are not real credentials"
+paths = [
+    # Test fixtures may include token-shaped placeholders to exercise
+    # anonymisation/redaction code. These are NOT real credentials.
+    '''tests/.*\.sh$''',
+    '''tests/.*\.py$''',
+]
