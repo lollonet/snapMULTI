@@ -578,7 +578,7 @@ See GitHub Actions tab for workflow status and logs.
 
 Defines all services with pre-built images and host networking for mDNS. Each audio source runs in its own container, communicating via named pipes in the shared `/audio` volume:
 
-**Security features**: All containers use `cap_drop: ALL`, `read_only: true` filesystems, `no-new-privileges: true`, and run as non-root (`PUID:PGID`) except for tidal-connect (proprietary binary requirement). See [Security Architecture](architecture/ARC-004.security.md) for complete details.
+**Security features**: All containers use `cap_drop: ALL`, `read_only: true` filesystems, `no-new-privileges: true`, and run as non-root (`PUID:PGID`) except for tidal-connect (proprietary binary requirement).
 
 ```yaml
 services:
