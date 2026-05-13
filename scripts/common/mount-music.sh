@@ -136,9 +136,16 @@ EOF
     if systemctl daemon-reload 2>/dev/null \
        && systemctl enable "$automount_name" >/dev/null 2>&1; then
         log_info "systemd .mount + .automount installed: $mount_name (lazy)"
-    else
-        log_warn "systemd units written but automount enable failed: $automount_name"
+        return 0
     fi
+
+    # daemon-reload or enable failed: the .mount + .automount files exist
+    # on disk but systemd will NOT pick them up at boot. NFS/SMB callers
+    # rely on this to mount the library lazily on first access; without
+    # the automount enabled the library is silently unreachable. Callers
+    # must abort install rather than ship a broken music path.
+    log_error "automount enable failed: $automount_name — units written but not active"
+    return 1
 }
 
 setup_music_source() {
@@ -206,10 +213,13 @@ setup_music_source() {
             # including nofail (via Options= and the unit-level
             # `RequiredBy=` defaults that don't enrol the unit into
             # local-fs.target).
-            _write_systemd_mount_unit nfs "${NFS_SERVER}:${NFS_EXPORT}" \
+            if ! _write_systemd_mount_unit nfs "${NFS_SERVER}:${NFS_EXPORT}" \
                 "$mount_point" \
                 "ro,soft,timeo=50,rsize=32768,_netdev,nofail" \
-                45
+                45; then
+                log_error "NFS music mount setup aborted — automount not active, library would be unreachable at boot"
+                return 1
+            fi
             export MUSIC_PATH="$mount_point"
             export MUSIC_SOURCE="nfs"
             # Try mount immediately; failure is non-fatal because the
@@ -238,10 +248,13 @@ setup_music_source() {
             # Same rationale as the NFS branch — overlayroot rewriter
             # would strip `nofail` from a fstab line and route systemd
             # into emergency mode on first-boot SMB hiccup.
-            _write_systemd_mount_unit cifs "//${SMB_SERVER}/${SMB_SHARE}" \
+            if ! _write_systemd_mount_unit cifs "//${SMB_SERVER}/${SMB_SHARE}" \
                 "$mount_point" \
                 "${mount_opts},nofail" \
-                60
+                60; then
+                log_error "SMB music mount setup aborted — automount not active, library would be unreachable at boot"
+                return 1
+            fi
             export MUSIC_PATH="$mount_point"
             export MUSIC_SOURCE="smb"
             if timeout 60 mount -t cifs "//${SMB_SERVER}/${SMB_SHARE}" "$mount_point" -o "$mount_opts"; then

@@ -890,10 +890,27 @@ start_services() {
     # apply. CPU limits go through HostConfig.NanoCpus and ARE applied,
     # which made the drift invisible until inspected with
     # `docker inspect ... HostConfig.Memory`.
-    info "Starting containers (force-recreate to apply .env)..."
-    if ! docker compose up -d --force-recreate; then
-        error "Failed to start services"
-        exit 1
+    # Prefer the systemd unit when it's already installed (normal
+    # firstboot flow: install_systemd_service ran first). systemctl start
+    # triggers ExecStart=`docker compose up -d` AND the mDNS self-heal
+    # ExecStartPost, and binds the lifecycle to PartOf=avahi-daemon.service.
+    # Fall back to raw compose only when the unit isn't registered yet
+    # (e.g. manual `deploy.sh` from a dev host or tests).
+    if systemctl list-unit-files snapmulti-server.service --no-legend 2>/dev/null | grep -q snapmulti-server.service; then
+        info "Starting via systemd (snapmulti-server.service)..."
+        # Compose may have been started earlier by a prior install; bring
+        # it down first so the systemd ExecStart applies .env afresh.
+        docker compose down >/dev/null 2>&1 || true
+        if ! systemctl start snapmulti-server.service; then
+            error "Failed to start snapmulti-server.service"
+            exit 1
+        fi
+    else
+        info "Starting containers (force-recreate to apply .env)..."
+        if ! docker compose up -d --force-recreate; then
+            error "Failed to start services"
+            exit 1
+        fi
     fi
     ok "Services started"
 }
@@ -1178,9 +1195,15 @@ main() {
     setup_env "$profile"
     validate_config
     pull_images
+    # Install the systemd unit BEFORE the first compose start so that
+    # `start_services` can hand off to `systemctl start
+    # snapmulti-server.service` instead of running `docker compose up`
+    # directly. This way the unit's ExecStartPost mDNS self-heal and
+    # PartOf=avahi-daemon.service binding take effect on first boot —
+    # not just on restarts after install completes.
+    install_systemd_service
     start_services
     verify_services
-    install_systemd_service
     write_version
 
     show_status
