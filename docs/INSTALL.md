@@ -19,7 +19,7 @@ Already comfortable with Raspberry Pi Imager and terminals? This is the whole in
 7. Eject the SD, boot the Pi, and wait about 10-15 minutes. It installs, verifies, then reboots once.
 8. Open `http://<hostname>.local:1780` for Snapweb or `http://<hostname>.local:8180` for myMPD.
 
-If any step is unclear, continue with the detailed walkthrough below. If first boot fails, recover the diagnostic bundle from the SD card as described in [TROUBLESHOOTING.md — Recovering a diagnostic bundle](TROUBLESHOOTING.md#recovering-a-diagnostic-bundle).
+If any step is unclear, continue with the detailed walkthrough below. If first boot fails, recover the diagnostic bundle from the SD card as described in [TROUBLESHOOTING.md — When in doubt](TROUBLESHOOTING.md#when-in-doubt--grab-the-diagnostic-bundle).
 
 ---
 
