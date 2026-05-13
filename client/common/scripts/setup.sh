@@ -289,13 +289,7 @@ if [ "$AUTO_MODE" = true ]; then
         detect_hat > "$_hat_tmp"
         AUDIO_HAT=$(cat "$_hat_tmp")
         rm -f "$_hat_tmp"
-        # [INFO] prefix makes this line match the firstboot.sh case filter
-        # (otherwise stripped along with every other plain echo), giving
-        # the install.log a record of which detection path won
-        # (eeprom / alsa / i2c / usb / internal) and which HAT name was
-        # selected. Without this, an install that produced a wrong
-        # soundcard (e.g. sndrpihifiberry without the matching dtoverlay
-        # on an EEPROM-less HAT) was impossible to debug from the bundle.
+        # [INFO] prefix required — firstboot.sh case filter drops plain echoes.
         echo "[INFO] Auto-detected HAT: $AUDIO_HAT (source: $HAT_DETECTION_SOURCE)"
     fi
     HAT_CONFIG=$(resolve_hat_config_name "$AUDIO_HAT")
@@ -319,10 +313,7 @@ fi
 # shellcheck source=/dev/null
 source "$HAT_CONFIG_FILE"
 
-# Surface the resolved HAT decision in install.log: which file was sourced,
-# which overlay will be written to config.txt, which ALSA card name the
-# snapclient ExecStart will reference, and through which detection path.
-# Plain echo + [INFO] prefix to match the firstboot.sh case filter.
+# Single line with all HAT decisions for post-mortem debugging.
 echo "[INFO] HAT decision: config=$HAT_CONFIG overlay=${HAT_OVERLAY:-<none>} card=${HAT_CARD_NAME:-<none>} source=${HAT_DETECTION_SOURCE:-<none>}"
 
 # Override HAT_CARD_NAME with the actual ALSA card id when the user is
@@ -862,13 +853,7 @@ if [ -n "$BOOT_CONFIG" ]; then
         fi
     fi
 
-    # Validate that the block actually landed in config.txt. Without this
-    # check, a silent write failure (read-only filesystem, full disk, sed
-    # eaten by a race) would let the installer continue with the host
-    # missing dtoverlay — snapclient then fails at runtime with "ALSA card
-    # not found" and the user gets a restart loop with no clue why. Match
-    # observed on pi3hat (InnoMaker HAT, EEPROM-less): config.txt left
-    # factory-default after install, ALSA had only Headphones + vc4hdmi.
+    # Fail loud if dtoverlay write was silently lost (overlayroot, full disk, etc.)
     if [ -n "${HAT_OVERLAY:-}" ]; then
         if ! grep -qF "dtoverlay=$HAT_OVERLAY" "$BOOT_CONFIG"; then
             echo "ERROR: HAT overlay block was NOT persisted to $BOOT_CONFIG"
