@@ -116,7 +116,7 @@ JSON for scripts / dashboards: `sudo bash /opt/snapmulti/scripts/device-smoke.sh
 4. Tidal Connect is **opt-in** and ARM-only — see [USAGE.md — Tidal Connect security note](USAGE.md#tidal-connect-security-note) to enable.
 5. Spotify Connect needs **Premium** — Free accounts don't show the device.
 
-**If still broken.** Restart the relevant container: `cd /opt/snapmulti && sudo docker compose up -d --force-recreate librespot` (or `shairport-sync` / `tidal-connect`). Then re-check `avahi-browse`. Also see [mDNS triage in ADVANCED.md](ADVANCED.md#mdns) — wait, mDNS troubleshooting is here above ("Speakers don't find the server").
+**If still broken.** Restart the relevant container: `cd /opt/snapmulti && sudo docker compose up -d --force-recreate librespot` (or `shairport-sync` / `tidal-connect`). Then re-check `avahi-browse`. See also the "Speakers don't find the server" section above for detailed mDNS triage.
 
 ## NAS library empty or never mounts (NFS / SMB)
 
