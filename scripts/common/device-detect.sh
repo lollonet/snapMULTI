@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # Centralized Raspberry Pi hardware detection for snapMULTI.
 #
+# This is a sourced library, not a standalone executable. The shebang
+# is kept only so editors / shellcheck identify the dialect correctly.
+# Intentionally NO `set -euo pipefail` here — a sourced library would
+# alter the caller's error mode, and snapMULTI callers tune that
+# themselves: firstboot.sh / setup.sh use `set -euo pipefail`, ad-hoc
+# operator scripts may rely on `set +e` to keep going past failures.
+#
 # Before this module the same `*"Zero 2 W"*` model match lived as
 # byte-identical patterns in five callers (firstboot.sh,
 # system-tune.sh in two functions, smoke/check_containers.sh,

@@ -61,18 +61,33 @@ _is_snapmulti_container() {
 
 # is_pi_zero_2w lives in scripts/common/device-detect.sh. Source it
 # if device-smoke.sh hasn't already, so this module is callable
-# standalone (e.g. ad-hoc operator runs) without surprises.
+# standalone (e.g. ad-hoc operator runs) without surprises. If the
+# common/ sibling is missing (partial deployment, hand-copied smoke
+# dir, wrong working directory), fall back to an inline implementation
+# so the smoke check still degrades gracefully instead of dying with
+# "command not found: is_pi_zero_2w" at call time.
 if ! command -v is_pi_zero_2w &>/dev/null; then
     _CC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ -f "$_CC_DIR/../common/device-detect.sh" ]]; then
         # shellcheck source=../common/device-detect.sh
         source "$_CC_DIR/../common/device-detect.sh"
+    else
+        # Inline fallback — mirrors device-detect.sh:is_pi_zero_2w but
+        # without the device_model() cache. Returns 1 (not detected)
+        # when /proc/device-tree/model is unreadable, matching the
+        # original self-contained behaviour.
+        is_pi_zero_2w() {
+            local m
+            m=$(tr -d '\0' </proc/device-tree/model 2>/dev/null) || return 1
+            [[ "$m" == *"Zero 2 W"* ]]
+        }
     fi
     unset _CC_DIR
 fi
 
 # Backwards-compat alias — older invocations / tests may still call
-# this name. Implementation moved to device-detect.sh:is_pi_zero_2w.
+# this name. Implementation moved to device-detect.sh:is_pi_zero_2w
+# (with the inline fallback above as a safety net).
 _is_pi_zero_2w_smoke() { is_pi_zero_2w; }
 
 check_containers() {
