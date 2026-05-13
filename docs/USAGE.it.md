@@ -600,7 +600,7 @@ Vedi la scheda GitHub Actions per lo stato dei workflow e i log.
 
 Definisce tutti i servizi con immagini pre-compilate e rete host per mDNS. Ogni sorgente audio gira nel proprio container, comunicando tramite named pipe nel volume condiviso `/audio`:
 
-**Caratteristiche di sicurezza**: Tutti i container usano `cap_drop: ALL`, filesystem `read_only: true`, `no-new-privileges: true`, e girano come utenti non-root (`PUID:PGID`) eccetto tidal-connect (requisito del binario proprietario). Vedi [Architettura di Sicurezza](architecture/ARC-004.security.md) per dettagli completi.
+**Caratteristiche di sicurezza**: Tutti i container usano `cap_drop: ALL`, filesystem `read_only: true`, `no-new-privileges: true`, e girano come utenti non-root (`PUID:PGID`) eccetto tidal-connect (requisito del binario proprietario).
 
 ```yaml
 services:
