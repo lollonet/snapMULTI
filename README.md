@@ -1,37 +1,33 @@
 🇬🇧 **English** | 🇮🇹 [Italiano](README.it.md)
 
-# snapMULTI — Open-source Sonos alternative on Raspberry Pi
+# snapMULTI — Multi-room audio for Raspberry Pi
 
 [![CI](https://github.com/lollonet/snapMULTI/actions/workflows/validate.yml/badge.svg)](https://github.com/lollonet/snapMULTI/actions/workflows/validate.yml)
 [![release](https://img.shields.io/github/v/release/lollonet/snapMULTI?color=orange)](https://github.com/lollonet/snapMULTI/releases/latest)
 [![Docker pulls](https://img.shields.io/docker/pulls/lollonet/snapmulti-server?color=green)](https://hub.docker.com/r/lollonet/snapmulti-server)
 [![License GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-Play music in sync across every room. Cast from **Spotify**, **AirPlay**, **Tidal**, or your music library — all speakers play together with sub-millisecond drift. Flash an SD card, boot, done. Core runs locally, no snapMULTI cloud or telemetry; the streaming services (Spotify Premium, Tidal, AirPlay) keep their own account / device requirements.
+Play music in sync across every room from a Raspberry Pi. Cast from **Spotify**, **AirPlay**, **Tidal**, or your music library — every speaker plays together with sub-millisecond drift. Flash an SD card, boot, done. Local-first: no snapMULTI cloud or telemetry; the streaming services keep their own account requirements.
 
 <p align="center">
   <img src="docs/images/display-playing.png" alt="snapMULTI HDMI display: cover art + spectrum analyzer + track info" width="640">
 </p>
 
-## Why snapMULTI
-
-| | snapMULTI | Sonos | Volumio | MoOde |
-|---|---|---|---|---|
-| **Cost per room** | ~€60 (Pi 4 + DAC HAT) | €200+ | ~€60 + Plus subscription for multi-room | ~€60 |
-| **Open source** | ✅ GPL-3.0 | ❌ | Partial | ✅ |
-| **Multi-room sync** | ✅ ~5 ms drift | ✅ proprietary | ✅ (Plus only) | ❌ single device |
-| **Cloud-free** | ✅ all local | ❌ | Partial | ✅ |
-| **Spotify / AirPlay / Tidal** | ✅ / ✅ / ✅ (ARM, opt-in) | ✅ | ✅ (Plus) | ✅ |
-| **HDMI cover-art display** | ✅ built-in | ❌ | ❌ | ❌ |
-| **Setup time** | ~10 min (zero-touch SD) | app wizard | ~30 min wizard | wizard |
-
-Pick snapMULTI when you want multi-room **and** Pi-DIY **and** zero cloud **and** zero subscription, in one package.
+> **Sound output.** snapMULTI sends a line-level signal from the Pi — it does not amplify. You need one of:
+> - an **active speaker** (built-in amp, e.g. Edifier R1280T, Audioengine A2+),
+> - a **HAT with integrated amplifier** (e.g. [HiFiBerry AMP2](https://www.hifiberry.com/shop/boards/hifiberry-amp2/)) driving passive speakers,
+> - a **DAC HAT** (e.g. HiFiBerry DAC+ / DAC2 Pro) into an external amplifier and passive speakers, or
+> - a **digital HAT** (e.g. HiFiBerry Digi+) feeding an AV receiver over S/PDIF.
+>
+> Full setup examples and tested combinations: [docs/HARDWARE.md#recommended-setups](docs/HARDWARE.md#recommended-setups).
 
 ## Quick start
 
-You need: a Raspberry Pi 4 or 5 (2 GB+), a 16 GB+ microSD, and a computer (macOS / Linux / Windows) to prepare the card.
+Hardware checklist (Pi model, SD card, audio output) before you begin: [docs/HARDWARE.md](docs/HARDWARE.md).
 
-### 1. Flash the SD with Raspberry Pi Imager
+### 1. Flash the SD with [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
+
+snapMULTI relies on the cloud-init metadata that Imager writes when you set hostname, user, WiFi and SSH below. **Plain image flashers (Balena Etcher, `dd`) won't work** — they copy bytes only, no metadata, so the Pi boots without network or login.
 
 - OS: **Raspberry Pi OS Lite (64-bit)**
 - Click the gear icon (`Ctrl/Cmd+Shift+X`) and set: hostname, username + password, WiFi (or leave empty for Ethernet), **☑ Enable SSH (password)**

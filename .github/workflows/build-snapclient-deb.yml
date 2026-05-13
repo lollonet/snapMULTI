@@ -133,5 +133,6 @@ jobs:
           esac
           gh release create "$tag" \
             --title "snapclient .deb $tag" \
-            --notes-file <(printf 'Custom snapclient .deb built by snapMULTI CI for Pi OS Trixie + Bookworm.\n\nBuilt from upstream [badaix/snapcast](https://github.com/badaix/snapcast). snapMULTI Pi Zero 2W native install (setup-zero2w.sh) prefers these .deb when available.\n') \
+            --prerelease \
+            --notes-file <(printf 'Custom snapclient .deb built by snapMULTI CI for Pi OS Trixie + Bookworm.\n\nBuilt from upstream [badaix/snapcast](https://github.com/badaix/snapcast). snapMULTI Pi Zero 2W native install (setup-zero2w.sh) prefers these .deb when available.\n\nMarked as pre-release so it does not shadow the main snapMULTI vX.Y.Z releases under /releases/latest.\n') \
             release/*
