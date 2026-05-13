@@ -749,15 +749,19 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     else
         setup_music_source
         checkpoint_done "music"
-        # Scrub install.conf credentials NOW — mount-music has persisted
-        # the SMB/NFS creds to systemd .mount units on ext4 (root-only),
-        # so /boot/firmware/install.conf (FAT32, readable from any PC
-        # after pulling the SD card) no longer needs them. Doing the
-        # scrub here, before deploy.sh runs, closes the plaintext-on-FAT32
-        # window even if install fails downstream. The "music" checkpoint
-        # above guarantees retry never sees the now-empty creds.
-        scrub_credentials
     fi
+    # Scrub install.conf credentials NOW — mount-music has persisted the
+    # SMB/NFS creds to systemd .mount units on ext4 (root-only), so
+    # /boot/firmware/install.conf (FAT32, readable from any PC after
+    # pulling the SD card) no longer needs them. Doing the scrub here,
+    # before deploy.sh runs, closes the plaintext-on-FAT32 window even
+    # if install fails downstream. Position OUTSIDE the if/else is
+    # deliberate: a crash between `checkpoint_done "music"` and the
+    # scrub would otherwise leave creds plaintext forever — retry
+    # finds the checkpoint set and skips the else branch. scrub is
+    # idempotent (already-empty keys are a no-op), so unconditional
+    # execution is safe.
+    scrub_credentials
 
     # Export IMAGE_TAG for deploy.sh
     if [[ "$IMAGE_TAG" != "latest" ]]; then
