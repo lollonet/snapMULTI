@@ -1,37 +1,51 @@
 🇬🇧 **English** | 🇮🇹 [Italiano](README.it.md)
 
-# snapMULTI — Open-source Sonos alternative on Raspberry Pi
+# snapMULTI — Multi-room audio for Raspberry Pi
 
 [![CI](https://github.com/lollonet/snapMULTI/actions/workflows/validate.yml/badge.svg)](https://github.com/lollonet/snapMULTI/actions/workflows/validate.yml)
 [![release](https://img.shields.io/github/v/release/lollonet/snapMULTI?color=orange)](https://github.com/lollonet/snapMULTI/releases/latest)
 [![Docker pulls](https://img.shields.io/docker/pulls/lollonet/snapmulti-server?color=green)](https://hub.docker.com/r/lollonet/snapmulti-server)
 [![License GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-Play music in sync across every room. Cast from **Spotify**, **AirPlay**, **Tidal**, or your music library — all speakers play together with sub-millisecond drift. Flash an SD card, boot, done. Core runs locally, no snapMULTI cloud or telemetry; the streaming services (Spotify Premium, Tidal, AirPlay) keep their own account / device requirements.
+snapMULTI is for people who want an **open-source multi-room audio system** without hand-building the Linux audio stack. You still flash Raspberry Pi OS and answer a few setup questions; snapMULTI automates the hard parts — Snapcast, Docker, audio routing, service discovery (mDNS), read-only boot, and recovery diagnostics. Cast from **Spotify**, **AirPlay**, **Tidal**, or your music library; every speaker plays together with sub-millisecond drift. Local-first: no snapMULTI cloud or telemetry; the streaming services keep their own account requirements.
 
 <p align="center">
   <img src="docs/images/display-playing.png" alt="snapMULTI HDMI display: cover art + spectrum analyzer + track info" width="640">
 </p>
 
-## Why snapMULTI
+> **Sound output.** snapMULTI sends a line-level signal from the Pi — it does not amplify. You need one of:
+> - an **active speaker** (built-in amp, e.g. Edifier R1280T, Audioengine A2+),
+> - a **HAT with integrated amplifier** (e.g. [HiFiBerry AMP2](https://www.hifiberry.com/shop/boards/hifiberry-amp2/)) driving passive speakers,
+> - a **DAC HAT** (e.g. HiFiBerry DAC+ / DAC2 Pro) into an external amplifier and passive speakers, or
+> - a **digital HAT** (e.g. HiFiBerry Digi+) feeding an AV receiver over S/PDIF.
+>
+> Full setup examples and tested combinations: [docs/HARDWARE.md#recommended-setups](docs/HARDWARE.md#recommended-setups).
 
-| | snapMULTI | Sonos | Volumio | MoOde |
-|---|---|---|---|---|
-| **Cost per room** | ~€60 (Pi 4 + DAC HAT) | €200+ | ~€60 + Plus subscription for multi-room | ~€60 |
-| **Open source** | ✅ GPL-3.0 | ❌ | Partial | ✅ |
-| **Multi-room sync** | ✅ ~5 ms drift | ✅ proprietary | ✅ (Plus only) | ❌ single device |
-| **Cloud-free** | ✅ all local | ❌ | Partial | ✅ |
-| **Spotify / AirPlay / Tidal** | ✅ / ✅ / ✅ (ARM, opt-in) | ✅ | ✅ (Plus) | ✅ |
-| **HDMI cover-art display** | ✅ built-in | ❌ | ❌ | ❌ |
-| **Setup time** | ~10 min (zero-touch SD) | app wizard | ~30 min wizard | wizard |
+## Choose your setup
 
-Pick snapMULTI when you want multi-room **and** Pi-DIY **and** zero cloud **and** zero subscription, in one package.
+| Your situation | What to install on each Pi | Notes |
+|----------------|----------------------------|-------|
+| **One speaker, one room** | One Pi → choose **Audio Player** | Any Pi 3 B+ / 4 / 5 / Zero 2 W |
+| **Server + one speaker on the same Pi** | One Pi → choose **Server + Player** | Pi 4 2 GB+ (Pi Zero 2 W not supported in this mode) |
+| **Central server, speakers in other rooms** | One Pi → **Music Server**. Each speaker Pi → **Audio Player** | mDNS auto-discovers — speakers find the server on first boot |
+| **Music library lives on a NAS** | Pick Music Server or Server + Player | `prepare-sd.sh` will ask for the NFS / SMB path. Have user / password ready for SMB |
+| **You only have a Pi Zero 2 W as client** | Choose **Audio Player** | Auto-promoted to native snapclient — no Docker, no cover-art display. See [Pi Zero 2 W Notes](docs/HARDWARE.md#pi-zero-2-w-notes) |
+
+## Realistic expectations
+
+- **Time**: ~10–15 min from inserting the SD to hearing audio. First boot does the install over the network, then reboots once.
+- **Skill floor**: you should be comfortable flashing an SD with Raspberry Pi Imager, finding your Pi by hostname (`.local`) or IP, and copying a small file off the SD card if something goes wrong. You do **not** need to know Docker, systemd, ALSA, or Snapcast — snapMULTI handles them.
+- **SD card matters**: cheap microSDs are the #1 cause of "install hangs". Use a SanDisk / Samsung A1 (or better). 16 GB is the minimum.
+- **Network**: 2.4 GHz works but 5 GHz or Ethernet is more stable. mDNS (`*.local`) must traverse the LAN (single subnet, no VLAN isolation).
+- **Streaming services have their own requirements**: Spotify Connect needs Premium. Tidal Connect is ARM-only and opt-in (see [security note](docs/USAGE.md#tidal-connect-security-note)). AirPlay needs an Apple device.
 
 ## Quick start
 
-You need: a Raspberry Pi 4 or 5 (2 GB+), a 16 GB+ microSD, and a computer (macOS / Linux / Windows) to prepare the card.
+Hardware checklist (Pi model, SD card, audio output) before you begin: [docs/HARDWARE.md](docs/HARDWARE.md).
 
-### 1. Flash the SD with Raspberry Pi Imager
+### 1. Flash the SD with [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
+
+snapMULTI relies on the cloud-init metadata that Imager writes when you set hostname, user, WiFi and SSH below. **Plain image flashers (Balena Etcher, `dd`) won't work** — they copy bytes only, no metadata, so the Pi boots without network or login.
 
 - OS: **Raspberry Pi OS Lite (64-bit)**
 - Click the gear icon (`Ctrl/Cmd+Shift+X`) and set: hostname, username + password, WiFi (or leave empty for Ethernet), **☑ Enable SSH (password)**
@@ -92,13 +106,25 @@ Or any Linux box: `sudo apt install snapclient`.
 
 Reflash the SD with the latest release — all config auto-detects on first boot. To keep your MPD music index across reflashes: `./scripts/backup-from-sd.sh` before flashing.
 
+## If something fails
+
+snapMULTI runs the install as a systemd service and captures everything as it goes. If the first boot aborts, the cleanup trap writes a redacted diagnostic bundle to the SD card's **boot partition** (FAT32, readable from any computer — no SSH needed):
+
+```
+/boot/firmware/snapmulti-diag-install-failed-<UTC-ts>.tar.gz
+```
+
+Pull the SD out, plug it into your laptop, attach the bundle to a [GitHub issue](https://github.com/lollonet/snapMULTI/issues/new/choose). The bundle is anonymised (no MAC, no LAN IPs, no SSID, no passwords, no API tokens) — safe to share publicly. Common symptoms and the smoke test (`scripts/device-smoke.sh`): [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+
 ## Documentation
 
-| Guide | What's inside |
-|-------|--------------|
-| [Installation](docs/INSTALL.md) | Step-by-step with troubleshooting and diagnostic recovery |
-| [Hardware](docs/HARDWARE.md) | Pi models, DAC HATs, network, Pi Zero 2 W exceptions |
-| [Usage & Ops](docs/USAGE.md) | Architecture, audio sources, MPD, mDNS, deployment, log/diagnostic recovery |
+| Guide | When to open it |
+|-------|-----------------|
+| [Install](docs/INSTALL.md) | First-time setup — flash, boot, listen. The basic path |
+| [Advanced](docs/ADVANCED.md) | Multi-room, NFS / SMB library, custom `.env`, manual deploy, read-only fs, MPD CLI, JSON-RPC |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Something failed — install, mDNS, audio, container restart loops |
+| [Hardware](docs/HARDWARE.md) | Pi models, DAC HATs, network requirements, Pi Zero 2 W details |
+| [Architecture](docs/USAGE.md) | How it's put together — services, ports, audio sources, security model |
 | [Changelog](CHANGELOG.md) | Version history |
 
 ## Contributing & security

@@ -86,7 +86,22 @@ lsblk -o NAME,LABEL,MOUNTPOINT | grep bootfs
 
 ---
 
-## Passo 3 — Clonare il repository
+## Passo 3 — Scaricare i file snapMULTI
+
+Scegli una delle due opzioni. Entrambe producono una cartella `snapMULTI/` che il passo successivo si aspetta.
+
+### Opzione A — Scaricare lo ZIP (senza Git)
+
+1. Apri [https://github.com/lollonet/snapMULTI/releases/latest](https://github.com/lollonet/snapMULTI/releases/latest) nel browser
+2. Sotto **Assets**, clicca **Source code (zip)** per scaricare l'ultima release
+3. Estrai lo ZIP — ottieni una cartella chiamata `snapMULTI-<versione>` (per es. `snapMULTI-0.7.4`). Il nome della cartella non è vincolante — `prepare-sd.sh` ricava la project root dalla propria posizione
+4. Apri un terminale dentro quella cartella estratta
+
+> Preferisci lo ZIP della release taggata al pulsante verde **Code → Download ZIP** della home page del repo — quest'ultimo scarica il branch `main`, che può contenere lavori non rilasciati.
+>
+> Gli esempi nel README e in `INSTALL.it.md` mostrano comandi tipo `./snapMULTI/scripts/prepare-sd.sh` per coerenza con `git clone` (che crea sempre una cartella `snapMULTI`). Se la tua cartella ha un altro nome, adatta il path (o entra nella cartella con `cd` ed esegui `./scripts/prepare-sd.sh`).
+
+### Opzione B — Clone con Git (consigliato se vuoi aggiornare)
 
 Hai bisogno di Git installato sul tuo computer.
 
@@ -103,8 +118,7 @@ sudo apt install git
 
 **Windows** — Installa [Git for Windows](https://git-scm.com/download/win). Accetta tutte le impostazioni predefinite durante l'installazione. Poi apri **Git Bash** (non PowerShell) per i prossimi passi, o usa PowerShell con i comandi sottostanti.
 
-### Clone
-
+Poi:
 ```bash
 git clone https://github.com/lollonet/snapMULTI.git
 cd snapMULTI
@@ -178,7 +192,7 @@ Se il rilevamento automatico fallisce:
 | **3 — Server + Player** | Un Pi fa tutto — server e speaker locale. Buono per iniziare con un singolo dispositivo |
 
 > **Utenti Pi Zero 2 W:** l'installer si comporta diversamente perché la scheda ha solo 512 MB di RAM:
-> - **Scelta 1 (Audio Player)** — funziona, ma il profilo viene auto-promosso a `client-native`: snapclient nativo da `.deb`, niente Docker, niente display per la copertina, solo single-server. Lo stack Docker completo non sta in RAM
+> - **Scelta 1 (Audio Player)** — funziona, ma il profilo viene auto-promosso a `client-native`: snapclient nativo da `.deb`, niente Docker, niente display per la copertina, solo ruolo single-client. Lo stack Docker completo non sta in RAM
 > - **Scelte 2 e 3** — il primo boot si interrompe con `Pi Zero 2W (512 MB RAM) cannot host the snapMULTI server stack` e si ferma. Il server richiede almeno un Pi 3 B+ con 1 GB di RAM. Riflashare l'SD con la scelta 1, oppure usare un Pi diverso
 >
 > Vedi [HARDWARE.it.md — Note Pi Zero 2 W](HARDWARE.it.md#note-pi-zero-2-w) per la lista completa dei vincoli.
@@ -257,27 +271,29 @@ snapMULTI Auto-Install
 
 Il Pi **si riavvia automaticamente** quando l'installazione è completa. Dopo il riavvio, il display diventa scuro (normale — nessun desktop su Lite OS).
 
-> Se l'HDMI rimane vuoto per tutto il tempo: il Pi sta ancora installando via SSH in background. Aspetta 10 minuti prima di presumere che qualcosa sia andato storto.
+> Se l'HDMI rimane nero per tutto il tempo: l'installazione continua comunque in background — `firstboot.sh` gira come servizio systemd e non ha bisogno del display. Aspetta 10 minuti; per controllare lo stato senza schermo, fai `ssh <username>@<hostname>.local` ed esegui `sudo journalctl -u snapmulti-firstboot.service -f`.
 
 ---
 
 ## Passo 6 — Verificare che funzioni
+
+> **Placeholder hostname.** Da qui in avanti, `<hostname>.local` significa l'hostname che hai impostato in Imager al Passo 1c. Se hai impostato `myradio`, usa `myradio.local` ovunque appaia `<hostname>.local` qui sotto.
 
 ### Trovare il Pi sulla tua rete
 
 Dal tuo computer, fai ping al Pi usando il suo hostname:
 
 ```bash
-ping pi-server.local     # sostituisci con l'hostname che hai scelto in Imager
+ping <hostname>.local
 ```
 
 Se il ping funziona, collegati via SSH:
 
 ```bash
-ssh <username>@pi-server.local
+ssh <username>@<hostname>.local
 ```
 
-> **Utenti Windows:** Usa Windows Terminal, PowerShell o [PuTTY](https://putty.org) con `pi-server.local` come host.
+> **Utenti Windows:** Usa Windows Terminal, PowerShell o [PuTTY](https://putty.org) con `<hostname>.local` come host.
 
 > **Se `.local` non si risolve:** Usa l'indirizzo IP invece. Trovalo nella lista client DHCP del tuo router, o controlla l'output HDMI dopo il riavvio — il Pi stampa il suo IP sulla console.
 
@@ -313,7 +329,7 @@ fb-display         Up X minutes (healthy)
 Apri il tuo browser e vai a:
 
 ```
-http://pi-server.local:8180
+http://<hostname>.local:8180
 ```
 
 Questo è **myMPD** — naviga la tua libreria musicale, crea playlist, controlla la riproduzione.
@@ -321,7 +337,7 @@ Questo è **myMPD** — naviga la tua libreria musicale, crea playlist, controll
 L'**interfaccia web Snapcast** (controlla quale speaker riproduce cosa) è a:
 
 ```
-http://pi-server.local:1780
+http://<hostname>.local:1780
 ```
 
 ---
@@ -330,58 +346,22 @@ http://pi-server.local:1780
 
 | Sorgente | Cosa fare dopo l'installazione |
 |----------|--------------------------------|
-| **Spotify** | Apri l'app Spotify → Dispositivi → seleziona **"pi-server Spotify"** (Premium richiesto) |
-| **AirPlay** | iPhone/iPad/Mac → icona AirPlay → seleziona **"pi-server AirPlay"** |
-| **Tidal** | Apri l'app Tidal → Cast → seleziona **"pi-server Tidal"** (solo ARM/Pi) |
-| **Libreria musicale** | Apri `http://pi-server.local:8180` e naviga i tuoi file |
-| **App Snapcast** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) — connetti a `pi-server.local` |
+| **Spotify** | Apri l'app Spotify → Dispositivi → seleziona **"`<hostname>` Spotify"** (Premium richiesto) |
+| **AirPlay** | iPhone/iPad/Mac → icona AirPlay → seleziona **"`<hostname>` AirPlay"** |
+| **Tidal** | Apri l'app Tidal → Cast → seleziona **"`<hostname>` Tidal"** (solo ARM/Pi) |
+| **Libreria musicale** | Apri `http://<hostname>.local:8180` e naviga i tuoi file |
+| **App Snapcast** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) — connetti a `<hostname>.local` |
 
 ---
 
-## Aggiungere più Pi speaker
+## Prossimi passi
 
-Per ogni speaker aggiuntivo:
-
-1. Flasha una nuova scheda SD con Raspberry Pi Imager
-   - Imposta un **hostname unico** (es. `pi-display`, `kitchen`, `bedroom`)
-   - Stesso user/password del tuo server è comodo ma non richiesto
-2. Reinserisci → esegui `prepare-sd.sh` → scegli **1) Audio Player**
-3. Avvia → il Pi speaker trova automaticamente il server tramite mDNS
-
-Il nuovo speaker appare nell'interfaccia web Snapcast a `http://pi-server.local:1780` entro ~30 secondi dall'avvio.
-
----
-
-## Risoluzione problemi primo avvio
-
-| Sintomo | Causa probabile | Soluzione |
-|---------|-----------------|-----------|
-| HDMI vuoto, nessun progresso | Normale su avvio headless | Aspetta 10 min; controlla con `ping pi-server.local` |
-| `ping pi-server.local` fallisce | Pi non ancora in rete | Aspetta 2 min; se ancora fallisce, controlla impostazione paese WiFi in Imager. I canali 5 GHz 100+ (DFS) possono fallire al primo avvio — prova il 2.4 GHz o un canale 5 GHz non-DFS (36–48) |
-| `.local` si risolve ma SSH rifiutato | SSH non ancora avviato | Aspetta altri 1–2 min |
-| SSH funziona ma container mancanti | Installazione ancora in corso | Esegui `sudo journalctl -u cloud-init -f` per guardare il progresso |
-| Container in loop di restart | Download immagini fallito (rete) | Esegui `sudo docker compose logs -f` in `/opt/snapmulti` |
-| Hostname sbagliato | Valore sbagliato impostato in Imager | Reflasha SD, ricomincia dal Passo 1 |
-| `prepare-sd.sh`: partizione boot non trovata | SD non reinserita dopo Imager | Rimuovi SD, reinserisci, esegui di nuovo lo script |
-| Windows: script non si avvia | Execution policy | Esegui prima `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
-| HAT audio non rilevato (client) | Scheda senza EEPROM | Collegati via SSH ed esegui `sudo bash /opt/snapclient/common/scripts/setup.sh` per selezionare il tuo HAT manualmente |
-| `no matching manifest for linux/arm/v7` | OS 32-bit flashato invece del 64-bit | Riflasha con **Raspberry Pi OS Lite (64-bit)** — tutti i modelli Pi incluso Zero 2 W lo supportano |
-| Pi Zero 2 W: WiFi non si connette | SSID 5 GHz configurato ma Pi Zero ha solo 2,4 GHz | Riflasha con il tuo SSID 2,4 GHz nelle impostazioni WiFi di Imager |
-| Pi Zero 2 W: HAT audio non rilevato | `otg_mode=1` o `dr_mode=host` in config.txt | `prepare-sd.sh` lo corregge automaticamente. Per installazioni manuali: commenta `otg_mode=1` e rimuovi `dr_mode=host` dall'overlay dwc2 |
-| Pi Zero 2 W: il primo boot si interrompe con "cannot host the snapMULTI server stack" | Hai scelto **Music Server** o **Server + Player** su una scheda da 512 MB | Riflashare con `prepare-sd.sh` scegliendo **1 — Audio Player**. Vedi [HARDWARE.it.md — Note Pi Zero 2 W](HARDWARE.it.md#note-pi-zero-2-w) |
-
-### Recuperare il bundle diagnostico quando il primo boot fallisce
-
-Se `firstboot.sh` fallisce a metà strada, scrive un tarball diagnostico sulla **partizione di boot FAT32** prima di terminare. È la stessa partizione scritta da Raspberry Pi Imager — leggibile da qualsiasi computer.
-
-1. Spegni il Pi, estrai la microSD e collegala al laptop
-2. Apri la **partizione boot** (su macOS / Linux si monta come `bootfs`, su Windows compare una lettera di unità)
-3. Cerca un file chiamato `snapmulti-diag-<motivo>-<timestamp>.tar.gz` (es. `snapmulti-diag-install-failed-20260513T142301Z.tar.gz`)
-4. Allegalo a una [issue GitHub](https://github.com/lollonet/snapMULTI/issues/new/choose) — il bundle è anonimizzato (niente indirizzi MAC, IP RFC1918, SSID, password o token API)
-
-Il bundle contiene i log di installazione più recenti, l'output del rilevamento hardware (modello, HAT audio, rete) e il nome dello step che è fallito. La partizione di boot resta intatta anche quando overlayroot si è attivato o il rootfs è altrimenti irraggiungibile — è il motivo per cui scriviamo lì invece che in `/var/log`.
-
-Per problemi post-installazione vedi [Risoluzione problemi in USAGE.it.md](USAGE.it.md#risoluzione-problemi).
+| Obiettivo | Dove |
+|-----------|------|
+| Aggiungere un altro altoparlante (multi-room), collegare un NAS, personalizzare `.env`, deploy manuale | [ADVANCED.it.md](ADVANCED.it.md) |
+| Qualcosa è fallito (primo boot, post-install, mDNS, audio) | [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md) |
+| Matrice hardware, requisiti di rete, dettagli Pi Zero 2 W | [HARDWARE.it.md](HARDWARE.it.md) |
+| Architettura, sorgenti audio, modello di sicurezza | [USAGE.it.md](USAGE.it.md) |
 
 ---
 

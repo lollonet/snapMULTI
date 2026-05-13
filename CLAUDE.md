@@ -7,10 +7,12 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 
 | Topic | Owner |
 |-------|-------|
-| Architecture, services, ports, audio sources, mDNS, CI/CD, deployment | `docs/USAGE.md` |
+| Architecture, services, ports, audio sources, security model, mDNS overview, systemd units | `docs/USAGE.md` |
 | Source config + parameter reference (inline comments) | `config/snapserver.conf` |
 | Hardware, network, recommended setups | `docs/HARDWARE.md` |
-| First-time install procedure | `docs/INSTALL.md` |
+| First-time install — flash → boot → listen, basic path only | `docs/INSTALL.md` |
+| Multi-room, NFS/SMB library, custom `.env`, manual deploy, read-only fs, MPD CLI, JSON-RPC, update strategy | `docs/ADVANCED.md` |
+| First-boot failures, mDNS troubleshooting, audio issues, container restart loops, diagnostic bundle recovery | `docs/TROUBLESHOOTING.md` |
 | Value prop + quick start | `README.md` |
 | Changelog | `CHANGELOG.md` |
 | Quality gates (tools, paths, thresholds) | `CONTROL.yaml` |
@@ -19,9 +21,11 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 - README is an appliance manual — what it does, how to install, how to connect. No jargon. The "Quick start" section in README covers the 4-step onramp; the detailed walk-through lives in `docs/INSTALL.md`.
 - New source type → update `config/snapserver.conf` + `docs/USAGE.md` "Audio Sources" table + `README.md` source table
 - Source parameter changes → `config/snapserver.conf` only (it is the schema reference)
-- Services/ports/CI/deployment changes → `docs/USAGE.md` only
+- Services/ports/security-model/architecture changes → `docs/USAGE.md` only
 - Hardware/network changes → `docs/HARDWARE.md` only
-- Install procedure changes → `docs/INSTALL.md` only
+- Install procedure (basic path) changes → `docs/INSTALL.md` only
+- Operations / customisation / power-user how-tos → `docs/ADVANCED.md` only
+- Failure-mode tables, recovery procedures → `docs/TROUBLESHOOTING.md` only
 - README links to docs/ for anything technical — never inline technical details
 - Quality gate changes → update `CONTROL.yaml` + CI workflow + pre-push hook together
 
@@ -107,8 +111,10 @@ snapMULTI/
       tidal-meta-bridge.sh   # Metadata scraper (tmux TUI → JSON file)
   docs/
     HARDWARE.md              # Hardware & network guide
-    INSTALL.md               # First-time install walk-through
-    USAGE.md                 # Operations guide (architecture, audio sources, deployment)
+    INSTALL.md               # First-time install (basic path)
+    ADVANCED.md              # Operations & customisation (multi-room, NFS, manual deploy, etc.)
+    TROUBLESHOOTING.md       # Failure modes + diagnostic bundle recovery
+    USAGE.md                 # Architecture reference (services, ports, security, audio sources)
     *.it.md                  # Italian translations
   .github/workflows/
     build-push.yml           # Dual-arch build + push to Docker Hub (5 images; Spotify uses upstream)
