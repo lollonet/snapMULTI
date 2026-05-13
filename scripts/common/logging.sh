@@ -1,30 +1,18 @@
 #!/usr/bin/env bash
-# Common logging utilities for snapMULTI scripts
-# Provides consistent colored output across all scripts
+# DEPRECATED: thin shim that sources scripts/common/unified-log.sh.
+#
+# unified-log.sh is the single source of truth for snapMULTI logging since
+# v0.7.x. It auto-detects install-chain vs interactive mode and provides
+# both the legacy logging.sh API (info/ok/warn/error/step/debug, coloured
+# stderr) and the install-chain API (log_info/log_warn/log_error/log_ok/
+# log_and_tty, timestamped file + TUI feed + PROGRESS_TTY mirror).
+#
+# Existing callers (deploy.sh, status.sh, device-smoke.sh, system-tune.sh,
+# prepare-sd.sh) continue to work unchanged. New code should source
+# unified-log.sh directly.
 
-# Colors (only if terminal supports them)
-if [[ -t 2 ]]; then
-    RED=$'\033[0;31m'
-    GREEN=$'\033[0;32m'
-    YELLOW=$'\033[1;33m'
-    BLUE=$'\033[0;34m'
-    CYAN=$'\033[0;36m'
-    BOLD=$'\033[1m'
-    NC=$'\033[0m'  # No Color
-else
-    RED=''
-    GREEN=''
-    YELLOW=''
-    BLUE=''
-    CYAN=''
-    BOLD=''
-    NC=''
-fi
-
-# Logging functions - all output to stderr to not interfere with stdout
-info()  { echo -e "${BLUE}[INFO]${NC} $*" >&2; }
-ok()    { echo -e "${GREEN}[OK]${NC} $*" >&2; }
-warn()  { echo -e "${YELLOW}[WARN]${NC} $*" >&2; }
-error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-step()  { echo -e "\n${CYAN}${BOLD}==> $*${NC}" >&2; }
-debug() { [[ "${DEBUG:-0}" == "1" ]] && echo -e "[DEBUG] $*" >&2; }
+_LOGGING_SHIM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=unified-log.sh
+# shellcheck disable=SC1091
+source "$_LOGGING_SHIM_DIR/unified-log.sh"
+unset _LOGGING_SHIM_DIR
