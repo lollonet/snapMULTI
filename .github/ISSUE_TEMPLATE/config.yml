@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Quick Start Guide
-    url: https://github.com/lollonet/snapMULTI/blob/main/QUICKSTART.md
+  - name: Quick Start
+    url: https://github.com/lollonet/snapMULTI/blob/main/README.md#quick-start
     about: New to snapMULTI? Start here.
   - name: Installation Guide
     url: https://github.com/lollonet/snapMULTI/blob/main/docs/INSTALL.md

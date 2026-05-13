@@ -11,12 +11,12 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 | Source config + parameter reference (inline comments) | `config/snapserver.conf` |
 | Hardware, network, recommended setups | `docs/HARDWARE.md` |
 | First-time install procedure | `docs/INSTALL.md` |
-| User quickstart, value prop | `README.md` |
+| Value prop + quick start | `README.md` |
 | Changelog | `CHANGELOG.md` |
 | Quality gates (tools, paths, thresholds) | `CONTROL.yaml` |
 
 **Rules:**
-- README is an appliance manual — what it does, how to install, how to connect. No jargon.
+- README is an appliance manual — what it does, how to install, how to connect. No jargon. The "Quick start" section in README covers the 4-step onramp; the detailed walk-through lives in `docs/INSTALL.md`.
 - New source type → update `config/snapserver.conf` + `docs/USAGE.md` "Audio Sources" table + `README.md` source table
 - Source parameter changes → `config/snapserver.conf` only (it is the schema reference)
 - Services/ports/CI/deployment changes → `docs/USAGE.md` only
@@ -107,7 +107,8 @@ snapMULTI/
       tidal-meta-bridge.sh   # Metadata scraper (tmux TUI → JSON file)
   docs/
     HARDWARE.md              # Hardware & network guide
-    USAGE.md                 # Technical operations guide
+    INSTALL.md               # First-time install walk-through
+    USAGE.md                 # Operations guide (architecture, audio sources, deployment)
     *.it.md                  # Italian translations
   .github/workflows/
     build-push.yml           # Dual-arch build + push to Docker Hub (5 images; Spotify uses upstream)
