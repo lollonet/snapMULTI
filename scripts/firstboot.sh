@@ -739,10 +739,25 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     next_step "Deploy server..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
-    # Mount music source
+    # Mount music source (idempotent — checkpoint guard skips on retry
+    # so install.conf creds, already scrubbed on first success, never
+    # reach an empty setup_music_source which would write broken units).
     # shellcheck source=common/mount-music.sh
     source "$COMMON/mount-music.sh"
-    setup_music_source
+    if checkpoint_reached "music"; then
+        log_info "Music source already configured (checkpoint), skipping"
+    else
+        setup_music_source
+        checkpoint_done "music"
+        # Scrub install.conf credentials NOW — mount-music has persisted
+        # the SMB/NFS creds to systemd .mount units on ext4 (root-only),
+        # so /boot/firmware/install.conf (FAT32, readable from any PC
+        # after pulling the SD card) no longer needs them. Doing the
+        # scrub here, before deploy.sh runs, closes the plaintext-on-FAT32
+        # window even if install fails downstream. The "music" checkpoint
+        # above guarantees retry never sees the now-empty creds.
+        scrub_credentials
+    fi
 
     # Export IMAGE_TAG for deploy.sh
     if [[ "$IMAGE_TAG" != "latest" ]]; then
@@ -820,15 +835,6 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         exit 1
     fi
     checkpoint_done "deploy"
-
-    # Scrub credentials only AFTER deploy verified. Doing it earlier (the
-    # original placement, before deploy.sh) means: if firstboot crashed
-    # between the scrub and the deploy checkpoint, the next boot would
-    # re-enter setup_music_source() with empty NFS_*/SMB_* vars, yielding
-    # a broken fstab line ("//empty/empty cifs guest") that masks the
-    # original good line. Now scrub runs only on the success path; on
-    # retry, the install.conf creds are still intact.
-    scrub_credentials
   fi  # checkpoint guard
 fi
 
