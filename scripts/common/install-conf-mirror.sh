@@ -45,7 +45,10 @@ _INSTALL_CONF_MIRROR_SH_SOURCED=1
 #   0 on success
 #   1 if src does not exist or is unreadable
 #   2 if dest-dir cannot be created or written to
-#   3 if the temp copy fails verification
+#   3 if the temp copy, the source-guard check, or the atomic publish
+#     fails (covers `cp` errors, missing INSTALL_TYPE= field, and `mv`
+#     errors — callers that need to distinguish these can grep the
+#     stderr line emitted by the helper)
 #
 # Logs via log_warn / log_error if those helpers are available (the
 # Pi-side caller has unified-log.sh sourced already); otherwise falls
