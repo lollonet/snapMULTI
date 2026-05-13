@@ -20,6 +20,9 @@ CLIENT_DIR="$PROJECT_DIR/client"
 # shellcheck source=common/sanitize.sh
 source "$SCRIPT_DIR/common/sanitize.sh"
 
+# shellcheck source=common/cmdline-manager.sh
+source "$SCRIPT_DIR/common/cmdline-manager.sh"
+
 # ── Preflight: check client directory ─────────────────────────────
 check_client_dir() {
     if [[ ! -d "$CLIENT_DIR/common/scripts" ]]; then
@@ -618,15 +621,25 @@ fi
 
 # ── Set temporary 800x600 resolution for setup TUI ────────────────
 # KMS driver ignores hdmi_group/hdmi_mode; use kernel video= parameter.
+# Use cmdline-manager helpers here too — they are pure-bash (no sed)
+# and work cross-platform on the host (Mac/Linux/Windows-via-WSL). The
+# helper's cmdline_path() defaults to /boot/firmware/cmdline.txt; we
+# point it at the SD card's cmdline.txt with a one-shot override.
 CMDLINE="$BOOT/cmdline.txt"
 SETUP_VIDEO="video=HDMI-A-1:800x600@60"
 if [[ -f "$CMDLINE" ]] && ! grep -qF "video=HDMI-A-1:" "$CMDLINE"; then
-    sed -i.bak "1s/$/ $SETUP_VIDEO/" "$CMDLINE"
-    rm -f "${CMDLINE}.bak"
-    if grep -qF "$SETUP_VIDEO" "$CMDLINE"; then
-        echo "  Set temporary setup resolution (800x600) in cmdline.txt"
+    # Override cmdline_path() in a subshell so the override doesn't leak
+    # to other callers later in this script. The subshell sources the
+    # already-loaded function and re-defines cmdline_path locally.
+    if ( cmdline_path() { printf '%s\n' "$CMDLINE"; }
+         cmdline_add_token "$SETUP_VIDEO" ); then
+        if grep -qF "$SETUP_VIDEO" "$CMDLINE"; then
+            echo "  Set temporary setup resolution (800x600) in cmdline.txt"
+        else
+            echo "  WARNING: Failed to patch cmdline.txt — display may not work during install"
+        fi
     else
-        echo "  WARNING: Failed to patch cmdline.txt — display may not work during install"
+        echo "  WARNING: cmdline_add_token failed — display may not work during install"
     fi
 fi
 

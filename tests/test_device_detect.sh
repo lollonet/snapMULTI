@@ -124,9 +124,13 @@ swap_uses_helper=$(awk '
     fail=$((fail + 1))
 }
 
-# check_containers.sh: legacy _is_pi_zero_2w_smoke is now an alias.
-assert 'grep -qE "^_is_pi_zero_2w_smoke\\(\\) \\{ is_pi_zero_2w; \\}" "$CHECK_CONTAINERS"' \
-    "check_containers.sh: _is_pi_zero_2w_smoke is now an alias for is_pi_zero_2w"
+# check_containers.sh: legacy _is_pi_zero_2w_smoke alias removed in
+# Bundle B1 (call sites now use is_pi_zero_2w directly). Verify the
+# direct call form is in place and the inline fallback is gone.
+assert 'grep -qF " is_pi_zero_2w; " "$CHECK_CONTAINERS" || grep -qE "\\|\\| is_pi_zero_2w" "$CHECK_CONTAINERS"' \
+    "check_containers.sh: calls is_pi_zero_2w directly (no _smoke alias)"
+assert '! grep -qE "tr -d .* /proc/device-tree/model" "$CHECK_CONTAINERS"' \
+    "check_containers.sh: no inline /proc/device-tree/model fallback"
 
 echo
 echo "=== firstboot.sh: promote client -> client-native ==="

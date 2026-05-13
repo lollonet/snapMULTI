@@ -21,12 +21,11 @@ fi
 # shellcheck source=common/logging.sh
 source "$SCRIPT_DIR/common/logging.sh"
 
-# Prevent pull-images.sh from sourcing unified-log.sh (which would overwrite
-# logging.sh's info/warn/error with versions that don't write to stderr).
-# pull-images.sh checks `declare -F log_info` — provide it as a wrapper.
-log_info()  { info "$@"; }
-log_warn()  { warn "$@"; }
-log_error() { error "$@"; }
+# unified-log.sh (transitively sourced by logging.sh) already defines
+# log_info / log_warn / log_error / log_ok plus the info / warn / error
+# back-compat aliases. The source guard in unified-log.sh makes the
+# re-source attempted by pull-images.sh a no-op, so no manual wrappers
+# are needed here.
 
 # shellcheck source=common/system-tune.sh
 source "$SCRIPT_DIR/common/system-tune.sh"

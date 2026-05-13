@@ -66,17 +66,27 @@ else
     fail=$((fail + 1))
 fi
 
-# Validator body must check Zero 2 W AND reject server|both.
+# Validator body must call is_pi_zero_2w (NOT inline /proc/device-tree
+# read) and reject server|both. Bundle B1 moved the detection into
+# scripts/common/device-detect.sh as the single authority.
 validator_body=$(awk '
     /^_validate_profile_hardware\(\) \{/ {f=1}
     f
     f && /^\}/ {f=0}
 ' "$FIRSTBOOT")
 
-assert_contains "$validator_body" "Zero 2 W" "validator checks model 'Zero 2 W'"
+assert_contains "$validator_body" "is_pi_zero_2w" "validator calls is_pi_zero_2w (single-authority helper)"
 assert_contains "$validator_body" "server|both" "validator rejects server|both in case"
 assert_contains "$validator_body" "exit 1" "validator exits non-zero on reject"
-assert_contains "$validator_body" "/proc/device-tree/model" "validator reads /proc/device-tree/model"
+# Static gate: no inline /proc/device-tree/model read inside the
+# validator body (must route through device-detect.sh).
+if grep -qF "/proc/device-tree/model" <<<"$validator_body"; then
+    echo "  FAIL: validator reads /proc/device-tree/model inline — route via device-detect.sh"
+    fail=$((fail + 1))
+else
+    echo "  PASS: validator has no inline /proc/device-tree/model read"
+    pass=$((pass + 1))
+fi
 
 # Error message must point the user at the fix.
 assert_contains "$validator_body" "Reflash this SD" "validator message tells user to reflash"
@@ -101,6 +111,20 @@ set -uo pipefail
 
 # Stub the logger so we can capture error messages.
 log_error() { echo "[ERROR] $*" >&2; }
+
+# Stub the canonical detection helpers (from scripts/common/device-detect.sh)
+# driven by $MOCK_MODEL_FILE — the validator now calls is_pi_zero_2w /
+# device_model instead of reading /proc/device-tree/model inline.
+_read_mock_model() {
+    [[ -n "${MOCK_MODEL_FILE:-}" && -r "$MOCK_MODEL_FILE" ]] || return 0
+    tr -d '\0' <"$MOCK_MODEL_FILE" 2>/dev/null || true
+}
+is_pi_zero_2w() {
+    local m
+    m=$(_read_mock_model)
+    [[ "$m" == *"Zero 2 W"* ]]
+}
+device_model() { _read_mock_model; }
 EOF
 
 awk '
@@ -109,20 +133,6 @@ awk '
     f && /^\}/ {exit}
 ' "$FIRSTBOOT" >> "$EXTRACT"
 
-# Make /proc/device-tree controllable via env var by stubbing the model
-# read with a `cat` of $MOCK_MODEL_FILE if set.
-# Approach: rewrite the function to read from $MOCK_MODEL_FILE if non-empty.
-# We use a sed replacement after the extract so the test stays
-# isolated from production code paths.
-sed -i.bak '
-    s|tr -d .\\0. </proc/device-tree/model 2>/dev/null|tr -d "\\0" <"${MOCK_MODEL_FILE:-/proc/device-tree/model}" 2>/dev/null|
-' "$EXTRACT" 2>/dev/null || {
-    # macOS BSD sed wants -i ''
-    sed -i '' '
-        s|tr -d .\\0. </proc/device-tree/model 2>/dev/null|tr -d "\\0" <"${MOCK_MODEL_FILE:-/proc/device-tree/model}" 2>/dev/null|
-    ' "$EXTRACT"
-}
-rm -f "${EXTRACT}.bak"
 echo '_validate_profile_hardware' >> "$EXTRACT"
 
 run_case() {

@@ -13,6 +13,18 @@ if ! declare -F log_info &>/dev/null; then
     }
 fi
 
+# Source device-detect.sh — single authority for Pi model string. If
+# not available (very early bootstrap), fall back to direct read but
+# log it so the drift is visible.
+if ! declare -F device_model &>/dev/null; then
+    _RD_COMMON_DIR="$(dirname "${BASH_SOURCE[0]}")"
+    if [[ -f "$_RD_COMMON_DIR/device-detect.sh" ]]; then
+        # shellcheck source=device-detect.sh
+        source "$_RD_COMMON_DIR/device-detect.sh"
+    fi
+    unset _RD_COMMON_DIR
+fi
+
 # Detect hardware: RAM, CPU cores, Pi model, architecture.
 # Sets global variables for callers to use.
 # shellcheck disable=SC2034  # Variables used by callers
@@ -31,9 +43,10 @@ detect_hardware() {
         DETECTED_CPU_CORES=$(sysctl -n hw.ncpu 2>/dev/null) || DETECTED_CPU_CORES=4
     fi
 
-    # Detect Raspberry Pi model
-    if [[ -f /proc/device-tree/model ]]; then
-        DETECTED_PI_MODEL=$(tr -d '\0' < /proc/device-tree/model)
+    # Detect Raspberry Pi model — delegate to device-detect.sh (cached)
+    # when available, fall back to /proc/cpuinfo Model line otherwise.
+    if declare -F device_model &>/dev/null; then
+        DETECTED_PI_MODEL=$(device_model)
     elif [[ -f /proc/cpuinfo ]] && grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null; then
         DETECTED_PI_MODEL=$(grep "Model" /proc/cpuinfo | cut -d: -f2 | xargs)
     else

@@ -59,36 +59,29 @@ _is_snapmulti_container() {
     return 1
 }
 
-# is_pi_zero_2w lives in scripts/common/device-detect.sh. Source it
-# if device-smoke.sh hasn't already, so this module is callable
-# standalone (e.g. ad-hoc operator runs) without surprises. If the
-# common/ sibling is missing (partial deployment, hand-copied smoke
-# dir, wrong working directory), fall back to an inline implementation
-# so the smoke check still degrades gracefully instead of dying with
-# "command not found: is_pi_zero_2w" at call time.
+# is_pi_zero_2w lives in scripts/common/device-detect.sh — the SINGLE
+# authority for hardware detection. Source it here if device-smoke.sh
+# hasn't already, so this module is callable standalone (ad-hoc operator
+# runs) without surprises. We require the sibling common/ dir: a
+# partial-deployment scenario (smoke dir copied without common/) is a
+# bug worth surfacing loudly rather than papering over with an inline
+# fallback — the previous fallback had no cache and risked diverging
+# from device-detect.sh semantics over time.
 if ! command -v is_pi_zero_2w &>/dev/null; then
     _CC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ -f "$_CC_DIR/../common/device-detect.sh" ]]; then
         # shellcheck source=../common/device-detect.sh
         source "$_CC_DIR/../common/device-detect.sh"
     else
-        # Inline fallback — mirrors device-detect.sh:is_pi_zero_2w but
-        # without the device_model() cache. Returns 1 (not detected)
-        # when /proc/device-tree/model is unreadable, matching the
-        # original self-contained behaviour.
-        is_pi_zero_2w() {
-            local m
-            m=$(tr -d '\0' </proc/device-tree/model 2>/dev/null) || return 1
-            [[ "$m" == *"Zero 2 W"* ]]
-        }
+        echo "ERROR: $_CC_DIR/../common/device-detect.sh not found." >&2
+        echo "  check_containers.sh requires scripts/common/device-detect.sh." >&2
+        echo "  Hint: re-deploy the smoke module bundle (scripts/smoke/ +" >&2
+        echo "  scripts/common/) together — they ship as a unit." >&2
+        unset _CC_DIR
+        return 1 2>/dev/null || exit 1
     fi
     unset _CC_DIR
 fi
-
-# Backwards-compat alias — older invocations / tests may still call
-# this name. Implementation moved to device-detect.sh:is_pi_zero_2w
-# (with the inline fallback above as a safety net).
-_is_pi_zero_2w_smoke() { is_pi_zero_2w; }
 
 check_containers() {
     section "Containers"
@@ -99,7 +92,7 @@ check_containers() {
     # detects /opt/snapclient/install.conf with INSTALL_TYPE=client-native.
     # The model-based heuristic stays as a fallback for setups where the
     # env var is missing (e.g. invoking this module standalone).
-    if { [[ "${INSTALL_TYPE_NATIVE_CLIENT:-false}" == "true" ]] || _is_pi_zero_2w_smoke; } \
+    if { [[ "${INSTALL_TYPE_NATIVE_CLIENT:-false}" == "true" ]] || is_pi_zero_2w; } \
        && [[ "${MODE:-}" == "client" || "${MODE:-}" == "" ]]; then
         if command -v systemctl >/dev/null 2>&1; then
             if systemctl is-active --quiet snapclient.service; then
