@@ -66,16 +66,24 @@ cmdline_remove_overlayroot() {
     sed -i 's/\(^\| \)overlayroot=tmpfs\($\| \)/ /g; s/^ //; s/  */ /g; s/ $//' "$cmdline"
 }
 
-# Append `cgroup_enable=memory cgroup_memory=1` to cmdline.txt. Pi OS
-# default cmdline contains `cgroup_disable=memory` (low-memory tuning
-# inherited from the Pi 1 / Zero era); the kernel applies the LAST
-# value, so appending these two tokens enables the memory controller
-# without rewriting the original line. Docker requires this to enforce
-# container memory limits — without it `docker run --memory N` is
-# silently ignored. Idempotent.
+# Enable the memory cgroup controller in cmdline.txt. Pi OS default
+# cmdline contains `cgroup_disable=memory` (low-RAM tuning inherited
+# from the Pi 1 / Zero era). Earlier versions of this helper relied on
+# kernel "last wins" semantics when both `cgroup_disable=memory` and
+# `cgroup_enable=memory` appeared in /proc/cmdline; that assumption is
+# fragile (kernel version dependent, observed in the field as
+# /sys/fs/cgroup/memory absent on Pi 4 8GB even with both tokens
+# present in cmdline.txt). Strip the disable token first so only the
+# explicit enable remains. Docker requires the memory cgroup to be
+# present to enforce `mem_limit` in compose — without it the limits
+# are silently ignored and HostConfig.Memory shows 0. Idempotent.
 cmdline_ensure_memory_cgroup() {
     local cmdline
     cmdline=$(cmdline_path) || return 1
+    # Remove any pre-existing `cgroup_disable=memory` token to remove
+    # ambiguity. Field-based, NOT regex word-boundary, so adjacent
+    # punctuation in other tokens is preserved.
+    cmdline_remove_token cgroup_disable=memory >/dev/null 2>&1 || true
     if grep -q 'cgroup_enable=memory' "$cmdline" 2>/dev/null; then
         return 0
     fi

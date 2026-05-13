@@ -220,6 +220,18 @@ if command -v journalctl >/dev/null 2>&1; then
     } > "$STAGE_DIR/journal.log" || true
 fi
 
+# Install log — the most important diagnostic for install-failed bundles.
+# Without this, a firstboot.sh failure leaves no trace of WHERE in the
+# 12-step orchestration the failure occurred. journalctl only captures
+# the systemd-unit output (cloud-init / snapmulti-firstboot.service);
+# the per-module INFO/WARN/ERROR lines emitted via unified-log.sh land
+# in this file and nowhere else. Tail to keep the bundle small —
+# 5000 lines covers a full install run with verbose deploy output.
+if [[ -f /var/log/snapmulti-install.log ]]; then
+    tail -5000 /var/log/snapmulti-install.log 2>/dev/null \
+        | anonymise > "$STAGE_DIR/install.log" || true
+fi
+
 # Docker compose logs — best-effort; only meaningful if docker is up.
 if command -v docker >/dev/null 2>&1; then
     compose=""
@@ -278,7 +290,14 @@ fi
     echo ""
     echo "=== df / overlay tmpfs usage ==="
     df -h / /var 2>/dev/null | head -5 || true
-} > "$STAGE_DIR/hw.txt"
+} | anonymise > "$STAGE_DIR/hw.txt" || true
+# /proc/cmdline carries firmware-injected device identifiers — most
+# notably `smsc95xx.macaddr=<MAC>` on Pi 3 / 4 — that the file-level
+# anonymise pass must rewrite. Earlier versions of this script piped
+# only the journal / docker / dmesg streams through anonymise; hw.txt
+# went through raw and leaked MAC addresses into every install-failed
+# bundle. Pipe-on-write closes the gap without touching the
+# per-section formatting above.
 
 # ─── Bundle ──────────────────────────────────────────────────────────
 mkdir -p "$OUT_DIR" 2>/dev/null || true
