@@ -1,134 +1,47 @@
 # Contribuire a snapMULTI
 
-Grazie per il tuo interesse per snapMULTI! Che si tratti di correggere un bug, aggiungere una funzionalità, migliorare la documentazione o semplicemente condividere il tuo setup — ogni contributo conta.
+Bug fix, feature, miglioramenti alla documentazione e post "show your setup" sono tutti benvenuti.
 
-## Link rapidi
+- [Issues](https://github.com/lollonet/snapMULTI/issues) — segnalazioni di bug + richieste feature (usa i template)
+- [Discussions](https://github.com/lollonet/snapMULTI/discussions) — domande, idee, show your setup
+- [SECURITY.md](SECURITY.md) — disclosure privata di vulnerabilità
 
-- [Issues](https://github.com/lollonet/snapMULTI/issues) — Segnalazioni di bug e richieste di funzionalità
-- [Discussions](https://github.com/lollonet/snapMULTI/discussions) — Domande, idee, mostra il tuo setup
-- [Security](SECURITY.md) — Segnalazione privata di vulnerabilità
+## Inviare codice
 
-## Come contribuire
-
-### Segnalare un bug
-
-Usa il [template Bug Report](https://github.com/lollonet/snapMULTI/issues/new?template=bug_report.yml). Includi:
-
-- Il tuo hardware (modello Pi, x86_64, ecc.)
-- Output di `docker compose ps` e `docker compose logs <servizio>`
-- Passi per riprodurre il problema
-
-### Suggerire una funzionalità
-
-Usa il [template Feature Request](https://github.com/lollonet/snapMULTI/issues/new?template=feature_request.yml). Descrivi cosa vuoi, perché è utile e quali alternative hai considerato.
-
-### Inviare codice
-
-1. **Fai il fork** del repository e crea un branch da `main`:
+1. Fork + branch da `main` (`feature/<nome-corto>` o `fix/<nome-corto>`).
+2. Fai commit atomici e focalizzati. Referenzia le issue collegate (`Fix audio dropout on Pi 3 (#42)`).
+3. Testa in locale:
    ```bash
-   git checkout -b feature/mio-miglioramento
-   ```
-
-2. **Apporta le tue modifiche** — mantieni i commit focalizzati e atomici.
-
-3. **Testa in locale:**
-   ```bash
-   # Script shell: lint con shellcheck
    shellcheck scripts/*.sh scripts/**/*.sh
-
-   # Test bash (34 suite, 500+ assert)
    bash tests/run-all-tests.sh
-
-   # Test Python dei plugin (pytest auto-discovera test_*.py sotto tests/)
-   pytest tests/ -v
-
-   # Docker: verifica la sintassi compose
    docker compose config --quiet
-
-   # Stack completo: build e run
-   docker compose build
-   docker compose up -d
-   docker compose ps   # tutti i container devono essere healthy
    ```
+4. Apri una PR su `main`. CI esegue `validate.yml` (shellcheck + sintassi docker-compose) e `build-test.yml` (build Docker).
 
-4. **Apri una Pull Request** verso `main`. La CI partirà automaticamente:
-   - `validate.yml` — shellcheck + sintassi docker-compose
-   - `build-test.yml` — validazione build Docker (no push)
+## Documentazione
 
-### Migliorare la documentazione
-
-La documentazione vive in:
+Ogni argomento ha UN solo file autorevole (tabella SSOT completa in [CLAUDE.md](CLAUDE.md)). Non duplicare contenuto tra docs.
 
 | File | Contenuto |
 |------|-----------|
-| `README.md` | Cosa fa, come installare, come connettersi |
-| `docs/INSTALL.md` | Procedura di prima installazione |
-| `docs/HARDWARE.md` | Requisiti hardware, rete, setup consigliati |
-| `docs/USAGE.md` | Architettura, servizi, sorgenti audio, deployment, CI/CD |
+| `README.md` | Cosa fa, value prop, quick start in 4 passi |
+| `docs/INSTALL.md` | Procedura di prima installazione, troubleshooting, recupero bundle diagnostico |
+| `docs/HARDWARE.md` | Modelli Pi, DAC HAT, rete, setup consigliati |
+| `docs/USAGE.md` | Architettura, sorgenti audio, servizi/porte, mDNS, deployment, operazioni |
 | `config/snapserver.conf` | Schema autorevole dei parametri sorgente (commenti inline) |
 
-Le traduzioni italiane (`*.it.md`) rispecchiano i documenti inglesi. Se aggiorni la documentazione inglese, segnalalo nella PR così che le traduzioni possano essere sincronizzate.
-
-### Condividere il tuo setup
-
-Posta su [GitHub Discussions — Show Your Setup](https://github.com/lollonet/snapMULTI/discussions). Adoriamo vedere come la gente usa snapMULTI — foto del tuo setup di altoparlanti, configurazioni personalizzate, integrazioni Home Assistant o instradamenti audio creativi.
+I mirror italiani (`*.it.md`) seguono i file inglesi 1:1 — aggiornali nella stessa PR quando modifichi la documentazione inglese. Correttezza diacritica completa (usa `à è é ì ò ù`, mai gli equivalenti ASCII).
 
 ## Convenzioni di codice
 
-### Script shell
+**Script shell** — `set -euo pipefail` in testa, devono passare `shellcheck -S warning`, usa `scripts/common/unified-log.sh` (`info` / `warn` / `error` / `log_info` / `log_warn` / `log_error`). Solo ASCII in output su `/dev/tty1` (i font PSF non hanno simboli Unicode).
 
-- **Sicurezza prima**: tutti gli script iniziano con `set -euo pipefail`
-- **Lint**: devono passare `shellcheck -S warning`
-- **Logging**: usa le funzioni di `scripts/common/logging.sh` (`info`, `warn`, `error`)
-- **Output console**: solo ASCII per `/dev/tty1` — i font PSF non hanno simboli Unicode
+**Docker** — pinna versioni specifiche delle base-image (`alpine:3.23`, non `:latest`). I container girano in read-only con `cap_drop: ALL` + `no-new-privileges` dove possibile; l'unica eccezione è `tidal-connect` (binario proprietario necessita di `DAC_OVERRIDE`). Ogni container ha una healthcheck. Le build multi-arch supportano `linux/amd64` + `linux/arm64`.
 
-### Docker
+**Formato audio** — `44100:16:2` su tutte le sorgenti, niente resampling. Non cambiarlo senza discussione in una issue prima.
 
-- **Immagini base**: pinna versioni specifiche (es. `alpine:3.23`, non `alpine:latest`)
-- **Sicurezza**: filesystem root in sola lettura, drop di tutte le capabilities, no-new-privileges
-- **Healthcheck**: ogni container deve avere un health check
-- **Multi-arch**: supporta sia `linux/amd64` che `linux/arm64`
-
-### Configurazione
-
-- **Formato audio**: 44100:16:2 (44.1kHz, 16-bit, stereo) — non cambiarlo senza discussione
-- **File di config**: tutti in `config/`, tutti gli script in `scripts/`
-- **Environment**: usa `.env` per i valori configurabili dall'utente, documenta in `.env.example`
-
-### Documentazione
-
-Segui il principio [Single Source of Truth](CLAUDE.md) — ogni argomento ha UN file autoritativo. Non duplicare contenuto tra documenti.
-
-### Commit
-
-- Scrivi messaggi di commit chiari che spiegano il **perché**, non solo cosa
-- Cita le issue correlate: `Fix audio dropout su Pi 3 (#42)`
-- Mantieni i commit focalizzati — un cambiamento logico per commit
-
-## Setup di sviluppo
-
-```bash
-# Clona il monorepo (include server + client)
-git clone https://github.com/lollonet/snapMULTI.git
-cd snapMULTI
-
-# Copia il template environment
-cp .env.example .env
-# Modifica .env con i tuoi path locali
-
-# Avvia lo stack
-docker compose up -d
-
-# Guarda i log
-docker compose logs -f
-```
-
-## Ottenere aiuto
-
-- **Domande?** Apri una [Discussion](https://github.com/lollonet/snapMULTI/discussions)
-- **Bug?** Apri una [Issue](https://github.com/lollonet/snapMULTI/issues)
-- **Problema di sicurezza?** Vedi [SECURITY.md](SECURITY.md)
+**Config** — `.env` per i valori configurabili dall'utente (documentati in `.env.example`), config sorgenti in `config/`, script in `scripts/` (librerie condivise in `scripts/common/`).
 
 ## Licenza
 
-Contribuendo, accetti che i tuoi contributi siano rilasciati sotto `GPL-3.0-only` (vedi [LICENSE](LICENSE)).
+Contribuendo accetti che i tuoi contributi siano rilasciati sotto `GPL-3.0-only` (vedi [LICENSE](LICENSE)).

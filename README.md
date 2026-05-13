@@ -1,132 +1,109 @@
 🇬🇧 **English** | 🇮🇹 [Italiano](README.it.md)
 
-# snapMULTI - Multiroom Audio Server
+# snapMULTI — Open-source Sonos alternative on Raspberry Pi
 
 [![CI](https://github.com/lollonet/snapMULTI/actions/workflows/validate.yml/badge.svg)](https://github.com/lollonet/snapMULTI/actions/workflows/validate.yml)
 [![release](https://img.shields.io/github/v/release/lollonet/snapMULTI?color=orange)](https://github.com/lollonet/snapMULTI/releases/latest)
-[![downloads](https://img.shields.io/docker/pulls/lollonet/snapmulti-server?color=green)](https://hub.docker.com/r/lollonet/snapmulti-server)
-[![Donate](https://img.shields.io/badge/Donate-PayPal-yellowgreen)](https://paypal.me/lolettic)
-[![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
+[![Docker pulls](https://img.shields.io/docker/pulls/lollonet/snapmulti-server?color=green)](https://hub.docker.com/r/lollonet/snapmulti-server)
+[![License GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-License: `GPL-3.0-only` · [Code of Conduct](CODE_OF_CONDUCT.md) · [Third-party notices](THIRD-PARTY-NOTICES.md)
-
-Play music in sync across every room. Stream from Spotify, AirPlay, your music library, or any app — all speakers play together.
-
-**What it is**: a Sonos-style multiroom audio system you build yourself with Raspberry Pis (~€60 per room with a DAC HAT). All open source, no cloud, no subscription, no telemetry. Flash an SD card, boot, done.
+Play music in sync across every room. Cast from **Spotify**, **AirPlay**, **Tidal**, or your music library — all speakers play together with sub-millisecond drift. Flash an SD card, boot, done. No cloud, no subscription, no telemetry.
 
 <p align="center">
-  <img src="docs/images/display-playing.png" alt="snapMULTI playing Nirvana — cover art, spectrum analyzer, track info" width="720">
-  <br>
-  <em>HDMI display: cover art, spectrum analyzer, track metadata — rendered directly to framebuffer, no desktop needed</em>
+  <img src="docs/images/display-playing.png" alt="snapMULTI HDMI display: cover art + spectrum analyzer + track info" width="640">
 </p>
-
-## How it works
-
-```text
-   Spotify   AirPlay   Tidal   myMPD web UI   any TCP audio app
-      │         │        │           │                │
-      └─────────┴────────┴───────────┴────────────────┘
-                              │
-                              ▼
-                    ┌───────────────────┐
-                    │  Server (Pi / NUC)│  mixes sources, encodes once,
-                    │  snapserver       │  fans out a single audio stream
-                    └───────────────────┘
-                              │  Snapcast over LAN (TCP/UDP)
-                              ▼
-              ┌───────────┬───────────┬──────────────┐
-              │  Pi #1    │  Pi #2    │  Pi #N       │  each runs snapclient
-              │  Living   │  Kitchen  │  Bedroom     │  + a DAC HAT or USB DAC
-              └───────────┴───────────┴──────────────┘
-                              │
-                              ▼
-                          🔊 Speakers
-```
-
-All clients play in lock-step (~5 ms drift across rooms). Add a client by flashing another SD and inserting it in any Pi — no IP config, no pairing, mDNS auto-discovers the server. Server and one client can run on the same Pi (`both` mode).
 
 ## Why snapMULTI
 
 | | snapMULTI | Sonos | Volumio | MoOde |
 |---|---|---|---|---|
-| **Cost per room** | ~€60 (Pi 4 + DAC HAT) | €200+ (One SL) | ~€60 hardware + Volumio Plus subscription for multi-room | ~€60 hardware |
-| **Open source** | ✅ GPL-3.0 | ❌ proprietary | Partial (multi-room is paid) | ✅ |
-| **Multi-room sync** | ✅ Snapcast (~5 ms) | ✅ proprietary | ✅ (with Plus) | ❌ single device |
-| **Cloud-free** | ✅ all local | ❌ Sonos cloud required | Partial | ✅ |
-| **Telemetry** | ❌ none, none planned | ✅ collected by default | Partial | ❌ |
-| **Spotify Connect** | ✅ Premium | ✅ | ✅ (Plus) | ✅ |
-| **AirPlay** | ✅ AirPlay 1 | ✅ AirPlay 2 | ✅ (Plus) | ✅ |
-| **Tidal Connect** | ✅ (ARM only, opt-in) | ✅ | ✅ (Plus) | ✅ |
-| **HDMI cover-art display** | ✅ built-in fb-display | ❌ | ❌ | ❌ |
-| **Setup** | flash SD → boot → done (~10 min) | app setup | wizard (~30 min) | wizard |
-| **First-party hardware** | none — bring your own Pi | required | none | none |
+| **Cost per room** | ~€60 (Pi 4 + DAC HAT) | €200+ | ~€60 + Plus subscription for multi-room | ~€60 |
+| **Open source** | ✅ GPL-3.0 | ❌ | Partial | ✅ |
+| **Multi-room sync** | ✅ ~5 ms drift | ✅ proprietary | ✅ (Plus only) | ❌ single device |
+| **Cloud-free** | ✅ all local | ❌ | Partial | ✅ |
+| **Spotify / AirPlay / Tidal** | ✅ / ✅ / ✅ (ARM, opt-in) | ✅ | ✅ (Plus) | ✅ |
+| **HDMI cover-art display** | ✅ built-in | ❌ | ❌ | ❌ |
+| **Setup time** | ~10 min (zero-touch SD) | app wizard | ~30 min wizard | wizard |
 
-Pick snapMULTI when you want **multi-room + Pi-DIY + zero cloud + zero subscription** in one package. Pick Sonos when you want plug-and-play and don't mind the price tag and the cloud lock-in. Pick Volumio Plus when you already own its hardware and the multi-room subscription is OK with you.
+Pick snapMULTI when you want multi-room **and** Pi-DIY **and** zero cloud **and** zero subscription, in one package.
 
-## Sources
+## Quick start
+
+You need: a Raspberry Pi 4 or 5 (2 GB+), a 16 GB+ microSD, and a computer (macOS / Linux / Windows) to prepare the card.
+
+### 1. Flash the SD with Raspberry Pi Imager
+
+- OS: **Raspberry Pi OS Lite (64-bit)**
+- Click the gear icon (`Ctrl/Cmd+Shift+X`) and set: hostname, username + password, WiFi (or leave empty for Ethernet), **☑ Enable SSH (password)**
+
+### 2. Get the snapMULTI files
+
+Either `git clone https://github.com/lollonet/snapMULTI.git`, or download the [latest release ZIP](https://github.com/lollonet/snapMULTI/releases/latest) and rename the folder to `snapMULTI/`.
+
+### 3. Re-insert the SD and run the prep script
+
+Re-insert the freshly-flashed SD so the `bootfs` partition appears on your computer, then in the folder that *contains* `snapMULTI/`:
+
+```bash
+# macOS / Linux:
+./snapMULTI/scripts/prepare-sd.sh
+
+# Windows PowerShell:
+.\snapMULTI\scripts\prepare-sd.ps1
+```
+
+The script asks: **Audio Player** (speaker only) / **Music Server** (Spotify+AirPlay+Tidal+library) / **Server + Player** (both on one Pi).
+
+> First PowerShell run on Windows? `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
+### 4. Boot the Pi
+
+Eject SD, insert in the Pi, power on. Wait ~10 minutes. The first-boot installer runs without SSH, shows progress on HDMI if you have a screen attached. Done.
+
+> **Detailed walk-through** with screenshots and troubleshooting: [docs/INSTALL.md](docs/INSTALL.md).
+> **Compatibility matrix** (which Pi models, DAC HATs, network setups): [docs/HARDWARE.md](docs/HARDWARE.md).
+
+## After install
+
+Replace `hostname` with what you set in Step 1.
+
+| URL | What it does |
+|-----|--------------|
+| `http://hostname.local:1780` | **Snapweb** — per-room volume, group speakers, switch source |
+| `http://hostname.local:8180` | **myMPD** — browse and play music library |
+| `http://hostname.local:8083/status` | **Health page** — container + audio + NFS status |
+
+### Cast from your apps
 
 | Source | How |
 |--------|-----|
 | **Spotify** | Open app → select "*hostname* Spotify" (Premium) |
-| **AirPlay** | AirPlay icon → select "*hostname* AirPlay" |
-| **Tidal** | Open app → cast to "*hostname* Tidal" (ARM/Pi only, **opt-in** — see [security note](docs/USAGE.md#tidal-connect-security-note)) |
-| **Music library** | Browse at `http://hostname.local:8180` |
-| **Any app** | Stream to port 4953 ([details](docs/USAGE.md#streaming-from-android-no-native-cast)) |
+| **AirPlay** | AirPlay icon → "*hostname* AirPlay" |
+| **Tidal** | Cast to "*hostname* Tidal" (ARM/Pi only, **opt-in** — see [security note](docs/USAGE.md#tidal-connect-security-note)) |
+| **Any app** | Stream raw PCM to port 4953 ([details](docs/USAGE.md#streaming-from-android-no-native-cast)) |
 
-Manage speakers at `http://hostname.local:1780`
-Check system health at `http://hostname.local:8083`
+## Add speakers
 
-> **Full port reference**: see [`docs/USAGE.md#services--ports`](docs/USAGE.md#services--ports) for the complete list of ports, protocols, and what each container exposes.
+Flash another SD → choose **Audio Player** → insert in any Pi. mDNS auto-discovers the server.
 
-## Quick Start
-
-**[QUICKSTART.md](QUICKSTART.md)** — zero to music in 5 minutes.
-
-### Raspberry Pi (beginners)
-
-```bash
-# Flash SD with Pi Imager (64-bit Lite, set hostname/WiFi/SSH)
-# Re-insert SD, then:
-git clone https://github.com/lollonet/snapMULTI.git
-./snapMULTI/scripts/prepare-sd.sh
-# Insert SD in Pi, power on, wait ~10 min
-```
-
-### Any Linux (advanced)
-
-```bash
-git clone https://github.com/lollonet/snapMULTI.git && cd snapMULTI
-sudo ./scripts/deploy.sh   # or: cp .env.example .env && docker compose up -d
-```
-
-## Add Speakers
-
-Flash another SD → choose "Audio Player" → insert in any Pi. Auto-discovers the server.
-
-Or install snapclient on any Linux: `sudo apt install snapclient`
+Or any Linux box: `sudo apt install snapclient`.
 
 ## Updating
 
-Reflash the SD card with the latest version — all config is auto-detected.
-
-To preserve your music library index: `./scripts/backup-from-sd.sh` before flashing.
-See [Usage Guide — Updating](docs/USAGE.md#updating) for advanced options.
+Reflash the SD with the latest release — all config auto-detects on first boot. To keep your MPD music index across reflashes: `./scripts/backup-from-sd.sh` before flashing.
 
 ## Documentation
 
 | Guide | What's inside |
-|-------|---------------|
-| **[Quick Start](QUICKSTART.md)** | One-page install — zero to music in 5 minutes |
-| [Installation](docs/INSTALL.md) | Complete step-by-step with troubleshooting |
-| [Hardware](docs/HARDWARE.md) | Pi models, DAC HATs, network, tested combinations |
-| [Usage & Ops](docs/USAGE.md) | Architecture, audio sources, MPD, mDNS, deployment, troubleshooting |
+|-------|--------------|
+| [Installation](docs/INSTALL.md) | Step-by-step with troubleshooting and diagnostic recovery |
+| [Hardware](docs/HARDWARE.md) | Pi models, DAC HATs, network, Pi Zero 2 W exceptions |
+| [Usage & Ops](docs/USAGE.md) | Architecture, audio sources, MPD, mDNS, deployment, log/diagnostic recovery |
 | [Changelog](CHANGELOG.md) | Version history |
 
-## Contributing
+## Contributing & security
 
-PRs, bug reports, and "show your setup" posts are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-For security issues, follow the private-disclosure flow in [SECURITY.md](SECURITY.md).
+PRs, bug reports and "show your setup" posts welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). For security issues use the private flow in [SECURITY.md](SECURITY.md). [Code of Conduct](CODE_OF_CONDUCT.md) · [Third-party notices](THIRD-PARTY-NOTICES.md) · License `GPL-3.0-only`.
 
 ## Acknowledgments
 
