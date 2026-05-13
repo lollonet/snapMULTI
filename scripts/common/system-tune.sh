@@ -18,6 +18,11 @@ if ! command -v cmdline_path &>/dev/null; then
     # shellcheck source=cmdline-manager.sh
     source "$TUNE_DIR/cmdline-manager.sh"
 fi
+if ! command -v is_pi_zero_2w &>/dev/null; then
+    TUNE_DIR="${TUNE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+    # shellcheck source=device-detect.sh
+    source "$TUNE_DIR/device-detect.sh"
+fi
 
 # ── Overlayroot detection ─────────────────────────────────────────
 is_overlayroot() {
@@ -128,14 +133,7 @@ tune_usb_autosuspend() {
 # supplicant; applying feature_disable=0x80000 to them would disable
 # a working feature (regression). Pi Zero 2W only.
 tune_bcm43430_firmware_workaround() {
-    local model_file=/proc/device-tree/model
-    [[ -f "$model_file" ]] || return 0
-    local model
-    model=$(tr -d '\0' <"$model_file" 2>/dev/null) || return 0
-    # "Raspberry Pi Zero 2 W Rev 1.0" / "... Rev 1.1" etc.
-    if [[ "$model" != *"Zero 2 W"* ]]; then
-        return 0  # not BCM43430 — fix would disable a working feature
-    fi
+    is_pi_zero_2w || return 0  # not BCM43430 — fix would disable a working feature
 
     local conf=/etc/modprobe.d/snapmulti-brcmfmac.conf
     local expected_payload='options brcmfmac roamoff=1 feature_disable=0x80000'
@@ -189,13 +187,7 @@ BCMEOF
 # Detection: same `Zero 2 W` model match as the bcm43430 workaround.
 # Other Pi models have enough RAM to use zram safely.
 tune_pi_zero_2w_swap_safety() {
-    local model_file=/proc/device-tree/model
-    [[ -f "$model_file" ]] || return 0
-    local model
-    model=$(tr -d '\0' <"$model_file" 2>/dev/null) || return 0
-    if [[ "$model" != *"Zero 2 W"* ]]; then
-        return 0  # other Pi models keep zram (sufficient RAM)
-    fi
+    is_pi_zero_2w || return 0  # other Pi models keep zram (sufficient RAM)
 
     # Authoritative kill switch for Pi OS Bookworm's rpi-swap package:
     # /lib/systemd/system-generators/rpi-swap-generator reads

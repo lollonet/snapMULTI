@@ -420,15 +420,31 @@ else
 fi
 
 # ── Install snapMULTI install dir marker (for smoke checks) ─────
+# firstboot.sh already promoted INSTALL_TYPE=client -> client-native
+# before invoking this script, so the install.conf on the boot
+# partition is the canonical source. We just mirror it (+ runtime
+# extras like SNAPCLIENT_VERSION) under /opt/snapclient/ so the
+# device-smoke modules can `grep INSTALL_TYPE` without reaching
+# back to the boot partition. The write is guarded — if the disk
+# is full or has gone read-only we fail loudly rather than leaving
+# a half-written marker that confuses smoke at the next boot.
 mkdir -p "$INSTALL_DIR"
 _apt_snapclient_ver=$(dpkg-query -W -f='${Version}' snapclient 2>/dev/null || echo "unknown")
-cat > "$INSTALL_DIR/install.conf" <<EOF
-# snapMULTI install marker — written by setup-zero2w.sh
+if ! cat > "$INSTALL_DIR/install.conf" <<EOF
+# snapMULTI install marker — mirrored from firstboot's install.conf.
+# INSTALL_TYPE is promoted by firstboot.sh based on device model
+# (client + Pi Zero 2W -> client-native). This file is the on-device
+# canonical copy consumed by device-smoke.sh and check_containers.sh.
 INSTALL_TYPE=client-native
 CLIENT_ID=${CLIENT_ID}
 SNAPCLIENT_VERSION=${_apt_snapclient_ver}
 ARCH=${ARCH}
 EOF
+then
+    error "Failed to write $INSTALL_DIR/install.conf — disk full or filesystem read-only?"
+    error "Smoke checks will not detect this as a native-client install."
+    exit 1
+fi
 unset _apt_snapclient_ver
 
 # ── Strip Docker-only assets staged by prepare-sd.sh ─────────────

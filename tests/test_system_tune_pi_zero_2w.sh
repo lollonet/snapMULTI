@@ -54,9 +54,21 @@ echo "== system-tune.sh: tune_pi_zero_2w_swap_safety() =="
 assert 'grep -qE "^tune_pi_zero_2w_swap_safety\(\)" "$TUNE_SH"' \
     "function tune_pi_zero_2w_swap_safety() defined"
 
-# 2. Pi Zero 2W detection matches the bcm43430 idiom
-assert 'grep -qF "[[ \"\$model\" != *\"Zero 2 W\"* ]]" "$TUNE_SH"' \
-    "uses identical 'Zero 2 W' model match (no-op on other Pi models)"
+# 2. Pi Zero 2W detection goes through the shared is_pi_zero_2w helper
+# in scripts/common/device-detect.sh (single source of truth — the
+# `*"Zero 2 W"*` string lives in one file). Both functions short-circuit
+# with `is_pi_zero_2w || return 0` so they no-op on non-Zero-2W models.
+assert 'grep -qE "is_pi_zero_2w \|\| return 0" "$TUNE_SH"' \
+    "uses is_pi_zero_2w helper (no-op on other Pi models)"
+# Both functions must use the helper — count the call sites.
+helper_calls=$(grep -cE "is_pi_zero_2w \|\| return 0" "$TUNE_SH" || echo 0)
+if [[ "$helper_calls" -ge 2 ]]; then
+    echo "  PASS: is_pi_zero_2w used by both tune functions ($helper_calls call sites)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: is_pi_zero_2w used in only $helper_calls site (expected >=2: bcm43430 + zram swap)"
+    fail=$((fail + 1))
+fi
 
 # 3. The four zram units masked are exactly the ones Pi OS Bookworm ships
 for unit in \
