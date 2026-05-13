@@ -122,7 +122,15 @@ info()  { log_info "$@"; }
 ok()    { log_ok "$@"; }
 warn()  { log_warn "$@"; }
 error() { log_error "$@"; }
-debug() { log_msg DEBUG "$LOG_SOURCE" "$*"; }
+debug() {
+    # Match the legacy logging.sh contract: emit ONLY when DEBUG=1.
+    # The interactive branch of log_msg already guards DEBUG, but the
+    # install-chain branch writes every level unconditionally — without
+    # the guard here, debug() would flood both the install log file
+    # AND the TUI PROGRESS_LOG feed regardless of the DEBUG env var.
+    [[ "${DEBUG:-0}" == "1" ]] || return 0
+    log_msg DEBUG "$LOG_SOURCE" "$*"
+}
 step() {
     # step() emits a banner-style line. In interactive mode keep the
     # cyan/bold header for visual separation; in install-chain mode it

@@ -83,16 +83,42 @@ done
 # Redirect-safety: every external redirect to UNIFIED_LOG / PROGRESS_LOG /
 # PROGRESS_TTY must be wrapped in `{ ...; } 2>/dev/null` so bash's own
 # "Permission denied" message is silenced.
-for path in '\\$UNIFIED_LOG' '\\$PROGRESS_LOG' '\\$PROGRESS_TTY'; do
-    bare=$(grep -nE ">>? *\"$path\"" "$UNIFIED_LOG_SH" \
-        | grep -vE '\\{ .*>>? *"'"$path"'"; \\} 2>/dev/null' \
-        | grep -vE '^[[:space:]]*#' \
-        | grep -vE 'log_and_tty.*>' || true)
+#
+# The wraps may span multiple lines (e.g. `{ printf ... \\\n    >> "$X"; } 2>/dev/null`)
+# so we flatten the file by stripping line continuations and joining
+# brace blocks onto a single line before grepping. log_and_tty() is
+# excluded — it has its own wrap on a different shape.
+#
+# A SINGLE backslash before `$` in an ERE matches a literal `$` in the
+# input (the source contains `>> "$UNIFIED_LOG"`, a literal dollar).
+# Earlier `'\\$VAR'` produced an ERE looking for `\$` (no such input)
+# so the test passed vacuously.
+flattened=$(awk '
+    # Strip "# ..." comments first; the file uses inline comments.
+    { sub(/[[:space:]]*#.*$/, "") }
+    /log_and_tty/ { in_lat = 1 }
+    in_lat && /^[[:space:]]*}/ { in_lat = 0; next }
+    in_lat { next }
+    # Join backslash-continuations into one logical line.
+    /\\$/ { sub(/\\$/, " "); printf "%s", $0; next }
+    { print }
+' "$UNIFIED_LOG_SH")
+
+for path in '\$UNIFIED_LOG' '\$PROGRESS_LOG' '\$PROGRESS_TTY'; do
+    # All matching redirect lines.
+    all=$(grep -E ">>? *\"$path\"" <<<"$flattened" || true)
+    if [[ -z "$all" ]]; then
+        echo "  FAIL: no redirect to $path found at all (probe + production should both exist)"
+        fail=$((fail + 1))
+        continue
+    fi
+    # Lines that are NOT wrapped in `{ ... } 2>/dev/null`.
+    bare=$(grep -vE '\{ .*>>? *"'"$path"'"; *\} 2>/dev/null' <<<"$all" || true)
     if [[ -z "$bare" ]]; then
-        echo "  PASS: every redirect to $path is wrapped"
+        echo "  PASS: every redirect to $path is wrapped in '{ ...; } 2>/dev/null'"
         pass=$((pass + 1))
     else
-        echo "  FAIL: bare redirect to $path:"
+        echo "  FAIL: bare (unwrapped) redirect to $path:"
         echo "$bare" | sed 's/^/    /'
         fail=$((fail + 1))
     fi
@@ -155,6 +181,30 @@ assert_contains "$file_contents" "[ERROR]" "log file gets [ERROR] tag"
 assert_contains "$file_contents" "install-info" "log file gets info message body"
 assert_contains "$file_contents" "install-error" "log file gets error message body"
 assert_contains "$file_contents" "install-tty" "log file gets log_and_tty body"
+
+# Install-chain mode + DEBUG=0: debug() must NOT write to the log
+# file. Without the DEBUG guard in debug() this would flood the log
+# (the install-chain branch of log_msg has no level filter).
+debug_log_off=$(mktemp /tmp/snapmulti-debug-off-XXXXXX)
+DEBUG=0 UNIFIED_LOG="$debug_log_off" PROGRESS_TTY=/dev/null bash -c "
+    source '$LOGGING_SH'
+    debug 'debug-off-should-not-appear'
+" 2>&1
+debug_off_contents=$(cat "$debug_log_off")
+rm -f "$debug_log_off"
+assert_not_contains "$debug_off_contents" "debug-off-should-not-appear" \
+    "install-chain mode: debug() suppressed when DEBUG=0 (no log-file write)"
+
+# Install-chain mode + DEBUG=1: debug() DOES write.
+debug_log_on=$(mktemp /tmp/snapmulti-debug-on-XXXXXX)
+DEBUG=1 UNIFIED_LOG="$debug_log_on" PROGRESS_TTY=/dev/null bash -c "
+    source '$LOGGING_SH'
+    debug 'debug-on-should-appear'
+" 2>&1
+debug_on_contents=$(cat "$debug_log_on")
+rm -f "$debug_log_on"
+assert_contains "$debug_on_contents" "debug-on-should-appear" \
+    "install-chain mode: debug() writes to log file when DEBUG=1"
 
 echo
 echo "Results: $pass passed, $fail failed"
