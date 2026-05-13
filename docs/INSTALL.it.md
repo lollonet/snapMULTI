@@ -177,6 +177,12 @@ Se il rilevamento automatico fallisce:
 | **2 — Music Server** | Hub centrale. Ospita Spotify Connect, AirPlay, Tidal, MPD. Nessuna uscita speaker locale |
 | **3 — Server + Player** | Un Pi fa tutto — server e speaker locale. Buono per iniziare con un singolo dispositivo |
 
+> **Utenti Pi Zero 2 W:** l'installer si comporta diversamente perché la scheda ha solo 512 MB di RAM:
+> - **Scelta 1 (Audio Player)** — funziona, ma il profilo viene auto-promosso a `client-native`: snapclient nativo da `.deb`, niente Docker, niente display per la copertina, solo single-server. Lo stack Docker completo non sta in RAM
+> - **Scelte 2 e 3** — il primo boot si interrompe con `Pi Zero 2W (512 MB RAM) cannot host the snapMULTI server stack` e si ferma. Il server richiede almeno un Pi 3 B+ con 1 GB di RAM. Riflashare l'SD con la scelta 1, oppure usare un Pi diverso
+>
+> Vedi [HARDWARE.it.md — Note Pi Zero 2 W](HARDWARE.it.md#note-pi-zero-2-w) per la lista completa dei vincoli.
+
 ---
 
 ### Menu 2 — Dov'è la tua musica? *(Solo Music Server e Server+Player)*
@@ -362,6 +368,18 @@ Il nuovo speaker appare nell'interfaccia web Snapcast a `http://pi-server.local:
 | `no matching manifest for linux/arm/v7` | OS 32-bit flashato invece del 64-bit | Riflasha con **Raspberry Pi OS Lite (64-bit)** — tutti i modelli Pi incluso Zero 2 W lo supportano |
 | Pi Zero 2 W: WiFi non si connette | SSID 5 GHz configurato ma Pi Zero ha solo 2,4 GHz | Riflasha con il tuo SSID 2,4 GHz nelle impostazioni WiFi di Imager |
 | Pi Zero 2 W: HAT audio non rilevato | `otg_mode=1` o `dr_mode=host` in config.txt | `prepare-sd.sh` lo corregge automaticamente. Per installazioni manuali: commenta `otg_mode=1` e rimuovi `dr_mode=host` dall'overlay dwc2 |
+| Pi Zero 2 W: il primo boot si interrompe con "cannot host the snapMULTI server stack" | Hai scelto **Music Server** o **Server + Player** su una scheda da 512 MB | Riflashare con `prepare-sd.sh` scegliendo **1 — Audio Player**. Vedi [HARDWARE.it.md — Note Pi Zero 2 W](HARDWARE.it.md#note-pi-zero-2-w) |
+
+### Recuperare il bundle diagnostico quando il primo boot fallisce
+
+Se `firstboot.sh` fallisce a metà strada, scrive un tarball diagnostico sulla **partizione di boot FAT32** prima di terminare. È la stessa partizione scritta da Raspberry Pi Imager — leggibile da qualsiasi computer.
+
+1. Spegni il Pi, estrai la microSD e collegala al laptop
+2. Apri la **partizione boot** (su macOS / Linux si monta come `bootfs`, su Windows compare una lettera di unità)
+3. Cerca un file chiamato `snapmulti-diag-<motivo>-<timestamp>.tar.gz` (es. `snapmulti-diag-install-failed-20260513T142301Z.tar.gz`)
+4. Allegalo a una [issue GitHub](https://github.com/lollonet/snapMULTI/issues/new/choose) — il bundle è anonimizzato (niente indirizzi MAC, IP RFC1918, SSID, password o token API)
+
+Il bundle contiene i log di installazione più recenti, l'output del rilevamento hardware (modello, HAT audio, rete) e il nome dello step che è fallito. La partizione di boot resta intatta anche quando overlayroot si è attivato o il rootfs è altrimenti irraggiungibile — è il motivo per cui scriviamo lì invece che in `/var/log`.
 
 Per problemi post-installazione vedi [Risoluzione problemi in USAGE.it.md](USAGE.it.md#risoluzione-problemi).
 
