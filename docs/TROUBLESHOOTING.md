@@ -2,79 +2,181 @@
 
 # Troubleshooting
 
-What to check when things fail. For first-time install see [INSTALL.md](INSTALL.md); for ops and customisation see [ADVANCED.md](ADVANCED.md).
+Symptom-driven guide for when something on snapMULTI isn't working. For first-time install see [INSTALL.md](INSTALL.md); for ops and customisation see [ADVANCED.md](ADVANCED.md).
 
-## First boot fails
+## When in doubt — grab the diagnostic bundle
 
-| Symptom | Likely cause | Fix |
-|---------|-------------|-----|
-| HDMI blank, no progress | Normal on headless boot | Wait 10 min; check with `ping <hostname>.local` |
-| `ping <hostname>.local` fails | Pi not on network yet | Wait 2 min; if still failing, check WiFi country in Imager. 5 GHz DFS channels (100+) may fail on first boot — try 2.4 GHz or a non-DFS 5 GHz channel (36–48) |
-| `.local` resolves but SSH refused | SSH not yet started | Wait 1–2 more min |
-| SSH works but containers missing | Installation still running | `sudo journalctl -u snapmulti-firstboot.service -f` to watch progress |
-| Containers in restart loop | Image pull failed (network) | `cd /opt/snapmulti && sudo docker compose logs -f` |
-| Wrong hostname | Wrong value in Imager | Re-flash SD, redo from Step 1 |
-| `prepare-sd.sh`: boot partition not found | SD not re-inserted after Imager | Remove SD, re-insert, re-run |
-| Windows: script won't run | Execution policy | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
-| Audio HAT not detected (client) | EEPROM-less board | SSH in: `sudo bash /opt/snapclient/common/scripts/setup.sh` and select your HAT manually |
-| `no matching manifest for linux/arm/v7` | 32-bit OS flashed instead of 64-bit | Re-flash with **Raspberry Pi OS Lite (64-bit)** — all Pi models including Zero 2 W support it |
-| Pi Zero 2 W: WiFi won't connect | 5 GHz SSID set, but Pi Zero only does 2.4 GHz | Re-flash with your 2.4 GHz SSID in Imager WiFi settings |
-| Pi Zero 2 W: audio HAT not detected | `otg_mode=1` or `dr_mode=host` in `config.txt` | `prepare-sd.sh` fixes this automatically. Manual: comment out `otg_mode=1` and remove `dr_mode=host` from the dwc2 overlay |
-| Pi Zero 2 W: first boot aborts with "cannot host the snapMULTI server stack" | You picked **Music Server** or **Server + Player** on a 512 MB board | Reflash and choose **1 — Audio Player**. See [HARDWARE.md — Pi Zero 2 W Notes](HARDWARE.md#pi-zero-2-w-notes) |
+If `firstboot.sh` aborts, the cleanup trap writes a redacted tarball to the **FAT32 boot partition** of the SD card — readable from any computer without SSH:
 
-### Recovering a diagnostic bundle
+```
+/boot/firmware/snapmulti-diag-install-failed-<UTC-ts>.tar.gz
+```
 
-If `firstboot.sh` fails partway through, the cleanup trap writes a redacted tarball to the **FAT32 boot partition** — readable on any computer without SSH.
+What's inside: last hour of install logs, hardware detection output (model, audio HAT, network), failing step name, container logs. The bundle is **anonymised** before it lands on the SD — no MAC addresses, no LAN IPs, no SSIDs, no passwords, no API tokens — so it is safe to attach to a public [GitHub issue](https://github.com/lollonet/snapMULTI/issues/new/choose). The boot partition survives overlayroot activation and rootfs corruption; that's why we write there rather than `/var/log`.
 
-1. Power off the Pi, eject the SD, plug it into your laptop
-2. Open the **boot partition** (auto-mounts as `bootfs` on macOS / Linux, drive letter on Windows)
-3. Look for `snapmulti-diag-<reason>-<UTC-ts>.tar.gz` (e.g. `snapmulti-diag-install-failed-20260513T142301Z.tar.gz`)
-4. Attach it to a [GitHub issue](https://github.com/lollonet/snapMULTI/issues/new/choose) — the bundle is anonymised (no MAC, no RFC1918 IPs, no SSID, no passwords, no API tokens)
+You can also create one manually on a running device for support reports:
 
-The bundle contains the last hour of install logs, hardware detection output (model, audio HAT, network), and the failing step name. The boot partition survives overlayroot activation and rootfs corruption — that's why we write there rather than `/var/log`.
+```bash
+sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp
+```
+
+Same redaction rules.
 
 ## First check — run the smoke test
 
-Before digging into individual symptoms, run the all-in-one health check:
+Before drilling into a specific symptom, run the all-in-one health check on the device:
 
 ```bash
 sudo bash /opt/snapmulti/scripts/device-smoke.sh --server   # or --client, or --both
 ```
 
-It validates: root mount + overlayroot state, Docker storage driver, required systemd units, container expected / running / healthy counts, mDNS advertisement, Snapcast TCP/RPC reachability, audio kernel modules vs configured HAT, QoS, music mounts, and timer health (10 modules in `scripts/smoke/`).
+It validates root mount + overlayroot state, Docker storage driver, required systemd units, container expected / running / healthy counts, mDNS advertisement, Snapcast TCP/RPC reachability, audio kernel modules vs configured HAT, QoS, music mounts, and timer health (10 modules in `scripts/smoke/`). If every section is green, the platform itself is healthy — focus on the upstream (network, casting client, app account). If something is red, the failing check tells you which subsystem to focus on. The same script is the release gate (ADR-005) and what `fleet-smoke.sh` runs across multiple devices.
 
-If every section is green, the platform is healthy and the problem is elsewhere (network upstream, app-side, casting client). If anything is red, the failing check tells you which subsystem to focus on. The same script is the release gate (ADR-005) and what `fleet-smoke.sh` runs across multiple devices.
+JSON for scripts / dashboards: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server --json`.
 
-JSON output for scripts / dashboards: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server --json`.
+---
 
-## Post-install issues
+## Installation seems stuck
 
-| Symptom | First check |
-|---------|-------------|
-| No audio out, all containers `healthy` | snapclient picked the wrong sound card — on the client: `docker exec snapclient snapclient --list` to find the card name, set `SOUND_CARD` in client `.env`, then `docker compose up -d` |
-| Spotify / AirPlay / Tidal not visible in apps | mDNS issue — see [mDNS discovery troubleshooting](#mdns-discovery) below |
-| MPD database empty, all files visible on NFS | `mpc -h <server> update`, watch `mpc status \| grep updating_db`. If hours of D-state, copy a pre-built `mpd.db` instead — see [ADVANCED.md — Music library](ADVANCED.md#music-library-on-the-network) |
-| A container in restart loop | `cd /opt/snapmulti && docker compose logs <name>`. The web status page (`http://<server>:8083/status`) shows which container is unhealthy |
-| Pi Zero 2 W boots then kernel-panics | Zram swap saturated the overlay tmpfs — `tune_pi_zero_2w_swap_safety()` should mask it. Reflash to apply the fix |
-| `.local` doesn't resolve after install | Try the IP directly. Find it in your router's DHCP client list, or check the HDMI console after reboot — the Pi prints its IP |
+**Symptoms.** HDMI shows the progress screen but doesn't advance for several minutes, or the screen is blank and the Pi isn't reachable yet.
 
-### mDNS discovery
+**Likely cause.** First boot is downloading container images over the network (the slow part, 2–6 minutes on typical home WiFi). Cheap / counterfeit SD cards also cause apparent "hangs" — the install is actually waiting on SD write throughput.
 
-If a source isn't visible in the casting app (Spotify, AirPlay, Tidal) or speakers don't appear in Snapweb:
+**Try this.**
+1. Wait the full 10–15 minutes before assuming a problem — the install runs `cloud-init` → `snapmulti-firstboot.service`, both headless.
+2. From your laptop: `ping <hostname>.local`. If it answers, the network side is up.
+3. If SSH works: `ssh <username>@<hostname>.local`, then `sudo journalctl -u snapmulti-firstboot.service -f` to watch the install in real time.
 
-```bash
-# on the server
-systemctl is-active avahi-daemon            # must say active
-avahi-browse -r _snapcast._tcp --terminate  # must list the server hostname
-avahi-browse -r _raop._tcp --terminate      # for AirPlay
-```
+**If still broken.** Pull the SD card and check for `snapmulti-diag-install-failed-*.tar.gz` on the boot partition — that means the install gave up. Attach it to a GitHub issue. If no bundle exists and the Pi is fully unreachable after 20 minutes, the SD card is the most common culprit (use a SanDisk / Samsung A1 or better — see [HARDWARE.md](HARDWARE.md#if-unsure-buyuse-this)).
 
-Common causes:
+## Device doesn't show up on the network / `.local` doesn't resolve
 
-1. **Host avahi-daemon down** → `sudo systemctl start avahi-daemon`
-2. **AppArmor blocking the container** → check `apparmor:unconfined` in `docker-compose.yml` (server stack)
-3. **Different subnet / VLAN** → mDNS doesn't cross VLAN boundaries. Use a static IP in `.env` (`SNAPSERVER_HOST=<server-ip>` on clients) or run an mDNS repeater
-4. **Firewall** → see [HARDWARE.md — Firewall Rules](HARDWARE.md#firewall-rules)
+**Symptoms.** `ping <hostname>.local` fails. The Pi never appears in your router's DHCP client list.
+
+**Likely cause.** WiFi configuration mismatch in Imager (wrong country code, 5 GHz SSID on a 2.4 GHz-only board, DFS channel that the Pi can't use on first boot), or your phone / laptop is on a different network than the Pi (guest WiFi, separate VLAN), or your router doesn't relay mDNS.
+
+**Try this.**
+1. Use the IP directly. Find it in your router's DHCP client list, or attach HDMI: the Pi prints the IP on the console after boot.
+2. Check both devices are on the same subnet — `192.168.x.y` on the Pi vs. `192.168.x.z` on your laptop, same first three octets.
+3. On Pi Zero 2 W: confirm Imager has a 2.4 GHz SSID, not 5 GHz (the Zero 2 W radio doesn't do 5 GHz).
+4. On a Pi 4 / 5 stuck on a DFS 5 GHz channel: re-flash with a 2.4 GHz SSID or a non-DFS 5 GHz channel (36–48).
+
+**If still broken.** If you have HDMI: log in, run `ip addr` and `iwgetid -r` to confirm the Pi is even on WiFi. If `ip addr` shows no `wlan0` address, the WiFi credentials in Imager were wrong — re-flash. If `iwgetid` shows the right SSID but `ip addr` shows no address, you have a DHCP issue at the router.
+
+## Emergency console / root locked out
+
+**Symptoms.** SSH is refused even though you set up Imager correctly. Or you set the SSH key only and lost it.
+
+**Likely cause.** Imager wrote the wrong username, the read-only overlay is masking your changes, or the cloud-init step that installs the SSH key didn't run.
+
+**Try this.**
+1. Plug an HDMI display + USB keyboard into the Pi for a local console. Username and password are what you set in Imager.
+2. From there: `sudo ro-mode disable && sudo reboot` if you need persistent changes (see [ADVANCED.md — Read-only filesystem](ADVANCED.md#read-only-filesystem)).
+3. If the Pi never gets to a login prompt: pull the SD, open the **boot partition** on your laptop, edit `user-data` to reset credentials, re-insert and boot.
+
+**If still broken.** Reflash with Imager — snapMULTI is reflash-first by design (DEC-003), and the install only takes 10–15 min. Back up `/opt/snapmulti/mpd.db` first with `scripts/backup-from-sd.sh` if you want to preserve the music library index.
+
+## No audio
+
+**Symptoms.** Containers are all `healthy`, you can cast from Spotify / AirPlay / Tidal and see the "Now Playing" status in Snapweb, but no sound comes out.
+
+**Likely cause.** snapclient picked the wrong ALSA card, the HAT overlay was loaded but the physical wiring is off, or volume is muted at the hardware mixer.
+
+**Try this.**
+1. On the client device: `docker exec snapclient snapclient --list` (or `snapclient --list` on the Pi Zero 2 W native install) to enumerate cards. The right card is the one matching your HAT (e.g. `sndrpihifiberry`).
+2. Set `SOUND_CARD` in `/opt/snapclient/.env` to that name, then `cd /opt/snapclient && sudo docker compose up -d` (NOT `restart` — that doesn't reload `.env`).
+3. Check the hardware mixer: `alsamixer -c 0`, press F6 to pick the right card, raise the master and any "Digital" / "Speaker" controls.
+4. Verify the HAT was detected: `aplay -l` should show your DAC; `dmesg | grep -i 'snd\|hifiberry\|wm8'` should show driver load messages.
+
+**If still broken.** Run the smoke test (it has an `audio_modules` check that flags kernel-module / HAT mismatches). If `config.txt` is missing `dtoverlay=hifiberry-*` etc., re-run `setup.sh` and confirm the HAT detection picks the right model — EEPROM-less boards need a manual choice.
+
+## Speakers don't find the server (snapclient won't connect)
+
+**Symptoms.** A client device is fully booted but never appears in Snapweb. `journalctl -u snapclient` on the client shows repeated reconnect attempts.
+
+**Likely cause.** mDNS isn't reaching the client (different subnet, VLAN isolation, router doesn't forward `_snapcast._tcp`), or the server's `avahi-daemon` isn't advertising.
+
+**Try this.**
+1. On the server: `systemctl is-active avahi-daemon` — must say `active`. Then `avahi-browse -r _snapcast._tcp --terminate` — must list the server's hostname.
+2. On the client: `avahi-browse -r _snapcast._tcp --terminate` — must list the server. If it doesn't, mDNS isn't crossing your network.
+3. As a workaround, set a static server in the client `.env`: `SNAPSERVER_HOST=<server-ip>` and `cd /opt/snapclient && sudo docker compose up -d`.
+
+**If still broken.** Most common cause is a router that doesn't relay mDNS across SSIDs / VLANs (mesh routers and "guest network" features are typical). Put the server and clients on the same SSID, or install an mDNS repeater on your router (DD-WRT, OpenWrt, UniFi all support it).
+
+## Spotify / AirPlay / Tidal not visible in the casting app
+
+**Symptoms.** The server is running, Snapweb works, but when you open the Spotify / AirPlay / Tidal app there is no `<hostname> Spotify` / `<hostname> AirPlay` / `<hostname> Tidal` device to cast to.
+
+**Likely cause.** Same mDNS problem as above — the casting app is on a different network than the server, or the relevant container isn't healthy.
+
+**Try this.**
+1. Confirm the container is up: `cd /opt/snapmulti && docker compose ps` — `librespot` (Spotify), `shairport-sync` (AirPlay), `tidal-connect` (Tidal, ARM only) all `healthy`.
+2. From the server: `avahi-browse -r _spotify-connect._tcp --terminate`, `avahi-browse -r _raop._tcp --terminate` (AirPlay) — must list your server.
+3. Phone and server on the same WiFi SSID? Guest networks and VLANs block discovery.
+4. Tidal Connect is **opt-in** and ARM-only — see [USAGE.md — Tidal Connect security note](USAGE.md#tidal-connect-security-note) to enable.
+5. Spotify Connect needs **Premium** — Free accounts don't show the device.
+
+**If still broken.** Restart the relevant container: `cd /opt/snapmulti && sudo docker compose up -d --force-recreate librespot` (or `shairport-sync` / `tidal-connect`). Then re-check `avahi-browse`. Also see [mDNS triage in ADVANCED.md](ADVANCED.md#mdns) — wait, mDNS troubleshooting is here above ("Speakers don't find the server").
+
+## NAS library empty or never mounts (NFS / SMB)
+
+**Symptoms.** myMPD shows zero tracks. `mount | grep music` shows nothing on the server. Or you see "permission denied" / "no such directory" in the install log.
+
+**Likely cause.** NAS share path mismatch (snapMULTI rejects paths with spaces — Synology's default `Music Share` must be renamed `Music_Share`), wrong username / password for SMB, NFS export not allowed for the Pi's IP, or the systemd `.automount` failed to enable.
+
+**Try this.**
+1. On the server: `systemctl status music.mount music.automount` — the unit state tells you if the mount even tries.
+2. Try a manual mount with the same path: `sudo mount -t nfs <nas>:<share> /mnt/test` or `sudo mount -t cifs ...`. The error message is more informative than the systemd one.
+3. Check the path has **no spaces** on the NAS side. Rename `Music Share` → `Music_Share`.
+4. For SMB, verify the credentials. They live in `/etc/credentials.smb` (root-only, ext4) after install — the install scrubs them off the FAT32 partition for safety.
+
+**If still broken.** Re-run install with the corrected path: reflash or `sudo /opt/snapmulti/scripts/setup_music_source.sh` (from the repo). MPD library scan over NFS is slow on the first run — see [ADVANCED.md — Music library](ADVANCED.md#music-library-on-the-network) for the `mpd.db` backup trick.
+
+## Docker / "no space left on device"
+
+**Symptoms.** Containers fail to start with `no space left on device` in `docker compose logs`. `df -h` shows the rootfs nearly full or shows the overlay tmpfs full.
+
+**Likely cause.** The overlayroot tmpfs upper layer is finite. If a process inside a container writes a lot to a non-tmpfs path inside `/var/lib/docker`, it eats the upper layer. Pi Zero 2 W is particularly tight (256 MB).
+
+**Try this.**
+1. `df -h /` — if the overlay is full, reboot. The upper layer is wiped each boot (that's the whole point of overlayroot).
+2. `docker system df` — see which images / containers / volumes are using space.
+3. If a specific container is misbehaving: `docker compose logs <name>` to find the runaway log writer, then `docker compose up -d --force-recreate <name>`.
+
+**If still broken.** On Pi Zero 2 W, the `tune_pi_zero_2w_swap_safety()` function disables zram swap to prevent it from filling the overlay — if you've manually re-enabled zram, that's likely the cause. Reflash applies the fix.
+
+## Slow shutdown / reboot
+
+**Symptoms.** `sudo reboot` takes longer than 60 seconds. systemd shows "A stop job is running".
+
+**Likely cause.** A snapclient or container with a long graceful-shutdown timeout (default 90 s in systemd), or `network-online.target` waiting for an unreachable NAS mount on shutdown.
+
+**Try this.**
+1. Identify the slow unit: `systemctl list-jobs` during shutdown, or `journalctl -b -1 | grep -i 'timeout\|stop job'` after reboot.
+2. If a music NAS mount is blocking, `systemctl edit music.mount` and add `TimeoutStopSec=10s` under `[Mount]`.
+3. For container shutdown: the snapclient / snapserver units use `KillSignal=SIGTERM` + 30 s timeout — usually graceful.
+
+**If still broken.** A 60–90 second shutdown is not a bug per se — systemd's default unit timeout is 90 s. If everything still completes, ignore it. If shutdown actually never finishes, that's a hardware-level hang and a `dmesg` post-reboot will usually show the cause (USB device, SD card timeout, etc.).
+
+## Pi Zero 2 W specifics
+
+**Symptoms.** Install reaches the menu but first boot aborts with `Pi Zero 2W (512 MB RAM) cannot host the snapMULTI server stack`. Or the install runs but no Docker is installed. Or the audio HAT isn't detected.
+
+**Likely cause.** The Zero 2 W only has 512 MB RAM. The installer enforces this:
+
+- **Menu choice 1 (Audio Player)** auto-promotes the profile to `client-native` — native snapclient `.deb`, no Docker, no cover-art display.
+- **Menu choices 2 (Music Server) and 3 (Server + Player)** abort at first boot. Reflash with choice 1 instead, or use a different Pi.
+
+The HAT-detection issue is usually `otg_mode=1` or `dr_mode=host` in `config.txt` conflicting with I2S. `prepare-sd.sh` fixes this automatically; manual installs need to comment those out.
+
+**Try this.**
+1. For unsupported-mode aborts: pull the SD, re-run `prepare-sd.sh` and pick Audio Player.
+2. For native install verification: `systemctl status snapclient` (not `docker compose ps`, there's no Docker).
+3. For HAT issues: see [HARDWARE.md — Pi Zero 2 W Notes](HARDWARE.md#pi-zero-2-w-notes).
+
+**If still broken.** The Pi Zero 2 W is the most resource-constrained device we support. If it kernel-panics on boot after install: zram swap may have saturated the overlay tmpfs (incident 2026-05-11). `tune_pi_zero_2w_swap_safety()` should mask zram; a reflash applies the fix.
+
+---
 
 ## Logs that matter
 
@@ -89,18 +191,16 @@ docker inspect --format='{{.State.Health.Status}}' snapserver
 
 # install log (writable layer survives until reboot)
 cat /var/log/snapmulti-install.log
+
+# system status web page
+http://<server>:8083/status
 ```
 
-For a portable bundle to attach to a bug report:
-
-```bash
-sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp
-```
-
-Same redaction rules as the first-boot trap — safe to share publicly.
+For a portable, anonymised bundle to attach to a bug report: `sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp`.
 
 ## Still stuck?
 
 - Pi-specific issue → [HARDWARE.md](HARDWARE.md)
-- Customisation / ops → [ADVANCED.md](ADVANCED.md)
-- Bug / unclear behaviour → [open a GitHub issue](https://github.com/lollonet/snapMULTI/issues/new/choose) (attach the diagnostic bundle)
+- Customisation / ops question → [ADVANCED.md](ADVANCED.md)
+- Architecture / service-level question → [USAGE.md](USAGE.md)
+- Bug or unclear behaviour → [open a GitHub issue](https://github.com/lollonet/snapMULTI/issues/new/choose) and attach the diagnostic bundle.

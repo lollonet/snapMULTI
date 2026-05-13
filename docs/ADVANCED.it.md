@@ -146,3 +146,135 @@ Ispeziona con `systemctl cat <unit>`. I file di unit sono installati da `firstbo
 Riflashare per primo è il default del progetto (DEC-003). Tutta la config si auto-rileva al primo boot — stesso hostname / stessa sorgente musica / stesso HAT.
 
 Dopo ogni reflash o aggiornamento in-place, esegui lo smoke test sul device per confermare che la piattaforma sia tornata sana: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server` (oppure `--client` / `--both`). È lo stesso release gate (ADR-005) che `fleet-smoke.sh` esegue su più device. Descrizione completa in [TROUBLESHOOTING.it.md — Prima cosa da fare](TROUBLESHOOTING.it.md#prima-cosa-da-fare--esegui-lo-smoke-test).
+
+## Profili risorse
+
+`deploy.sh` (server) e `setup.sh` (client) rilevano automaticamente l'hardware e applicano uno dei tre profili — **minimal**, **standard** o **performance**. I limiti possono essere sovrascritti in `.env`.
+
+### Selezione del profilo
+
+| Hardware | RAM | Profilo |
+|----------|-----|---------|
+| Pi Zero 2 W, Pi 3 | < 2 GB | minimal |
+| Pi 4 2 GB | 2–4 GB | standard |
+| Pi 4 4 GB+, Pi 5, x86_64 | 4 GB+ | performance |
+
+### Limiti memoria server
+
+| Servizio | minimal | standard | performance |
+|----------|---------|----------|-------------|
+| snapserver | 128M | 192M | 256M |
+| shairport-sync | 48M | 64M | 96M |
+| librespot | 96M | 256M | 256M |
+| mpd | 128M | 256M | 384M |
+| mympd | 32M | 64M | 128M |
+| metadata | 96M | 128M | 128M |
+| tidal-connect | 64M | 96M | 128M |
+| **Totale** | **592M** | **1.056M** | **1.376M** |
+
+### Limiti memoria client
+
+| Servizio | minimal | standard | performance |
+|----------|---------|----------|-------------|
+| snapclient | 64M | 64M | 96M |
+| audio-visualizer | 96M | 128M | 192M |
+| fb-display | 192M | 256M | 384M |
+| **Totale** | **352M** | **448M** | **672M** |
+
+Il footprint di fb-display scala con la risoluzione — 4K è notevolmente più pesante del 1080p. I client headless (senza display) eseguono solo `snapclient` e restano leggeri.
+
+### Matrice compatibilità hardware
+
+Si assume ~200 MB di overhead SO + Docker. Le percentuali rappresentano i *limiti massimi*, non l'utilizzo effettivo.
+
+**Solo server** (tutti i servizi, incluso Tidal su ARM):
+
+| Hardware | RAM | Profilo | Limiti | % RAM | Stato |
+|----------|-----|---------|--------|-------|-------|
+| Pi Zero 2 W | 512M | minimal | 592M | 190% | **Non supportato** |
+| Pi 3 1 GB | 1024M | minimal | 592M | 72% | Stretto — funziona, niente margine per picchi |
+| Pi 4 2 GB | 2048M | standard | 1.056M | 57% | OK |
+| Pi 4 4 GB+ | 4096M | performance | 1.376M | 35% | OK |
+| Pi 5 | 4–8 GB | performance | 1.376M | 17–35% | OK |
+
+**Client con display:**
+
+| Hardware | RAM | Profilo | Limiti | % RAM | Stato |
+|----------|-----|---------|--------|-------|-------|
+| Pi Zero 2 W | 512M | minimal | 352M | 113% | **Non supportato** |
+| Pi 3 1 GB | 1024M | minimal | 352M | 43% | OK |
+| Pi 4 2 GB | 2048M | standard | 448M | 24% | OK |
+| Pi 4 4 GB+ | 4096M | performance | 672M | 17% | OK |
+
+**Client headless** (solo snapclient):
+
+| Hardware | RAM | Profilo | Limiti | Stato |
+|----------|-----|---------|--------|-------|
+| Pi Zero 2 W | 512M | minimal | 64M | OK |
+| Pi 3 1 GB | 1024M | minimal | 64M | OK |
+| Qualsiasi 2 GB+ | 2 GB+ | standard+ | 64–96M | OK |
+
+**Modalità entrambi** (server + client con display sullo stesso Pi):
+
+| Hardware | RAM | Profilo | Server | Client | Totale | % RAM | Stato |
+|----------|-----|---------|--------|--------|--------|-------|-------|
+| Pi Zero 2 W | 512M | minimal | 592M | 352M | 944M | 303% | **Non supportato** |
+| Pi 3 1 GB | 1024M | minimal | 592M | 352M | 944M | 115% | **Non supportato** |
+| Pi 4 2 GB | 2048M | standard | 1.056M | 448M | 1.504M | 81% | Stretto — funziona, margine limitato |
+| Pi 4 4 GB+ | 4096M | performance | 1.376M | 672M | 2.048M | 53% | OK |
+
+**Modalità entrambi** (server + client headless sullo stesso Pi):
+
+| Hardware | RAM | Profilo | Server | Client | Totale | % RAM | Stato |
+|----------|-----|---------|--------|--------|--------|-------|-------|
+| Pi Zero 2 W | 512M | minimal | 592M | 64M | 656M | 210% | **Non supportato** |
+| Pi 3 1 GB | 1024M | minimal | 592M | 64M | 656M | 80% | Stretto — funziona, margine limitato |
+| Pi 4 2 GB | 2048M | standard | 1.056M | 64M | 1.120M | 61% | OK |
+| Pi 4 4 GB+ | 4096M | performance | 1.376M | 96M | 1.472M | 38% | OK |
+
+> I servizi raramente raggiungono i loro limiti simultaneamente — i limiti esistono per impedire ai processi fuori controllo di esaurire le risorse del sistema. Un rapporto limiti/RAM del 74% su Pi 4 2 GB è sicuro nella pratica.
+
+## Regole firewall
+
+Se l'host usa `ufw` o equivalente, apri queste porte sul **server**:
+
+```bash
+# Snapcast core
+sudo ufw allow 1704/tcp   # Streaming audio
+sudo ufw allow 1705/tcp   # Controllo JSON-RPC
+sudo ufw allow 1780/tcp   # API HTTP + Snapweb UI
+
+# Sorgenti audio
+sudo ufw allow 4953/tcp   # Ingresso audio TCP (ffmpeg / Android streaming)
+sudo ufw allow 5000/tcp   # AirPlay (shairport-sync RTSP)
+sudo ufw allow 5858/tcp   # Copertine AirPlay
+sudo ufw allow 2019/tcp   # Tidal Connect discovery (solo ARM)
+# Spotify Connect usa una porta TCP casuale per il discovery zeroconf —
+# consenti il range effimero o usa connection tracking:
+# sudo ufw allow proto tcp from 192.168.0.0/16 to any port 30000:65535
+
+# Libreria musicale
+sudo ufw allow 6600/tcp   # Protocollo MPD
+sudo ufw allow 8000/tcp   # Stream HTTP MPD
+sudo ufw allow 8180/tcp   # Interfaccia web myMPD
+
+# Metadata
+sudo ufw allow 8082/tcp   # Servizio metadata (WebSocket)
+sudo ufw allow 8083/tcp   # Servizio metadata (HTTP / copertine)
+
+# Discovery
+sudo ufw allow 5353/udp   # mDNS (Avahi / Bonjour)
+```
+
+Tabella completa delle porte (con direzione e scopo): [USAGE.it.md](USAGE.it.md).
+
+## Network QoS
+
+Per reti congestionate o installazioni dove lo stesso Pi vede trasferimenti di file pesanti, `deploy.sh` configura il qdisc `cake` con marcatura DSCP EF sulle porte snapcast (1704/1705) così i pacchetti audio mantengono la priorità a bassa latenza durante la contesa:
+
+```bash
+# Applicato automaticamente da deploy.sh sui kernel supportati
+tc qdisc add dev eth0 root cake bandwidth 100mbit
+```
+
+Si può disabilitare o modulare via `.env` (`QOS_ENABLE=false`). Su una LAN domestica tranquilla l'effetto non si nota; sotto trasferimenti paralleli pesanti è la differenza fra audio senza glitch e dropout.

@@ -6,6 +6,23 @@ This guide takes you from a blank SD card to a working multiroom audio system, s
 
 ---
 
+## Fast path
+
+Already comfortable with Raspberry Pi Imager and terminals? This is the whole install in one pass:
+
+1. Flash **Raspberry Pi OS Lite (64-bit)** with Raspberry Pi Imager.
+2. In Imager settings, set hostname, username/password, WiFi country/network, and enable SSH.
+3. When the write finishes, remove and re-insert the SD so the `bootfs` partition mounts.
+4. Download the latest snapMULTI release ZIP or `git clone https://github.com/lollonet/snapMULTI.git`.
+5. From the snapMULTI folder, run `./scripts/prepare-sd.sh` on macOS/Linux or `.\scripts\prepare-sd.ps1` on Windows.
+6. Choose what this Pi should do: **Audio Player**, **Music Server**, or **Server + Player**.
+7. Eject the SD, boot the Pi, and wait about 10-15 minutes. It installs, verifies, then reboots once.
+8. Open `http://<hostname>.local:1780` for Snapweb or `http://<hostname>.local:8180` for myMPD.
+
+If any step is unclear, continue with the detailed walkthrough below. If first boot fails, recover the diagnostic bundle from the SD card as described in [TROUBLESHOOTING.md — Recovering a diagnostic bundle](TROUBLESHOOTING.md#recovering-a-diagnostic-bundle).
+
+---
+
 ## What you need
 
 | Item | Notes |
@@ -223,7 +240,7 @@ If auto-detection fails:
 | **1 — Streaming only** | No local music library. Spotify, AirPlay and Tidal work without any files |
 | **2 — USB drive** | Plug your USB drive into the Pi *before* powering on. It auto-mounts |
 | **3 — Network share** | You'll be asked for server hostname/IP and share path. NFS for Linux/Mac/NAS; SMB for Windows shares. Credentials are stored on the SD card temporarily and removed after first boot |
-| **4 — Set up later** | Skips music config. Add your library to `/opt/snapmulti/.env` after install (see [USAGE.md](USAGE.md)) |
+| **4 — Set up later** | Skips music config. Add your library to `/opt/snapmulti/.env` after install (see [ADVANCED.md — Music library on the network](ADVANCED.md#music-library-on-the-network)) |
 
 If you choose **Network share**, you'll then enter:
 - **NFS:** server hostname or IP (e.g. `nas.local`) and export path (e.g. `/volume1/music`)

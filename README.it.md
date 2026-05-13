@@ -116,6 +116,21 @@ snapMULTI esegue l'installazione come servizio systemd e cattura tutto strada fa
 
 Estrai la SD, collegala al laptop, allega il bundle a una [issue GitHub](https://github.com/lollonet/snapMULTI/issues/new/choose). Il bundle è anonimizzato (niente MAC, niente IP della LAN, niente SSID, niente password, niente token API) — si può condividere pubblicamente in sicurezza. Sintomi comuni e smoke test (`scripts/device-smoke.sh`): [docs/TROUBLESHOOTING.it.md](docs/TROUBLESHOOTING.it.md).
 
+## Glossario
+
+Definizioni rapide dei termini che incontrerai in questo README e nella documentazione.
+
+| Termine | Cos'è |
+|---------|-------|
+| **Server** | Il Raspberry Pi (o qualsiasi box Linux) che ospita le sorgenti musicali — Snapcast, MPD, Spotify Connect, AirPlay, Tidal — e distribuisce l'audio a uno o più altoparlanti |
+| **Audio Player** *(o "client" / "altoparlante")* | Un Raspberry Pi che riceve l'audio dal server e lo riproduce attraverso un DAC / amplificatore / altoparlante collegato. Uno per stanza |
+| **Snapcast** | Il motore open source di sincronizzazione multi-room su cui snapMULTI è costruito. Lato server: `snapserver`; lato client: `snapclient` |
+| **HAT** | "Hardware Attached on Top" — una piccola scheda che si innesta sul GPIO del Pi. snapMULTI funziona con HAT audio (DAC, amplificatore o digitale S/PDIF) |
+| **mDNS** / `.local` | "Multicast DNS" — come i dispositivi si annunciano in LAN senza configurare IP manualmente. `pi-server.local` si risolve automaticamente sulla maggior parte delle reti |
+| **NAS** | Network-attached storage — un box separato (Synology, QNAP, custom) che ospita la libreria musicale, montato da snapMULTI via NFS o SMB |
+| **Filesystem read-only** | snapMULTI monta il root in sola lettura dopo l'install (overlayroot + fuse-overlayfs), così un blackout non può corrompere la SD. Le modifiche vengono cancellate al reboot a meno che tu non disattivi la modalità RO |
+| **Bundle diagnostico** | Tarball anonimizzato sulla partizione boot della SD (`snapmulti-diag-*.tar.gz`) — scritto automaticamente quando un'installazione fallisce, allegabile a una issue GitHub senza far trapelare segreti |
+
 ## Documentazione
 
 | Guida | Quando aprirla |

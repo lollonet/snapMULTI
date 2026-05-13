@@ -1,8 +1,8 @@
 🇬🇧 **English** | 🇮🇹 [Italiano](USAGE.it.md)
 
-# Usage & Architecture Reference
+# Architecture Reference
 
-Architecture, audio sources and security model — the "how it's put together" reference. For the operational how-tos (multi-room, NFS, custom `.env`, manual deploy) see [ADVANCED.md](ADVANCED.md). For first-time install see [INSTALL.md](INSTALL.md). For failures see [TROUBLESHOOTING.md](TROUBLESHOOTING.md). For hardware compatibility see [HARDWARE.md](HARDWARE.md).
+The "how it's put together" reference — services, ports, audio sources, security model, mDNS, systemd units. This file is **not a how-to**. For operational procedures (multi-room, NFS, custom `.env`, manual deploy, MPD CLI, JSON-RPC) see [ADVANCED.md](ADVANCED.md). For first-time install see [INSTALL.md](INSTALL.md). For failures see [TROUBLESHOOTING.md](TROUBLESHOOTING.md). For hardware compatibility see [HARDWARE.md](HARDWARE.md).
 
 ## Architecture
 

@@ -10,6 +10,19 @@ Hardware requirements, recommended setups, and network considerations for snapMU
 >
 > Full details in [Pi Zero 2 W Notes](#pi-zero-2-w-notes) below.
 
+## If unsure, buy/use this
+
+Quick recommendations if you don't want to read the whole guide.
+
+| Role | Buy / use | Why |
+|------|-----------|-----|
+| **Server + Player** (one Pi does everything) | **Pi 4 4 GB** (or **Pi 5**), good-brand A1/A2 SD ≥ 16 GB, official 15 W PSU, **USB DAC** or **HiFiBerry DAC+ / DAC2 Pro** | The 4 GB model leaves headroom for MPD scans + Spotify / Tidal peaks; A1/A2 cards are the #1 install-hang preventer |
+| **Server only** (speakers live in other rooms) | **Pi 4 2 GB+** or any mini PC / NAS with Docker | Server stack is ~1 GB of container limits; 2 GB host RAM is enough |
+| **Speaker / client** | Any **Pi 3 B+ / Pi 4 / Pi 5** with a DAC HAT or USB DAC, or a **Pi Zero 2 W** headless (native install — no Docker) | snapclient is tiny; the choice depends on whether you want the cover-art HDMI display (Pi 4 only) |
+| **Avoid** | Pi Zero 2 W as server or in both-mode (512 MB RAM is not enough), 32-bit Raspberry Pi OS, no-brand cheap SD cards, USB-powered hubs without their own PSU when driving multiple Pis | These are the recurring failure modes in real installs |
+
+The rest of this guide goes into the *why* and the corner cases.
+
 ## Server Requirements
 
 The server runs all audio services: Snapcast, MPD, shairport-sync (AirPlay), go-librespot (Spotify Connect) and — on `linux/arm64` only — tidal-connect (Tidal), all inside Docker containers.
@@ -50,7 +63,7 @@ The server runs all audio services: Snapcast, MPD, shairport-sync (AirPlay), go-
 
 > **Note:** Pi 3B+ has only **1 GB RAM**. Server-only works but leaves limited headroom. Not recommended for "both" mode (server + client with display). Pi 2 is too slow for simultaneous AirPlay + Spotify; avoid for server use.
 
-> **Beginners:** If this is your first time, use a Raspberry Pi 4 (4GB) with the [zero-touch SD setup](../README.md#beginners-plug-and-play-raspberry-pi). It handles everything automatically — no terminal required.
+> **Beginners:** If this is your first time, use a Raspberry Pi 4 (4 GB) and follow the [Quick start in the README](../README.md#quick-start). It handles everything automatically — no terminal required.
 
 ## Client Requirements
 
@@ -204,49 +217,7 @@ Audio format: 44100 Hz, 16-bit, stereo (default FLAC codec).
 - IGMP snooping support recommended for larger networks
 - No special router features needed for typical home use
 
-### Firewall Rules
-
-```bash
-# Snapcast core
-sudo ufw allow 1704/tcp   # Audio streaming
-sudo ufw allow 1705/tcp   # JSON-RPC control
-sudo ufw allow 1780/tcp   # HTTP API + Snapweb UI
-
-# Audio sources — required for casting from phone/app
-sudo ufw allow 4953/tcp   # TCP audio input (ffmpeg/Android streaming)
-sudo ufw allow 5000/tcp   # AirPlay (shairport-sync RTSP)
-sudo ufw allow 5858/tcp   # AirPlay cover art (meta_shairport.py)
-sudo ufw allow 2019/tcp   # Tidal Connect discovery (ARM only)
-# Spotify Connect uses a random TCP port for zeroconf discovery;
-# if ufw is enabled, allow the ephemeral range or use connection tracking:
-# sudo ufw allow proto tcp from 192.168.0.0/16 to any port 30000:65535
-
-# Music library
-sudo ufw allow 6600/tcp   # MPD protocol
-sudo ufw allow 8000/tcp   # MPD HTTP stream
-sudo ufw allow 8180/tcp   # myMPD web UI
-
-# Metadata
-sudo ufw allow 8082/tcp   # Metadata service (WebSocket)
-sudo ufw allow 8083/tcp   # Metadata service (HTTP/cover art)
-
-# Discovery
-sudo ufw allow 5353/udp   # mDNS (Avahi/Bonjour)
-```
-
-### Network QoS (Quality of Service)
-
-For optimal audio streaming performance, especially on congested networks or with bulk file transfers, `deploy.sh` configures network QoS:
-
-**CAKE + DSCP EF**: Snapcast audio packets are marked with DSCP EF (Expedited Forwarding) for priority handling. The CAKE (Common Applications Kept Enhanced) qdisc provides low-latency queuing and automatic bandwidth management.
-
-```bash
-# Applied automatically by deploy.sh on compatible systems
-tc qdisc add dev eth0 root cake bandwidth 100mbit
-# Snapcast uses DSCP EF marking for real-time audio priority
-```
-
-This ensures consistent audio streaming even during network congestion from file transfers, updates, or other bulk traffic.
+Firewall configuration (`ufw` rules) and QoS / `cake` qdisc setup are documented in [ADVANCED.md — Firewall rules](ADVANCED.md#firewall-rules) and [Network QoS](ADVANCED.md#network-qos).
 
 ## Storage
 
@@ -357,92 +328,9 @@ These hardware combinations have been verified end-to-end (firstboot → smoke t
 
 ---
 
-## Resource Profiles
+## Resource profiles
 
-`deploy.sh` (server) and `setup.sh` (client) auto-detect hardware and apply one of three profiles: **minimal**, **standard**, or **performance**. Limits can be overridden in `.env`.
-
-### Profile Selection
-
-| Hardware | RAM | Profile |
-|----------|-----|---------|
-| Pi Zero 2 W, Pi 3 | < 2 GB | minimal |
-| Pi 4 2 GB | 2–4 GB | standard |
-| Pi 4 4 GB+, Pi 5, x86_64 | 4 GB+ | performance |
-
-### Server Memory Limits by Profile
-
-| Service | minimal | standard | performance |
-|---------|---------|----------|-------------|
-| snapserver | 128M | 192M | 256M |
-| shairport-sync | 48M | 64M | 96M |
-| librespot | 96M | 256M | 256M |
-| mpd | 128M | 256M | 384M |
-| mympd | 32M | 64M | 128M |
-| metadata | 96M | 128M | 128M |
-| tidal-connect | 64M | 96M | 128M |
-| **Total** | **592M** | **1,056M** | **1,376M** |
-
-### Client Memory Limits by Profile
-
-| Service | minimal | standard | performance |
-|---------|---------|----------|-------------|
-| snapclient | 64M | 64M | 96M |
-| audio-visualizer | 96M | 128M | 192M |
-| fb-display | 192M | 256M | 384M |
-| **Total** | **352M** | **448M** | **672M** |
-
-> fb-display footprint scales with resolution — 4K is noticeably heavier than 1080p. Headless clients (no display) run only `snapclient` and stay lightweight.
-
-### Hardware Compatibility Matrix
-
-Assumes ~200 MB OS + Docker overhead. "Avail" = RAM remaining after container limits.
-
-**Server-only** (all services including Tidal on ARM):
-
-| Hardware | RAM | Profile | Limits | % RAM | Status |
-|----------|-----|---------|--------|-------|--------|
-| Pi Zero 2W | 512M | minimal | 592M | 190% | **Not supported** |
-| Pi 3 1GB | 1024M | minimal | 592M | 72% | Tight — works, no headroom for spikes |
-| Pi 4 2GB | 2048M | standard | 1,056M | 57% | OK |
-| Pi 4 4GB+ | 4096M | performance | 1,376M | 35% | OK |
-| Pi 5 | 4–8 GB | performance | 1,376M | 17–35% | OK |
-
-**Client with display:**
-
-| Hardware | RAM | Profile | Limits | % RAM | Status |
-|----------|-----|---------|--------|-------|--------|
-| Pi Zero 2W | 512M | minimal | 352M | 113% | **Not supported** |
-| Pi 3 1GB | 1024M | minimal | 352M | 43% | OK |
-| Pi 4 2GB | 2048M | standard | 448M | 24% | OK |
-| Pi 4 4GB+ | 4096M | performance | 672M | 17% | OK |
-
-**Client headless** (snapclient only — no display):
-
-| Hardware | RAM | Profile | Limits | Status |
-|----------|-----|---------|--------|--------|
-| Pi Zero 2W | 512M | minimal | 64M | OK |
-| Pi 3 1GB | 1024M | minimal | 64M | OK |
-| Any 2GB+ | 2GB+ | standard+ | 64–96M | OK |
-
-**Both mode** (server + client with display on same Pi):
-
-| Hardware | RAM | Profile | Server | Client | Total | % RAM | Status |
-|----------|-----|---------|--------|--------|-------|-------|--------|
-| Pi Zero 2W | 512M | minimal | 592M | 352M | 944M | 303% | **Not supported** |
-| Pi 3 1GB | 1024M | minimal | 592M | 352M | 944M | 115% | **Not supported** |
-| Pi 4 2GB | 2048M | standard | 1,056M | 448M | 1,504M | 81% | Tight — works, limited headroom |
-| Pi 4 4GB+ | 4096M | performance | 1,376M | 672M | 2,048M | 53% | OK |
-
-**Both mode** (server + client headless on same Pi):
-
-| Hardware | RAM | Profile | Server | Client | Total | % RAM | Status |
-|----------|-----|---------|--------|--------|-------|-------|--------|
-| Pi Zero 2W | 512M | minimal | 592M | 64M | 656M | 210% | **Not supported** |
-| Pi 3 1GB | 1024M | minimal | 592M | 64M | 656M | 80% | Tight — works, limited headroom |
-| Pi 4 2GB | 2048M | standard | 1,056M | 64M | 1,120M | 61% | OK |
-| Pi 4 4GB+ | 4096M | performance | 1,376M | 96M | 1,472M | 38% | OK |
-
-> **Important:** These percentages represent *limits* (ceilings), not actual usage. Services rarely hit their limits simultaneously — the limits exist to prevent runaway processes from starving the system. A 74% limit-to-RAM ratio on Pi 4 2 GB is safe in practice.
+Container memory limits are applied automatically based on detected hardware (minimal / standard / performance). Full per-service tables and the hardware-compatibility matrix: [ADVANCED.md — Resource profiles](ADVANCED.md#resource-profiles).
 
 ---
 

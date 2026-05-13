@@ -6,6 +6,23 @@ Questa guida ti porta da una scheda SD vuota a un sistema audio multiroom funzio
 
 ---
 
+## Percorso rapido
+
+Hai già dimestichezza con Raspberry Pi Imager e terminale? Questa è tutta l'installazione in una sola checklist:
+
+1. Flasha **Raspberry Pi OS Lite (64-bit)** con Raspberry Pi Imager.
+2. Nelle impostazioni di Imager, configura hostname, username/password, paese/rete WiFi e abilita SSH.
+3. Quando la scrittura finisce, rimuovi e reinserisci la SD così la partizione `bootfs` viene montata.
+4. Scarica lo ZIP dell'ultima release snapMULTI oppure esegui `git clone https://github.com/lollonet/snapMULTI.git`.
+5. Dalla cartella snapMULTI, esegui `./scripts/prepare-sd.sh` su macOS/Linux oppure `.\scripts\prepare-sd.ps1` su Windows.
+6. Scegli cosa deve fare questo Pi: **Audio Player**, **Music Server** o **Server + Player**.
+7. Espelli la SD, avvia il Pi e attendi circa 10-15 minuti. Installa, verifica e poi riavvia una volta.
+8. Apri `http://<hostname>.local:1780` per Snapweb oppure `http://<hostname>.local:8180` per myMPD.
+
+Se un passaggio non è chiaro, continua con la procedura dettagliata qui sotto. Se il primo boot fallisce, recupera il bundle diagnostico dalla SD come descritto in [TROUBLESHOOTING.it.md — Recupero del bundle diagnostico](TROUBLESHOOTING.it.md#recupero-del-bundle-diagnostico).
+
+---
+
 ## Di cosa hai bisogno
 
 | Elemento | Note |
@@ -225,7 +242,7 @@ Se il rilevamento automatico fallisce:
 | **1 — Solo streaming** | Nessuna libreria musicale locale. Spotify, AirPlay e Tidal funzionano senza file |
 | **2 — Drive USB** | Collega il tuo drive USB al Pi *prima* di accenderlo. Si monta automaticamente |
 | **3 — Condivisione di rete** | Ti verranno chiesti hostname/IP del server e percorso di condivisione. NFS per Linux/Mac/NAS; SMB per condivisioni Windows. Le credenziali sono memorizzate sulla scheda SD temporaneamente e rimosse dopo il primo avvio |
-| **4 — Configurare dopo** | Salta la configurazione musicale. Aggiungi la tua libreria a `/opt/snapmulti/.env` dopo l'installazione (vedi [USAGE.it.md](USAGE.it.md)) |
+| **4 — Configurare dopo** | Salta la configurazione musicale. Aggiungi la tua libreria a `/opt/snapmulti/.env` dopo l'installazione (vedi [ADVANCED.it.md — Libreria musicale in rete](ADVANCED.it.md#libreria-musicale-in-rete)) |
 
 Se scegli **Condivisione di rete**, dovrai quindi inserire:
 - **NFS:** hostname o IP del server (es. `nas.local`) e percorso di export (es. `/volume1/music`)
