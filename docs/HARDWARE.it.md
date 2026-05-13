@@ -73,12 +73,25 @@ I client Snapcast sono leggeri — ricevono audio e lo riproducono attraverso gl
 
 ### Note Pi Zero 2 W
 
-Il Pi Zero 2 W è l'opzione client più economica ma ha requisiti specifici:
+Il Pi Zero 2 W è l'opzione client più economica ma ha requisiti specifici.
+
+> **Cosa fa snapMULTI automaticamente sul Pi Zero 2 W:**
+>
+> | Scelta nel menu di `prepare-sd.sh` | Cosa succede al primo boot |
+> |-----|-----|
+> | **1) Audio Player** | Il profilo viene auto-promosso da `client` a `client-native`. Niente Docker, niente container display (fb-display / visualizer), solo mDNS single-server. Viene installato lo snapclient nativo da `.deb` |
+> | **2) Music Server** | Il primo boot **si interrompe con un errore** che rimanda qui. 512 MB di RAM non bastano per lo stack server da 7 container. Riflashare l'SD con la scelta 1 |
+> | **3) Server + Player** | Il primo boot **si interrompe con lo stesso errore**. Stesso vincolo di RAM della scelta 2 |
+>
+> Se hai scelto "Audio Player" aspettandoti lo stack Docker standard con display per la copertina — è il compromesso per stare dentro i 512 MB di RAM. Usa un Pi 3 B+ o un Pi 4 se ti servono display, failover multi-server o l'isolamento Docker completo.
+
+Dettagli:
 
 - **OS 64-bit obbligatorio** — Imager propone 32-bit come predefinito per questo modello. Seleziona esplicitamente "Raspberry Pi OS Lite (64-bit)"
 - **Solo WiFi 2,4 GHz** — niente 5 GHz. Usa il tuo SSID 2,4 GHz quando configuri il WiFi in Imager
 - **512 MB RAM** — solo audio headless (senza display). Non può eseguire fb-display o server
-- **snapclient nativo (no Docker)** — `firstboot.sh` rileva il Pi Zero 2 W ed esegue `client/common/scripts/setup-zero2w.sh`, che installa snapclient v0.35 dal `.deb` upstream di badaix saltando Docker completamente. Questo mantiene il budget di 512 MB di RAM sostenibile. Gli altri modelli client continuano a usare il path Docker standard
+- **snapclient nativo (no Docker)** — `firstboot.sh` rileva il Pi Zero 2 W tramite `is_pi_zero_2w` (`scripts/common/device-detect.sh`), promuove il profilo da `client` a `client-native` e poi richiama `client/common/scripts/setup-zero2w.sh`. Lo script installa snapclient v0.35 dal `.deb` upstream di badaix e salta del tutto Docker, dockerd e fuse-overlayfs. Gli altri modelli client continuano a usare il path Docker standard
+- **Hardware guard per server / both** — all'inizio di `firstboot.sh`, `_validate_profile_hardware()` rifiuta `INSTALL_TYPE=server` e `INSTALL_TYPE=both` su Pi Zero 2 W. Il primo boot si interrompe con `log_error` ed `exit 1`, segnalando subito il vincolo invece di fallire più tardi durante `docker compose pull` con un OOM oscuro. Per recuperare, riflashare l'SD scegliendo Audio Player
 - **Zram swap disabilitato** — `tune_pi_zero_2w_swap_safety()` in `scripts/common/system-tune.sh` maschera `dev-zram0.swap` / `rpi-zram-writeback.service` e rimuove `/var/swap` al primo boot. Senza questa correzione, `rpi-zram-writeback` scrive sul file swap che vive nel layer alto tmpfs da 256 MB dell'overlay e il kernel va in panic quando il tmpfs si riempie (osservato il 2026-05-11)
 - **Solo mDNS single-server** — lo snapclient nativo usa direttamente l'autodiscovery di libavahi-client. La macchina a stati di failover multi-server di `discover-server.sh` (TCP probing, anti-flapping, scelta IPv4 intelligente) non è disponibile sul Pi Zero 2 W. Accettabile per i setup headless tipici a singola stanza; se serve failover usa un client Pi 3 B+ o Pi 4
 - **Compatibilità HAT I2S** — funziona con HAT basati su PCM5122 (HiFiBerry DAC+, InnoMaker Mini). L'impostazione USB `otg_mode=1` di Imager interferisce con I2S — `prepare-sd.sh` e `setup.sh` lo correggono automaticamente

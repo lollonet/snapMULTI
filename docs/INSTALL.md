@@ -175,6 +175,12 @@ If auto-detection fails:
 | **2 — Music Server** | Central hub. Hosts Spotify Connect, AirPlay, Tidal, MPD. No local speaker output |
 | **3 — Server + Player** | One Pi does everything — server and local speaker. **Choose this if you only have one Pi** and want to play music on it directly |
 
+> **Pi Zero 2 W users:** the installer behaves differently because the board has only 512 MB RAM:
+> - **Choice 1 (Audio Player)** — works, but the profile is auto-promoted to `client-native`: native snapclient `.deb`, no Docker, no cover-art display, single-server only. The full Docker stack does not fit
+> - **Choices 2 and 3** — the first boot aborts with `Pi Zero 2W (512 MB RAM) cannot host the snapMULTI server stack` and stops. The server needs at least a Pi 3 B+ with 1 GB RAM. Reflash the SD card with choice 1, or use a different Pi
+>
+> See [HARDWARE.md — Pi Zero 2 W Notes](HARDWARE.md#pi-zero-2-w-notes) for the full constraint list.
+
 ---
 
 ### Menu 2 — Where is your music? *(Music Server and Server+Player only)*
@@ -362,6 +368,18 @@ The new speaker appears in the Snapcast web UI at `http://pi-server.local:1780` 
 | `no matching manifest for linux/arm/v7` | 32-bit OS flashed instead of 64-bit | Re-flash with **Raspberry Pi OS Lite (64-bit)** — all Pi models including Zero 2 W support it |
 | Pi Zero 2 W: WiFi won't connect | 5 GHz SSID configured but Pi Zero only has 2.4 GHz | Re-flash with your 2.4 GHz SSID in Imager WiFi settings |
 | Pi Zero 2 W: audio HAT not detected | `otg_mode=1` or `dr_mode=host` in config.txt | `prepare-sd.sh` fixes this automatically. For manual installs: comment out `otg_mode=1` and remove `dr_mode=host` from dwc2 overlay |
+| Pi Zero 2 W: first boot aborts with "cannot host the snapMULTI server stack" | You picked **Music Server** or **Server + Player** on a 512 MB board | Reflash with `prepare-sd.sh` and choose **1 — Audio Player**. See [HARDWARE.md — Pi Zero 2 W Notes](HARDWARE.md#pi-zero-2-w-notes) |
+
+### Recovering a diagnostic bundle when first boot fails
+
+If `firstboot.sh` fails partway through, it writes a diagnostic tarball to the **FAT32 boot partition** before exiting. This is the partition Raspberry Pi Imager wrote — readable on any computer.
+
+1. Power off the Pi, eject the SD card, and plug it into your laptop
+2. Open the **boot partition** (auto-mounts as `bootfs` on macOS / Linux, drive letter on Windows)
+3. Look for a file named `snapmulti-diag-<reason>-<timestamp>.tar.gz` (e.g. `snapmulti-diag-install-failed-20260513T142301Z.tar.gz`)
+4. Attach it to a [GitHub issue](https://github.com/lollonet/snapMULTI/issues/new/choose) — the bundle is anonymised (no MAC addresses, RFC1918 IPs, SSIDs, passwords, or API tokens)
+
+The bundle contains the most recent install logs, hardware detection output (model, audio HAT, network), and the failing step name. The boot partition stays intact even when overlayroot has activated or the rootfs is otherwise unreachable — that is why we write there rather than `/var/log`.
 
 For post-install issues see [Troubleshooting in USAGE.md](USAGE.md#troubleshooting).
 
