@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Static checks for Wave-4 install-pipeline fixes:
-#   N1/N4 — scrub_credentials runs ONLY after `checkpoint_done "deploy"`
-#           so a partial-install retry sees the original install.conf
-#           creds, not empty fields that would yield a broken fstab line.
+#   N1/N4 — scrub_credentials runs AFTER setup_music_source has persisted
+#           the creds to systemd .mount units on ext4, and BEFORE the
+#           deploy.sh invocation that could fail and leave install.conf
+#           plaintext on FAT32. A "music" checkpoint guards setup_music_source
+#           on retry so empty install.conf vars never reach it.
 #   A1   — MPD_START_PERIOD decided from MUSIC_SOURCE (authoritative at
 #           install time), not from the runtime is_network_mount probe
 #           which returns false when NFS is mid-mount.
@@ -39,20 +41,26 @@ assert() {
 
 echo "=== Wave-4: N1/N4 scrub_credentials timing ==="
 
-# scrub_credentials must come AFTER `checkpoint_done "deploy"`.
-scrub_line=$(grep -n "scrub_credentials" "$FIRSTBOOT" | head -1 | cut -d: -f1)
-checkpoint_line=$(grep -n 'checkpoint_done "deploy"' "$FIRSTBOOT" | head -1 | cut -d: -f1)
-if [[ -n "$scrub_line" && -n "$checkpoint_line" && "$scrub_line" -gt "$checkpoint_line" ]]; then
-    echo "  PASS: scrub_credentials runs after checkpoint_done deploy (line $scrub_line > $checkpoint_line)"
+# scrub_credentials must come AFTER setup_music_source (creds persisted to
+# systemd .mount units on ext4) and BEFORE `bash scripts/deploy.sh` (so a
+# deploy failure cannot leave creds plaintext on FAT32 indefinitely).
+scrub_line=$(grep -n "^[[:space:]]*scrub_credentials$" "$FIRSTBOOT" | head -1 | cut -d: -f1)
+music_line=$(grep -n 'checkpoint_done "music"' "$FIRSTBOOT" | head -1 | cut -d: -f1)
+deploy_invoke_line=$(grep -n 'bash scripts/deploy.sh' "$FIRSTBOOT" | head -1 | cut -d: -f1)
+if [[ -n "$scrub_line" && -n "$music_line" && -n "$deploy_invoke_line" \
+      && "$scrub_line" -gt "$music_line" && "$scrub_line" -lt "$deploy_invoke_line" ]]; then
+    echo "  PASS: scrub_credentials runs between music checkpoint ($music_line) and deploy invocation ($deploy_invoke_line) at line $scrub_line"
     pass=$((pass + 1))
 else
-    echo "  FAIL: scrub_credentials must run AFTER deploy checkpoint (scrub=$scrub_line, checkpoint=$checkpoint_line)"
+    echo "  FAIL: scrub_credentials position wrong (scrub=$scrub_line, music=$music_line, deploy=$deploy_invoke_line)"
     fail=$((fail + 1))
 fi
 
-# Make sure the OLD position (before bash scripts/deploy.sh) is gone.
-assert '! grep -B 2 "bash scripts/deploy.sh 2>&1" "$FIRSTBOOT" | grep -q "scrub_credentials"' \
-       "no stray scrub_credentials in the deploy-prep block"
+# scrub must NOT be inside the if/else guarded by checkpoint_reached "music".
+# Otherwise a crash after checkpoint_done but before scrub would skip the
+# else branch on retry and leave creds plaintext forever.
+assert '! awk "/if checkpoint_reached \"music\"/,/^[[:space:]]*fi\$/" "$FIRSTBOOT" | grep -q "scrub_credentials"' \
+       "scrub_credentials sits OUTSIDE the music checkpoint if/else (retry-safe)"
 
 echo
 echo "=== Wave-4: A1 MPD_START_PERIOD authoritative source ==="

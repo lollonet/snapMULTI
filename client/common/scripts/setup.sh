@@ -1228,9 +1228,14 @@ fi
 cat > /etc/systemd/system/snapclient.service << EOF
 [Unit]
 Description=Snapclient Docker Compose Service
-Requires=docker.service avahi-daemon.service
+# Only docker.service is fatal: avahi is a soft dep (Wants=) so a flaky
+# avahi-daemon does not block snapclient from starting at all — the
+# ExecStartPre below already polls avahi readiness with a bounded wait
+# and proceeds either way. Mirrors the server-side snapmulti-server.service
+# pattern in scripts/deploy.sh.
+Requires=docker.service
 After=${_after_units}
-Wants=network-online.target
+Wants=network-online.target avahi-daemon.service
 # Block startup until the install dir is mounted (it's the compose project root)
 RequiresMountsFor=${INSTALL_DIR}
 # Snapcast 0.35.0 upstream bug: when avahi-daemon restarts, libavahi-client

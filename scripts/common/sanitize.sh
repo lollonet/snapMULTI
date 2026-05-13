@@ -33,20 +33,42 @@ sanitize_nfs_server() {
 
 # Sanitize NFS export path: alphanumeric, forward slash, dots, underscores, hyphens
 # Must start with /. Returns empty string if input doesn't start with /.
+# Spaces are NOT silently stripped: a path like "/volume1/Music Share" used to
+# become "/volume1/MusicShare" and the mount would then fail with a confusing
+# ENOENT, leaving the user thinking it was a network/permissions issue when
+# the script itself had corrupted the path. Now we emit an explicit error and
+# return empty so the caller fails fast at the source.
 # Usage: sanitize_nfs_export "/volume1/music"
 sanitize_nfs_export() {
+    local input="$1"
+    if [[ "$input" == *' '* ]]; then
+        echo "ERROR: NFS export contains spaces: '$input'" >&2
+        echo "ERROR: snapMULTI does not support spaces in NFS paths." >&2
+        echo "ERROR: Rename the share on the NAS (e.g. 'Music_Share') and retry." >&2
+        return 1
+    fi
     local cleaned
-    cleaned=$(printf '%s' "$1" | tr -cd 'A-Za-z0-9/._-')
+    cleaned=$(printf '%s' "$input" | tr -cd 'A-Za-z0-9/._-')
     # Must start with /
     if [[ "$cleaned" == /* ]]; then
         printf '%s' "$cleaned"
     fi
 }
 
-# Sanitize SMB share name: alphanumeric, dots, underscores, hyphens
+# Sanitize SMB share name: alphanumeric, dots, underscores, hyphens.
+# Same loud-fail policy as sanitize_nfs_export: spaces become an error
+# instead of a silent strip, because Synology / QNAP "Music Share" is a
+# real-world case and silent corruption masks the actual problem.
 # Usage: sanitize_smb_share "Music"
 sanitize_smb_share() {
-    printf '%s' "$1" | tr -cd 'A-Za-z0-9._-'
+    local input="$1"
+    if [[ "$input" == *' '* ]]; then
+        echo "ERROR: SMB share name contains spaces: '$input'" >&2
+        echo "ERROR: snapMULTI does not support spaces in SMB share names." >&2
+        echo "ERROR: Rename the share on the NAS (e.g. 'Music_Share') and retry." >&2
+        return 1
+    fi
+    printf '%s' "$input" | tr -cd 'A-Za-z0-9._-'
 }
 
 # Sanitize SMB username: alphanumeric, dots, underscores, hyphens, @

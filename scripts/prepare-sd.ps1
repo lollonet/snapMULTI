@@ -126,6 +126,7 @@ function Assert-PreparedSdCard {
         foreach ($file in @(
             'server/docker-compose.yml',
             'server/deploy.sh',
+            'server/diagnostic.sh',
             'server/config/snapserver.conf',
             'server/config/mpd.conf',
             'server/config/shairport-sync.conf'
@@ -144,6 +145,7 @@ function Assert-PreparedSdCard {
         foreach ($file in @(
             'client/docker-compose.yml',
             'client/scripts/setup.sh',
+            'client/scripts/diagnostic.sh',
             'client/scripts/audio-hat-detect.sh',
             'client/scripts/discover-server.sh',
             'client/scripts/display.sh',
@@ -402,6 +404,15 @@ function Copy-ServerFiles {
     if (Test-Path $reconcileSh) {
         Copy-Item $reconcileSh -Destination $serverDest
     }
+    # diagnostic.sh — install-failed trap in firstboot.sh invokes this to
+    # bundle journalctl + install.log + smoke output to the FAT32 boot
+    # partition. Without it on the SD, a failed first boot leaves no
+    # recoverable diagnostics for a Windows user (no SSH, no console).
+    # Mirrors prepare-sd.sh copy_server_files.
+    $diagnosticSh = Join-Path $ScriptDir 'diagnostic.sh'
+    if (Test-Path $diagnosticSh) {
+        Copy-Item $diagnosticSh -Destination $serverDest
+    }
     Copy-Item (Join-Path $ProjectDir 'config') -Destination $serverDest -Recurse
 
     # docker/ contains source files that the compose file bind-mounts
@@ -510,6 +521,11 @@ function Copy-ClientFiles {
     $smokeSh = Join-Path $ScriptDir 'device-smoke.sh'
     if (Test-Path $smokeSh) {
         Copy-Item $smokeSh -Destination $scriptsDest
+    }
+    # diagnostic.sh — see Copy-ServerFiles for context.
+    $diagnosticSh = Join-Path $ScriptDir 'diagnostic.sh'
+    if (Test-Path $diagnosticSh) {
+        Copy-Item $diagnosticSh -Destination $scriptsDest
     }
     # Modular smoke checks dir — mirrors prepare-sd.sh copy_client_files.
     # Client firstboot path is recursive so once smoke/ lands here it

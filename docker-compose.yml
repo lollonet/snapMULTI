@@ -76,6 +76,9 @@ services:
       - ./audio:/audio
       - ./config/shairport-sync.conf:/etc/shairport-sync.conf:ro
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+      # See librespot below for the rationale — `$(hostname)` fallback in
+      # airplay-entrypoint.sh resolves to the container ID without this.
+      - /etc/hostname:/etc/hostname:ro
     environment:
       - TZ=${TZ:-Europe/Berlin}
       - DEVICE_NAME=${AIRPLAY_NAME:-}
@@ -115,6 +118,13 @@ services:
       - ./config/go-librespot.yml:/config/config.yml:ro
       - ./audio:/audio
       - /var/run/dbus:/var/run/dbus
+      # Bind-mount /etc/hostname so `hostname` inside the container returns
+      # the Pi hostname instead of the container ID. `network_mode: host`
+      # shares only the NET namespace, not UTS — without this bind the
+      # entrypoint command below resolves `$(hostname)` to the container
+      # ID and Spotify advertises the device as "a1b2c3d4e5f6 Spotify"
+      # instead of "<hostname> Spotify". Same fix as tidal-connect below.
+      - /etc/hostname:/etc/hostname:ro
     environment:
       - TZ=${TZ:-Europe/Berlin}
       - SPOTIFY_NAME=${SPOTIFY_NAME:-}
