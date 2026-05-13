@@ -278,7 +278,14 @@ fi
     echo ""
     echo "=== df / overlay tmpfs usage ==="
     df -h / /var 2>/dev/null | head -5 || true
-} > "$STAGE_DIR/hw.txt"
+} | anonymise > "$STAGE_DIR/hw.txt"
+# /proc/cmdline carries firmware-injected device identifiers — most
+# notably `smsc95xx.macaddr=<MAC>` on Pi 3 / 4 — that the file-level
+# anonymise pass must rewrite. Earlier versions of this script piped
+# only the journal / docker / dmesg streams through anonymise; hw.txt
+# went through raw and leaked MAC addresses into every install-failed
+# bundle. Pipe-on-write closes the gap without touching the
+# per-section formatting above.
 
 # ─── Bundle ──────────────────────────────────────────────────────────
 mkdir -p "$OUT_DIR" 2>/dev/null || true
