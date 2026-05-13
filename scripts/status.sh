@@ -15,11 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common/logging.sh
 source "${SCRIPT_DIR}/common/logging.sh"
 
-# unified-log.sh exposes colors as _LOG_GREEN / _LOG_RED / … and only when
-# stderr is a TTY. status.sh writes to stdout via show_container/section,
-# so re-derive locally: define the legacy names ourselves, ANSI when stdout
-# is a TTY, empty otherwise. Self-contained — no dependency on unified-log
-# internals — and survives `set -u` regardless of how logging.sh evolves.
+# Define legacy color names locally: ANSI when stdout is TTY, empty otherwise (set -u safe).
 if [[ -t 1 ]]; then
     GREEN=$'\033[0;32m'
     RED=$'\033[0;31m'
