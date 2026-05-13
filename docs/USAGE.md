@@ -23,6 +23,24 @@ Audio chain: source → FIFO pipe in `/audio/` → snapserver → FLAC over netw
 Client stack (3 containers on Pi 3/4/5; native snapclient `.deb` on Pi Zero 2W):
 `snapclient` + `audio-visualizer` (port 8081) + `fb-display` (HDMI cover art).
 
+## Container security model
+
+Defaults applied to every container in `docker-compose.yml`:
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| `cap_drop` | `ALL` | Containers don't need root capabilities for audio routing |
+| `read_only` | `true` + tmpfs at `/tmp` / `/run` | Compromised process can't write to image or persist code |
+| `no-new-privileges` | `true` | Setuid binaries inside the container can't escalate |
+| `user` | `PUID:PGID` (default `1000:1000`) | Non-root process inside the container |
+| Resource limits | mem + CPU per service in `deploy.resources` | One runaway container can't starve the rest |
+
+**Exception 1 — D-Bus / Avahi containers** (`snapserver`, `shairport-sync`, `librespot`, `mpd`): need `apparmor:unconfined` to access the host's D-Bus socket for mDNS advertisement (Avahi). AppArmor in the default Ubuntu profile blocks the D-Bus connection otherwise. They also need `cap_add: DAC_OVERRIDE` to write to the named-pipe FIFOs owned by the host's `PUID` user. Everything else stays dropped.
+
+**Exception 2 — `tidal-connect`** (ARM only, opt-in): runs as root because the proprietary upstream binary needs it; the Compose profile is **opt-out by default** (see [Tidal Connect security note](#tidal-connect-security-note)). If you don't enable the `tidal` profile, the container never runs.
+
+**Threat model**: snapMULTI is designed for a trusted LAN — server and clients on the same subnet behind a residential router. Out-of-scope: WAN exposure (no authentication on JSON-RPC, Snapweb or myMPD), multi-tenant scenarios, malicious clients on the LAN. If you need any of those, put a reverse proxy with auth in front and use `bind 127.0.0.1` in `config/snapserver.conf`.
+
 ## Audio Sources
 
 9 sources defined in `config/snapserver.conf` (5 active, 4 available as commented examples):
