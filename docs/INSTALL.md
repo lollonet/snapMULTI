@@ -86,7 +86,21 @@ lsblk -o NAME,LABEL,MOUNTPOINT | grep bootfs
 
 ---
 
-## Step 3 — Clone the repository
+## Step 3 — Get the snapMULTI files
+
+Pick one of the two options. Both produce a folder named `snapMULTI/` that the next step expects.
+
+### Option A — Download the ZIP (no Git required)
+
+1. Open [https://github.com/lollonet/snapMULTI/releases/latest](https://github.com/lollonet/snapMULTI/releases/latest) in your browser
+2. Under **Assets**, click **Source code (zip)** to download the latest release
+3. Extract the ZIP — you get a folder named `snapMULTI-<version>` (e.g. `snapMULTI-0.7.4`)
+4. **Rename it to `snapMULTI`** — the prepare-sd script expects that exact name
+5. Open a terminal in the folder that *contains* `snapMULTI/`
+
+> Prefer the tagged release ZIP over the green **Code → Download ZIP** button on the repo home page — the latter ships the `main` branch, which may include unreleased work-in-progress.
+
+### Option B — Clone with Git (recommended for updates)
 
 You need Git installed on your computer.
 
@@ -103,8 +117,7 @@ sudo apt install git
 
 **Windows** — Install [Git for Windows](https://git-scm.com/download/win). Accept all defaults during install. Then open **Git Bash** (not PowerShell) for the next steps, or use PowerShell with the commands below.
 
-### Clone
-
+Then:
 ```bash
 git clone https://github.com/lollonet/snapMULTI.git
 cd snapMULTI
@@ -176,7 +189,7 @@ If auto-detection fails:
 | **3 — Server + Player** | One Pi does everything — server and local speaker. **Choose this if you only have one Pi** and want to play music on it directly |
 
 > **Pi Zero 2 W users:** the installer behaves differently because the board has only 512 MB RAM:
-> - **Choice 1 (Audio Player)** — works, but the profile is auto-promoted to `client-native`: native snapclient `.deb`, no Docker, no cover-art display, single-server only. The full Docker stack does not fit
+> - **Choice 1 (Audio Player)** — works, but the profile is auto-promoted to `client-native`: native snapclient `.deb`, no Docker, no cover-art display, single-client role only. The full Docker stack does not fit
 > - **Choices 2 and 3** — the first boot aborts with `Pi Zero 2W (512 MB RAM) cannot host the snapMULTI server stack` and stops. The server needs at least a Pi 3 B+ with 1 GB RAM. Reflash the SD card with choice 1, or use a different Pi
 >
 > See [HARDWARE.md — Pi Zero 2 W Notes](HARDWARE.md#pi-zero-2-w-notes) for the full constraint list.
@@ -261,21 +274,23 @@ The Pi **reboots automatically** when installation is complete. After the reboot
 
 ## Step 6 — Verify it works
 
+> **Hostname placeholder.** From here on, `<hostname>.local` means the hostname you set in Imager at Step 1c. If you set `myradio`, use `myradio.local` everywhere `<hostname>.local` appears below.
+
 ### Find the Pi on your network
 
 From your computer, ping the Pi using its hostname:
 
 ```bash
-ping pi-server.local     # replace with the hostname you chose in Imager
+ping <hostname>.local
 ```
 
 If ping works, SSH in:
 
 ```bash
-ssh <username>@pi-server.local
+ssh <username>@<hostname>.local
 ```
 
-> **Windows users:** Use Windows Terminal, PowerShell, or [PuTTY](https://putty.org) with `pi-server.local` as the host.
+> **Windows users:** Use Windows Terminal, PowerShell, or [PuTTY](https://putty.org) with `<hostname>.local` as the host.
 
 > **If `.local` doesn't resolve:** Use the IP address instead. Find it in your router's DHCP client list, or check the HDMI output after reboot — the Pi prints its IP on the console.
 
@@ -311,7 +326,7 @@ fb-display         Up X minutes (healthy)
 Open your browser and go to:
 
 ```
-http://pi-server.local:8180
+http://<hostname>.local:8180
 ```
 
 This is **myMPD** — browse your music library, build playlists, control playback.
@@ -319,10 +334,10 @@ This is **myMPD** — browse your music library, build playlists, control playba
 The **Snapcast web UI** (control which speaker plays what) is at:
 
 ```
-http://pi-server.local:1780
+http://<hostname>.local:1780
 ```
 
-If everything shows "healthy" and the web interfaces load — your server is ready. Try playing a track from Snapweb (`http://pi-server.local:1780`) or cast from Spotify/AirPlay to confirm audio works.
+If everything shows "healthy" and the web interfaces load — your server is ready. Try playing a track from Snapweb (`http://<hostname>.local:1780`) or cast from Spotify/AirPlay to confirm audio works.
 
 ---
 
@@ -330,11 +345,11 @@ If everything shows "healthy" and the web interfaces load — your server is rea
 
 | Source | What to do after install |
 |--------|--------------------------|
-| **Spotify** | Open Spotify app → Devices → select **"pi-server Spotify"** (Premium required) |
-| **AirPlay** | iPhone/iPad/Mac → AirPlay icon → select **"pi-server AirPlay"** |
-| **Tidal** | Open Tidal app → Cast → select **"pi-server Tidal"** (ARM/Pi only) |
-| **Music library** | Open `http://pi-server.local:8180` and browse your files |
-| **Snapcast app** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) — connect to `pi-server.local` |
+| **Spotify** | Open Spotify app → Devices → select **"`<hostname>` Spotify"** (Premium required) |
+| **AirPlay** | iPhone/iPad/Mac → AirPlay icon → select **"`<hostname>` AirPlay"** |
+| **Tidal** | Open Tidal app → Cast → select **"`<hostname>` Tidal"** (ARM/Pi only) |
+| **Music library** | Open `http://<hostname>.local:8180` and browse your files |
+| **Snapcast app** | [Android](https://play.google.com/store/apps/details?id=de.badaix.snapcast) — connect to `<hostname>.local` |
 
 ---
 
@@ -348,7 +363,7 @@ For each additional speaker:
 2. Re-insert → run `prepare-sd.sh` → choose **1) Audio Player**
 3. Boot → the speaker Pi auto-discovers the server via mDNS
 
-The new speaker appears in the Snapcast web UI at `http://pi-server.local:1780` within ~30 seconds of booting.
+The new speaker appears in the Snapcast web UI at `http://<hostname>.local:1780` within ~30 seconds of booting.
 
 ---
 
@@ -356,8 +371,8 @@ The new speaker appears in the Snapcast web UI at `http://pi-server.local:1780` 
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| HDMI blank, no progress | Normal on headless boot | Wait 10 min; check with `ping pi-server.local` |
-| `ping pi-server.local` fails | Pi not on network yet | Wait 2 min; if still failing, check WiFi country setting in Imager. 5 GHz channels 100+ (DFS) may fail on first boot — try 2.4 GHz or a non-DFS 5 GHz channel (36–48) |
+| HDMI blank, no progress | Normal on headless boot | Wait 10 min; check with `ping <hostname>.local` |
+| `ping <hostname>.local` fails | Pi not on network yet | Wait 2 min; if still failing, check WiFi country setting in Imager. 5 GHz channels 100+ (DFS) may fail on first boot — try 2.4 GHz or a non-DFS 5 GHz channel (36–48) |
 | `.local` resolves but SSH refused | SSH not yet started | Wait 1–2 more min |
 | SSH works but containers missing | Installation still running | Run `sudo journalctl -u cloud-init -f` to watch progress |
 | Containers in restart loop | Image pull failed (network) | Run `sudo docker compose logs -f` in `/opt/snapmulti` |
