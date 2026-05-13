@@ -803,6 +803,21 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
                 *"Downloaded newer image"*)
                     log_msg INFO deploy "$line"
                     ;;
+                # Docker Compose state-transition milestones — these are the
+                # only signals the user gets that the install is progressing
+                # while images pull and containers start. Earlier versions
+                # dropped every line that was not [INFO]/[OK]/==>, so the
+                # log appeared stuck for 2–4 min during a fresh first-boot
+                # pull. Match `Container <name> Started/Created/Healthy/
+                # Running/Stopped` and `Network/Volume <name> Created`.
+                *"Container "*"Started"*|*"Container "*"Created"*|\
+                *"Container "*"Healthy"*|*"Container "*"Running"*|\
+                *"Container "*"Stopped"*|*"Container "*"Removed"*)
+                    log_msg INFO deploy "$line"
+                    ;;
+                *"Network "*"Created"*|*"Volume "*"Created"*)
+                    log_msg INFO deploy "$line"
+                    ;;
                 *"Pulling "*|*"Pull complete"*|*"pulling "*|*"Downloaded"*)
                     # Skip Docker Compose per-layer progress (floods log).
                     # Pull-images.sh messages have [INFO] prefix, caught above.
@@ -1004,6 +1019,15 @@ if is_client_install; then
                     ;;
                 "Hardware profile:"*|"Detected:"*|"Setup Complete"*|\
                 "Audio HAT:"*|"Configuration Summary:"*|"  - "*)
+                    log_msg INFO setup "$line"
+                    ;;
+                # Docker Compose state milestones (see deploy block above).
+                *"Container "*"Started"*|*"Container "*"Created"*|\
+                *"Container "*"Healthy"*|*"Container "*"Running"*|\
+                *"Container "*"Stopped"*|*"Container "*"Removed"*)
+                    log_msg INFO setup "$line"
+                    ;;
+                *"Network "*"Created"*|*"Volume "*"Created"*)
                     log_msg INFO setup "$line"
                     ;;
             esac
