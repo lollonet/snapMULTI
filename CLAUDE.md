@@ -7,22 +7,23 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 
 | Topic | Owner |
 |-------|-------|
-| Audio sources, params, schema, JSON-RPC API | `docs/SOURCES.md` |
-| Architecture, services, ports, mDNS, CI/CD | `docs/USAGE.md` |
+| Architecture, services, ports, audio sources, mDNS, CI/CD, deployment | `docs/USAGE.md` |
+| Source config + parameter reference (inline comments) | `config/snapserver.conf` |
 | Hardware, network, recommended setups | `docs/HARDWARE.md` |
-| User quickstart, client basic setup | `QUICKSTART.md` + `README.md` |
+| First-time install procedure | `docs/INSTALL.md` |
+| User quickstart, value prop | `README.md` |
 | Changelog | `CHANGELOG.md` |
-| Source config (inline comments) | `config/snapserver.conf` |
 | Quality gates (tools, paths, thresholds) | `CONTROL.yaml` |
 
 **Rules:**
 - README is an appliance manual — what it does, how to install, how to connect. No jargon.
-- New source type → update `docs/SOURCES.md` + `config/snapserver.conf` + `README.md` source table
-- Source param changes → `docs/SOURCES.md` only
-- Services/ports/CI changes → `docs/USAGE.md` only
+- New source type → update `config/snapserver.conf` + `docs/USAGE.md` "Audio Sources" table + `README.md` source table
+- Source parameter changes → `config/snapserver.conf` only (it is the schema reference)
+- Services/ports/CI/deployment changes → `docs/USAGE.md` only
 - Hardware/network changes → `docs/HARDWARE.md` only
+- Install procedure changes → `docs/INSTALL.md` only
 - README links to docs/ for anything technical — never inline technical details
-- Quality gate changes (tools, paths, severity) → update `CONTROL.yaml` + CI workflow + pre-push hook together
+- Quality gate changes → update `CONTROL.yaml` + CI workflow + pre-push hook together
 
 ## Deployment Targets
 
@@ -107,7 +108,6 @@ snapMULTI/
   docs/
     HARDWARE.md              # Hardware & network guide
     USAGE.md                 # Technical operations guide
-    SOURCES.md               # Audio sources technical reference
     *.it.md                  # Italian translations
   .github/workflows/
     build-push.yml           # Dual-arch build + push to Docker Hub (5 images; Spotify uses upstream)

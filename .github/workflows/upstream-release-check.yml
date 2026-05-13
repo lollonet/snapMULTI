@@ -163,7 +163,7 @@ jobs:
 
           - [ ] Read release notes
           - [ ] Decide bump / hold (Snapcast is intentionally pinned for stability)
-          - [ ] If bumping: open PR updating all pin references (`docker-compose.yml`, `THIRD-PARTY-NOTICES.md`, `docs/SOURCES.md`, `docs/SOURCES.it.md`, `CLAUDE.md`)
+          - [ ] If bumping: open PR updating all pin references (`docker-compose.yml`, `THIRD-PARTY-NOTICES.md`, `docs/USAGE.md`, `docs/USAGE.it.md`, `CLAUDE.md`)
           - [ ] Live-test on at least one device before merging
 
           _Auto-created by `.github/workflows/upstream-release-check.yml`. New issues are de-duplicated by title (`[upstream] __NAME__ __LATEST__`)._
