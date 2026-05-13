@@ -402,7 +402,21 @@ copy_client_files() {
     # Pi Zero 2W native snapclient install path (firstboot.sh selects
     # this script when /proc/device-tree/model matches "Zero 2 W").
     [[ -f "$CLIENT_DIR/common/scripts/setup-zero2w.sh" ]] && cp "$CLIENT_DIR/common/scripts/setup-zero2w.sh" "$dest/scripts/"
-    # Shared modules from server scripts/common/ that setup.sh needs
+    # Shared modules from server scripts/common/ that setup.sh needs.
+    #
+    # Note on the duplicate copy under /opt/snapclient/scripts/common/:
+    # in `both` mode the same library files (logging.sh, unified-log.sh,
+    # system-tune.sh, sanitize.sh, etc.) end up under BOTH
+    # /opt/snapmulti/scripts/common/ AND /opt/snapclient/scripts/common/.
+    # This is intentional: each install dir is independently reflashable
+    # and each install path (deploy.sh server-side, setup.sh client-side)
+    # must source its libs from its OWN dir without cross-dependency.
+    # Drift risk is bounded by snapMULTI's reflash-first update model
+    # (DEC-003): there is no in-place upgrade path that could touch one
+    # copy and leave the other stale. The multi-candidate `for _cand in
+    # /opt/snapmulti/... /opt/snapclient/... ; do source "$_cand"; done`
+    # idiom in ro-mode.sh / cmdline-manager.sh is resilience for ad-hoc
+    # operator invocations, not because the copies disagree.
     for _shared in install-deps.sh install-docker.sh system-tune.sh unified-log.sh logging.sh sanitize.sh; do
         [[ -f "$SCRIPT_DIR/common/$_shared" ]] && cp "$SCRIPT_DIR/common/$_shared" "$dest/scripts/common/"
     done

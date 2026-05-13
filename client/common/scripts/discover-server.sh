@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 # Monitor snapserver IP and (re)point snapclient at a healthy one.
 #
+# Profile applicability: this script ships only with the CONTAINERISED
+# client paths — INSTALL_TYPE=client (Pi 3/4/5) and INSTALL_TYPE=both.
+# INSTALL_TYPE=client-native (Pi Zero 2W) PRUNES this file in
+# setup-zero2w.sh during install: snapclient on Pi Zero 2W uses
+# libavahi-client's built-in mDNS autodiscovery instead of this
+# state machine (no TCP probing, no anti-flapping — acceptable
+# trade-off for the headless single-room use case, documented in
+# docs/HARDWARE.md). So the `_is_both_mode` check below is reachable
+# only on non-Zero-2W hosts; on Pi Zero 2W the file is absent and
+# snapclient-discover.timer is also absent (no caller exists).
+#
 # Boot mode:  ExecStartPre (no args) — picks initial server (or 127.0.0.1 in both mode).
 # Watch mode: timer (--watch) — only acts when the current server is unreachable,
 #             then prefers an mDNS-discovered server *different* from the dead one
