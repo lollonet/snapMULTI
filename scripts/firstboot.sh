@@ -818,6 +818,14 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
                 *"Network "*"Created"*|*"Volume "*"Created"*)
                     log_msg INFO deploy "$line"
                     ;;
+                # Image-level pull completion (capital "Pulled" — one line
+                # per image, 5-7 total). Without these the log appears
+                # frozen for the entire pull phase (3–10 min) because the
+                # per-layer "Pulling"/"Pull complete"/"Downloaded" flood
+                # is intentionally dropped below.
+                *"Pulled"*)
+                    log_msg INFO deploy "$line"
+                    ;;
                 *"Pulling "*|*"Pull complete"*|*"pulling "*|*"Downloaded"*)
                     # Skip Docker Compose per-layer progress (floods log).
                     # Pull-images.sh messages have [INFO] prefix, caught above.
@@ -1028,6 +1036,10 @@ if is_client_install; then
                     log_msg INFO setup "$line"
                     ;;
                 *"Network "*"Created"*|*"Volume "*"Created"*)
+                    log_msg INFO setup "$line"
+                    ;;
+                # Image-level pull completion (see deploy block above).
+                *"Pulled"*)
                     log_msg INFO setup "$line"
                     ;;
             esac
