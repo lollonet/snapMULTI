@@ -151,6 +151,13 @@ source "$COMMON/unified-log.sh"
 # shellcheck source=common/device-detect.sh
 source "$COMMON/device-detect.sh"
 
+# Source install-conf-mirror.sh — single owner of /opt/snap*/install.conf
+# writes. mirror_install_conf() copies $SNAP_BOOT/install.conf to a
+# destination directory atomically (temp-file + mv) so a concurrent
+# smoke reader never observes a partial file.
+# shellcheck source=common/install-conf-mirror.sh
+source "$COMMON/install-conf-mirror.sh"
+
 # Promote profile based on hardware. The prepare-sd.sh menu offers
 # three user-facing choices (client / server / both) — `client-native`
 # is derived: it is what the user really gets on a Pi Zero 2W when they
@@ -710,6 +717,14 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     fi
     cd "$SERVER_DIR"
 
+    # Mirror the canonical install.conf to /opt/snapmulti/ so smoke and
+    # diagnostic readers find it at a stable path. Atomic temp+mv —
+    # smoke readers running concurrently never see a partial file. The
+    # boot-partition copy remains the canonical source; this is purely
+    # a convenience for tools that don't want to look in two places.
+    mirror_install_conf "$SNAP_BOOT/install.conf" "$SERVER_DIR" \
+        || log_warn "Failed to mirror install.conf to $SERVER_DIR (continuing — smoke may fall back to boot partition)"
+
     # Run deploy.sh — parse output through unified logger.
     # Tee a copy of every line to a temp file so on failure we can dump
     # the full unfiltered output (the case-statement filter below drops
@@ -910,6 +925,14 @@ if is_client_install; then
     else
         setup_script="scripts/setup.sh"
     fi
+
+    # Mirror install.conf to $CLIENT_DIR so smoke (check_containers.sh)
+    # and diagnostic readers find it on the client path. For client-native
+    # this is the canonical write — setup-zero2w.sh also calls the helper
+    # but doing it here too is idempotent (same content) and ensures the
+    # file lands even if setup-zero2w.sh fails mid-run.
+    mirror_install_conf "$SNAP_BOOT/install.conf" "$CLIENT_DIR" \
+        || log_warn "Failed to mirror install.conf to $CLIENT_DIR (continuing — smoke may fall back to boot partition)"
 
     # Run setup script — parse output through unified logger (same as deploy.sh).
     # Tee a copy of every line so the failure path can dump full unfiltered
