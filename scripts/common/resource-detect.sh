@@ -14,13 +14,16 @@ if ! declare -F log_info &>/dev/null; then
 fi
 
 # Source device-detect.sh — single authority for Pi model string. If
-# not available (very early bootstrap), fall back to direct read but
-# log it so the drift is visible.
+# not available (very early bootstrap or partial bundle), fall back to
+# the /proc/cpuinfo Model-line path inside detect_hardware() below and
+# log the drift so it is visible to operators reading the install log.
 if ! declare -F device_model &>/dev/null; then
     _RD_COMMON_DIR="$(dirname "${BASH_SOURCE[0]}")"
     if [[ -f "$_RD_COMMON_DIR/device-detect.sh" ]]; then
         # shellcheck source=device-detect.sh
         source "$_RD_COMMON_DIR/device-detect.sh"
+    else
+        echo "WARN: resource-detect.sh: device-detect.sh not found at $_RD_COMMON_DIR — Pi model detection falls back to /proc/cpuinfo Model line" >&2
     fi
     unset _RD_COMMON_DIR
 fi

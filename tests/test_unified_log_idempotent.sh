@@ -36,13 +36,18 @@ assert_eq "$(grep -c '_UNIFIED_LOG_SH_SOURCED' "$UL")" "2" "guard sentinel + ass
 
 echo
 echo "=== Idempotency: source twice in subshell ==="
+# Use mktemp + trap so parallel CI runs don't collide on a hardcoded
+# /tmp path and a prior broken run can't leave a stale file that
+# influences this one (unified-log.sh opens UNIFIED_LOG in append mode).
+TMP_LOG=$(mktemp /tmp/snapmulti-idemp-test.XXXXXX.log)
+trap 'rm -f "$TMP_LOG"' EXIT
 # Use a subshell so the test's own state isn't polluted.
 result=$(
     set -e
     # First source — sets LOG_SOURCE to "first", defines functions.
     LOG_SOURCE="first"
     # shellcheck disable=SC2034  # read by unified-log.sh via parameter expansion
-    UNIFIED_LOG=/tmp/snapmulti-idemp-test.log
+    UNIFIED_LOG="$TMP_LOG"
     # shellcheck source=../scripts/common/unified-log.sh
     source "$UL"
     first_source=$LOG_SOURCE
