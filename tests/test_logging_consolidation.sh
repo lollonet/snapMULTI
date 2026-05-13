@@ -159,6 +159,8 @@ echo
 echo "=== Functional: install-chain mode (UNIFIED_LOG writable) ==="
 
 tmp_log=$(mktemp /tmp/snapmulti-test-log.XXXXXX)
+# shellcheck disable=SC2064  # intentional: $tmp_log must expand NOW so
+# the trap captures the specific tmpfile, not the variable name.
 trap "rm -f '$tmp_log'" EXIT
 
 # Force interactive-detection off by pointing at a writable file. Capture
