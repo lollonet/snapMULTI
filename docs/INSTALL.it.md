@@ -353,50 +353,14 @@ http://<hostname>.local:1780
 
 ---
 
-## Aggiungere più Pi speaker
+## Prossimi passi
 
-Per ogni speaker aggiuntivo:
-
-1. Flasha una nuova scheda SD con Raspberry Pi Imager
-   - Imposta un **hostname unico** (es. `pi-display`, `kitchen`, `bedroom`)
-   - Stesso user/password del tuo server è comodo ma non richiesto
-2. Reinserisci → esegui `prepare-sd.sh` → scegli **1) Audio Player**
-3. Avvia → il Pi speaker trova automaticamente il server tramite mDNS
-
-Il nuovo speaker appare nell'interfaccia web Snapcast a `http://<hostname>.local:1780` entro ~30 secondi dall'avvio.
-
----
-
-## Risoluzione problemi primo avvio
-
-| Sintomo | Causa probabile | Soluzione |
-|---------|-----------------|-----------|
-| HDMI vuoto, nessun progresso | Normale su avvio headless | Aspetta 10 min; controlla con `ping <hostname>.local` |
-| `ping <hostname>.local` fallisce | Pi non ancora in rete | Aspetta 2 min; se ancora fallisce, controlla impostazione paese WiFi in Imager. I canali 5 GHz 100+ (DFS) possono fallire al primo avvio — prova il 2.4 GHz o un canale 5 GHz non-DFS (36–48) |
-| `.local` si risolve ma SSH rifiutato | SSH non ancora avviato | Aspetta altri 1–2 min |
-| SSH funziona ma container mancanti | Installazione ancora in corso | Esegui `sudo journalctl -u cloud-init -f` per guardare il progresso |
-| Container in loop di restart | Download immagini fallito (rete) | Esegui `sudo docker compose logs -f` in `/opt/snapmulti` |
-| Hostname sbagliato | Valore sbagliato impostato in Imager | Reflasha SD, ricomincia dal Passo 1 |
-| `prepare-sd.sh`: partizione boot non trovata | SD non reinserita dopo Imager | Rimuovi SD, reinserisci, esegui di nuovo lo script |
-| Windows: script non si avvia | Execution policy | Esegui prima `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
-| HAT audio non rilevato (client) | Scheda senza EEPROM | Collegati via SSH ed esegui `sudo bash /opt/snapclient/common/scripts/setup.sh` per selezionare il tuo HAT manualmente |
-| `no matching manifest for linux/arm/v7` | OS 32-bit flashato invece del 64-bit | Riflasha con **Raspberry Pi OS Lite (64-bit)** — tutti i modelli Pi incluso Zero 2 W lo supportano |
-| Pi Zero 2 W: WiFi non si connette | SSID 5 GHz configurato ma Pi Zero ha solo 2,4 GHz | Riflasha con il tuo SSID 2,4 GHz nelle impostazioni WiFi di Imager |
-| Pi Zero 2 W: HAT audio non rilevato | `otg_mode=1` o `dr_mode=host` in config.txt | `prepare-sd.sh` lo corregge automaticamente. Per installazioni manuali: commenta `otg_mode=1` e rimuovi `dr_mode=host` dall'overlay dwc2 |
-| Pi Zero 2 W: il primo boot si interrompe con "cannot host the snapMULTI server stack" | Hai scelto **Music Server** o **Server + Player** su una scheda da 512 MB | Riflashare con `prepare-sd.sh` scegliendo **1 — Audio Player**. Vedi [HARDWARE.it.md — Note Pi Zero 2 W](HARDWARE.it.md#note-pi-zero-2-w) |
-
-### Recuperare il bundle diagnostico quando il primo boot fallisce
-
-Se `firstboot.sh` fallisce a metà strada, scrive un tarball diagnostico sulla **partizione di boot FAT32** prima di terminare. È la stessa partizione scritta da Raspberry Pi Imager — leggibile da qualsiasi computer.
-
-1. Spegni il Pi, estrai la microSD e collegala al laptop
-2. Apri la **partizione boot** (su macOS / Linux si monta come `bootfs`, su Windows compare una lettera di unità)
-3. Cerca un file chiamato `snapmulti-diag-<motivo>-<timestamp>.tar.gz` (es. `snapmulti-diag-install-failed-20260513T142301Z.tar.gz`)
-4. Allegalo a una [issue GitHub](https://github.com/lollonet/snapMULTI/issues/new/choose) — il bundle è anonimizzato (niente indirizzi MAC, IP RFC1918, SSID, password o token API)
-
-Il bundle contiene i log di installazione più recenti, l'output del rilevamento hardware (modello, HAT audio, rete) e il nome dello step che è fallito. La partizione di boot resta intatta anche quando overlayroot si è attivato o il rootfs è altrimenti irraggiungibile — è il motivo per cui scriviamo lì invece che in `/var/log`.
-
-Per problemi post-installazione vedi [Risoluzione problemi in USAGE.it.md](USAGE.it.md#risoluzione-problemi).
+| Obiettivo | Dove |
+|-----------|------|
+| Aggiungere un altro altoparlante (multi-room), collegare un NAS, personalizzare `.env`, deploy manuale | [ADVANCED.it.md](ADVANCED.it.md) |
+| Qualcosa è fallito (primo boot, post-install, mDNS, audio) | [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md) |
+| Matrice hardware, requisiti di rete, dettagli Pi Zero 2 W | [HARDWARE.it.md](HARDWARE.it.md) |
+| Architettura, sorgenti audio, modello di sicurezza | [USAGE.it.md](USAGE.it.md) |
 
 ---
 

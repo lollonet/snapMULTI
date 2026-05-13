@@ -90,11 +90,13 @@ Riflasha l'SD con l'ultima release — tutta la config si auto-rileva al primo b
 
 ## Documentazione
 
-| Guida | Contenuto |
-|-------|-----------|
-| [Installazione](docs/INSTALL.it.md) | Passo-passo con risoluzione problemi e recupero bundle diagnostico |
-| [Hardware](docs/HARDWARE.it.md) | Modelli Pi, DAC HAT, rete, eccezioni Pi Zero 2 W |
-| [Uso e Operazioni](docs/USAGE.it.md) | Architettura, sorgenti audio, MPD, mDNS, deployment, recupero log/diagnostica |
+| Guida | Quando aprirla |
+|-------|----------------|
+| [Installazione](docs/INSTALL.it.md) | Prima configurazione — flash, boot, ascolto. Il percorso base |
+| [Avanzata](docs/ADVANCED.it.md) | Multi-room, libreria NFS / SMB, `.env` personalizzato, deploy manuale, fs read-only, MPD CLI, JSON-RPC |
+| [Risoluzione problemi](docs/TROUBLESHOOTING.it.md) | Qualcosa è fallito — installazione, mDNS, audio, container in restart loop |
+| [Hardware](docs/HARDWARE.it.md) | Modelli Pi, DAC HAT, requisiti di rete, dettagli Pi Zero 2 W |
+| [Architettura](docs/USAGE.it.md) | Come è fatto — servizi, porte, sorgenti audio, modello di sicurezza |
 | [Changelog](CHANGELOG.md) | Cronologia versioni |
 
 ## Contribuire e sicurezza

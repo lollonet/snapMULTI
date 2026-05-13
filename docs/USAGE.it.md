@@ -1,8 +1,8 @@
 🇮🇹 **Italiano** | 🇬🇧 [English](USAGE.md)
 
-# Guida operativa
+# Riferimento architettura
 
-Riferimento operativo per un'installazione snapMULTI già in funzione. Per la prima installazione vedi [INSTALL.it.md](INSTALL.it.md). Per la compatibilità hardware vedi [HARDWARE.it.md](HARDWARE.it.md).
+Architettura, sorgenti audio e modello di sicurezza — la guida "come è fatto". Per le procedure operative (multi-room, NFS, `.env` personalizzato, deploy manuale) vedi [ADVANCED.it.md](ADVANCED.it.md). Per la prima installazione vedi [INSTALL.it.md](INSTALL.it.md). Per i fallimenti vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md). Per la compatibilità hardware vedi [HARDWARE.it.md](HARDWARE.it.md).
 
 ## Architettura
 
@@ -61,12 +61,7 @@ I parametri specifici (path FIFO, controlscript, formato campione) vivono inline
 
 ### Personalizzare i nomi device
 
-Spotify e Tidal usano per default `<hostname> Spotify` / `<hostname> Tidal`. Override via `.env`:
-
-```bash
-SPOTIFY_NAME="Spotify Soggiorno"
-TIDAL_NAME="Tidal Soggiorno"
-```
+Spotify e Tidal usano per default `<hostname> Spotify` / `<hostname> Tidal`. Override tramite `SPOTIFY_NAME` / `TIDAL_NAME` in `.env` — vedi [ADVANCED.it.md — Configurazione personalizzata](ADVANCED.it.md#configurazione-personalizzata--file-env).
 
 ### Nota sicurezza Tidal Connect
 
@@ -96,28 +91,7 @@ Regole rapide:
 - Cast da Spotify/AirPlay/Tidal → l'app della sorgente sceglie l'altoparlante
 - Health check → pagina `/status`
 
-### MPD da riga di comando
-
-```bash
-sudo apt install mpc
-mpc -h <server> play | pause | next | volume 50 | status
-mpc -h <server> add "Artist/Album"
-mpc -h <server> update                # rescansione libreria (usalo con cautela su NFS — vedi "Aggiornamento")
-```
-
-### Cambiare sorgente via JSON-RPC
-
-```bash
-# elenca stream
-curl -s http://<server>:1780/jsonrpc -d \
-  '{"id":1,"jsonrpc":"2.0","method":"Server.GetStatus"}' | jq '.result.server.streams[].id'
-
-# cambia un gruppo
-curl -s http://<server>:1780/jsonrpc -d \
-  '{"id":1,"jsonrpc":"2.0","method":"Group.SetStream","params":{"id":"<GROUP_ID>","stream_id":"Spotify"}}'
-```
-
-Schema JSON-RPC completo: [wiki Snapcast](https://github.com/badaix/snapcast/blob/master/doc/json_rpc_api/v2_0_0.md).
+Comandi avanzati (MPD CLI, switch sorgente via JSON-RPC, `.env` personalizzato): [ADVANCED.it.md](ADVANCED.it.md).
 
 ## Autodiscovery (mDNS)
 
@@ -125,35 +99,30 @@ Snapcast, AirPlay, Spotify e Tidal si annunciano sulla LAN tramite l'`avahi-daem
 
 Snapcast 0.35.x esce dal suo poll loop Avahi su `AVAHI_CLIENT_FAILURE` senza retry. I systemd unit contengono `PartOf=avahi-daemon.service` quindi un riavvio dell'avahi host ricrea automaticamente gli stack Compose (~3 s di buco audio).
 
-### Verifica
+Verifica rapida:
 
 ```bash
-avahi-browse -r _snapcast._tcp --terminate   # annuncio snapcast
-avahi-browse -r _raop._tcp --terminate       # AirPlay
-ss -tlnp | grep -E '1704|1705|1780'          # porte snapserver in ascolto
+avahi-browse -r _snapcast._tcp --terminate
+avahi-browse -r _raop._tcp --terminate
+ss -tlnp | grep -E '1704|1705|1780'
 ```
 
-### Quando la discovery non funziona
+Quando la discovery non funziona (Spotify / AirPlay / Tidal non visibili, speaker mancanti in Snapweb): [TROUBLESHOOTING.it.md — Discovery mDNS](TROUBLESHOOTING.it.md#discovery-mdns).
 
-1. avahi-daemon host fermo → `sudo systemctl start avahi-daemon`
-2. AppArmor blocca il container → conferma `apparmor:unconfined` in `docker-compose.yml`
-3. Sottorete diversa → mDNS non attraversa VLAN; usa IP statico in `.env`
-4. Firewall → vedi [HARDWARE.it.md — Regole firewall](HARDWARE.it.md#regole-firewall)
+## Unit systemd
 
-## Systemd unit
+Dopo l'installazione systemd possiede il ciclo di vita dei container (ADR-005). `restart: unless-stopped` di Docker gestisce i crash, systemd gestisce il boot.
 
-Dopo l'installazione, systemd possiede il ciclo di vita dei container. ADR-005 — `restart: unless-stopped` di Docker gestisce i crash, systemd gestisce il boot.
+- Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`
+- Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (solo client HDMI)
+- Tutti: `snapmulti-boot-tune.service`
 
-Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`
-Client: `snapclient.service` (o `snapclient.service` nativo su Pi Zero 2W), `snapclient-discover.timer`, `snapclient-display.service` (client con HDMI)
-Tutti: `snapmulti-boot-tune.service` (CPU governor, USB autosuspend, WiFi powersave)
-
-I file unit vengono installati da `firstboot.sh`. Ispeziona con `systemctl cat <unit>`.
+Ispeziona con `systemctl cat <unit>`. Path di deployment e strategie di aggiornamento: [ADVANCED.it.md](ADVANCED.it.md#deploy-senza-prepare-sd).
 
 ## Log e diagnostica
 
 ```bash
-# log live (server)
+# log live server
 cd /opt/snapmulti && docker compose logs -f
 docker compose logs -f snapserver shairport-sync librespot mpd
 
@@ -165,67 +134,4 @@ docker inspect --format='{{.State.Health.Status}}' snapserver
 http://<server>:8083/status
 ```
 
-### Bundle diagnostico in caso di fallimento
-
-Quando `firstboot.sh` si interrompe (qualsiasi step), la sua trap di cleanup scrive un tarball anonimizzato sulla partizione FAT32 di boot:
-
-```
-/boot/firmware/snapmulti-diag-install-failed-<UTC-ts>.tar.gz
-```
-
-Estrai la SD, montala su qualsiasi computer, allega a una [issue GitHub](https://github.com/lollonet/snapMULTI/issues/new/choose). Anonimizzato: niente MAC, niente IP RFC1918, niente SSID, niente token. Invocazione manuale per supporto:
-
-```bash
-sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp
-```
-
-Sorgente: [`scripts/diagnostic.sh`](../scripts/diagnostic.sh).
-
-### Log di installazione (Pi)
-
-`cat /var/log/snapmulti-install.log` (il layer scrivibile sopravvive fino al reboot — overlayroot lo cancella al reboot, il bundle sulla partizione di boot rimane).
-
-## Deployment
-
-snapMULTI è **reflash-first** (ADR-005, DEC-003). Tutta la config si auto-rileva al primo boot.
-
-| Path | Utenza | Trigger |
-|------|--------|---------|
-| Zero-touch SD | Principianti | Flash + `prepare-sd.sh` + accensione |
-| `deploy.sh` su host Linux esistente | Avanzati | `git clone` + `bash scripts/deploy.sh` |
-| Manuale | Avanzati | `git clone` + modifica `.env` + `docker compose up -d` |
-| Push tag CI | Maintainer | `git tag v* && git push --tags` |
-
-Il push di un tag triggera `build-push.yml` → immagini multi-arch (amd64 + arm64 su runner nativi) → Docker Hub. I device prendono `:latest` al prossimo reflash.
-
-### Strategia di aggiornamento
-
-- **Primaria**: reflash dell'SD. `scripts/backup-from-sd.sh` estrae prima `mpd.db` così MPD fa rescan incrementale veloce, non ore di rescan NFS
-- **In-place** (avanzato): `cd /opt/snapmulti && docker compose pull && docker compose up -d`. Non ufficialmente supportato — la deriva di config fra versioni è un problema tuo
-
-### Immagini Docker
-
-`lollonet/snapmulti-{server,airplay,mpd,metadata,tidal}:latest` (Docker Hub, build in CI) + `ghcr.io/devgianlu/go-librespot` (upstream) + `ghcr.io/jcorporation/mympd/mympd` (upstream). Tidal è solo ARM.
-
-### Filesystem read-only
-
-Dopo l'installazione, il rootfs è montato in sola lettura tramite overlayroot + fuse-overlayfs. Per la manutenzione:
-
-```bash
-sudo /opt/snapmulti/scripts/ro-mode.sh disable   # reboot
-# modifiche
-sudo /opt/snapmulti/scripts/ro-mode.sh enable    # reboot
-```
-
-`cmdline.txt` è di proprietà di `scripts/common/cmdline-manager.sh` — non editare `/boot/firmware/cmdline.txt` a mano. Vedi ADR-003 per il motivo.
-
-## Troubleshooting rapido
-
-| Sintomo | Prima verifica |
-|---------|----------------|
-| Nessun audio in uscita, tutti i container `healthy` | snapclient ha scelto la scheda audio sbagliata — `snapclient --list` sul client per trovare il nome, imposta `SOUND_CARD` nel `.env` client |
-| Spotify/AirPlay/Tidal non appaiono nelle app | mDNS — vedi [Autodiscovery](#autodiscovery-mdns) |
-| Database MPD vuoto, file visibili su NFS | `mpc -h <server> update`, controlla `mpc status | grep updating_db`. Se ore di D-state, copia invece un `mpd.db` pre-costruito |
-| Container in restart loop | `docker compose logs <name>` — controlla prima la pagina stato sistema per capire quale |
-| Pi Zero 2W boota poi va in panic | Zram swap ha saturato l'overlay — `tune_pi_zero_2w_swap_safety()` dovrebbe averlo mascherato. Riflashare per applicare il fix |
-| L'installazione fallisce prima che SSH funzioni | Estrai la SD, cerca `snapmulti-diag-install-failed-*.tar.gz` sulla partizione di boot |
+Fallimenti all'install e post-install (con la procedura del bundle diagnostico): [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md).

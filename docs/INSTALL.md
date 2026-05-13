@@ -353,50 +353,14 @@ If everything shows "healthy" and the web interfaces load — your server is rea
 
 ---
 
-## Adding more speaker Pis
+## Next steps
 
-For each additional speaker:
-
-1. Flash a new SD card with Raspberry Pi Imager
-   - Set a **unique hostname** (e.g. `pi-display`, `kitchen`, `bedroom`)
-   - Same user/password as your server is convenient but not required
-2. Re-insert → run `prepare-sd.sh` → choose **1) Audio Player**
-3. Boot → the speaker Pi auto-discovers the server via mDNS
-
-The new speaker appears in the Snapcast web UI at `http://<hostname>.local:1780` within ~30 seconds of booting.
-
----
-
-## Troubleshooting first boot
-
-| Symptom | Likely cause | Fix |
-|---------|-------------|-----|
-| HDMI blank, no progress | Normal on headless boot | Wait 10 min; check with `ping <hostname>.local` |
-| `ping <hostname>.local` fails | Pi not on network yet | Wait 2 min; if still failing, check WiFi country setting in Imager. 5 GHz channels 100+ (DFS) may fail on first boot — try 2.4 GHz or a non-DFS 5 GHz channel (36–48) |
-| `.local` resolves but SSH refused | SSH not yet started | Wait 1–2 more min |
-| SSH works but containers missing | Installation still running | Run `sudo journalctl -u cloud-init -f` to watch progress |
-| Containers in restart loop | Image pull failed (network) | Run `sudo docker compose logs -f` in `/opt/snapmulti` |
-| Wrong hostname | Set wrong value in Imager | Re-flash SD, redo from Step 1 |
-| `prepare-sd.sh`: boot partition not found | SD not re-inserted after Imager | Remove SD, re-insert, run script again |
-| Windows: script won't run | Execution policy | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` first |
-| Audio HAT not detected (client) | EEPROM-less board | SSH in and run `sudo bash /opt/snapclient/common/scripts/setup.sh` to select your HAT manually |
-| `no matching manifest for linux/arm/v7` | 32-bit OS flashed instead of 64-bit | Re-flash with **Raspberry Pi OS Lite (64-bit)** — all Pi models including Zero 2 W support it |
-| Pi Zero 2 W: WiFi won't connect | 5 GHz SSID configured but Pi Zero only has 2.4 GHz | Re-flash with your 2.4 GHz SSID in Imager WiFi settings |
-| Pi Zero 2 W: audio HAT not detected | `otg_mode=1` or `dr_mode=host` in config.txt | `prepare-sd.sh` fixes this automatically. For manual installs: comment out `otg_mode=1` and remove `dr_mode=host` from dwc2 overlay |
-| Pi Zero 2 W: first boot aborts with "cannot host the snapMULTI server stack" | You picked **Music Server** or **Server + Player** on a 512 MB board | Reflash with `prepare-sd.sh` and choose **1 — Audio Player**. See [HARDWARE.md — Pi Zero 2 W Notes](HARDWARE.md#pi-zero-2-w-notes) |
-
-### Recovering a diagnostic bundle when first boot fails
-
-If `firstboot.sh` fails partway through, it writes a diagnostic tarball to the **FAT32 boot partition** before exiting. This is the partition Raspberry Pi Imager wrote — readable on any computer.
-
-1. Power off the Pi, eject the SD card, and plug it into your laptop
-2. Open the **boot partition** (auto-mounts as `bootfs` on macOS / Linux, drive letter on Windows)
-3. Look for a file named `snapmulti-diag-<reason>-<timestamp>.tar.gz` (e.g. `snapmulti-diag-install-failed-20260513T142301Z.tar.gz`)
-4. Attach it to a [GitHub issue](https://github.com/lollonet/snapMULTI/issues/new/choose) — the bundle is anonymised (no MAC addresses, RFC1918 IPs, SSIDs, passwords, or API tokens)
-
-The bundle contains the most recent install logs, hardware detection output (model, audio HAT, network), and the failing step name. The boot partition stays intact even when overlayroot has activated or the rootfs is otherwise unreachable — that is why we write there rather than `/var/log`.
-
-For post-install issues see [Troubleshooting in USAGE.md](USAGE.md#troubleshooting).
+| Goal | Where |
+|------|-------|
+| Add another speaker (multi-room), connect a NAS library, customise `.env`, manual deploy | [ADVANCED.md](ADVANCED.md) |
+| Something failed (first boot, post-install, mDNS, audio) | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) |
+| Hardware matrix, network requirements, Pi Zero 2 W details | [HARDWARE.md](HARDWARE.md) |
+| Architecture, audio sources, security model | [USAGE.md](USAGE.md) |
 
 ---
 

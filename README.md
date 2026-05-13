@@ -90,11 +90,13 @@ Reflash the SD with the latest release — all config auto-detects on first boot
 
 ## Documentation
 
-| Guide | What's inside |
-|-------|--------------|
-| [Installation](docs/INSTALL.md) | Step-by-step with troubleshooting and diagnostic recovery |
-| [Hardware](docs/HARDWARE.md) | Pi models, DAC HATs, network, Pi Zero 2 W exceptions |
-| [Usage & Ops](docs/USAGE.md) | Architecture, audio sources, MPD, mDNS, deployment, log/diagnostic recovery |
+| Guide | When to open it |
+|-------|-----------------|
+| [Install](docs/INSTALL.md) | First-time setup — flash, boot, listen. The basic path |
+| [Advanced](docs/ADVANCED.md) | Multi-room, NFS / SMB library, custom `.env`, manual deploy, read-only fs, MPD CLI, JSON-RPC |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Something failed — install, mDNS, audio, container restart loops |
+| [Hardware](docs/HARDWARE.md) | Pi models, DAC HATs, network requirements, Pi Zero 2 W details |
+| [Architecture](docs/USAGE.md) | How it's put together — services, ports, audio sources, security model |
 | [Changelog](CHANGELOG.md) | Version history |
 
 ## Contributing & security
