@@ -334,6 +334,28 @@ cleanup_on_failure() {
             echo "=== END DIAGNOSTIC DUMP ==="
         } >> "$UNIFIED_LOG" 2>/dev/null || true
 
+        # Bundle a recoverable diagnostic tarball on the boot partition.
+        # The boot partition is FAT32 — readable from any laptop after
+        # the SD card is removed. This is the one piece of state that
+        # survives an install failure on a headless appliance with no
+        # SSH access and no display: the user moves the SD to a PC and
+        # finds the bundle in the root of the bootfs partition.
+        diag_path=""
+        for _diag in "$SNAP_BOOT/scripts/diagnostic.sh" \
+                     "$SERVER_DIR/scripts/diagnostic.sh" \
+                     "$SCRIPT_DIR/diagnostic.sh"; do
+            [[ -x "$_diag" ]] && { diag_path="$_diag"; break; }
+        done
+        diag_bundle=""
+        if [[ -n "$diag_path" ]]; then
+            # Capture stdout (the bundle path) — diagnostic.sh prints
+            # `[diag] ...` lines to stderr which goes to journald.
+            diag_bundle=$("$diag_path" --reason install-failed --out-dir "$BOOT" 2>>"$UNIFIED_LOG") || diag_bundle=""
+            if [[ -n "$diag_bundle" ]]; then
+                log_error "Diagnostic bundle saved: $diag_bundle"
+            fi
+        fi
+
         # Failure messages must be visible regardless of which VT is
         # active. fb-display may have started already (post snapclient),
         # in which case PROGRESS_TTY is no longer the visible VT — so
@@ -343,6 +365,12 @@ cleanup_on_failure() {
             echo "" > "$_vt" 2>/dev/null || true
             echo "  --- Installation FAILED (module: $CURRENT_MODULE) ---" > "$_vt" 2>/dev/null || true
             echo "  Check log: $UNIFIED_LOG" > "$_vt" 2>/dev/null || true
+            if [[ -n "$diag_bundle" ]]; then
+                echo "  Diagnostic bundle on boot partition (move SD to PC):" > "$_vt" 2>/dev/null || true
+                echo "    $(basename "$diag_bundle")" > "$_vt" 2>/dev/null || true
+                echo "  Attach the .tar.gz to a GitHub issue:" > "$_vt" 2>/dev/null || true
+                echo "    https://github.com/lollonet/snapMULTI/issues/new" > "$_vt" 2>/dev/null || true
+            fi
         done
         chvt 1 2>/dev/null || true
 
