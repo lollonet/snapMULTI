@@ -35,7 +35,7 @@ Default applicati a ogni container in `docker-compose.yml`:
 | `user` | `PUID:PGID` (default `1000:1000`) | Processo non-root dentro il container |
 | Limiti risorse | mem + CPU per servizio in `deploy.resources` | Un container fuori controllo non può affamare gli altri |
 
-**Eccezione 1 — container D-Bus / Avahi** (`snapserver`, `shairport-sync`, `librespot`, `mpd`): hanno bisogno di `apparmor:unconfined` per accedere al socket D-Bus dell'host per l'annuncio mDNS (Avahi). AppArmor nel profilo Ubuntu default blocca la connessione D-Bus altrimenti. Hanno anche bisogno di `cap_add: DAC_OVERRIDE` per scrivere sulle named-pipe FIFO possedute dall'utente `PUID` dell'host. Tutto il resto resta dropped.
+**Eccezione 1 — container D-Bus / Avahi** (`snapserver`, `shairport-sync`, `librespot`): hanno bisogno di `apparmor:unconfined` per accedere al socket D-Bus dell'host per l'annuncio mDNS (Avahi) e di `cap_add: DAC_OVERRIDE` per scrivere sulle named-pipe FIFO possedute dall'utente `PUID` dell'host. AppArmor nel profilo Ubuntu default blocca la connessione D-Bus altrimenti. `mpd` monta gli stessi socket Avahi/D-Bus ma mantiene il profilo AppArmor di default — non richiede `apparmor:unconfined`. Tutto il resto resta dropped.
 
 **Eccezione 2 — `tidal-connect`** (solo ARM, opt-in): gira come root perché il binario proprietario upstream lo richiede; il profilo Compose è **opt-out di default** (vedi [Nota sicurezza Tidal Connect](#nota-sicurezza-tidal-connect)). Se non abiliti il profilo `tidal`, il container non parte mai.
 
