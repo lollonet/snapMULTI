@@ -131,10 +131,14 @@ for flag in quiet loglevel=3 systemd.show_status=false vt.global_cursor_default=
     fi
 done
 
-# Idempotency: each append must be guarded by a grep against the
-# existing cmdline so re-run firstboot doesn't duplicate flags.
-assert 'echo "$quiet_block" | grep -qE "if ! grep -qE.*CMDLINE_FILE"' \
-       'each cmdline flag append is idempotent (grep guard)'
+# Idempotency: each append routes through cmdline_add_token (from
+# scripts/common/cmdline-manager.sh) which is itself idempotent —
+# its internal field-loop returns 0 with no write when the token is
+# already present. The previous explicit `grep -qE` guard around each
+# `sed -i` call is gone because the helper subsumes it. Verifying
+# idempotency now means verifying the helper is called.
+assert 'echo "$quiet_block" | grep -qE "cmdline_add_token"' \
+       'each cmdline flag append routes through idempotent cmdline_add_token helper'
 
 # CRITICAL ORDERING #1: the quiet-boot block MUST run BEFORE
 # `bash scripts/setup.sh`. setup.sh itself runs `raspi-config nonint
