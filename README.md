@@ -116,6 +116,21 @@ snapMULTI runs the install as a systemd service and captures everything as it go
 
 Pull the SD out, plug it into your laptop, attach the bundle to a [GitHub issue](https://github.com/lollonet/snapMULTI/issues/new/choose). The bundle is anonymised (no MAC, no LAN IPs, no SSID, no passwords, no API tokens) — safe to share publicly. Common symptoms and the smoke test (`scripts/device-smoke.sh`): [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
+## Glossary
+
+Quick definitions of terms you'll see in this README and the docs.
+
+| Term | What it is |
+|------|------------|
+| **Server** | The Raspberry Pi (or any Linux box) that hosts the music sources — Snapcast, MPD, Spotify Connect, AirPlay, Tidal — and fans audio out to one or more speakers |
+| **Audio Player** *(or "client" / "speaker")* | A Raspberry Pi that receives audio from the server and plays it through an attached DAC / amp / speaker. One per room |
+| **Snapcast** | The open-source multi-room sync engine snapMULTI is built on. Server-side: `snapserver`; client-side: `snapclient` |
+| **HAT** | "Hardware Attached on Top" — a small board that plugs onto the Pi's GPIO header. snapMULTI works with audio HATs (DAC, amplifier, or digital S/PDIF) |
+| **mDNS** / `.local` | "Multicast DNS" — how devices announce themselves on the LAN without manual IP setup. `pi-server.local` resolves automatically on most networks |
+| **NAS** | Network-attached storage — a separate box (Synology, QNAP, custom) hosting your music library, mounted by snapMULTI over NFS or SMB |
+| **Read-only filesystem** | snapMULTI mounts the root filesystem read-only after install (overlayroot + fuse-overlayfs) so a power cut can't corrupt the SD card. Changes are wiped on reboot unless you toggle off RO mode |
+| **Diagnostic bundle** | Anonymised tarball on the SD's boot partition (`snapmulti-diag-*.tar.gz`) — written automatically when an install fails, attachable to a GitHub issue without leaking secrets |
+
 ## Documentation
 
 | Guide | When to open it |

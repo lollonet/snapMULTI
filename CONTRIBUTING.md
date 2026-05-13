@@ -24,10 +24,12 @@ Each topic has ONE authoritative file (full SSOT table in [CLAUDE.md](CLAUDE.md)
 
 | File | Content |
 |------|---------|
-| `README.md` | What it does, value prop, 4-step quick start |
-| `docs/INSTALL.md` | First-time install walk-through, troubleshooting, diagnostic bundle recovery |
-| `docs/HARDWARE.md` | Pi models, DAC HATs, network, recommended setups |
-| `docs/USAGE.md` | Architecture, audio sources, services/ports, mDNS, deployment, operations |
+| `README.md` | Overview, quick start, realistic expectations, "choose your setup" |
+| `docs/INSTALL.md` | First-time installation walk-through (basic linear path) |
+| `docs/TROUBLESHOOTING.md` | Symptom-based support, mDNS / audio / install failure triage, diagnostic bundle recovery |
+| `docs/ADVANCED.md` | Operational customisation — multi-room, NAS (NFS / SMB), custom `.env`, manual deploy, read-only fs, update strategy, MPD CLI, JSON-RPC |
+| `docs/HARDWARE.md` | Supported Pi models, audio outputs, SD / network / hardware choice, Pi Zero 2 W notes |
+| `docs/USAGE.md` | Architecture reference — services, ports, audio sources, security model |
 | `config/snapserver.conf` | Authoritative source-parameter schema (inline comments) |
 
 Italian mirrors (`*.it.md`) follow the English files 1:1 — update them in the same PR when you change English docs. Full diacritical correctness (use `à è é ì ò ù`, never the ASCII equivalents).

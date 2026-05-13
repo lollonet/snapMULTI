@@ -2,7 +2,7 @@
 
 # Riferimento architettura
 
-Architettura, sorgenti audio e modello di sicurezza — la guida "come è fatto". Per le procedure operative (multi-room, NFS, `.env` personalizzato, deploy manuale) vedi [ADVANCED.it.md](ADVANCED.it.md). Per la prima installazione vedi [INSTALL.it.md](INSTALL.it.md). Per i fallimenti vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md). Per la compatibilità hardware vedi [HARDWARE.it.md](HARDWARE.it.md).
+Il riferimento "come è fatto" — servizi, porte, sorgenti audio, modello di sicurezza, mDNS, unit systemd. Questo file **non è un how-to**. Per le procedure operative (multi-room, NFS, `.env` personalizzato, deploy manuale, MPD CLI, JSON-RPC) vedi [ADVANCED.it.md](ADVANCED.it.md). Per la prima installazione vedi [INSTALL.it.md](INSTALL.it.md). Per i fallimenti vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md). Per la compatibilità hardware vedi [HARDWARE.it.md](HARDWARE.it.md).
 
 ## Architettura
 

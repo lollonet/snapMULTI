@@ -24,10 +24,12 @@ Ogni argomento ha UN solo file autorevole (tabella SSOT completa in [CLAUDE.md](
 
 | File | Contenuto |
 |------|-----------|
-| `README.md` | Cosa fa, value prop, quick start in 4 passi |
-| `docs/INSTALL.md` | Procedura di prima installazione, troubleshooting, recupero bundle diagnostico |
-| `docs/HARDWARE.md` | Modelli Pi, DAC HAT, rete, setup consigliati |
-| `docs/USAGE.md` | Architettura, sorgenti audio, servizi/porte, mDNS, deployment, operazioni |
+| `README.md` | Panoramica, quick start, aspettative realistiche, "scegli il tuo setup" |
+| `docs/INSTALL.md` | Procedura di prima installazione (percorso base lineare) |
+| `docs/TROUBLESHOOTING.md` | Supporto per sintomi, triage mDNS / audio / fallimento install, recupero bundle diagnostico |
+| `docs/ADVANCED.md` | Personalizzazioni operative — multi-room, NAS (NFS / SMB), `.env` personalizzato, deploy manuale, fs read-only, strategia di aggiornamento, MPD CLI, JSON-RPC |
+| `docs/HARDWARE.md` | Modelli Pi supportati, uscite audio, scelta SD / rete / hardware, note Pi Zero 2 W |
+| `docs/USAGE.md` | Riferimento architettura — servizi, porte, sorgenti audio, modello di sicurezza |
 | `config/snapserver.conf` | Schema autorevole dei parametri sorgente (commenti inline) |
 
 I mirror italiani (`*.it.md`) seguono i file inglesi 1:1 — aggiornali nella stessa PR quando modifichi la documentazione inglese. Correttezza diacritica completa (usa `à è é ì ò ù`, mai gli equivalenti ASCII).
