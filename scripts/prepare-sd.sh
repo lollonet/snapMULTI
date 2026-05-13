@@ -336,6 +336,10 @@ copy_server_files() {
     cp "$SCRIPT_DIR/boot-tune.sh" "$dest/" 2>/dev/null || true
     cp "$SCRIPT_DIR/status.sh" "$dest/" 2>/dev/null || true
     cp "$SCRIPT_DIR/device-smoke.sh" "$dest/" 2>/dev/null || true
+    # diagnostic.sh — bundles runtime diagnostics into a tarball on the
+    # boot partition. Invoked by firstboot.sh's failure trap (so it must
+    # ship on the SD card) and on-demand from any device for issue reports.
+    cp "$SCRIPT_DIR/diagnostic.sh" "$dest/" 2>/dev/null || true
     # Modular smoke checks (scripts/smoke/check_*.sh) — sourced by
     # device-smoke.sh at runtime. v0.7.1 shipped device-smoke.sh aware
     # of $SMOKE_MODULES_DIR but forgot to copy the dir itself, so the
@@ -427,6 +431,8 @@ copy_client_files() {
     [[ -f "$SCRIPT_DIR/boot-tune.sh" ]] && cp "$SCRIPT_DIR/boot-tune.sh" "$dest/scripts/"
     [[ -f "$SCRIPT_DIR/docker-driver-reconcile.sh" ]] && cp "$SCRIPT_DIR/docker-driver-reconcile.sh" "$dest/scripts/"
     [[ -f "$SCRIPT_DIR/device-smoke.sh" ]] && cp "$SCRIPT_DIR/device-smoke.sh" "$dest/scripts/"
+    # diagnostic.sh — see copy_server_files for context.
+    [[ -f "$SCRIPT_DIR/diagnostic.sh" ]] && cp "$SCRIPT_DIR/diagnostic.sh" "$dest/scripts/"
     # Modular smoke checks (see copy_server_files for context). Client
     # firstboot path does `cp -r .../client/*` recursively so once
     # smoke/ lands in the boot/client/scripts/ tree it propagates
