@@ -15,8 +15,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common/logging.sh
 source "${SCRIPT_DIR}/common/logging.sh"
 
-# logging.sh gates colors on stderr (-t 2); re-gate on stdout for show_container/section
-[[ -t 1 ]] || { GREEN=''; RED=''; YELLOW=''; CYAN=''; BOLD=''; NC=''; }
+# unified-log.sh exposes colors as _LOG_GREEN / _LOG_RED / … and only when
+# stderr is a TTY. status.sh writes to stdout via show_container/section,
+# so re-derive locally: define the legacy names ourselves, ANSI when stdout
+# is a TTY, empty otherwise. Self-contained — no dependency on unified-log
+# internals — and survives `set -u` regardless of how logging.sh evolves.
+if [[ -t 1 ]]; then
+    GREEN=$'\033[0;32m'
+    RED=$'\033[0;31m'
+    YELLOW=$'\033[1;33m'
+    CYAN=$'\033[0;36m'
+    BOLD=$'\033[1m'
+    NC=$'\033[0m'
+else
+    GREEN=''; RED=''; YELLOW=''; CYAN=''; BOLD=''; NC=''
+fi
 
 # ---------------------------------------------------------------------------
 # Install detection — prefer /opt install dirs; fall back to repo checkout
