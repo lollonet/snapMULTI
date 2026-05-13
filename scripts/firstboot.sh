@@ -340,9 +340,18 @@ cleanup_on_failure() {
         # survives an install failure on a headless appliance with no
         # SSH access and no display: the user moves the SD to a PC and
         # finds the bundle in the root of the bootfs partition.
+        # prepare-sd.sh copies diagnostic.sh to two SD-card locations:
+        # `$SNAP_BOOT/server/diagnostic.sh` (server profile) and
+        # `$SNAP_BOOT/client/scripts/diagnostic.sh` (client profile).
+        # These paths exist BEFORE deploy.sh/setup.sh run, so they are
+        # the only reliable sources for an early-failure bundle. The
+        # /opt/snap*/scripts paths are present only after a successful
+        # file-copy phase and are kept as fallbacks for late failures.
         diag_path=""
-        for _diag in "$SNAP_BOOT/scripts/diagnostic.sh" \
+        for _diag in "$SNAP_BOOT/server/diagnostic.sh" \
+                     "$SNAP_BOOT/client/scripts/diagnostic.sh" \
                      "$SERVER_DIR/scripts/diagnostic.sh" \
+                     "$CLIENT_DIR/scripts/diagnostic.sh" \
                      "$SCRIPT_DIR/diagnostic.sh"; do
             [[ -x "$_diag" ]] && { diag_path="$_diag"; break; }
         done

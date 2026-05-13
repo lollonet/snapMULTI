@@ -204,5 +204,19 @@ assert 'grep -qE "diagnostic\\.sh.*dest/scripts" <<<"$(grep -A60 "^copy_client_f
     "copy_client_files() copies diagnostic.sh"
 
 echo
+echo "=== firstboot.sh path discovery covers prepare-sd.sh write targets ==="
+# Regression gate: prepare-sd.sh copies diagnostic.sh to two SD-card
+# paths (server/diagnostic.sh and client/scripts/diagnostic.sh). On an
+# early install failure (before deploy.sh / setup.sh have copied files
+# to /opt), these SD paths are the ONLY sources for the bundle.
+# firstboot.sh must include both in its lookup loop or the feature is
+# silently defeated. This test caught a real bug where the original
+# lookup tried `$SNAP_BOOT/scripts/diagnostic.sh` (never populated).
+assert 'grep -qF "\$SNAP_BOOT/server/diagnostic.sh" "$FIRSTBOOT"' \
+    "firstboot.sh lookup includes \$SNAP_BOOT/server/diagnostic.sh (server SD path)"
+assert 'grep -qF "\$SNAP_BOOT/client/scripts/diagnostic.sh" "$FIRSTBOOT"' \
+    "firstboot.sh lookup includes \$SNAP_BOOT/client/scripts/diagnostic.sh (client SD path)"
+
+echo
 echo "Results: $pass passed, $fail failed"
 exit $(( fail > 0 ? 1 : 0 ))
