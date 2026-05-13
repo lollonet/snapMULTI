@@ -7,7 +7,7 @@
 [![Docker pulls](https://img.shields.io/docker/pulls/lollonet/snapmulti-server?color=green)](https://hub.docker.com/r/lollonet/snapmulti-server)
 [![License GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-Suona musica in sincronia in ogni stanza. Cast da **Spotify**, **AirPlay**, **Tidal** o dalla tua libreria — tutti gli altoparlanti suonano insieme con deriva inferiore al millisecondo. Flasha un'SD, accendi, fatto. Niente cloud, niente abbonamento, niente telemetria.
+Suona musica in sincronia in ogni stanza. Cast da **Spotify**, **AirPlay**, **Tidal** o dalla tua libreria — tutti gli altoparlanti suonano insieme con deriva inferiore al millisecondo. Flasha un'SD, accendi, fatto. Il core gira in locale, niente cloud o telemetria snapMULTI; i servizi di streaming (Spotify Premium, Tidal, AirPlay) mantengono i loro requisiti di account/dispositivo.
 
 <p align="center">
   <img src="docs/images/display-playing.png" alt="Display HDMI snapMULTI: copertina + spettro + info brano" width="640">

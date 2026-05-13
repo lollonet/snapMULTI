@@ -7,7 +7,7 @@
 [![Docker pulls](https://img.shields.io/docker/pulls/lollonet/snapmulti-server?color=green)](https://hub.docker.com/r/lollonet/snapmulti-server)
 [![License GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-Play music in sync across every room. Cast from **Spotify**, **AirPlay**, **Tidal**, or your music library — all speakers play together with sub-millisecond drift. Flash an SD card, boot, done. No cloud, no subscription, no telemetry.
+Play music in sync across every room. Cast from **Spotify**, **AirPlay**, **Tidal**, or your music library — all speakers play together with sub-millisecond drift. Flash an SD card, boot, done. Core runs locally, no snapMULTI cloud or telemetry; the streaming services (Spotify Premium, Tidal, AirPlay) keep their own account / device requirements.
 
 <p align="center">
   <img src="docs/images/display-playing.png" alt="snapMULTI HDMI display: cover art + spectrum analyzer + track info" width="640">
