@@ -233,7 +233,7 @@ fi
     cat /proc/cmdline 2>/dev/null || true
     echo ""
     echo "=== /etc/asound.conf ==="
-    [[ -f /etc/asound.conf ]] && cat /etc/asound.conf
+    { [[ -f /etc/asound.conf ]] && cat /etc/asound.conf; } || true
     echo ""
     echo "=== vcgencmd ==="
     if command -v vcgencmd >/dev/null 2>&1; then
