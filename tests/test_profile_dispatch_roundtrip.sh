@@ -55,8 +55,11 @@ assert() {
 # reads from `read -rp` so we just `echo "$N" | get_install_type`.
 
 GET_TYPE_SRC=$(mktemp /tmp/snapmulti-get-type-XXXXXX.sh)
-# shellcheck disable=SC2064  # intentional: $GET_TYPE_SRC must expand NOW
-trap "rm -f '$GET_TYPE_SRC'" EXIT
+# shellcheck disable=SC2064  # intentional: paths must expand NOW so
+# trap captures these specific tmpfiles. Includes .callable companion
+# created below so an unexpected exit between mktemp and the manual
+# `rm -f` (line ~84) doesn't leak it.
+trap "rm -f '$GET_TYPE_SRC' '$GET_TYPE_SRC.callable'" EXIT
 
 awk '
     /^get_install_type\(\) \{/ {f=1}
