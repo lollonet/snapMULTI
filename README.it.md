@@ -7,7 +7,7 @@
 [![Docker pulls](https://img.shields.io/docker/pulls/lollonet/snapmulti-server?color=green)](https://hub.docker.com/r/lollonet/snapmulti-server)
 [![License GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-Suona musica in sincronia in ogni stanza partendo da un Raspberry Pi. Cast da **Spotify**, **AirPlay**, **Tidal** o dalla tua libreria — tutti gli altoparlanti suonano insieme con deriva inferiore al millisecondo. Flasha un'SD, accendi, fatto. Local-first: niente cloud o telemetria snapMULTI; i servizi di streaming mantengono i loro requisiti di account.
+snapMULTI è pensato per chi vuole un **sistema audio multi-room open source** senza costruirsi a mano tutto lo stack Linux audio. Devi comunque flashare Raspberry Pi OS e rispondere a poche domande; snapMULTI automatizza la parte difficile — Snapcast, Docker, routing audio, discovery dei servizi (mDNS), boot read-only e diagnostica di recupero. Fai cast da **Spotify**, **AirPlay**, **Tidal** o dalla tua libreria; tutti gli altoparlanti suonano insieme con deriva inferiore al millisecondo. Local-first: niente cloud o telemetria snapMULTI; i servizi di streaming mantengono i loro requisiti di account.
 
 <p align="center">
   <img src="docs/images/display-playing.png" alt="Display HDMI snapMULTI: copertina + spettro + info brano" width="640">
@@ -20,6 +20,24 @@ Suona musica in sincronia in ogni stanza partendo da un Raspberry Pi. Cast da **
 > - un **HAT digitale** (es. HiFiBerry Digi+) verso un sintoamplificatore AV via S/PDIF.
 >
 > Esempi di setup completi e combinazioni testate: [docs/HARDWARE.it.md#configurazioni-consigliate](docs/HARDWARE.it.md#configurazioni-consigliate).
+
+## Scegli il tuo setup
+
+| La tua situazione | Cosa installare su ogni Pi | Note |
+|-------------------|----------------------------|------|
+| **Un altoparlante, una stanza** | Un Pi → scegli **Audio Player** | Va bene qualsiasi Pi 3 B+ / 4 / 5 / Zero 2 W |
+| **Server + un altoparlante sullo stesso Pi** | Un Pi → scegli **Server + Player** | Pi 4 2 GB+ (Pi Zero 2 W non supporta questa modalità) |
+| **Server centrale, altoparlanti in altre stanze** | Un Pi → **Music Server**. Ogni Pi altoparlante → **Audio Player** | mDNS scopre automaticamente — gli speaker trovano il server al primo boot |
+| **La libreria musicale è su un NAS** | Scegli Music Server o Server + Player | `prepare-sd.sh` ti chiederà il path NFS / SMB. Tieni pronti user / password per SMB |
+| **Hai solo un Pi Zero 2 W come client** | Scegli **Audio Player** | Viene auto-promosso a snapclient nativo — niente Docker, niente display copertine. Vedi [Note Pi Zero 2 W](docs/HARDWARE.it.md#note-pi-zero-2-w) |
+
+## Aspettative realistiche
+
+- **Tempo**: ~10–15 min dall'inserimento dell'SD al primo suono. Il primo boot installa via rete, poi si riavvia una volta.
+- **Livello richiesto**: devi sapere flashare un'SD con Raspberry Pi Imager, trovare il Pi tramite hostname (`.local`) o IP, e copiare un piccolo file dalla SD card se qualcosa va storto. **Non** ti serve conoscere Docker, systemd, ALSA o Snapcast — li gestisce snapMULTI.
+- **L'SD è importante**: le microSD economiche sono la prima causa di "install che si blocca". Usa una SanDisk / Samsung A1 (o migliore). Minimo 16 GB.
+- **Rete**: il 2,4 GHz funziona ma il 5 GHz o Ethernet sono più stabili. L'mDNS (`*.local`) deve attraversare la LAN (una sola sottorete, niente isolamento VLAN).
+- **I servizi di streaming hanno requisiti propri**: Spotify Connect richiede Premium. Tidal Connect è solo ARM ed è opt-in (vedi [nota sicurezza](docs/USAGE.it.md#nota-sicurezza-tidal-connect)). AirPlay richiede un dispositivo Apple.
 
 ## Quick start
 
@@ -87,6 +105,16 @@ O su qualsiasi Linux: `sudo apt install snapclient`.
 ## Aggiornamento
 
 Riflasha l'SD con l'ultima release — tutta la config si auto-rileva al primo boot. Per mantenere l'indice della libreria MPD fra reflash: `./scripts/backup-from-sd.sh` prima di riflashare.
+
+## Se qualcosa fallisce
+
+snapMULTI esegue l'installazione come servizio systemd e cattura tutto strada facendo. Se il primo boot si interrompe, la trap di cleanup scrive un bundle diagnostico anonimizzato sulla **partizione boot** dell'SD (FAT32, leggibile da qualsiasi computer — niente SSH necessario):
+
+```
+/boot/firmware/snapmulti-diag-install-failed-<UTC-ts>.tar.gz
+```
+
+Estrai la SD, collegala al laptop, allega il bundle a una [issue GitHub](https://github.com/lollonet/snapMULTI/issues/new/choose). Il bundle è anonimizzato (niente MAC, niente IP della LAN, niente SSID, niente password, niente token API) — si può condividere pubblicamente in sicurezza. Sintomi comuni e smoke test (`scripts/device-smoke.sh`): [docs/TROUBLESHOOTING.it.md](docs/TROUBLESHOOTING.it.md).
 
 ## Documentazione
 

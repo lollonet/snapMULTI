@@ -7,7 +7,7 @@
 [![Docker pulls](https://img.shields.io/docker/pulls/lollonet/snapmulti-server?color=green)](https://hub.docker.com/r/lollonet/snapmulti-server)
 [![License GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-Play music in sync across every room from a Raspberry Pi. Cast from **Spotify**, **AirPlay**, **Tidal**, or your music library — every speaker plays together with sub-millisecond drift. Flash an SD card, boot, done. Local-first: no snapMULTI cloud or telemetry; the streaming services keep their own account requirements.
+snapMULTI is for people who want an **open-source multi-room audio system** without hand-building the Linux audio stack. You still flash Raspberry Pi OS and answer a few setup questions; snapMULTI automates the hard parts — Snapcast, Docker, audio routing, service discovery (mDNS), read-only boot, and recovery diagnostics. Cast from **Spotify**, **AirPlay**, **Tidal**, or your music library; every speaker plays together with sub-millisecond drift. Local-first: no snapMULTI cloud or telemetry; the streaming services keep their own account requirements.
 
 <p align="center">
   <img src="docs/images/display-playing.png" alt="snapMULTI HDMI display: cover art + spectrum analyzer + track info" width="640">
@@ -20,6 +20,24 @@ Play music in sync across every room from a Raspberry Pi. Cast from **Spotify**,
 > - a **digital HAT** (e.g. HiFiBerry Digi+) feeding an AV receiver over S/PDIF.
 >
 > Full setup examples and tested combinations: [docs/HARDWARE.md#recommended-setups](docs/HARDWARE.md#recommended-setups).
+
+## Choose your setup
+
+| Your situation | What to install on each Pi | Notes |
+|----------------|----------------------------|-------|
+| **One speaker, one room** | One Pi → choose **Audio Player** | Any Pi 3 B+ / 4 / 5 / Zero 2 W |
+| **Server + one speaker on the same Pi** | One Pi → choose **Server + Player** | Pi 4 2 GB+ (Pi Zero 2 W not supported in this mode) |
+| **Central server, speakers in other rooms** | One Pi → **Music Server**. Each speaker Pi → **Audio Player** | mDNS auto-discovers — speakers find the server on first boot |
+| **Music library lives on a NAS** | Pick Music Server or Server + Player | `prepare-sd.sh` will ask for the NFS / SMB path. Have user / password ready for SMB |
+| **You only have a Pi Zero 2 W as client** | Choose **Audio Player** | Auto-promoted to native snapclient — no Docker, no cover-art display. See [Pi Zero 2 W Notes](docs/HARDWARE.md#pi-zero-2-w-notes) |
+
+## Realistic expectations
+
+- **Time**: ~10–15 min from inserting the SD to hearing audio. First boot does the install over the network, then reboots once.
+- **Skill floor**: you should be comfortable flashing an SD with Raspberry Pi Imager, finding your Pi by hostname (`.local`) or IP, and copying a small file off the SD card if something goes wrong. You do **not** need to know Docker, systemd, ALSA, or Snapcast — snapMULTI handles them.
+- **SD card matters**: cheap microSDs are the #1 cause of "install hangs". Use a SanDisk / Samsung A1 (or better). 16 GB is the minimum.
+- **Network**: 2.4 GHz works but 5 GHz or Ethernet is more stable. mDNS (`*.local`) must traverse the LAN (single subnet, no VLAN isolation).
+- **Streaming services have their own requirements**: Spotify Connect needs Premium. Tidal Connect is ARM-only and opt-in (see [security note](docs/USAGE.md#tidal-connect-security-note)). AirPlay needs an Apple device.
 
 ## Quick start
 
@@ -87,6 +105,16 @@ Or any Linux box: `sudo apt install snapclient`.
 ## Updating
 
 Reflash the SD with the latest release — all config auto-detects on first boot. To keep your MPD music index across reflashes: `./scripts/backup-from-sd.sh` before flashing.
+
+## If something fails
+
+snapMULTI runs the install as a systemd service and captures everything as it goes. If the first boot aborts, the cleanup trap writes a redacted diagnostic bundle to the SD card's **boot partition** (FAT32, readable from any computer — no SSH needed):
+
+```
+/boot/firmware/snapmulti-diag-install-failed-<UTC-ts>.tar.gz
+```
+
+Pull the SD out, plug it into your laptop, attach the bundle to a [GitHub issue](https://github.com/lollonet/snapMULTI/issues/new/choose). The bundle is anonymised (no MAC, no LAN IPs, no SSID, no passwords, no API tokens) — safe to share publicly. Common symptoms and the smoke test (`scripts/device-smoke.sh`): [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ## Documentation
 

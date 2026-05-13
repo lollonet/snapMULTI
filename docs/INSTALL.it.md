@@ -94,11 +94,12 @@ Scegli una delle due opzioni. Entrambe producono una cartella `snapMULTI/` che i
 
 1. Apri [https://github.com/lollonet/snapMULTI/releases/latest](https://github.com/lollonet/snapMULTI/releases/latest) nel browser
 2. Sotto **Assets**, clicca **Source code (zip)** per scaricare l'ultima release
-3. Estrai lo ZIP — ottieni una cartella chiamata `snapMULTI-<versione>` (per es. `snapMULTI-0.7.4`)
-4. **Rinominala in `snapMULTI`** — lo script prepare-sd si aspetta esattamente quel nome
-5. Apri un terminale nella cartella che *contiene* `snapMULTI/`
+3. Estrai lo ZIP — ottieni una cartella chiamata `snapMULTI-<versione>` (per es. `snapMULTI-0.7.4`). Il nome della cartella non è vincolante — `prepare-sd.sh` ricava la project root dalla propria posizione
+4. Apri un terminale dentro quella cartella estratta
 
 > Preferisci lo ZIP della release taggata al pulsante verde **Code → Download ZIP** della home page del repo — quest'ultimo scarica il branch `main`, che può contenere lavori non rilasciati.
+>
+> Gli esempi nel README e in `INSTALL.it.md` mostrano comandi tipo `./snapMULTI/scripts/prepare-sd.sh` per coerenza con `git clone` (che crea sempre una cartella `snapMULTI`). Se la tua cartella ha un altro nome, adatta il path (o entra nella cartella con `cd` ed esegui `./scripts/prepare-sd.sh`).
 
 ### Opzione B — Clone con Git (consigliato se vuoi aggiornare)
 
@@ -270,7 +271,7 @@ snapMULTI Auto-Install
 
 Il Pi **si riavvia automaticamente** quando l'installazione è completa. Dopo il riavvio, il display diventa scuro (normale — nessun desktop su Lite OS).
 
-> Se l'HDMI rimane vuoto per tutto il tempo: il Pi sta ancora installando via SSH in background. Aspetta 10 minuti prima di presumere che qualcosa sia andato storto.
+> Se l'HDMI rimane nero per tutto il tempo: l'installazione continua comunque in background — `firstboot.sh` gira come servizio systemd e non ha bisogno del display. Aspetta 10 minuti; per controllare lo stato senza schermo, fai `ssh <username>@<hostname>.local` ed esegui `sudo journalctl -u snapmulti-firstboot.service -f`.
 
 ---
 

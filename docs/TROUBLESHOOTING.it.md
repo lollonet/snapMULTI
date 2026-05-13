@@ -33,6 +33,20 @@ Se `firstboot.sh` fallisce a metà, la trap di cleanup scrive un tarball anonimi
 
 Il bundle contiene l'ultima ora di log di installazione, l'output del rilevamento hardware (modello, HAT audio, rete) e il nome del passo fallito. La partizione boot sopravvive all'attivazione di overlayroot e alla corruzione del rootfs — è per questo che scriviamo lì invece che in `/var/log`.
 
+## Prima cosa da fare — esegui lo smoke test
+
+Prima di addentrarti nei singoli sintomi, esegui il controllo di salute generale:
+
+```bash
+sudo bash /opt/snapmulti/scripts/device-smoke.sh --server   # o --client, o --both
+```
+
+Verifica: stato del mount root + overlayroot, storage driver Docker, unit systemd richieste, conteggio container previsti / attivi / healthy, annuncio mDNS, raggiungibilità TCP/RPC di Snapcast, moduli kernel audio rispetto all'HAT configurato, QoS, mount musica e salute dei timer (10 moduli in `scripts/smoke/`).
+
+Se tutte le sezioni sono verdi, la piattaforma è sana e il problema sta altrove (rete upstream, lato app, client che fa cast). Se qualcosa è rosso, il check fallito ti dice quale sottosistema controllare. Lo stesso script è il release gate (ADR-005) ed è quello che `fleet-smoke.sh` esegue su più dispositivi.
+
+Output JSON per script / dashboard: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server --json`.
+
 ## Problemi dopo l'installazione
 
 | Sintomo | Primo controllo |

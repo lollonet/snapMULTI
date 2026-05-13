@@ -33,6 +33,20 @@ If `firstboot.sh` fails partway through, the cleanup trap writes a redacted tarb
 
 The bundle contains the last hour of install logs, hardware detection output (model, audio HAT, network), and the failing step name. The boot partition survives overlayroot activation and rootfs corruption — that's why we write there rather than `/var/log`.
 
+## First check — run the smoke test
+
+Before digging into individual symptoms, run the all-in-one health check:
+
+```bash
+sudo bash /opt/snapmulti/scripts/device-smoke.sh --server   # or --client, or --both
+```
+
+It validates: root mount + overlayroot state, Docker storage driver, required systemd units, container expected / running / healthy counts, mDNS advertisement, Snapcast TCP/RPC reachability, audio kernel modules vs configured HAT, QoS, music mounts, and timer health (10 modules in `scripts/smoke/`).
+
+If every section is green, the platform is healthy and the problem is elsewhere (network upstream, app-side, casting client). If anything is red, the failing check tells you which subsystem to focus on. The same script is the release gate (ADR-005) and what `fleet-smoke.sh` runs across multiple devices.
+
+JSON output for scripts / dashboards: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server --json`.
+
 ## Post-install issues
 
 | Symptom | First check |

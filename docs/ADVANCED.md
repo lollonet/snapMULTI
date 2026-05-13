@@ -144,3 +144,5 @@ Inspect with `systemctl cat <unit>`. Unit files are installed by `firstboot.sh`.
 - **In-place** (advanced, unsupported): `cd /opt/snapmulti && sudo docker compose pull && sudo docker compose up -d`. Config drift between versions is your problem to resolve.
 
 Reflash-first is the project default (DEC-003). All config auto-detects on first boot — same hostname / same music source / same HAT.
+
+After every reflash or in-place update, run the smoke test on the device to confirm the platform came back healthy: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server` (or `--client` / `--both`). It's the same release gate (ADR-005) that `fleet-smoke.sh` runs across multiple devices. Full description in [TROUBLESHOOTING.md — First check](TROUBLESHOOTING.md#first-check--run-the-smoke-test).

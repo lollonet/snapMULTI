@@ -94,11 +94,12 @@ Pick one of the two options. Both produce a folder named `snapMULTI/` that the n
 
 1. Open [https://github.com/lollonet/snapMULTI/releases/latest](https://github.com/lollonet/snapMULTI/releases/latest) in your browser
 2. Under **Assets**, click **Source code (zip)** to download the latest release
-3. Extract the ZIP — you get a folder named `snapMULTI-<version>` (e.g. `snapMULTI-0.7.4`)
-4. **Rename it to `snapMULTI`** — the prepare-sd script expects that exact name
-5. Open a terminal in the folder that *contains* `snapMULTI/`
+3. Extract the ZIP — you get a folder named `snapMULTI-<version>` (e.g. `snapMULTI-0.7.4`). The folder name doesn't matter — `prepare-sd.sh` finds its project root via its own location
+4. Open a terminal inside that extracted folder
 
 > Prefer the tagged release ZIP over the green **Code → Download ZIP** button on the repo home page — the latter ships the `main` branch, which may include unreleased work-in-progress.
+>
+> The README and `INSTALL.md` examples show commands like `./snapMULTI/scripts/prepare-sd.sh` for consistency with `git clone` (which always creates a folder named `snapMULTI`). If your folder has a different name, adjust the path accordingly (or just `cd` into it and run `./scripts/prepare-sd.sh`).
 
 ### Option B — Clone with Git (recommended for updates)
 
@@ -268,7 +269,7 @@ snapMULTI Auto-Install
 
 The Pi **reboots automatically** when installation is complete. After the reboot, the display goes dark (normal — no desktop on Lite OS).
 
-> If the HDMI stays blank throughout: the Pi is still installing via SSH in the background. Wait 10 minutes before assuming something went wrong.
+> If the HDMI stays blank throughout: the installation is still running in the background — `firstboot.sh` is a systemd service that does not need a display. Wait 10 minutes; to check progress without a screen, `ssh <username>@<hostname>.local` and run `sudo journalctl -u snapmulti-firstboot.service -f`.
 
 ---
 
