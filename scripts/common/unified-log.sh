@@ -36,7 +36,10 @@ _UNIFIED_LOG_SH_SOURCED=1
 # Legacy aliases (info/ok/warn/error/step/debug) are provided for back-compat
 # with logging.sh — no caller migration required.
 
-# Log file destinations (can be overridden before sourcing)
+# Log file destinations (can be overridden before sourcing).
+# Capture whether the caller exported UNIFIED_LOG before applying the
+# default — that signals "install chain mode" intent.
+_UNIFIED_LOG_EXPLICIT="${UNIFIED_LOG+set}"
 UNIFIED_LOG="${UNIFIED_LOG:-/var/log/snapmulti-install.log}"
 LOG_SOURCE="${LOG_SOURCE:-unknown}"
 
@@ -44,17 +47,24 @@ LOG_SOURCE="${LOG_SOURCE:-unknown}"
 # so the install log doesn't overlap fb-display rendering on /dev/tty1 / fb0.
 PROGRESS_TTY="${PROGRESS_TTY:-/dev/tty1}"
 
-# Probe whether we can write to the unified log. The probe doubles as
-# initialisation — successful mkdir+touch leaves an empty log ready for
-# append. Failure is silent; falls back to stderr-only output below.
+# File-mode is enabled ONLY when the caller explicitly exported
+# UNIFIED_LOG before sourcing this module. The install chain does this
+# (firstboot.sh:128, deploy.sh:18). Any other invocation — including
+# `sudo device-smoke.sh` from a user shell, `ssh host "cmd"` without a
+# pty, CI capture — falls through to stderr output. Probing the
+# default path for writability is unreliable: root can write to it on
+# every snapMULTI device, so the probe would silently steal output
+# from every interactive run.
 #
 # `{ ...; } 2>/dev/null` wraps the redirect itself so bash's own
 # "Permission denied" message is captured — a bare `2>/dev/null` after
 # the redirect target does not catch shell-level redirect errors.
 _UNIFIED_LOG_WRITABLE=0
-if mkdir -p "$(dirname "$UNIFIED_LOG")" 2>/dev/null \
-   && { : >> "$UNIFIED_LOG"; } 2>/dev/null; then
-    _UNIFIED_LOG_WRITABLE=1
+if [[ "$_UNIFIED_LOG_EXPLICIT" == "set" ]]; then
+    if mkdir -p "$(dirname "$UNIFIED_LOG")" 2>/dev/null \
+       && { : >> "$UNIFIED_LOG"; } 2>/dev/null; then
+        _UNIFIED_LOG_WRITABLE=1
+    fi
 fi
 
 # Stderr fallback colours — applied only when stderr is a real terminal

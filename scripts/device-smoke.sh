@@ -206,7 +206,7 @@ section() {
     if [[ "$JSON_OUTPUT" == "true" ]]; then
         return  # section header is implicit in each record's `section` field
     fi
-    printf '\n%s%s==> %s%s\n' "$CYAN" "$BOLD" "$*" "$NC" >&2
+    printf '\n==> %s\n' "$*" >&2
 }
 
 pass_check() {
