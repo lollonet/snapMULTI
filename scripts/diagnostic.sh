@@ -74,6 +74,32 @@ if ! mkdir -p "$OUT_DIR" 2>/dev/null || [[ ! -w "$OUT_DIR" ]]; then
     fi
 fi
 
+# ─── Source device-detect.sh ────────────────────────────────────────
+# Single authority for hardware probes (device_model, is_pi_zero_2w).
+# Diagnostic.sh ships in several locations alongside common/ (via
+# prepare-sd.sh + deploy.sh/setup.sh). Try the canonical candidates;
+# if none are reachable, device_model is left undefined and the
+# meta.txt collector below falls back to `echo unknown` via its
+# `|| echo unknown` clause. We deliberately do NOT define an inline
+# /proc/device-tree/model fallback here — duplicating detection
+# logic is exactly what scripts/common/device-detect.sh is meant
+# to prevent (council ownership finding) and the anti-drift gate
+# tests/test_no_inline_pi_zero_2w.sh enforces this rule.
+_DIAG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for _candidate in \
+    "$_DIAG_DIR/common/device-detect.sh" \
+    "$_DIAG_DIR/../common/device-detect.sh" \
+    "/opt/snapmulti/scripts/common/device-detect.sh" \
+    "/opt/snapclient/scripts/common/device-detect.sh" \
+    "/boot/firmware/snapmulti/common/device-detect.sh"; do
+    if [[ -f "$_candidate" ]]; then
+        # shellcheck source=common/device-detect.sh
+        source "$_candidate"
+        break
+    fi
+done
+unset _candidate _DIAG_DIR
+
 TS=$(date -u +%Y%m%d-%H%M%SZ)
 BUNDLE_NAME="snapmulti-diag-${REASON}-${TS}"
 BUNDLE_PATH="$OUT_DIR/${BUNDLE_NAME}.tar.gz"
@@ -133,10 +159,10 @@ log "Collecting snapMULTI diagnostics (reason=$REASON, out=$BUNDLE_PATH)"
     echo "generated_at_utc=$TS"
     echo "reason=$REASON"
     echo "hostname=$(hostname 2>/dev/null || echo unknown)"
-    # `{ ...; } 2>/dev/null` so bash's own "No such file or directory"
-    # on the redirect target is silenced (a bare 2>/dev/null on tr
-    # doesn't catch shell-level redirect errors).
-    echo "model=$({ tr -d '\0' </proc/device-tree/model; } 2>/dev/null || echo unknown)"
+    # Use device_model() from scripts/common/device-detect.sh — single
+    # authority for /proc/device-tree/model reads (cached, error-tolerant).
+    # The fallback definition above covers stripped-bundle scenarios.
+    echo "model=$(device_model 2>/dev/null || echo unknown)"
     echo "kernel=$(uname -r 2>/dev/null || echo unknown)"
     echo "uptime=$(uptime -p 2>/dev/null || echo unknown)"
     echo "snapmulti_version=$(cat /opt/snapmulti/VERSION 2>/dev/null \
