@@ -10,7 +10,7 @@ Contents:
 - [Music library on the network (NFS / SMB)](#music-library-on-the-network)
 - [Custom config — `.env` files](#custom-config--env-files)
 - [Read-only filesystem](#read-only-filesystem)
-- [Deployment without `prepare-sd.sh`](#deployment-without-prepare-sd)
+- [Deployment without `prepare-sd`](#deployment-without-prepare-sd)
 - [MPD from the command line](#mpd-from-the-command-line)
 - [Switch source via JSON-RPC](#switch-source-via-json-rpc)
 - [Systemd units](#systemd-units)

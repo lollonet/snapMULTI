@@ -11,7 +11,7 @@ What to check when things fail. For first-time install see [INSTALL.md](INSTALL.
 | HDMI blank, no progress | Normal on headless boot | Wait 10 min; check with `ping <hostname>.local` |
 | `ping <hostname>.local` fails | Pi not on network yet | Wait 2 min; if still failing, check WiFi country in Imager. 5 GHz DFS channels (100+) may fail on first boot — try 2.4 GHz or a non-DFS 5 GHz channel (36–48) |
 | `.local` resolves but SSH refused | SSH not yet started | Wait 1–2 more min |
-| SSH works but containers missing | Installation still running | `sudo journalctl -u cloud-init -f` to watch progress |
+| SSH works but containers missing | Installation still running | `sudo journalctl -u snapmulti-firstboot.service -f` to watch progress |
 | Containers in restart loop | Image pull failed (network) | `cd /opt/snapmulti && sudo docker compose logs -f` |
 | Wrong hostname | Wrong value in Imager | Re-flash SD, redo from Step 1 |
 | `prepare-sd.sh`: boot partition not found | SD not re-inserted after Imager | Remove SD, re-insert, re-run |

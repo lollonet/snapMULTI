@@ -10,7 +10,7 @@ Indice:
 - [Libreria musicale in rete (NFS / SMB)](#libreria-musicale-in-rete)
 - [Configurazione personalizzata — file `.env`](#configurazione-personalizzata--file-env)
 - [Filesystem read-only](#filesystem-read-only)
-- [Deploy senza `prepare-sd.sh`](#deploy-senza-prepare-sd)
+- [Deploy senza `prepare-sd`](#deploy-senza-prepare-sd)
 - [MPD da riga di comando](#mpd-da-riga-di-comando)
 - [Cambiare sorgente via JSON-RPC](#cambiare-sorgente-via-json-rpc)
 - [Unit systemd](#unit-systemd)
