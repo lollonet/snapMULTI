@@ -73,6 +73,20 @@ assert 'grep -qF "Snapweb:   http://\${LOCAL_HOSTNAME}.local:1780" "$FIRSTBOOT"'
 assert '! grep -qF "Speakers:  http://" "$FIRSTBOOT"' \
        'completion banner no longer labels Snapweb as Speakers'
 
+# Every user-facing URL the project publishes must appear in the banner.
+# Snapweb 1780, myMPD 8180, Status 8083, and the TCP audio input 4953
+# (documented in config/snapserver.conf:69 and docs/USAGE.md) are all
+# end-user endpoints. The Snapcast streaming/RPC ports (1704/1705) and
+# the metadata WS (8082) are intentionally omitted — internal protocol.
+assert 'grep -qF "Library:   http://\${LOCAL_HOSTNAME}.local:8180" "$FIRSTBOOT"' \
+       'completion banner names myMPD library URL'
+
+assert 'grep -qF "Status:    http://\${LOCAL_HOSTNAME}.local:8083" "$FIRSTBOOT"' \
+       'completion banner names Status page URL'
+
+assert 'grep -qF "Stream in: tcp://\${LOCAL_HOSTNAME}.local:4953" "$FIRSTBOOT"' \
+       'completion banner names TCP audio input URL (Android/Termux/ffmpeg)'
+
 echo
 echo "=== firstboot.sh — installed systemd unit permissions ==="
 

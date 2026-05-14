@@ -1301,6 +1301,7 @@ case "$INSTALL_TYPE" in
         fi
         _tty "  Library:   http://${LOCAL_HOSTNAME}.local:8180"
         _tty "  Status:    http://${LOCAL_HOSTNAME}.local:8083  (system health page)"
+        _tty "  Stream in: tcp://${LOCAL_HOSTNAME}.local:4953  (push audio from Android/Termux/ffmpeg)"
         ;;
     client)
         _tty "  Player will auto-discover your server"
