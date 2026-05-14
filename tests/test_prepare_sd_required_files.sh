@@ -64,7 +64,12 @@ if [[ -f "$PREPARE_SD_PS1" ]]; then
     assert_contains "$ps1_required_base" "common/systemd-snippets.sh" \
         "ps1 \$requiredBase includes common/systemd-snippets.sh"
 
-    ps1_client_required=$(sed -n '/client\/scripts\/common\/install-deps.sh/,/^[[:space:]]*)$/p' "$PREPARE_SD_PS1")
+    # NB: ps1 client-required array closes with `        )) {` not a bare `)`,
+    # so the closing delimiter has to match the literal `)) {` — `^[[:space:]]*)$`
+    # would never trip and sed would run to EOF, scoping the assert to the entire
+    # tail of the file (assertion still passes because the string is present
+    # above the close, but the range is unintentionally global).
+    ps1_client_required=$(sed -n '/client\/scripts\/common\/install-deps.sh/,/)) {/p' "$PREPARE_SD_PS1")
     assert_contains "$ps1_client_required" "client/scripts/common/systemd-snippets.sh" \
         "ps1 client-required list includes systemd-snippets.sh"
 
