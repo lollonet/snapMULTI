@@ -168,6 +168,145 @@ get_music_source() {
     done
 }
 
+# ── Audio output menu (client/both only) ─────────────────────────
+# Three-level menu:
+#   top:    auto-detect | manual HAT | manual built-in
+#   HAT:    list 16 supported HATs (excludes internal-audio and usb-audio,
+#           both of which are reached via "auto" or sub-menu 3)
+#   built:  HDMI vs Headphones (Pi 5 has no jack — flagged in the menu)
+#
+# Values written to install.conf:
+#   AUDIO_HAT=auto             → setup.sh runs full auto-detect (EEPROM → I2C → USB → internal)
+#   AUDIO_HAT=<hat-slug>       → setup.sh skips detection, uses the named profile directly
+#   AUDIO_HAT=internal-audio   → built-in audio path (no HAT, no USB)
+#   AUDIO_INTERNAL_OUTPUT=hdmi|jack   → only when AUDIO_HAT=internal-audio,
+#                                       tells setup.sh which built-in card to bind
+show_audio_menu() {
+    echo ""
+    echo "  +---------------------------------------------+"
+    echo "  |        Audio output                          |"
+    echo "  |                                              |"
+    echo "  |  1) Auto-detect (recommended)                |"
+    echo "  |     Detects HAT via EEPROM/I2C, falls back   |"
+    echo "  |     to USB DAC or built-in audio             |"
+    echo "  |                                              |"
+    echo "  |  2) I have an audio HAT (choose from list)   |"
+    echo "  |                                              |"
+    echo "  |  3) No HAT -- use Pi built-in audio          |"
+    echo "  |     HDMI (TV/monitor) or 3.5mm jack          |"
+    echo "  |                                              |"
+    echo "  +---------------------------------------------+"
+    echo ""
+    echo "  Auto-detect is the right choice for >90% of installs."
+    echo "  Use 2 or 3 only if auto-detect failed on a previous attempt."
+    echo ""
+}
+
+get_audio_type() {
+    local choice
+    while true; do
+        read -rp "  Choose [1-3]: " choice
+        case "$choice" in
+            1) echo "auto";     return ;;
+            2) echo "hat";      return ;;
+            3) echo "internal"; return ;;
+            *) echo "  Invalid choice. Enter 1, 2, or 3." >&2 ;;
+        esac
+    done
+}
+
+# Enumerate supported HATs from client/common/audio-hats/*.conf.
+# Skips `internal-audio` (sub-menu 3) and `usb-audio` (covered by auto-detect).
+# Writes "slug|friendly name" pairs to stdout, sorted by friendly name.
+_list_supported_hats() {
+    local hat_dir="$CLIENT_DIR/common/audio-hats"
+    [[ -d "$hat_dir" ]] || return 1
+    local f slug name
+    for f in "$hat_dir"/*.conf; do
+        [[ -f "$f" ]] || continue
+        slug=$(basename "$f" .conf)
+        case "$slug" in internal-audio|usb-audio) continue ;; esac
+        # HAT_NAME="..." line — strip quotes; tolerate either single or double.
+        name=$(grep -m1 '^HAT_NAME=' "$f" | cut -d= -f2- | sed 's/^["'"'"']//;s/["'"'"']$//')
+        printf '%s|%s\n' "$slug" "${name:-$slug}"
+    done | sort -t'|' -k2,2
+}
+
+show_hat_menu() {
+    echo ""
+    echo "  +---------------------------------------------+"
+    echo "  |        Choose your audio HAT                 |"
+    echo "  +---------------------------------------------+"
+    echo ""
+    local i=1 name
+    while IFS='|' read -r _ name; do
+        printf "  %2d) %s\n" "$i" "$name"
+        i=$((i + 1))
+    done < <(_list_supported_hats)
+    echo ""
+    echo "  Cancel and return to auto-detect:"
+    echo "   0) Back"
+    echo ""
+}
+
+# Maps the numeric choice from show_hat_menu back to the slug. Returns the
+# slug on stdout, "auto" if the user picked 0 (back), or repeats the prompt
+# on invalid input. Reads the slug list a second time to keep the menu and
+# the resolver in lock-step — anything `_list_supported_hats` shows here
+# is selectable here.
+get_hat_choice() {
+    local hats=()
+    while IFS='|' read -r slug _; do
+        hats+=("$slug")
+    done < <(_list_supported_hats)
+    local total=${#hats[@]}
+    local choice
+    while true; do
+        read -rp "  Choose [0-$total]: " choice
+        if [[ "$choice" == "0" ]]; then
+            echo "auto"
+            return
+        fi
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= total )); then
+            echo "${hats[$((choice - 1))]}"
+            return
+        fi
+        echo "  Invalid choice. Enter a number between 0 and $total." >&2
+    done
+}
+
+show_internal_audio_menu() {
+    echo ""
+    echo "  +---------------------------------------------+"
+    echo "  |        Built-in audio output                 |"
+    echo "  |                                              |"
+    echo "  |  1) HDMI (TV / monitor)                      |"
+    echo "  |     Works on Pi 3, Pi 4, Pi 5                |"
+    echo "  |                                              |"
+    echo "  |  2) 3.5mm jack (Headphones)                  |"
+    echo "  |     Works on Pi 3, Pi 4 only                 |"
+    echo "  |     (Pi 5 has no analog jack -- pick 1)      |"
+    echo "  |                                              |"
+    echo "  +---------------------------------------------+"
+    echo ""
+    echo "  On Bookworm/Trixie the real ALSA card name is"
+    echo "  detected at first boot via 'aplay -L' -- you do"
+    echo "  not need to know it here."
+    echo ""
+}
+
+get_internal_output() {
+    local choice
+    while true; do
+        read -rp "  Choose [1-2]: " choice
+        case "$choice" in
+            1) echo "hdmi"; return ;;
+            2) echo "jack"; return ;;
+            *) echo "  Invalid choice. Enter 1 or 2." >&2 ;;
+        esac
+    done
+}
+
 # ── Advanced options menu ──────────────────────────────────────────
 # Defaults (production)
 ADV_READONLY="true"
@@ -498,6 +637,36 @@ echo ""
 echo "Installing as: $INSTALL_TYPE"
 echo ""
 
+# ── Audio output (client/both only) ──────────────────────────────
+# AUDIO_HAT default `auto` matches setup.sh's current behaviour: when the
+# install is server-only, no audio is configured, so the variable is
+# never read on the device. We still emit it to install.conf so the file
+# format stays stable across install types — easier to diff and to spot
+# manually-edited typos.
+AUDIO_HAT="auto"
+AUDIO_INTERNAL_OUTPUT=""
+if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+    show_audio_menu
+    audio_type=$(get_audio_type)
+    case "$audio_type" in
+        auto)
+            AUDIO_HAT="auto"
+            ;;
+        hat)
+            show_hat_menu
+            AUDIO_HAT=$(get_hat_choice)
+            ;;
+        internal)
+            AUDIO_HAT="internal-audio"
+            show_internal_audio_menu
+            AUDIO_INTERNAL_OUTPUT=$(get_internal_output)
+            ;;
+    esac
+    echo ""
+    echo "Audio: $AUDIO_HAT${AUDIO_INTERNAL_OUTPUT:+ ($AUDIO_INTERNAL_OUTPUT)}"
+    echo ""
+fi
+
 # ── Music source (server/both only) ─────────────────────────────
 MUSIC_SOURCE=""
 NFS_SERVER=""
@@ -556,6 +725,15 @@ NFS_SERVER=$NFS_SERVER
 NFS_EXPORT=$NFS_EXPORT
 SMB_SERVER=$SMB_SERVER
 SMB_SHARE=$SMB_SHARE
+# Audio output (client/both only — server installs ignore these)
+#   AUDIO_HAT=auto             → full detection (EEPROM → I2C → USB → built-in)
+#   AUDIO_HAT=<hat-slug>       → skip detection, use named profile
+#   AUDIO_HAT=internal-audio   → built-in (HDMI or 3.5mm jack)
+# AUDIO_INTERNAL_OUTPUT only honoured when AUDIO_HAT=internal-audio:
+#   hdmi → bind to vc4-hdmi-0 / vc4hdmi0 / HDMI (kernel-dependent name)
+#   jack → bind to "Headphones" card (Pi 3/4 only — Pi 5 falls back to HDMI)
+AUDIO_HAT=$AUDIO_HAT
+AUDIO_INTERNAL_OUTPUT=$AUDIO_INTERNAL_OUTPUT
 # Advanced options
 ENABLE_READONLY=$ADV_READONLY
 SKIP_UPGRADE=$ADV_SKIP_UPGRADE

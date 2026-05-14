@@ -216,7 +216,37 @@ Se il rilevamento automatico fallisce:
 
 ---
 
-### Menu 2 — Dov'è la tua musica? *(Solo Music Server e Server+Player)*
+### Menu 2 — Uscita audio *(Solo Audio Player e Server+Player)*
+
+```
+  +---------------------------------------------+
+  |        Audio output                          |
+  |                                              |
+  |  1) Auto-detect (recommended)                |
+  |     Detects HAT via EEPROM/I2C, falls back   |
+  |     to USB DAC or built-in audio             |
+  |                                              |
+  |  2) I have an audio HAT (choose from list)   |
+  |                                              |
+  |  3) No HAT -- use Pi built-in audio          |
+  |     HDMI (TV/monitor) or 3.5mm jack          |
+  |                                              |
+  +---------------------------------------------+
+```
+
+| Opzione | Quando sceglierla |
+|---------|-------------------|
+| **1 — Auto-detect** | Scelta corretta per >90% delle installazioni. Il Pi sonda l'EEPROM del HAT al primo boot, scansiona il bus I2C per chip DAC noti, e ricade su USB DAC e poi audio integrato. Sceglila a meno che l'auto-detect non sia già fallito una volta |
+| **2 — Ho un HAT audio** | Salta l'auto-detect e scegli il profilo esatto da una lista di 15 HAT supportati (HiFiBerry, IQaudio, JustBoom, Allo, InnoMaker, Waveshare). Utile quando il tuo HAT non ha EEPROM o il chip è condiviso tra profili |
+| **3 — Senza HAT — audio integrato** | Audio integrato Pi 3/4/5. Poi scegli HDMI (TV/monitor) o jack 3.5mm. **Il Pi 5 non ha jack analogico** — scegli HDMI o lascia fare all'auto-detect |
+
+Se scegli **3**, un sotto-menu ti chiede l'uscita:
+- **HDMI** — funziona su Pi 3, Pi 4, Pi 5. Il nome reale della card ALSA (`vc4-hdmi-0`, `HDMI`, dipende dal kernel) viene risolto al primo boot via `aplay -L`
+- **Jack 3.5mm (Headphones)** — funziona solo su Pi 3 e Pi 4. Il Pi 5 non ha jack analogico; se scegli questa opzione su Pi 5, l'installer logga un warning e ricade automaticamente su HDMI
+
+---
+
+### Menu 3 — Dov'è la tua musica? *(Solo Music Server e Server+Player)*
 
 ```
   +---------------------------------------------+

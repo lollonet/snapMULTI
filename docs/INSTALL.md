@@ -214,7 +214,37 @@ If auto-detection fails:
 
 ---
 
-### Menu 2 — Where is your music? *(Music Server and Server+Player only)*
+### Menu 2 — Audio output *(Audio Player and Server+Player only)*
+
+```
+  +---------------------------------------------+
+  |        Audio output                          |
+  |                                              |
+  |  1) Auto-detect (recommended)                |
+  |     Detects HAT via EEPROM/I2C, falls back   |
+  |     to USB DAC or built-in audio             |
+  |                                              |
+  |  2) I have an audio HAT (choose from list)   |
+  |                                              |
+  |  3) No HAT -- use Pi built-in audio          |
+  |     HDMI (TV/monitor) or 3.5mm jack          |
+  |                                              |
+  +---------------------------------------------+
+```
+
+| Option | Use when |
+|--------|----------|
+| **1 — Auto-detect** | Right for >90% of installs. The Pi probes the HAT EEPROM at first boot, scans the I2C bus for known DAC chips, falls back to USB DAC, then to built-in audio. Choose this unless auto-detect failed on a previous attempt |
+| **2 — I have an audio HAT** | Skip auto-detect and pick the exact profile from a list of 15 supported HATs (HiFiBerry, IQaudio, JustBoom, Allo, InnoMaker, Waveshare). Useful when your HAT lacks an EEPROM or the chip is shared across profiles |
+| **3 — No HAT — built-in audio** | Pi 3/4/5 onboard audio. You then pick between HDMI (TV/monitor) or 3.5mm jack. **Pi 5 has no analog jack** — pick HDMI or let auto-detect handle it |
+
+If you pick **3**, a sub-menu asks for the output:
+- **HDMI** — works on Pi 3, Pi 4, Pi 5. The real ALSA card name (`vc4-hdmi-0`, `HDMI`, depending on kernel) is resolved at first boot via `aplay -L`
+- **3.5mm jack (Headphones)** — works on Pi 3 and Pi 4 only. Pi 5 has no analog jack; if you pick this on Pi 5, the installer logs a warning and automatically falls back to HDMI
+
+---
+
+### Menu 3 — Where is your music? *(Music Server and Server+Player only)*
 
 ```
   +---------------------------------------------+

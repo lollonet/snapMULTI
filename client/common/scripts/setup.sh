@@ -97,6 +97,10 @@ if [ "$AUTO_MODE" = true ]; then
     fi
     # Defaults for auto mode (can be overridden by config file)
     AUDIO_HAT="${AUDIO_HAT:-auto}"
+    # Built-in audio output selector — only consulted when AUDIO_HAT is
+    # internal-audio (i.e. user explicitly chose "no HAT" in prepare-sd).
+    # Empty for any other AUDIO_HAT value.
+    AUDIO_INTERNAL_OUTPUT="${AUDIO_INTERNAL_OUTPUT:-}"
     DISPLAY_RESOLUTION="${DISPLAY_RESOLUTION:-}"
     BAND_MODE="${BAND_MODE:-third-octave}"
     SNAPSERVER_HOST="${SNAPSERVER_HOST:-}"
@@ -358,6 +362,34 @@ if [[ "${HAT_CONFIG:-}" == "usb-audio" ]]; then
     if [[ -n "${USB_CARD_ID:-}" ]]; then
         echo "Overriding HAT_CARD_NAME=$HAT_CARD_NAME with USB_CARD_ID=$USB_CARD_ID"
         HAT_CARD_NAME="$USB_CARD_ID"
+    fi
+fi
+
+# Override HAT_CARD_NAME with the real ALSA card name when the user picked
+# "No HAT — use Pi built-in audio" in prepare-sd's audio menu. The static
+# `Headphones` in internal-audio.conf is correct only for Pi 3/4 on older
+# kernels; Bookworm/Trixie expose HDMI as `vc4-hdmi-0`/`vc4-hdmi-1` and Pi
+# 5 has no analog jack at all. detect_internal_card_name walks `aplay -L`
+# and returns the first real match. AUDIO_INTERNAL_OUTPUT comes from
+# install.conf (set when AUDIO_HAT=internal-audio).
+if [[ "${HAT_CONFIG:-}" == "internal-audio" ]] && [[ -n "${AUDIO_INTERNAL_OUTPUT:-}" ]]; then
+    if declare -F detect_internal_card_name &>/dev/null; then
+        _internal_card=$(detect_internal_card_name "$AUDIO_INTERNAL_OUTPUT" 2>/dev/null || true)
+        # Fallback chain: if jack was requested but not present (Pi 5),
+        # automatically retry as hdmi rather than leave the operator with
+        # an unbound card and a non-starting snapclient. The retry is
+        # logged so the diagnostic bundle reflects what actually happened.
+        if [[ -z "$_internal_card" && "$AUDIO_INTERNAL_OUTPUT" == "jack" ]]; then
+            echo "[WARN] AUDIO_INTERNAL_OUTPUT=jack requested but no Headphones card found (likely Pi 5). Falling back to HDMI."
+            _internal_card=$(detect_internal_card_name hdmi 2>/dev/null || true)
+        fi
+        if [[ -n "$_internal_card" ]]; then
+            echo "Overriding HAT_CARD_NAME=$HAT_CARD_NAME with detected built-in card: $_internal_card (mode=$AUDIO_INTERNAL_OUTPUT)"
+            HAT_CARD_NAME="$_internal_card"
+        else
+            echo "[WARN] detect_internal_card_name returned empty for mode=$AUDIO_INTERNAL_OUTPUT — keeping default HAT_CARD_NAME=$HAT_CARD_NAME"
+        fi
+        unset _internal_card
     fi
 fi
 

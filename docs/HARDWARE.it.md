@@ -123,10 +123,12 @@ Dettagli:
 | **DAC HAT I2S** (HiFiBerry DAC+, DAC2 Pro) | Eccellente | Migliore qualità analogica, uscita RCA, si collega direttamente al GPIO del Pi |
 | **HAT S/PDIF I2S** (HiFiBerry Digi+) | Eccellente | Uscita digitale ottica/coassiale verso ricevitore AV o DAC esterno; nessuna conversione analogica sul Pi |
 | **DAC USB** | Molto buona | Ampia gamma di opzioni; funziona con Pi Zero (nessun header GPIO necessario) |
-| **HDMI** | Buona | Usa il tuo TV/ricevitore AV come dispositivo di uscita |
-| **Jack 3.5mm** (Pi 3/4) | Adeguata | Rumore di fondo percepibile su alcuni modelli; va bene per ascolto casual |
+| **HDMI** | Buona | Usa il tuo TV/ricevitore AV come dispositivo di uscita. Il nome della card ALSA varia per kernel: `vc4-hdmi-0` (Bookworm/Trixie KMS), `HDMI` (legacy). Risolto automaticamente al primo boot via `aplay -L` |
+| **Jack 3.5mm** (Pi 3/4) | Adeguata | Rumore di fondo percepibile su alcuni modelli; va bene per ascolto casual. **Il Pi 5 non ha jack analogico** — scegliere "jack" nel menu installer ricade automaticamente su HDMI |
 
 > **Suggerimento:** Usa un HAT I2S per la migliore qualità. [HiFiBerry DAC+ Zero](https://www.hifiberry.com/shop/boards/dacplus-zero/) per i nodi client, [HiFiBerry DAC2 Pro](https://www.hifiberry.com/shop/boards/dac2-pro/) o [HiFiBerry Digi+](https://www.hifiberry.com/shop/boards/hifiberry-digi/) per nodi collegati a ricevitori AV.
+
+> **Override manuale:** `prepare-sd.sh` offre un menu *Uscita audio* (auto-detect, scegliere un HAT dalla lista, oppure scegliere HDMI/jack integrato). L'auto-detect è la scelta giusta per oltre il 90% delle installazioni — usa i percorsi manuali solo se l'auto-detect è già fallito una volta. Vedi [INSTALL.it.md — Menu 2 — Uscita audio](INSTALL.it.md#menu-2--uscita-audio-solo-audio-player-e-serverplayer).
 
 ### Metodo di Installazione Client
 
