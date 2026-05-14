@@ -125,12 +125,16 @@ JSON for scripts / dashboards: `sudo bash /opt/snapmulti/scripts/device-smoke.sh
 **Likely cause.** NAS share path mismatch (snapMULTI rejects paths with spaces — Synology's default `Music Share` must be renamed `Music_Share`), wrong username / password for SMB, NFS export not allowed for the Pi's IP, or the systemd `.automount` failed to enable.
 
 **Try this.**
-1. On the server: `systemctl status music.mount music.automount` — the unit state tells you if the mount even tries.
+1. On the server: identify the mount unit name (systemd-escapes the mount path) and check its state. Default mount points are `/media/nfs-music` or `/media/smb-music`:
+   ```bash
+   systemctl status "$(systemd-escape -p --suffix=automount /media/nfs-music)"
+   systemctl status "$(systemd-escape -p --suffix=mount /media/nfs-music)"
+   ```
 2. Try a manual mount with the same path: `sudo mount -t nfs <nas>:<share> /mnt/test` or `sudo mount -t cifs ...`. The error message is more informative than the systemd one.
 3. Check the path has **no spaces** on the NAS side. Rename `Music Share` → `Music_Share`.
-4. For SMB, verify the credentials. They live in `/etc/credentials.smb` (root-only, ext4) after install — the install scrubs them off the FAT32 partition for safety.
+4. For SMB, the persistent credentials live in `/etc/snapmulti-smb-credentials` (root-only, on ext4). They are also written into `install.conf` on the FAT32 boot partition during `prepare-sd.sh` and `firstboot.sh`, then scrubbed once `mount-music` has copied them to `/etc/snapmulti-smb-credentials`.
 
-**If still broken.** Re-run install with the corrected path: reflash or `sudo /opt/snapmulti/scripts/setup_music_source.sh` (from the repo). MPD library scan over NFS is slow on the first run — see [ADVANCED.md — Music library](ADVANCED.md#music-library-on-the-network) for the `mpd.db` backup trick.
+**If still broken.** Reflash the SD with the corrected NAS path — snapMULTI is reflash-first by design (DEC-003) and a fresh install only takes 10–15 min. Manual recovery without reflash is possible but not officially supported; it requires editing `/etc/snapmulti-smb-credentials` and the systemd `.mount`/`.automount` units by hand. MPD library scan over NFS is slow on the first run — see [ADVANCED.md — Music library](ADVANCED.md#music-library-on-the-network) for the `mpd.db` backup trick.
 
 ## Docker / "no space left on device"
 
@@ -153,8 +157,12 @@ JSON for scripts / dashboards: `sudo bash /opt/snapmulti/scripts/device-smoke.sh
 
 **Try this.**
 1. Identify the slow unit: `systemctl list-jobs` during shutdown, or `journalctl -b -1 | grep -i 'timeout\|stop job'` after reboot.
-2. If a music NAS mount is blocking, `systemctl edit music.mount` and add `TimeoutStopSec=10s` under `[Mount]`.
-3. For container shutdown: the snapclient / snapserver units use `KillSignal=SIGTERM` + 30 s timeout — usually graceful.
+2. If a music NAS mount is blocking, drop in a stop-timeout override on the actual unit (computed via `systemd-escape`):
+   ```bash
+   sudo systemctl edit "$(systemd-escape -p --suffix=mount /media/nfs-music)"
+   # then add under [Mount]: TimeoutStopSec=10s
+   ```
+3. For container shutdown: snapMULTI's systemd units run `docker compose down`, which in turn signals each container and waits for the per-service stop-grace (Docker's default is 10 s unless overridden in `docker-compose.yml`). On healthy stops the whole cycle is a few seconds; on an unresponsive container, expect to wait up to the per-service Docker timeout, then up to the systemd unit's own `TimeoutStopSec` (90 s default) before systemd SIGKILLs.
 
 **If still broken.** A 60–90 second shutdown is not a bug per se — systemd's default unit timeout is 90 s. If everything still completes, ignore it. If shutdown actually never finishes, that's a hardware-level hang and a `dmesg` post-reboot will usually show the cause (USB device, SD card timeout, etc.).
 

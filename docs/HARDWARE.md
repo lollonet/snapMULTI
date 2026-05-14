@@ -63,7 +63,7 @@ The server runs all audio services: Snapcast, MPD, shairport-sync (AirPlay), go-
 
 > **Note:** Pi 3B+ has only **1 GB RAM**. Server-only works but leaves limited headroom. Not recommended for "both" mode (server + client with display). Pi 2 is too slow for simultaneous AirPlay + Spotify; avoid for server use.
 
-> **Beginners:** If this is your first time, use a Raspberry Pi 4 (4 GB) and follow the [Quick start in the README](../README.md#quick-start). It handles everything automatically — no terminal required.
+> **Beginners:** If this is your first time, use a Raspberry Pi 4 (4 GB) and follow the [Quick start in the README](../README.md#quick-start). It handles everything automatically — no Linux administration required.
 
 ## Client Requirements
 

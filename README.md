@@ -52,18 +52,18 @@ snapMULTI relies on the cloud-init metadata that Imager writes when you set host
 
 ### 2. Get the snapMULTI files
 
-Either `git clone https://github.com/lollonet/snapMULTI.git`, or download the [latest release ZIP](https://github.com/lollonet/snapMULTI/releases/latest) and rename the folder to `snapMULTI/`.
+Either `git clone https://github.com/lollonet/snapMULTI.git`, or download and extract the [latest release ZIP](https://github.com/lollonet/snapMULTI/releases/latest). The folder name does not matter — `prepare-sd.sh` resolves its own path.
 
 ### 3. Re-insert the SD and run the prep script
 
-Re-insert the freshly-flashed SD so the `bootfs` partition appears on your computer, then in the folder that *contains* `snapMULTI/`:
+Re-insert the freshly-flashed SD so the `bootfs` partition appears on your computer, then from inside the snapMULTI folder:
 
 ```bash
 # macOS / Linux:
-./snapMULTI/scripts/prepare-sd.sh
+./scripts/prepare-sd.sh
 
 # Windows PowerShell:
-.\snapMULTI\scripts\prepare-sd.ps1
+.\scripts\prepare-sd.ps1
 ```
 
 The script asks: **Audio Player** (speaker only) / **Music Server** (Spotify+AirPlay+Tidal+library) / **Server + Player** (both on one Pi).

@@ -15,6 +15,9 @@ Contents:
 - [Switch source via JSON-RPC](#switch-source-via-json-rpc)
 - [Systemd units](#systemd-units)
 - [Update strategy](#update-strategy)
+- [Resource profiles](#resource-profiles)
+- [Firewall rules](#firewall-rules)
+- [Network QoS](#network-qos)
 
 ## Multi-room — adding speakers
 
@@ -37,7 +40,7 @@ If your library lives on a NAS (Synology, QNAP, generic Linux server, Windows sh
 | Protocol | When | Notes |
 |----------|------|-------|
 | NFS | Linux / Synology / QNAP NAS, allow-list by IP | `prepare-sd.sh` writes a systemd `.mount`/`.automount` pair; no password |
-| SMB / CIFS | Windows share, Synology / QNAP with username + password | Credentials stay on root-only ext4, never on the FAT32 boot partition |
+| SMB / CIFS | Windows share, Synology / QNAP with username + password | Credentials are written into `install.conf` on the FAT32 boot partition during `prepare-sd.sh` and `firstboot.sh`, then scrubbed and persisted in `/etc/snapmulti-smb-credentials` (root-only, on ext4) |
 | USB | Drive plugged into the Pi | Auto-mounted by `udisks2`; pick the partition UUID in the menu |
 | Local | Files copied into `/audio` on the Pi | Default for first-time users |
 
