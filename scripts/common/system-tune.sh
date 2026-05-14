@@ -168,27 +168,22 @@ BCMEOF
     # firstboot already schedules at the end of setup.
 }
 
-# ── Pi Zero 2W zram swap safety ──────────────────────────────────
-# Pi Zero 2W (512 MB RAM) on Pi OS Bookworm ships with
-# systemd-zram-generator + rpi-zram-writeback.service enabled. The
-# writeback service moves cold ZRAM pages to /var/swap (a swap file).
-# Under overlayroot=tmpfs, the /var path lives in the upper tmpfs
-# layer: any write to /var/swap allocates CoW pages from the
-# 256 MB tmpfs upper, which then fills until the kernel panics and
-# the device reboots. Observed on `pizero` 2026-05-11 (overlay tmpfs
-# at 97 % full, infinite reboot loop).
+# ── Appliance swap safety ────────────────────────────────────────
+# Pi OS Bookworm ships rpi-swap/zram helpers that can create /var/swap.
+# Under overlayroot=tmpfs, /var lives in the volatile upper layer: a
+# swap file there allocates RAM-backed tmpfs pages to provide "swap",
+# which is self-defeating and can trigger ENOSPC/containerd recovery.
+# snapMULTI is an appliance with memory-limited containers and a
+# reflash-first update policy, so swap is disabled on every install.
 #
-# Fix: mask the four zram units and remove any pre-existing
-# /var/swap file. MUST be invoked from firstboot.sh BEFORE setup.sh
-# runs (setup.sh calls `raspi-config nonint do_overlayfs 0` which
-# activates overlayroot, after which /etc/systemd/system writes go
-# to tmpfs upper and evaporate at reboot).
+# Observed live:
+#   - pizero: /var/swap filled the 256 MB overlay tmpfs → reboot loop
+#   - pi3hat: rpi-resize-swap-file repeatedly tried 580 MB in tmpfs
+#   - snapvideo: rpi-resize-swap-file peaked at 4 GB while making swap
 #
-# Detection: same `Zero 2 W` model match as the bcm43430 workaround.
-# Other Pi models have enough RAM to use zram safely.
-tune_pi_zero_2w_swap_safety() {
-    is_pi_zero_2w || return 0  # other Pi models keep zram (sufficient RAM)
-
+# Fix: disable the generator path, mask the generated/helper units, and
+# remove any pre-existing /var/swap.
+tune_appliance_swap_safety() {
     # Authoritative kill switch for Pi OS Bookworm's rpi-swap package:
     # /lib/systemd/system-generators/rpi-swap-generator reads
     # /etc/rpi/swap.conf at every boot and regenerates dev-zram0.swap
@@ -201,12 +196,14 @@ tune_pi_zero_2w_swap_safety() {
     # mask is kept as a defense-in-depth measure for kernels and
     # distros that bypass the rpi-swap generator entirely.
     local swap_conf=/etc/rpi/swap.conf
-    local swap_conf_payload='# snapMULTI Pi Zero 2W: zram and file swap disabled to keep
-# overlay tmpfs from filling (see tune_pi_zero_2w_swap_safety
+    local swap_conf_payload='# snapMULTI appliance mode: zram and file swap disabled.
+# See tune_appliance_swap_safety
 # in scripts/common/system-tune.sh). Re-add [File] / [Zram]
 # sections to re-enable.'
 
     local units=(
+        rpi-resize-swap-file.service
+        rpi-setup-loop@var-swap.service
         dev-zram0.swap
         systemd-zram-setup@zram0.service
         rpi-zram-writeback.service
@@ -221,7 +218,7 @@ tune_pi_zero_2w_swap_safety() {
         fi
     done
     local conf_ok=0
-    if [[ -f "$swap_conf" ]] && grep -qF "snapMULTI Pi Zero 2W" "$swap_conf"; then
+    if [[ -f "$swap_conf" ]] && grep -qF "snapMULTI appliance mode" "$swap_conf"; then
         conf_ok=1
     elif [[ ! -d /etc/rpi ]]; then
         # rpi-swap package not installed at all — nothing to neutralise.
@@ -231,7 +228,7 @@ tune_pi_zero_2w_swap_safety() {
         conf_ok=1
     fi
     if (( all_masked == 1 )) && (( conf_ok == 1 )) && [[ ! -f /var/swap ]]; then
-        ok "Pi Zero 2W zram swap safety already configured"
+        ok "Appliance swap safety already configured"
         return 0
     fi
 
@@ -243,10 +240,16 @@ tune_pi_zero_2w_swap_safety() {
             is_overlayroot && warn "rpi-swap-generator config not writable (overlayroot — write before ro-mode enable)"
         fi
     fi
+    # rpi-swap can activate before cloud-init runs firstboot. Masking
+    # prevents future activations; swapoff makes the current boot match
+    # the appliance policy immediately.
+    if [[ -s /proc/swaps ]] && awk 'NR > 1 { found=1 } END { exit found ? 0 : 1 }' /proc/swaps; then
+        /sbin/swapoff -a 2>/dev/null || /usr/sbin/swapoff -a 2>/dev/null || true
+    fi
     rm -f /var/swap 2>/dev/null || true
 
-    if systemctl list-unit-files dev-zram0.swap --no-legend 2>/dev/null | grep -q masked; then
-        ok "Pi Zero 2W zram swap safety applied (units masked, swap.conf cleared, /var/swap removed)"
+    if systemctl list-unit-files rpi-resize-swap-file.service --no-legend 2>/dev/null | grep -q masked; then
+        ok "Appliance swap safety applied (swap units masked, swap.conf cleared, /var/swap removed)"
         return 0
     fi
 
@@ -256,6 +259,14 @@ tune_pi_zero_2w_swap_safety() {
         warn "zram mask failed despite writable /etc; firstboot retry may resolve"
     fi
     return 0  # best-effort: never abort firstboot
+}
+
+# Backward-compatible wrapper retained for tests/docs that still refer
+# to the original Pi-Zero-specific guard. New firstboot code calls the
+# broader appliance guard for every install.
+tune_pi_zero_2w_swap_safety() {
+    is_pi_zero_2w || return 0
+    tune_appliance_swap_safety
 }
 
 # ── WiFi power save ───────────────────────────────────────────────
@@ -283,7 +294,14 @@ tune_wifi_powersave() {
         if [[ ! -f "$hook" ]]; then
             if cat > "$hook" <<'WEOF'
 #!/bin/sh
-[ "$2" = "up" ] && [ -n "$1" ] && /usr/sbin/iw dev "$1" set power_save off 2>/dev/null
+# NetworkManager also calls dispatcher hooks for lo/docker/veth events.
+# Those are not WiFi devices; always exit 0 so NM doesn't log failures.
+case "$1:$2" in
+    wl*:up|wlan*:up)
+        /usr/sbin/iw dev "$1" set power_save off >/dev/null 2>&1 || true
+        ;;
+esac
+exit 0
 WEOF
             then
                 chmod +x "$hook"
@@ -393,8 +411,11 @@ with open('$tmp', 'w') as f:
 }
 
 # ── Avahi hardening ─────────────────────────────────────────────
-# Pins mDNS hostname and restricts to physical network interfaces.
-# Prevents Docker veth interfaces from polluting mDNS announcements.
+# Pins mDNS hostname, restricts to physical network interfaces, and
+# keeps announcements IPv4-only. Snapclient 0.35 can pick IPv6
+# link-local SRV targets from Avahi and then fail to connect from a
+# different interface scope; the rest of snapMULTI discovery is already
+# IPv4-first for this reason.
 tune_avahi_daemon() {
     local hostname="${1:-$(hostname)}"
     local conf="/etc/avahi/avahi-daemon.conf"
@@ -408,15 +429,52 @@ tune_avahi_daemon() {
             sed -i "/^\[server\]/a host-name=${hostname}" "$conf"
             avahi_changed=true
         fi
+
+        if grep -q "^use-ipv4=" "$conf"; then
+            if ! grep -q "^use-ipv4=yes$" "$conf"; then
+                sed -i "s/^use-ipv4=.*/use-ipv4=yes/" "$conf"
+                avahi_changed=true
+            fi
+        else
+            sed -i "/^\[server\]/a use-ipv4=yes" "$conf"
+            avahi_changed=true
+        fi
+
+        if grep -q "^use-ipv6=" "$conf"; then
+            if ! grep -q "^use-ipv6=no$" "$conf"; then
+                sed -i "s/^use-ipv6=.*/use-ipv6=no/" "$conf"
+                avahi_changed=true
+            fi
+        else
+            sed -i "/^\[server\]/a use-ipv6=no" "$conf"
+            avahi_changed=true
+        fi
     fi
 
-    # Restrict to physical interfaces (exclude Docker veth*)
+    # Restrict to the primary physical interface. On Ethernet+WiFi
+    # devices, Avahi can otherwise publish the same hostname on the
+    # transient WiFi DHCP address before WiFi exclusivity disables wlan0;
+    # macOS then keeps the stale .local address in cache.
     local ifaces=""
     local iface
-    for iface in $(ip -o link show 2>/dev/null | awk -F': ' '$2 ~ /^(eth|wlan|en)/ {print $2}'); do
+    for iface in $(ip -o route show default 2>/dev/null | awk '
+        {
+            for (i = 1; i <= NF; i++) {
+                if ($i == "dev" && $(i + 1) ~ /^(eth|wlan|en)/ && !seen[$(i + 1)]++) {
+                    print $(i + 1)
+                }
+            }
+        }
+    '); do
         [[ -n "$ifaces" ]] && ifaces="${ifaces},"
         ifaces="${ifaces}${iface}"
     done
+    if [[ -z "$ifaces" ]]; then
+        for iface in $(ip -o -4 addr show scope global up 2>/dev/null | awk '$2 ~ /^(eth|wlan|en)/ && !seen[$2]++ {print $2}'); do
+            [[ -n "$ifaces" ]] && ifaces="${ifaces},"
+            ifaces="${ifaces}${iface}"
+        done
+    fi
     if [[ -n "$ifaces" ]]; then
         if ! grep -q "^allow-interfaces=${ifaces}$" "$conf"; then
             if grep -q '^allow-interfaces=' "$conf"; then
@@ -430,7 +488,20 @@ tune_avahi_daemon() {
 
     if [[ "$avahi_changed" == "true" ]]; then
         systemctl restart avahi-daemon 2>/dev/null || true
-        ok "Avahi hardened: host-name=${hostname}, interfaces=${ifaces:-all}"
+        # Snapcast 0.35 libavahi-client does not reconnect after avahi
+        # restart. snapmulti-server.service and snapclient.service no
+        # longer have PartOf=avahi-daemon.service (that gave Avahi full
+        # lifecycle control over the audio stack), so we trigger an
+        # explicit, operator-initiated refresh of the snapcast
+        # processes here. Both restarts are best-effort: this function
+        # also runs during firstboot before the audio units exist.
+        local audio_unit
+        for audio_unit in snapmulti-server.service snapclient.service; do
+            if systemctl is-active --quiet "$audio_unit" 2>/dev/null; then
+                systemctl restart "$audio_unit" 2>/dev/null || true
+            fi
+        done
+        ok "Avahi hardened: host-name=${hostname}, interfaces=${ifaces:-all}, ipv4=yes, ipv6=no"
     else
         ok "Avahi already configured"
     fi

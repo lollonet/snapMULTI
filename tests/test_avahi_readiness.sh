@@ -25,6 +25,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_SH="$SCRIPT_DIR/../scripts/deploy.sh"
 SETUP_SH="$SCRIPT_DIR/../client/common/scripts/setup.sh"
+SYSTEM_TUNE_SH="$SCRIPT_DIR/../scripts/common/system-tune.sh"
 
 pass=0
 fail=0
@@ -87,10 +88,37 @@ assert '! echo "$server_unit" | grep -qE "avahi-browse [^_]*-[prtl]*l[prtl]* _sn
 assert 'echo "$server_unit" | grep -qE "docker compose.*restart snapserver"' \
        'ExecStartPost restarts snapserver on PTR-only detection'
 
+# systemd parses backslash escapes in ExecStart* lines. Regexes such as
+# `\+` and `\.` trigger "Ignoring unknown escape sequences" warnings at
+# every daemon-reload. Use bracket expressions (`[+]`, `[.]`) instead.
+assert '! echo "$server_unit" | grep -qF "\\+" && ! echo "$server_unit" | grep -qF "\\."' \
+       'ExecStartPost avoids systemd unknown escape warnings in grep regexes'
+
 # Self-heal must be ignore-failure (leading -) so a transient avahi-browse
 # error never holds the unit in failed state.
 assert 'echo "$server_unit" | grep -qE "ExecStartPost=-"' \
        'ExecStartPost is non-fatal (leading -)'
+
+# PartOf=avahi-daemon.service has been removed: it gave Avahi full
+# lifecycle control over the audio stack, so a routine avahi restart
+# took the whole stack down. Server-side recovery from the snapcast
+# 0.35 libavahi-client reconnect bug is now via explicit operator
+# restart (tune_avahi_daemon) + the ExecStartPost mDNS self-heal.
+assert '! echo "$server_unit" | grep -qE "^PartOf=.*avahi-daemon"' \
+       'snapmulti-server.service does NOT have PartOf=avahi-daemon.service'
+
+# ExecStop must NOT use `docker compose down` — that removes containers
+# and the compose network, so a `systemctl restart` (operator or system)
+# costs 30-40 s of audio silence. Use `docker compose stop -t 5`
+# instead: containers and network persist, the next ExecStart=up -d
+# is a fast `start`, the snapcast 0.35 libavahi-client reconnect bug
+# is still resolved because the snapserver process restarts fresh
+# inside the container.
+assert '! echo "$server_unit" | grep -qE "^ExecStop=.*compose down"' \
+       'ExecStop does NOT use destructive `compose down`'
+
+assert 'echo "$server_unit" | grep -qE "^ExecStop=.*compose stop -t 5"' \
+       'ExecStop uses non-destructive `compose stop -t 5`'
 
 echo
 echo "=== snapclient.service — avahi readiness ExecStartPre ==="
@@ -116,9 +144,64 @@ else
     fail=$((fail + 1))
 fi
 
+# Same PartOf= removal + non-destructive ExecStop rules apply on the
+# client side. See server assertions above for the rationale.
+assert '! echo "$client_unit" | grep -qE "^PartOf=.*avahi-daemon"' \
+       'snapclient.service does NOT have PartOf=avahi-daemon.service'
+
+assert '! echo "$client_unit" | grep -qE "^ExecStop=.*compose down"' \
+       'snapclient ExecStop does NOT use destructive `compose down`'
+
+assert 'echo "$client_unit" | grep -qE "^ExecStop=.*compose stop -t 5"' \
+       'snapclient ExecStop uses non-destructive `compose stop -t 5`'
+
+# tune_avahi_daemon must restart the snapcast units after touching
+# the config — otherwise the snapcast 0.35 libavahi-client reconnect
+# bug leaves mDNS publish broken. This is the explicit replacement
+# for the PartOf= cascade we just removed.
+assert 'grep -qE "for audio_unit in snapmulti-server.service snapclient.service" "$SYSTEM_TUNE_SH"' \
+       'tune_avahi_daemon restarts snapmulti-server.service + snapclient.service after avahi restart'
+
+echo
+echo "=== Avahi host tuning ==="
+
+assert 'grep -qE "^tune_avahi_daemon\\(\\)" "$SYSTEM_TUNE_SH"' \
+       'tune_avahi_daemon is defined'
+
+assert 'grep -qF "use-ipv4=yes" "$SYSTEM_TUNE_SH"' \
+       'tune_avahi_daemon forces Avahi IPv4 on'
+
+assert 'grep -qF "use-ipv6=no" "$SYSTEM_TUNE_SH"' \
+       'tune_avahi_daemon forces Avahi IPv6 off'
+
+assert 'grep -qF "Snapclient 0.35 can pick IPv6" "$SYSTEM_TUNE_SH"' \
+       'IPv6-off rationale is documented near the tuning code'
+
+assert 'grep -qF "ip -o route show default" "$SYSTEM_TUNE_SH"' \
+       'tune_avahi_daemon prefers default-route interface for mDNS'
+
+assert 'grep -qF "ip -o -4 addr show scope global up" "$SYSTEM_TUNE_SH"' \
+       'tune_avahi_daemon has IPv4-up physical-interface fallback'
+
+echo
+echo "=== firstboot.sh — Avahi retune after network ==="
+
+FIRSTBOOT_SH="$SCRIPT_DIR/../scripts/firstboot.sh"
+network_line=$(grep -nE "^[[:space:]]*wait_for_network$" "$FIRSTBOOT_SH" | head -1 | cut -d: -f1)
+retune_line=$(grep -nE "tune_avahi_daemon \"\\$\\(hostname\\)\"" "$FIRSTBOOT_SH" | head -1 | cut -d: -f1)
+milestone_line=$(grep -nF 'milestone "$CURRENT_STEP" "Network ready"' "$FIRSTBOOT_SH" | head -1 | cut -d: -f1)
+if [[ -n "$network_line" && -n "$retune_line" && -n "$milestone_line" \
+      && "$network_line" -lt "$retune_line" && "$retune_line" -lt "$milestone_line" ]]; then
+    echo "  PASS: firstboot retunes Avahi after wait_for_network and before Network-ready milestone"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: firstboot Avahi retune ordering wrong (network=$network_line retune=$retune_line milestone=$milestone_line)"
+    fail=$((fail + 1))
+fi
+
 echo
 echo "=== Bash syntax ==="
-for f in "$DEPLOY_SH" "$SETUP_SH"; do
+for f in "$DEPLOY_SH" "$SETUP_SH" "$SYSTEM_TUNE_SH" "$FIRSTBOOT_SH"; do
     if bash -n "$f"; then
         echo "  PASS: bash -n $(basename "$f")"
         pass=$((pass + 1))

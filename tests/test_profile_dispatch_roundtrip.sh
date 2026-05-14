@@ -84,6 +84,13 @@ for input_expected in "1:client" "2:server" "3:both"; do
     assert_eq "$got" "$expected" "menu choice $input -> $expected"
 done
 
+# Invalid menu prompts must go to stderr only. `INSTALL_TYPE=$(...)`
+# captures stdout; if the error prompt is written there, install.conf
+# gets a corrupted value such as
+# `Invalidchoice.Enter1,2,or3.client`.
+got=$(printf 'x\n1\n' | "$GET_TYPE_SRC.callable" 2>/dev/null || true)
+assert_eq "$got" "client" "invalid menu choice does not contaminate stdout/INSTALL_TYPE"
+
 rm -f "$GET_TYPE_SRC.callable"
 
 # ═══════════════════════════════════════════════════════════════════

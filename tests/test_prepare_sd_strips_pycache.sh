@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Verifies prepare-sd.sh strips Python bytecode caches from the
-# staged SD tree after the mode-specific copies. The recursive
+# shellcheck disable=SC2034  # PREP_PS1 is referenced inside eval'd assertions.
+# Verifies prepare-sd.sh strips host-side junk from the staged SD tree
+# after the mode-specific copies. The recursive
 # `cp -r` calls in copy_server_files / copy_client_files don't
 # filter; the strip pass at the bottom of the script is the only
 # guard. Regressing the strip would ship `__pycache__/` to every
@@ -30,13 +31,22 @@ assert() {
     fi
 }
 
-echo "== prepare-sd.sh: __pycache__ strip =="
+echo "== prepare-sd.sh: host-junk strip =="
 
 assert 'grep -qE "find .* -type d -name .__pycache__. -exec rm -rf" "$PREP_SH"' \
     "find ... -name __pycache__ -exec rm -rf present"
 
 assert 'grep -qE "find .* -type f -name .\\*\\.pyc. -delete" "$PREP_SH"' \
     "find ... -name '*.pyc' -delete present"
+
+assert 'grep -qF "._*" "$PREP_SH"' \
+    "find ... -name '._*' -delete present (macOS AppleDouble)"
+
+assert 'grep -qF ".DS_Store" "$PREP_SH"' \
+    "find ... -name '.DS_Store' -delete present"
+
+assert 'grep -qF "__MACOSX" "$PREP_SH"' \
+    "find ... -name '__MACOSX' -exec rm -rf present"
 
 # Strip MUST run after the case "$INSTALL_TYPE" dispatch, so that
 # both server and client copy paths are cleaned. If it ran before,
@@ -50,6 +60,23 @@ else
     echo "  FAIL: strip ordering broken (case=$case_line strip=$strip_line)"
     fail=$((fail + 1))
 fi
+
+echo
+echo "== prepare-sd.sh: first-boot swap masks =="
+
+for unit in \
+    "rpi-resize-swap-file.service" \
+    "rpi-setup-loop@var-swap.service" \
+    "dev-zram0.swap" \
+    "systemd-zram-setup@zram0.service" \
+    "rpi-zram-writeback.service" \
+    "rpi-zram-writeback.timer"; do
+    assert "grep -qF \"${unit}\" \"$PREP_SH\"" \
+        "cmdline masks $unit before first boot"
+done
+
+assert 'grep -qF "cmdline_add_token \"systemd.mask=\${_swap_unit}\"" "$PREP_SH"' \
+    "prepare-sd uses cmdline-manager to add swap masks"
 
 echo
 echo "== prepare-sd.ps1: __pycache__ strip (parity) =="

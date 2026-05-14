@@ -30,6 +30,7 @@ assert_not_contains() {
 }
 
 install_docker_body="$(sed -n '/^install_docker()/,/^}/p' "$DEPLOY_SH")"
+pull_images_body="$(sed -n '/^pull_images()/,/^}/p' "$DEPLOY_SH")"
 
 echo "Testing deploy.sh Docker driver gating..."
 
@@ -38,6 +39,14 @@ assert_contains "$install_docker_body" "--live-restore" "deploy sets live-restor
 # deploy preserves fuse-overlayfs if already active (set by firstboot), but does not force it unconditionally
 assert_contains "$install_docker_body" "fuse-overlayfs" "deploy preserves fuse-overlayfs when already active"
 assert_not_contains "$install_docker_body" "apt-get install -y fuse-overlayfs" "deploy does not install fuse-overlayfs eagerly"
+
+echo ""
+echo "Testing deploy.sh firstboot pull progress..."
+
+assert_contains "$pull_images_body" "_pull_progress" "deploy uses firstboot-visible pull progress wrapper"
+assert_contains "$pull_images_body" "SNAPMULTI_FIRSTBOOT_CHAIN" "pull progress detects firstboot chain"
+assert_contains "$pull_images_body" "printf '[INFO] %s" "pull progress emits filterable [INFO] lines"
+assert_contains "$pull_images_body" "pull_compose_images _pull_progress 2048" "server image pulls use progress wrapper"
 
 echo ""
 if [[ "$fail" -gt 0 ]]; then

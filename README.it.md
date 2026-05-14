@@ -39,6 +39,18 @@ snapMULTI è pensato per chi vuole un **sistema audio multi-room open source** s
 - **Rete**: il 2,4 GHz funziona ma il 5 GHz o Ethernet sono più stabili. L'mDNS (`*.local`) deve attraversare la LAN (una sola sottorete, niente isolamento VLAN).
 - **I servizi di streaming hanno requisiti propri**: Spotify Connect richiede Premium. Tidal Connect è solo ARM ed è opt-in (vedi [nota sicurezza](docs/USAGE.it.md#nota-sicurezza-tidal-connect)). AirPlay richiede un dispositivo Apple.
 
+## Configurazione consigliata per iniziare
+
+Se è la tua prima installazione snapMULTI, scegli il percorso noioso: **Raspberry Pi 4 (4 GB)**, una **microSD A1/A2** buona, Ethernet se puoi, e un percorso DAC / amplificatore noto dalla pagina [Hardware](docs/HARDWARE.it.md). Evita di iniziare con un Pi Zero 2 W server, un esperimento con alimentatore debole o un setup NAS+WiFi+HAT sconosciuto. Prima ottieni un successo pulito, poi espandi.
+
+## Limiti noti
+
+- **Pi Zero 2 W** è supportato solo come Audio Player headless; non è un target server o "Server + Player".
+- **Path NAS con spazi** vengono rifiutati. Rinomina `Music Share` in `Music_Share` lato NAS.
+- **Tidal Connect** usa un componente proprietario upstream ed è opt-in; saltalo se vuoi uno stack interamente free software.
+- **Le installazioni read-only sono reflash-first**. Gli update in-place non sono il percorso utente supportato.
+- **La qualità hardware conta**. SD scadenti, alimentatori deboli e WiFi instabile causano la maggior parte dei fallimenti iniziali.
+
 ## Quick start
 
 Checklist hardware (modello Pi, SD, uscita audio) da consultare prima: [docs/HARDWARE.it.md](docs/HARDWARE.it.md).
