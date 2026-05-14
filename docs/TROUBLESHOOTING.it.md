@@ -125,12 +125,21 @@ Output JSON per script / dashboard: `sudo bash /opt/snapmulti/scripts/device-smo
 **Causa probabile.** Path share NAS errato (snapMULTI rifiuta path con spazi — il default Synology `Music Share` va rinominato `Music_Share`), credenziali SMB sbagliate, export NFS non autorizzato per l'IP del Pi, o `.automount` systemd che non si è abilitato.
 
 **Cosa provare.**
-1. Sul server: identifica il nome della mount unit (systemd-escapa il path) e controlla il suo stato. I mount point predefiniti sono `/media/nfs-music` o `/media/smb-music`:
+1. Sul server: identifica il nome della mount unit (systemd-escapa il path) e controlla il suo stato. I mount point predefiniti sono `/media/nfs-music` per NFS o `/media/smb-music` per SMB — sostituisci con quello che corrisponde al tuo install:
    ```bash
+   # Install NFS:
    systemctl status "$(systemd-escape -p --suffix=automount /media/nfs-music)"
    systemctl status "$(systemd-escape -p --suffix=mount /media/nfs-music)"
+   # Install SMB:
+   systemctl status "$(systemd-escape -p --suffix=automount /media/smb-music)"
+   systemctl status "$(systemd-escape -p --suffix=mount /media/smb-music)"
    ```
-2. Prova un mount manuale con lo stesso path: `sudo mount -t nfs <nas>:<share> /mnt/test` o `sudo mount -t cifs ...`. Il messaggio d'errore è più informativo di quello di systemd.
+2. Prova un mount manuale con lo stesso path contro una directory temporanea. Il messaggio d'errore è più informativo di quello di systemd:
+   ```bash
+   sudo mkdir -p /mnt/test
+   sudo mount -t nfs <nas>:<share> /mnt/test       # NFS
+   sudo mount -t cifs //<nas>/<share> /mnt/test    # SMB (aggiungi -o username=...,password=...)
+   ```
 3. Verifica che il path non abbia **spazi** lato NAS. Rinomina `Music Share` → `Music_Share`.
 4. Per SMB, le credenziali persistenti vivono in `/etc/snapmulti-smb-credentials` (root-only, su ext4). Vengono scritte anche dentro `install.conf` sulla partizione FAT32 di boot durante `prepare-sd.sh` e `firstboot.sh`, poi rimosse una volta che `mount-music` le ha copiate in `/etc/snapmulti-smb-credentials`.
 

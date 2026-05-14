@@ -125,12 +125,21 @@ JSON for scripts / dashboards: `sudo bash /opt/snapmulti/scripts/device-smoke.sh
 **Likely cause.** NAS share path mismatch (snapMULTI rejects paths with spaces — Synology's default `Music Share` must be renamed `Music_Share`), wrong username / password for SMB, NFS export not allowed for the Pi's IP, or the systemd `.automount` failed to enable.
 
 **Try this.**
-1. On the server: identify the mount unit name (systemd-escapes the mount path) and check its state. Default mount points are `/media/nfs-music` or `/media/smb-music`:
+1. On the server: identify the mount unit name (systemd-escapes the mount path) and check its state. Default mount points are `/media/nfs-music` for NFS or `/media/smb-music` for SMB — substitute the one that matches your install:
    ```bash
+   # NFS install:
    systemctl status "$(systemd-escape -p --suffix=automount /media/nfs-music)"
    systemctl status "$(systemd-escape -p --suffix=mount /media/nfs-music)"
+   # SMB install:
+   systemctl status "$(systemd-escape -p --suffix=automount /media/smb-music)"
+   systemctl status "$(systemd-escape -p --suffix=mount /media/smb-music)"
    ```
-2. Try a manual mount with the same path: `sudo mount -t nfs <nas>:<share> /mnt/test` or `sudo mount -t cifs ...`. The error message is more informative than the systemd one.
+2. Try a manual mount with the same path against a throwaway target. The error message is more informative than the systemd one:
+   ```bash
+   sudo mkdir -p /mnt/test
+   sudo mount -t nfs <nas>:<share> /mnt/test       # NFS
+   sudo mount -t cifs //<nas>/<share> /mnt/test    # SMB (add -o username=...,password=...)
+   ```
 3. Check the path has **no spaces** on the NAS side. Rename `Music Share` → `Music_Share`.
 4. For SMB, the persistent credentials live in `/etc/snapmulti-smb-credentials` (root-only, on ext4). They are also written into `install.conf` on the FAT32 boot partition during `prepare-sd.sh` and `firstboot.sh`, then scrubbed once `mount-music` has copied them to `/etc/snapmulti-smb-credentials`.
 

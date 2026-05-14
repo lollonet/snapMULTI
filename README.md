@@ -72,7 +72,7 @@ The script asks: **Audio Player** (speaker only) / **Music Server** (Spotify+Air
 
 ### 4. Boot the Pi
 
-Eject SD, insert in the Pi, power on. Wait ~10 minutes. The first-boot installer runs without SSH, shows progress on HDMI if you have a screen attached. Done.
+Eject SD, insert in the Pi, power on. Wait about 10-15 minutes. The first-boot installer runs without SSH, shows progress on HDMI if you have a screen attached. Done.
 
 > **Detailed walk-through** with screenshots and troubleshooting: [docs/INSTALL.md](docs/INSTALL.md).
 > **Compatibility matrix** (which Pi models, DAC HATs, network setups): [docs/HARDWARE.md](docs/HARDWARE.md).
