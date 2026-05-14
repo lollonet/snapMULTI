@@ -64,9 +64,15 @@ if [[ ! -d "$SNAP_BOOT" ]]; then
 fi
 
 # ── Read install.conf ────────────────────────────────────────────
+# Pipelines below append `|| true` to neutralize `grep`'s exit-1 when a key
+# is missing: without it, `set -euo pipefail` would propagate the failure
+# through the command substitution and kill firstboot.sh silently — BEFORE
+# the logger, the TUI, or the failure trap are wired up. The `${VAR:-default}`
+# safety net immediately after only triggers if VAR is *unset or empty*, not
+# if the assignment itself aborts.
 INSTALL_TYPE="server"
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
-    INSTALL_TYPE=$(grep -m1 '^INSTALL_TYPE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
+    INSTALL_TYPE=$(grep -m1 '^INSTALL_TYPE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]' || true)
     INSTALL_TYPE="${INSTALL_TYPE:-server}"
 fi
 
@@ -84,7 +90,11 @@ SMB_PASS=""
 }
 # shellcheck disable=SC2034
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
-    MUSIC_SOURCE=$(grep -m1 '^MUSIC_SOURCE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')
+    # See comment above the INSTALL_TYPE block for the rationale on `|| true`.
+    # Each grep|cut|tr pipeline tolerates the key being absent — downstream
+    # code (mount-music.sh, sanitize_*) already handles empty values via
+    # case statements and fallback paths.
+    MUSIC_SOURCE=$(grep -m1 '^MUSIC_SOURCE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]' || true)
     # Source sanitize.sh for re-validation
     if [[ -f "$SNAP_BOOT/common/sanitize.sh" ]]; then
         # shellcheck source=common/sanitize.sh
@@ -93,12 +103,12 @@ if [[ -f "$SNAP_BOOT/install.conf" ]]; then
         # shellcheck source=common/sanitize.sh
         source "$SCRIPT_DIR/common/sanitize.sh"
     fi
-    NFS_SERVER=$(sanitize_hostname "$(grep -m1 '^NFS_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
-    NFS_EXPORT=$(sanitize_nfs_export "$(grep -m1 '^NFS_EXPORT=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
-    SMB_SERVER=$(sanitize_hostname "$(grep -m1 '^SMB_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
-    SMB_SHARE=$(sanitize_smb_share "$(grep -m1 '^SMB_SHARE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]')")
-    SMB_USER=$(sanitize_smb_user "$(grep -m1 '^SMB_USER=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '\r')")
-    SMB_PASS=$(grep -m1 '^SMB_PASS=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '\r')
+    NFS_SERVER=$(sanitize_hostname "$(grep -m1 '^NFS_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]' || true)")
+    NFS_EXPORT=$(sanitize_nfs_export "$(grep -m1 '^NFS_EXPORT=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]' || true)")
+    SMB_SERVER=$(sanitize_hostname "$(grep -m1 '^SMB_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]' || true)")
+    SMB_SHARE=$(sanitize_smb_share "$(grep -m1 '^SMB_SHARE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]' || true)")
+    SMB_USER=$(sanitize_smb_user "$(grep -m1 '^SMB_USER=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '\r' || true)")
+    SMB_PASS=$(grep -m1 '^SMB_PASS=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '\r' || true)
 fi
 
 # Read advanced options
