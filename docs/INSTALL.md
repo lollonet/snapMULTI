@@ -116,7 +116,7 @@ Pick one of the two options. Both produce a folder named `snapMULTI/` that the n
 
 > Prefer the tagged release ZIP over the green **Code → Download ZIP** button on the repo home page — the latter ships the `main` branch, which may include unreleased work-in-progress.
 >
-> The README and `INSTALL.md` examples show commands like `./snapMULTI/scripts/prepare-sd.sh` for consistency with `git clone` (which always creates a folder named `snapMULTI`). If your folder has a different name, adjust the path accordingly (or just `cd` into it and run `./scripts/prepare-sd.sh`).
+> Run `./scripts/prepare-sd.sh` from inside the project folder. The folder name does not matter — `prepare-sd.sh` resolves its own path. Alternatively, from the parent folder, use `./<folder-name>/scripts/prepare-sd.sh`.
 
 ### Option B — Clone with Git (recommended for updates)
 

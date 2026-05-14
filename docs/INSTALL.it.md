@@ -116,7 +116,7 @@ Scegli una delle due opzioni. Entrambe producono una cartella `snapMULTI/` che i
 
 > Preferisci lo ZIP della release taggata al pulsante verde **Code → Download ZIP** della home page del repo — quest'ultimo scarica il branch `main`, che può contenere lavori non rilasciati.
 >
-> Gli esempi nel README e in `INSTALL.it.md` mostrano comandi tipo `./snapMULTI/scripts/prepare-sd.sh` per coerenza con `git clone` (che crea sempre una cartella `snapMULTI`). Se la tua cartella ha un altro nome, adatta il path (o entra nella cartella con `cd` ed esegui `./scripts/prepare-sd.sh`).
+> Esegui `./scripts/prepare-sd.sh` dall'interno della cartella del progetto. Il nome della cartella non importa — `prepare-sd.sh` risolve da solo il proprio path. In alternativa, dalla cartella superiore, usa `./<nome-cartella>/scripts/prepare-sd.sh`.
 
 ### Opzione B — Clone con Git (consigliato se vuoi aggiornare)
 
