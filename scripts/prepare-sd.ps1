@@ -110,7 +110,8 @@ function Assert-PreparedSdCard {
         'common/install-deps.sh',
         'common/setup-docker.sh',
         'common/wait-network.sh',
-        'common/mount-music.sh'
+        'common/mount-music.sh',
+        'common/systemd-snippets.sh'
     )
     foreach ($file in $requiredBase) {
         $path = Join-Path $Dest $file
@@ -152,6 +153,7 @@ function Assert-PreparedSdCard {
             'client/scripts/display-detect.sh',
             'client/scripts/common/install-deps.sh',
             'client/scripts/common/install-docker.sh',
+            'client/scripts/common/systemd-snippets.sh',
             'client/snapclient.conf'
         )) {
             $path = Join-Path $Dest $file
@@ -501,7 +503,7 @@ function Copy-ClientFiles {
     # Shared modules from server scripts/common/
     $commonDest = Join-Path $scriptsDest 'common'
     New-Item -ItemType Directory -Path $commonDest -Force | Out-Null
-    foreach ($shared in @('install-deps.sh', 'install-docker.sh', 'system-tune.sh', 'unified-log.sh', 'logging.sh', 'sanitize.sh')) {
+    foreach ($shared in @('install-deps.sh', 'install-docker.sh', 'system-tune.sh', 'unified-log.sh', 'logging.sh', 'sanitize.sh', 'systemd-snippets.sh')) {
         $sharedPath = Join-Path $ScriptDir "common\$shared"
         if (Test-Path $sharedPath) {
             Copy-Item $sharedPath -Destination $commonDest
