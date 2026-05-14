@@ -40,7 +40,7 @@ Se la tua libreria è su un NAS (Synology, QNAP, server Linux generico, condivis
 | Protocollo | Quando | Note |
 |------------|--------|------|
 | NFS | NAS Linux / Synology / QNAP, allow-list per IP | `prepare-sd.sh` scrive una coppia `.mount`/`.automount` systemd; nessuna password |
-| SMB / CIFS | Condivisione Windows, Synology / QNAP con username + password | Le credenziali finiscono in `install.conf` sulla partizione FAT32 durante `prepare-sd.sh` e `firstboot.sh`, poi vengono cancellate e persistite in `/etc/snapmulti-smb-credentials` (root-only, su ext4) |
+| SMB / CIFS | Condivisione Windows, Synology / QNAP con username + password | `prepare-sd.sh` scrive temporaneamente le credenziali in `install.conf` sulla partizione FAT32. Al primo boot, `firstboot.sh` le copia in `/etc/snapmulti-smb-credentials` con permessi root-only e poi le rimuove da `install.conf` |
 | USB | Disco collegato al Pi | Auto-montato da `udisks2`; scegli l'UUID della partizione nel menu |
 | Locale | File copiati in `/audio` sul Pi | Default per chi inizia |
 
