@@ -252,6 +252,27 @@ if ! declare -F detect_hat &>/dev/null; then
     exit 1
 fi
 
+# Source single-owner systemd snippet helper (scripts/common/systemd-snippets.sh).
+# The helper lives in the server tree because deploy.sh owns the same
+# snippets; setup.sh walks a candidate list to find it across the four
+# layouts in which setup.sh can run: dev tree, baked install dir,
+# firstboot SD-card mount, and rare standalone re-run from /opt.
+# Hard-fail on miss — silently generating units without the helpers
+# would produce service files missing critical ExecStartPre lines.
+for _snippets_candidate in \
+    "$SCRIPT_DIR/systemd-snippets.sh" \
+    "$SCRIPT_DIR/common/systemd-snippets.sh" \
+    "$SCRIPT_DIR/../../../scripts/common/systemd-snippets.sh" \
+    "$COMMON_DIR/../scripts/common/systemd-snippets.sh" \
+    "/boot/firmware/common/systemd-snippets.sh"; do
+    # shellcheck source=../../../scripts/common/systemd-snippets.sh
+    [[ -f "$_snippets_candidate" ]] && source "$_snippets_candidate" && break
+done
+if ! declare -F compose_stop_5s_execstop &>/dev/null; then
+    echo "FATAL: systemd-snippets.sh not found in any candidate path" >&2
+    exit 1
+fi
+
 # Ensure HAT detection tools are present BEFORE we call detect_hat. On
 # minimal Pi OS images neither alsa-utils (aplay), i2c-tools (i2cdetect),
 # nor kmod (modprobe) are installed by default; without them, detect_hat
@@ -1268,13 +1289,13 @@ RequiresMountsFor=${INSTALL_DIR}
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=${INSTALL_DIR}
-ExecStartPre=/bin/bash -c 'for i in \$(seq 1 60); do docker info >/dev/null 2>&1 && exit 0; sleep 2; done; exit 1'
+$(docker_info_ready_execstartpre)
 # Wait for avahi-daemon readiness before snapclient-discover and \`docker
 # compose up\`. snapclient-discover queries _snapcast._tcp via avahi-browse;
 # snapclient's libavahi-client also needs avahi ready to react to server
 # restarts. Non-fatal: 30 s max wait, then proceed (avahi may be missing
 # in unusual setups).
-ExecStartPre=/bin/bash -c 'for i in \$(seq 1 30); do systemctl is-active --quiet avahi-daemon.service && [[ -S /run/avahi-daemon/socket ]] && break; sleep 1; done; sleep 2'
+$(avahi_daemon_ready_execstartpre)
 ExecStartPre=-/usr/local/bin/snapclient-discover
 # Detect-and-recreate on mem_limit drift: the snapclient container is
 # created during firstboot.sh BEFORE the final reboot that activates
@@ -1289,7 +1310,7 @@ ExecStartPre=-/usr/local/bin/snapclient-discover
 # byte count once recreated, and empty when the container does not
 # yet exist (fresh reflash) — all three cases lead to the correct
 # decision (recreate only when memory == 0).
-ExecStartPre=-/bin/bash -c 'mem=\$(/usr/bin/docker inspect snapclient --format "{{.HostConfig.Memory}}" 2>/dev/null || true); if [[ "\$\$mem" == "0" ]]; then cd ${INSTALL_DIR} && /usr/bin/docker compose up -d --force-recreate; fi'
+$(mem_drift_recreate_execstartpre snapclient "${INSTALL_DIR}")
 ExecStart=/usr/bin/docker compose up -d
 # Non-destructive stop: see scripts/deploy.sh for full rationale. In
 # short, \`compose stop\` halts the snapclient container processes
@@ -1297,7 +1318,7 @@ ExecStart=/usr/bin/docker compose up -d
 # \`systemctl restart\` is a fast \`start\` not a recreate. Operators
 # call \`docker compose down\` manually from \${INSTALL_DIR} when a
 # destructive teardown is actually needed.
-ExecStop=/usr/bin/docker compose stop -t 5
+$(compose_stop_5s_execstop)
 TimeoutStartSec=180
 Restart=on-failure
 RestartSec=10

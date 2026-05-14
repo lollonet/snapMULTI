@@ -26,6 +26,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_SH="$SCRIPT_DIR/../scripts/deploy.sh"
 SETUP_SH="$SCRIPT_DIR/../client/common/scripts/setup.sh"
 SYSTEM_TUNE_SH="$SCRIPT_DIR/../scripts/common/system-tune.sh"
+SNIPPETS_SH="$SCRIPT_DIR/../scripts/common/systemd-snippets.sh"
 
 pass=0
 fail=0
@@ -41,10 +42,46 @@ assert() {
     fi
 }
 
+# Render the snapmulti-server unit body: extract the heredoc, source the
+# systemd-snippets helper, set the variables the heredoc references, then
+# eval the heredoc body so $(helper) substitutions resolve. This makes
+# the test assert on the FINAL unit content (what systemd sees) rather
+# than the source-file text — assertions stay valid across refactors
+# that move snippet generation behind helpers.
+# shellcheck source=../scripts/common/systemd-snippets.sh
+source "$SNIPPETS_SH"
+
+render_unit() {
+    local script="$1" marker="$2"
+    local body
+    body=$(awk -v m="$marker" '
+        # Match both `cat > X <<EOF` and `cat > X << EOF` (server uses no-space,
+        # client uses space) — tolerate either.
+        $0 ~ ("cat > " m " *<< *EOF") {flag=1; next}
+        flag && /^EOF$/ {flag=0; exit}
+        flag {print}
+    ' "$script")
+    # Variables referenced inside the heredoc — set with install-time
+    # defaults. shellcheck can't see through eval, so the SC2034 disables
+    # below acknowledge that these locals are consumed by the heredoc
+    # expansion. _after_units is only used by the client unit,
+    # music_mount_clause only by the server unit.
+    # shellcheck disable=SC2034
+    local PROJECT_ROOT=/opt/snapmulti
+    # shellcheck disable=SC2034
+    local INSTALL_DIR=/opt/snapclient
+    # shellcheck disable=SC2034
+    local music_mount_clause=""
+    # shellcheck disable=SC2034
+    local _after_units="docker.service network-online.target avahi-daemon.service"
+    eval "cat <<EOF
+$body
+EOF"
+}
+
 echo "=== snapmulti-server.service — avahi readiness ExecStartPre ==="
 
-# Extract the snapmulti-server unit file body from the heredoc.
-server_unit=$(awk '/cat > \/etc\/systemd\/system\/snapmulti-server\.service/,/^EOF$/' "$DEPLOY_SH")
+server_unit=$(render_unit "$DEPLOY_SH" "/etc/systemd/system/snapmulti-server.service")
 
 assert 'echo "$server_unit" | grep -qE "ExecStartPre=.*systemctl is-active --quiet avahi-daemon"' \
        'snapmulti-server has ExecStartPre gating on avahi-daemon is-active'
@@ -135,7 +172,7 @@ assert 'echo "$server_unit" | grep -qE "^ExecStop=.*compose stop -t 5"' \
 echo
 echo "=== snapclient.service — avahi readiness ExecStartPre ==="
 
-client_unit=$(awk '/cat > \/etc\/systemd\/system\/snapclient\.service/,/^EOF$/' "$SETUP_SH")
+client_unit=$(render_unit "$SETUP_SH" "/etc/systemd/system/snapclient.service")
 
 assert 'echo "$client_unit" | grep -qE "ExecStartPre=.*systemctl is-active --quiet avahi-daemon"' \
        'snapclient has ExecStartPre gating on avahi-daemon is-active'

@@ -34,6 +34,8 @@ source "$SCRIPT_DIR/common/system-tune.sh"
 source "$SCRIPT_DIR/common/resource-detect.sh"
 # shellcheck source=common/pull-images.sh
 source "$SCRIPT_DIR/common/pull-images.sh"
+# shellcheck source=common/systemd-snippets.sh
+source "$SCRIPT_DIR/common/systemd-snippets.sh"
 
 # Global: set by preflight_checks based on architecture
 IS_ARM=false
@@ -1057,7 +1059,7 @@ RequiresMountsFor=${PROJECT_ROOT} ${PROJECT_ROOT}/audio${music_mount_clause}
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=${PROJECT_ROOT}
-ExecStartPre=/bin/bash -c 'for i in \$(seq 1 60); do docker info >/dev/null 2>&1 && exit 0; sleep 2; done; exit 1'
+$(docker_info_ready_execstartpre)
 # Wait for avahi-daemon to be fully ready before \`docker compose up\`.
 # Without this, snapserver's libavahi-client connect race-loses against
 # avahi-daemon initialisation and falls back to PTR-only UDP 5353
@@ -1066,7 +1068,7 @@ ExecStartPre=/bin/bash -c 'for i in \$(seq 1 60); do docker info >/dev/null 2>&1
 # state; the socket existence proves the dbus listener is up; the final
 # \`sleep 2\` lets avahi publish its first announce. Non-fatal on
 # unusual setups (no avahi installed) — falls through after 30 s.
-ExecStartPre=/bin/bash -c 'for i in \$(seq 1 30); do systemctl is-active --quiet avahi-daemon.service && [[ -S /run/avahi-daemon/socket ]] && break; sleep 1; done; sleep 2'
+$(avahi_daemon_ready_execstartpre)
 # Detect-and-recreate on mem_limit drift, symmetric to snapclient.service
 # (PR #393). The first compose up during firstboot runs BEFORE the final
 # reboot that activates cgroup memory v2 (cmdline_ensure_memory_cgroup
@@ -1081,7 +1083,7 @@ ExecStartPre=/bin/bash -c 'for i in \$(seq 1 30); do systemctl is-active --quiet
 # output (fresh reflash, no container yet) returns "", neither "0" nor a
 # byte count, so the recreate is skipped — ExecStart will create the
 # containers fresh with proper limits.
-ExecStartPre=-/bin/bash -c 'mem=\$(/usr/bin/docker inspect snapserver --format "{{.HostConfig.Memory}}" 2>/dev/null || true); if [[ "\$\$mem" == "0" ]]; then cd ${PROJECT_ROOT} && /usr/bin/docker compose up -d --force-recreate; fi'
+$(mem_drift_recreate_execstartpre snapserver "${PROJECT_ROOT}")
 ExecStart=/usr/bin/docker compose up -d
 # Self-heal mDNS publish race: 12 s after compose up, query the local
 # avahi cache for \`_snapcast._tcp\`. If the PTR record is present but
@@ -1115,7 +1117,7 @@ ExecStartPost=-/bin/bash -c '\\
 # of the 30-40 s a full \`compose down\` would cost. If the operator
 # needs a destructive teardown (image upgrade, volume rebuild) they
 # call \`docker compose down\` manually from \${PROJECT_ROOT}.
-ExecStop=/usr/bin/docker compose stop -t 5
+$(compose_stop_5s_execstop)
 TimeoutStartSec=180
 Restart=on-failure
 RestartSec=10
