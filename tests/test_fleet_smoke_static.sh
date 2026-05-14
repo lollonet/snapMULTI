@@ -29,7 +29,10 @@ assert_not_contains() {
     fi
 }
 
-src="$(sed -n '1,340p' "$FLEET_SH")"
+# Read the whole file: there is no reason for a portability guard to
+# skip lines, and the 1,340 window left a regression window in the
+# final exit block (claude-review PR #400).
+src="$(cat "$FLEET_SH")"
 
 echo "Testing fleet-smoke.sh static portability and rendering guards..."
 
