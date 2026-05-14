@@ -124,7 +124,7 @@ get_install_type() {
             1) echo "client"; return ;;
             2) echo "server"; return ;;
             3) echo "both";   return ;;
-            *) echo "  Invalid choice. Enter 1, 2, or 3." ;;
+            *) echo "  Invalid choice. Enter 1, 2, or 3." >&2 ;;
         esac
     done
 }
@@ -584,13 +584,14 @@ case "$INSTALL_TYPE" in
         ;;
 esac
 
-# Strip Python bytecode caches that `cp -r` drags along from the host
-# tree (the recursive copies under copy_*_files don't filter — and
-# .gitignore-listed dirs like __pycache__/ can exist in the working
-# tree even though they're never committed). Running the strip once
-# at the end of the staging keeps the per-cp-call paths simple.
+# Strip host-side junk that `cp -r` can drag onto the FAT boot
+# partition. macOS AppleDouble files (`._*`) are especially noisy:
+# they preserve host metadata as executable-looking files and then
+# firstboot copies them into /opt, confusing diagnostics and humans.
 find "$DEST" -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
 find "$DEST" -type f -name '*.pyc' -delete 2>/dev/null || true
+find "$DEST" -type f \( -name '._*' -o -name '.DS_Store' \) -delete 2>/dev/null || true
+find "$DEST" -type d -name '__MACOSX' -exec rm -rf {} + 2>/dev/null || true
 
 # Bake version files so installer scripts can set version vars without a git repo on device.
 # Format difference is intentional: server strips "v" (deploy.sh + metadata-service expect
@@ -647,6 +648,27 @@ if [[ -f "$CMDLINE" ]] && ! grep -qF "video=HDMI-A-1:" "$CMDLINE"; then
     else
         echo "  WARNING: cmdline_add_token failed — display may not work during install"
     fi
+fi
+if [[ -f "$CMDLINE" ]]; then
+    # Disable Pi OS rpi-swap/zram before systemd starts. firstboot also
+    # masks/stops these units, but rpi-resize-swap-file runs before
+    # cloud-init; cmdline masks are the only cross-platform way to prevent
+    # swap creation during the very first boot without mounting ext4 rootfs.
+    SWAP_MASK_UNITS=(
+        rpi-resize-swap-file.service
+        rpi-setup-loop@var-swap.service
+        dev-zram0.swap
+        systemd-zram-setup@zram0.service
+        rpi-zram-writeback.service
+        rpi-zram-writeback.timer
+    )
+    for _swap_unit in "${SWAP_MASK_UNITS[@]}"; do
+        if ! ( cmdline_path() { printf '%s\n' "$CMDLINE"; }
+               cmdline_add_token "systemd.mask=${_swap_unit}" ); then
+            echo "  WARNING: Failed to mask ${_swap_unit} in cmdline.txt — swap may start before firstboot"
+        fi
+    done
+    unset _swap_unit SWAP_MASK_UNITS
 fi
 
 # ── Patch boot scripts ────────────────────────────────────────────

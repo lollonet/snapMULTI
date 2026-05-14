@@ -14,6 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # via pipe. Prevent unified-log.sh from writing directly to the log file
 # (which causes duplicate lines with [unknown] source).
 if [[ -n "${UNIFIED_LOG:-}" ]]; then
+    export SNAPMULTI_FIRSTBOOT_CHAIN=1
     export LOG_SOURCE="deploy"
     export UNIFIED_LOG="/dev/null"
 fi
@@ -821,6 +822,17 @@ pull_images() {
     step "Pulling Docker images"
     cd "$PROJECT_ROOT"
 
+    _pull_progress() {
+        # Under firstboot, deploy.sh routes its normal logger to /dev/null
+        # to avoid duplicate writes. Keep image-pull milestones visible to
+        # firstboot's pipe filter so the HDMI/log output does not appear
+        # frozen during the longest install phase.
+        if [[ "${SNAPMULTI_FIRSTBOOT_CHAIN:-0}" == "1" ]]; then
+            printf '[INFO] %s\n' "$*"
+        fi
+        info "$*"
+    }
+
     # Metadata build fallback: if pull fails for metadata service, build locally
     _metadata_fallback() {
         local svc="$1"
@@ -836,7 +848,7 @@ pull_images() {
     }
 
     # Use shared pull module (2 GB minimum for server)
-    if ! pull_compose_images info 2048 _metadata_fallback; then
+    if ! pull_compose_images _pull_progress 2048 _metadata_fallback; then
         exit 1
     fi
     ok "All images ready"
@@ -893,9 +905,8 @@ start_services() {
     # Prefer the systemd unit when it's already installed (normal
     # firstboot flow: install_systemd_service ran first). systemctl start
     # triggers ExecStart=`docker compose up -d` AND the mDNS self-heal
-    # ExecStartPost, and binds the lifecycle to PartOf=avahi-daemon.service.
-    # Fall back to raw compose only when the unit isn't registered yet
-    # (e.g. manual `deploy.sh` from a dev host or tests).
+    # ExecStartPost. Fall back to raw compose only when the unit isn't
+    # registered yet (e.g. manual `deploy.sh` from a dev host or tests).
     if systemctl list-unit-files snapmulti-server.service --no-legend 2>/dev/null | grep -q snapmulti-server.service; then
         info "Starting via systemd (snapmulti-server.service)..."
         # Compose may have been started earlier by a prior install; bring
@@ -1029,13 +1040,18 @@ Wants=network-online.target avahi-daemon.service
 # Block startup until project root + /audio (FIFO dir) are mounted; avoids
 # a Docker race where compose starts before NFS/USB attaches /music or /audio
 RequiresMountsFor=${PROJECT_ROOT} ${PROJECT_ROOT}/audio${music_mount_clause}
-# Snapcast 0.35.0 upstream bug: when avahi-daemon restarts, snapserver's
-# libavahi-client connection drops, the simple_poll quits, and snapserver
-# never re-registers — \`_snapcast._tcp\` mDNS publication is silently lost
-# until snapserver is restarted (verified on master branch too — same code).
-# Workaround: PartOf= propagates avahi-daemon restarts to this unit so
-# Docker re-creates the snapserver container with a fresh avahi connection.
-PartOf=avahi-daemon.service
+# NOTE on snapcast 0.35 mDNS reconnect bug: when avahi-daemon restarts,
+# snapserver's libavahi-client connection drops and the daemon never
+# re-publishes \`_snapcast._tcp\`. We previously used
+# PartOf=avahi-daemon.service to propagate avahi restarts to this unit,
+# but that gave Avahi full lifecycle control over the audio stack: a
+# routine avahi reload (config tune, hotplug, regulatory) tore the
+# whole stack down. The correct fix is to leave systemd's coupling
+# alone (Wants/After only) and recover mDNS via the ExecStartPost
+# self-heal below at start time. If avahi is restarted at runtime,
+# the operator must follow with \`systemctl restart snapmulti-server\`
+# to refresh the mDNS publish — \`tune_avahi_daemon\` and the install
+# scripts do this explicitly.
 
 [Service]
 Type=oneshot
@@ -1069,13 +1085,22 @@ ExecStartPost=-/bin/bash -c '\\
     sleep 12; \\
     if command -v avahi-browse >/dev/null 2>&1; then \\
         out=\$(avahi-browse -prt _snapcast._tcp 2>/dev/null || true); \\
-        if echo "\$out" | grep -qE "^\\+;.*;_snapcast\\._tcp" \\
-           && ! echo "\$out" | grep -qE "^=;.*;_snapcast\\._tcp"; then \\
+        if echo "\$out" | grep -qE "^[+];.*;_snapcast[.]_tcp" \\
+           && ! echo "\$out" | grep -qE "^=;.*;_snapcast[.]_tcp"; then \\
             logger -t snapmulti-server "mDNS PTR-only detected, restarting snapserver to recover SRV+TXT publish"; \\
             /usr/bin/docker compose -f ${PROJECT_ROOT}/docker-compose.yml restart snapserver >/dev/null 2>&1 || true; \\
         fi; \\
     fi'
-ExecStop=/usr/bin/docker compose down
+# Non-destructive stop: \`compose stop\` halts the processes inside the
+# containers (5 s grace) and leaves the container objects + compose
+# network in place, so a subsequent \`systemctl start\` re-enters
+# ExecStart=\`compose up -d\` and simply \`start\`s the existing
+# containers — no rebuild, no network teardown, no image re-pull. A
+# \`systemctl restart\` therefore costs 2-5 s of audio silence instead
+# of the 30-40 s a full \`compose down\` would cost. If the operator
+# needs a destructive teardown (image upgrade, volume rebuild) they
+# call \`docker compose down\` manually from \${PROJECT_ROOT}.
+ExecStop=/usr/bin/docker compose stop -t 5
 TimeoutStartSec=180
 Restart=on-failure
 RestartSec=10
@@ -1196,9 +1221,9 @@ main() {
     # Install the systemd unit BEFORE the first compose start so that
     # `start_services` can hand off to `systemctl start
     # snapmulti-server.service` instead of running `docker compose up`
-    # directly. This way the unit's ExecStartPost mDNS self-heal and
-    # PartOf=avahi-daemon.service binding take effect on first boot —
-    # not just on restarts after install completes.
+    # directly. This way the unit's ExecStartPost mDNS self-heal takes
+    # effect on first boot — not just on restarts after install
+    # completes.
     install_systemd_service
     start_services
     verify_services

@@ -147,7 +147,10 @@ RPC_OUT=$(curl -sS --max-time 8 \
 SERVER_REPORTED=$(jq -r '.result.server.host.name // ""' <<<"$RPC_OUT")
 # `connected: false` clients are kept in the list but skipped from smoke —
 # they're known peers that left the LAN, not new evidence.
-mapfile -t CLIENTS < <(
+CLIENTS=()
+while IFS= read -r client_host; do
+    [[ -n "$client_host" ]] && CLIENTS+=("$client_host")
+done < <(
     jq -r '.result.server.groups[]?.clients[]?
             | select(.connected == true)
             | .host.name' <<<"$RPC_OUT" | sort -u
@@ -226,6 +229,7 @@ REMOTE
     jq --arg h "$host" --arg r "$role" \
         '{host:$h, role:$r, reachable:true,
           versions:{server:.srv, client:.cli},
+          non_snapmulti: ((.srv == "" and .cli == "") and ((.smoke.schema_version // null) == null)),
           smoke:.smoke}' <<<"$payload" >"$out"
 }
 
@@ -240,15 +244,14 @@ for pid in "${PIDS[@]}"; do
 done
 
 # ── Collect ──────────────────────────────────────────────────────
-mapfile -t RECORDS < <(cat "$TMP"/*.json 2>/dev/null)
-ALL=$(printf '%s\n' "${RECORDS[@]}" | jq -s '.')
+ALL=$(jq -s '.' "$TMP"/*.json)
 
 # ── Compute overall pass/fail (shared by text + JSON output) ─────
 # A host counts as a failure if it's unreachable OR if smoke recorded at
 # least one fail. Calculated up-front so --json consumers get a proper
 # exit code (was 0 unconditionally before).
 overall_fail=$(jq '
-    [.[] | select(.reachable==false or ([.smoke.records[]? | select(.status=="fail")] | length > 0))]
+    [.[] | select(.reachable==false or (((.non_snapmulti // false) | not) and ([.smoke.records[]? | select(.status=="fail")] | length > 0)))]
     | length > 0 | if . then 1 else 0 end' <<<"$ALL")
 
 # ── Render ───────────────────────────────────────────────────────
@@ -257,6 +260,13 @@ if [[ "$OUTPUT" == "json" ]]; then
        '{server:$server, generated_at: (now | todate), hosts:.}' <<<"$ALL"
     exit "$overall_fail"
 else
+    baseline_version=$(jq -r --arg server "$SERVER" '
+        [.[] | select(.host == $server and .reachable == true and ((.non_snapmulti // false) | not))
+         | (.versions.server // "") as $srv
+         | (.versions.client // "") as $cli
+         | if $srv != "" then $srv elif $cli != "" then $cli else empty end][0] // ""
+    ' <<<"$ALL")
+
     printf '\nFleet smoke against %s — %s\n\n' "$SERVER" "$(date -u +%FT%TZ)"
     printf '%-20s %-7s %-15s %-7s %-6s %-30s\n' "HOST" "ROLE" "VERSION" "SMOKE" "FAILS" "NOTES"
     printf '%-20s %-7s %-15s %-7s %-6s %-30s\n' \
@@ -268,6 +278,12 @@ else
         if [[ "$reachable" != "true" ]]; then
             printf '%-20s %-7s %-15s %-7s %-6s %-30s\n' \
                 "$host" "$role" "—" "UNREACH" "—" "$(jq -r '.error // .parse_error // "?"' <<<"$rec")"
+            continue
+        fi
+        non_snapmulti=$(jq -r '.non_snapmulti // false' <<<"$rec")
+        if [[ "$non_snapmulti" == "true" ]]; then
+            printf '%-20s %-7s %-15s %-7s %-6s %-30s\n' \
+                "$host" "$role" "non-snapMULTI" "SKIP" "—" "not a snapMULTI host"
             continue
         fi
         srv=$(jq -r '.versions.server // ""' <<<"$rec")
@@ -288,8 +304,16 @@ else
         fi
         fails=$(jq -r '[.smoke.records[]? | select(.status=="fail")] | length' <<<"$rec" 2>/dev/null || echo "?")
         warns=$(jq -r '[.smoke.records[]? | select(.status=="warn")] | length' <<<"$rec" 2>/dev/null || echo "?")
+        version_drift=false
+        if [[ -n "$baseline_version" && "$ver" != "non-snapMULTI" && "$ver" != "$baseline_version" ]]; then
+            version_drift=true
+        fi
         if [[ "$fails" == "0" ]]; then
-            status="PASS"
+            if [[ "$warns" != "0" && "$warns" != "?" ]] || [[ "$version_drift" == "true" ]]; then
+                status="WARN"
+            else
+                status="PASS"
+            fi
         else
             status="FAIL"
         fi
@@ -297,6 +321,8 @@ else
         if [[ "$fails" != "0" ]]; then
             notes=$(jq -r '[.smoke.records[]? | select(.status=="fail") | .msg] | join("; ")' <<<"$rec" \
                     | cut -c-30)
+        elif [[ "$version_drift" == "true" ]]; then
+            notes="version drift vs ${baseline_version}"
         elif [[ "$warns" != "0" && "$warns" != "?" ]]; then
             notes="${warns} warning(s)"
         fi
@@ -304,14 +330,15 @@ else
             "$host" "$role" "$ver" "$status" "$fails" "$notes"
     done < <(jq -c '.[]' <<<"$ALL")
     echo
+    reachable_snapmulti_count=$(jq '[.[] | select(.reachable==true and ((.non_snapmulti // false) | not))] | length' <<<"$ALL")
+    pass_count=$(jq '[.[] | select(.reachable==true and ((.non_snapmulti // false) | not)) | select([.smoke.records[]? | select(.status=="fail")] | length == 0)] | length' <<<"$ALL")
+    skipped_count=$(jq '[.[] | select(.reachable==true and (.non_snapmulti // false))] | length' <<<"$ALL")
+    unreachable_count=$(jq '[.[] | select(.reachable==false)] | length' <<<"$ALL")
     if (( overall_fail == 0 )); then
-        echo "Overall: PASS — ${#HOSTS[@]}/${#HOSTS[@]} hosts green."
+        echo "Overall: PASS — ${pass_count}/${reachable_snapmulti_count} reachable snapMULTI hosts green, ${skipped_count} non-snapMULTI skipped, ${unreachable_count} unreachable."
         exit 0
     else
-        # Count reachable failures vs unreachable to give a useful summary.
-        reachable_count=$(jq '[.[] | select(.reachable==true)] | length' <<<"$ALL")
-        pass_count=$(jq '[.[] | select(.reachable==true) | select([.smoke.records[]? | select(.status=="fail")] | length == 0)] | length' <<<"$ALL")
-        echo "Overall: FAIL — ${pass_count}/${reachable_count} reachable hosts green, $((${#HOSTS[@]} - reachable_count)) unreachable."
+        echo "Overall: FAIL — ${pass_count}/${reachable_snapmulti_count} reachable snapMULTI hosts green, ${skipped_count} non-snapMULTI skipped, ${unreachable_count} unreachable."
         exit 1
     fi
 fi

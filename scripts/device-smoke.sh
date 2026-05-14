@@ -612,11 +612,15 @@ _net_emit_results arping
 # mDNS strict-client publishing (server-only) — services must answer
 # SRV+TXT, not just PTR. Strict clients (Python zeroconf, macOS
 # dns-sd -L) reject PTR-only and report "no servers found". This was
-# fixed in PR #290 (avahi socket bind-mount) but the upstream Snapcast
-# 0.35.0 bug still drops the registration if avahi-daemon restarts —
-# PR #300 (PartOf=avahi-daemon.service) is our workaround. avahi-browse
-# itself is a strict client: a "+" line means PTR-only, "=" means
-# fully resolved with SRV+TXT. Same logic for AirPlay + Spotify.
+# fixed in PR #290 (avahi socket bind-mount). The upstream Snapcast
+# 0.35.0 bug still drops the registration if avahi-daemon restarts;
+# tune_avahi_daemon now restarts snapmulti-server.service explicitly
+# whenever it touches /etc/avahi/avahi-daemon.conf (PartOf= cascade
+# was removed because it gave Avahi full lifecycle control over the
+# audio stack), and the unit's ExecStartPost self-heal re-checks
+# 12 s after start. avahi-browse itself is a strict client: a "+"
+# line means PTR-only, "=" means fully resolved with SRV+TXT. Same
+# logic for AirPlay + Spotify.
 # Smoke is per-device validation: this device must publish its own
 # Snapcast / AirPlay / Spotify records on the LAN. Peer servers
 # publishing the same protocols are NOT a substitute — green smoke

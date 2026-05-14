@@ -67,6 +67,27 @@ fi
 assert '! grep -qE "^reboot$" "$FIRSTBOOT"' \
        'no bare `reboot` line remains (would deadlock under cloud-final.service)'
 
+assert 'grep -qF "Snapweb:   http://\${LOCAL_HOSTNAME}.local:1780" "$FIRSTBOOT"' \
+       'completion banner names Snapweb URL explicitly'
+
+assert '! grep -qF "Speakers:  http://" "$FIRSTBOOT"' \
+       'completion banner no longer labels Snapweb as Speakers'
+
+echo
+echo "=== firstboot.sh — installed systemd unit permissions ==="
+
+assert '! grep -qE "cp .*\\.service.* /etc/systemd/system/" "$FIRSTBOOT"' \
+       'firstboot does not cp .service files into /etc/systemd/system'
+
+assert '! grep -qE "cp .*\\.timer.* /etc/systemd/system/" "$FIRSTBOOT"' \
+       'firstboot does not cp .timer files into /etc/systemd/system'
+
+assert 'grep -qE "install -m 0?644 .*\\.service.* /etc/systemd/system/" "$FIRSTBOOT"' \
+       'firstboot installs .service files with mode 0644'
+
+assert 'grep -qE "install -m 0?644 .*\\.timer.* /etc/systemd/system/" "$FIRSTBOOT"' \
+       'firstboot installs .timer files with mode 0644'
+
 echo
 echo "=== Bash syntax ==="
 if bash -n "$FIRSTBOOT"; then

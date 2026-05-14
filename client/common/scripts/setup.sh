@@ -1253,12 +1253,16 @@ After=${_after_units}
 Wants=network-online.target avahi-daemon.service
 # Block startup until the install dir is mounted (it's the compose project root)
 RequiresMountsFor=${INSTALL_DIR}
-# Snapcast 0.35.0 upstream bug: when avahi-daemon restarts, libavahi-client
-# in snapclient drops its connection and never reconnects — server
-# discovery via mDNS silently breaks until snapclient is restarted
-# (same code path as snapserver, verified on upstream master branch).
-# Workaround: PartOf= propagates avahi-daemon restarts to this unit.
-PartOf=avahi-daemon.service
+# NOTE on snapcast 0.35 mDNS reconnect bug: libavahi-client in snapclient
+# drops its connection when avahi-daemon restarts and never reconnects;
+# server discovery via mDNS then silently breaks. We previously used
+# PartOf=avahi-daemon.service to propagate Avahi restarts here, but
+# that gave Avahi full lifecycle control over the audio stack. The
+# correct fix is to use Wants/After only and recover at start time
+# via ExecStartPre snapclient-discover. If avahi is restarted at
+# runtime, the operator must follow with \`systemctl restart
+# snapclient\` to refresh server discovery; \`tune_avahi_daemon\` and
+# install scripts do this explicitly.
 
 [Service]
 Type=oneshot
@@ -1287,7 +1291,13 @@ ExecStartPre=-/usr/local/bin/snapclient-discover
 # decision (recreate only when memory == 0).
 ExecStartPre=-/bin/bash -c 'mem=\$(/usr/bin/docker inspect snapclient --format "{{.HostConfig.Memory}}" 2>/dev/null || true); if [[ "\$\$mem" == "0" ]]; then cd ${INSTALL_DIR} && /usr/bin/docker compose up -d --force-recreate; fi'
 ExecStart=/usr/bin/docker compose up -d
-ExecStop=/usr/bin/docker compose down
+# Non-destructive stop: see scripts/deploy.sh for full rationale. In
+# short, \`compose stop\` halts the snapclient container processes
+# (5 s grace) but leaves the container and network in place, so a
+# \`systemctl restart\` is a fast \`start\` not a recreate. Operators
+# call \`docker compose down\` manually from \${INSTALL_DIR} when a
+# destructive teardown is actually needed.
+ExecStop=/usr/bin/docker compose stop -t 5
 TimeoutStartSec=180
 Restart=on-failure
 RestartSec=10
@@ -1335,9 +1345,9 @@ chmod +x "$INSTALL_DIR/scripts/display-detect.sh"
 chmod +x "$INSTALL_DIR/scripts/display.sh"
 if [[ -d /etc/systemd/system ]]; then
     if [[ "$(cd "$COMMON_DIR" 2>/dev/null && pwd)" != "$(cd "$INSTALL_DIR" 2>/dev/null && pwd)" ]]; then
-        cp "$COMMON_DIR/systemd/snapclient-display.service" /etc/systemd/system/
+        install -m 0644 "$COMMON_DIR/systemd/snapclient-display.service" /etc/systemd/system/
     elif [[ -f "$INSTALL_DIR/systemd/snapclient-display.service" ]]; then
-        cp "$INSTALL_DIR/systemd/snapclient-display.service" /etc/systemd/system/
+        install -m 0644 "$INSTALL_DIR/systemd/snapclient-display.service" /etc/systemd/system/
     fi
     systemctl daemon-reload
     systemctl enable snapclient-display.service

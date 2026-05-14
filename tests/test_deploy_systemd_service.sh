@@ -24,7 +24,7 @@ echo "Testing deploy systemd service..."
 
 assert_contains "$service_body" 'snapmulti-server.service' "service file is created"
 assert_contains "$service_body" 'ExecStart=/usr/bin/docker compose up -d' "service starts compose stack"
-assert_contains "$service_body" 'ExecStop=/usr/bin/docker compose down' "service stops compose stack"
+assert_contains "$service_body" 'ExecStop=/usr/bin/docker compose stop -t 5' "service stops compose stack non-destructively"
 assert_contains "$service_body" 'WorkingDirectory=${PROJECT_ROOT}' "service runs from project root"
 assert_contains "$service_body" 'WantedBy=multi-user.target' "service is enabled at boot"
 assert_contains "$service_body" 'systemctl enable snapmulti-server.service' "service is enabled"

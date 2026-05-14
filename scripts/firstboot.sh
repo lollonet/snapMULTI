@@ -284,12 +284,12 @@ fi
 if command -v tune_bcm43430_firmware_workaround &>/dev/null; then
     tune_bcm43430_firmware_workaround
 fi
-# Pi Zero 2W: disable zram swap to prevent overlay tmpfs fill from
-# rpi-zram-writeback writing to /var/swap (CoW into tmpfs upper
-# layer fills 256 MB tmpfs → kernel panic). MUST run before
-# setup.sh, which activates overlayroot via raspi-config and would
-# strand the systemctl mask symlinks in the volatile tmpfs upper.
-if command -v tune_pi_zero_2w_swap_safety &>/dev/null; then
+# Appliance policy: no swap. snapMULTI uses memory-limited containers;
+# swap hides pressure, hurts audio latency, and under overlayroot can
+# consume tmpfs upper space as /var/swap.
+if command -v tune_appliance_swap_safety &>/dev/null; then
+    tune_appliance_swap_safety
+elif command -v tune_pi_zero_2w_swap_safety &>/dev/null; then
     tune_pi_zero_2w_swap_safety
 fi
 
@@ -487,6 +487,13 @@ wait_for_network
 # so an NTP time jump (Pi boots at epoch 0, sync to 2026) corrupts the counter.
 # Installation time is measured from here, excluding network wait.
 SECONDS=0
+if command -v tune_avahi_daemon &>/dev/null; then
+    # install-deps.sh also hardens Avahi, but that can run while wlan0
+    # still has a transient DHCP address before Ethernet/WiFi exclusivity
+    # settles. Re-run after network readiness so allow-interfaces reflects
+    # the real primary route (eth0 on wired installs, wlan0 on WiFi-only).
+    tune_avahi_daemon "$(hostname)"
+fi
 milestone "$CURRENT_STEP" "Network ready" 2 2>/dev/null || true
 
 # ══════════════════════════════════════════════════════════════════
@@ -1162,8 +1169,8 @@ if [[ -n "$DIAG_SCRIPT" ]]; then
     DIAG_DIR="$(dirname "$DIAG_SCRIPT")"
     if [[ -f "$DIAG_DIR/snapmulti-diagnostics.service" && \
           -f "$DIAG_DIR/snapmulti-diagnostics.timer" ]]; then
-        cp "$DIAG_DIR/snapmulti-diagnostics.service" /etc/systemd/system/
-        cp "$DIAG_DIR/snapmulti-diagnostics.timer" /etc/systemd/system/
+        install -m 0644 "$DIAG_DIR/snapmulti-diagnostics.service" /etc/systemd/system/
+        install -m 0644 "$DIAG_DIR/snapmulti-diagnostics.timer" /etc/systemd/system/
         systemctl daemon-reload
         systemctl enable snapmulti-diagnostics.timer
     fi
@@ -1183,8 +1190,8 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         bk_dir="$(dirname "$BACKUP_SCRIPT")"
         if [[ -f "$bk_dir/snapmulti-backup.service" && \
               -f "$bk_dir/snapmulti-backup.timer" ]]; then
-            cp "$bk_dir/snapmulti-backup.service" /etc/systemd/system/
-            cp "$bk_dir/snapmulti-backup.timer" /etc/systemd/system/
+            install -m 0644 "$bk_dir/snapmulti-backup.service" /etc/systemd/system/
+            install -m 0644 "$bk_dir/snapmulti-backup.timer" /etc/systemd/system/
             systemctl daemon-reload
             systemctl enable snapmulti-backup.timer
         fi
@@ -1208,8 +1215,8 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         fi
     done
     if [[ -n "$STATUS_DIR" ]]; then
-        cp "$STATUS_DIR/snapmulti-status.service" /etc/systemd/system/
-        cp "$STATUS_DIR/snapmulti-status.timer"   /etc/systemd/system/
+        install -m 0644 "$STATUS_DIR/snapmulti-status.service" /etc/systemd/system/
+        install -m 0644 "$STATUS_DIR/snapmulti-status.timer"   /etc/systemd/system/
         systemctl daemon-reload
         systemctl enable snapmulti-status.timer
         log_info "System-status snapshot timer installed (5-min snapshot interval)"
@@ -1234,7 +1241,7 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         done
         if [[ -n "$BIND_DIR" ]]; then
             install -m 0755 "$BIND_DIR/snapmulti-music-bind.sh" /usr/local/bin/snapmulti-music-bind
-            cp "$BIND_DIR/snapmulti-music-bind.service" /etc/systemd/system/
+            install -m 0644 "$BIND_DIR/snapmulti-music-bind.service" /etc/systemd/system/
             systemctl daemon-reload
             systemctl enable snapmulti-music-bind.service
             log_info "Music-bind unit installed (overlayroot $MUSIC_SOURCE workaround)"
@@ -1288,9 +1295,12 @@ _tty "  +--------------------------------------------+"
 _tty ""
 case "$INSTALL_TYPE" in
     server|both)
-        _tty "  Speakers:  http://${IP_ADDR:-$LOCAL_HOSTNAME}:1780"
-        _tty "  Library:   http://${IP_ADDR:-$LOCAL_HOSTNAME}:8180"
-        _tty "  Status:    http://${IP_ADDR:-$LOCAL_HOSTNAME}:8083  (system health page)"
+        _tty "  Snapweb:   http://${LOCAL_HOSTNAME}.local:1780"
+        if [[ -n "${IP_ADDR:-}" ]]; then
+            _tty "             http://${IP_ADDR}:1780"
+        fi
+        _tty "  Library:   http://${LOCAL_HOSTNAME}.local:8180"
+        _tty "  Status:    http://${LOCAL_HOSTNAME}.local:8083  (system health page)"
         ;;
     client)
         _tty "  Player will auto-discover your server"

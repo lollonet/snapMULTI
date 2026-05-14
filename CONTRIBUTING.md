@@ -6,6 +6,18 @@ Bug fixes, features, doc improvements and "show your setup" posts all welcome.
 - [Discussions](https://github.com/lollonet/snapMULTI/discussions) — questions, ideas, show your setup
 - [SECURITY.md](SECURITY.md) — private vulnerability disclosure
 
+## Non-code contributions
+
+The most useful community contributions are often not code:
+
+- hardware validation reports for Pi models, DAC HATs, amps, SD cards and PSUs
+- install logs or diagnostic bundles from failed first boots
+- translation fixes for the Italian mirrors
+- documentation improvements where a step was unclear
+- photos or screenshots of working setups for future hardware examples
+
+For a hardware report, include: Pi model + RAM, SD card model/class if known, PSU rating, HAT/DAC/audio output, install type (`server`, `client`, `both`), network path (Ethernet/WiFi/NAS), snapMULTI version, and `device-smoke.sh` or `fleet-smoke.sh` output if available.
+
 ## Submitting code
 
 1. Fork + branch off `main` (`feature/<short-name>` or `fix/<short-name>`).
