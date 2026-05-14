@@ -15,6 +15,9 @@ Indice:
 - [Cambiare sorgente via JSON-RPC](#cambiare-sorgente-via-json-rpc)
 - [Unit systemd](#unit-systemd)
 - [Strategia di aggiornamento](#strategia-di-aggiornamento)
+- [Profili risorse](#profili-risorse)
+- [Regole firewall](#regole-firewall)
+- [Network QoS](#network-qos)
 
 ## Multi-room — aggiungere altoparlanti
 
@@ -37,7 +40,7 @@ Se la tua libreria è su un NAS (Synology, QNAP, server Linux generico, condivis
 | Protocollo | Quando | Note |
 |------------|--------|------|
 | NFS | NAS Linux / Synology / QNAP, allow-list per IP | `prepare-sd.sh` scrive una coppia `.mount`/`.automount` systemd; nessuna password |
-| SMB / CIFS | Condivisione Windows, Synology / QNAP con username + password | Le credenziali restano su ext4 root-only, mai sulla partizione boot FAT32 |
+| SMB / CIFS | Condivisione Windows, Synology / QNAP con username + password | Le credenziali finiscono in `install.conf` sulla partizione FAT32 durante `prepare-sd.sh` e `firstboot.sh`, poi vengono cancellate e persistite in `/etc/snapmulti-smb-credentials` (root-only, su ext4) |
 | USB | Disco collegato al Pi | Auto-montato da `udisks2`; scegli l'UUID della partizione nel menu |
 | Locale | File copiati in `/audio` sul Pi | Default per chi inizia |
 
