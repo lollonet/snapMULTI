@@ -35,7 +35,7 @@ Il nuovo speaker compare in Snapweb (`http://<server>.local:1780`) entro ~30 sec
 
 ## Libreria musicale in rete
 
-Se la tua libreria è su un NAS (Synology, QNAP, server Linux generico, condivisione Windows), il Menu 2 di `prepare-sd.sh` chiede il path della share durante l'installazione. Scegli il protocollo che corrisponde al tuo NAS:
+Se la tua libreria è su un NAS (Synology, QNAP, server Linux generico, condivisione Windows), il Menu 3 di `prepare-sd.sh` chiede il path della share durante l'installazione. Scegli il protocollo che corrisponde al tuo NAS:
 
 | Protocollo | Quando | Note |
 |------------|--------|------|

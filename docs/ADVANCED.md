@@ -35,7 +35,7 @@ The new speaker appears in Snapweb (`http://<server>.local:1780`) within ~30 sec
 
 ## Music library on the network
 
-If your library lives on a NAS (Synology, QNAP, generic Linux server, Windows share), `prepare-sd.sh` Menu 2 asks for the share path during install. Pick the protocol that matches your NAS:
+If your library lives on a NAS (Synology, QNAP, generic Linux server, Windows share), `prepare-sd.sh` Menu 3 asks for the share path during install. Pick the protocol that matches your NAS:
 
 | Protocol | When | Notes |
 |----------|------|-------|
