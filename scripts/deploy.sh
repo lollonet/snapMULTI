@@ -1067,6 +1067,21 @@ ExecStartPre=/bin/bash -c 'for i in \$(seq 1 60); do docker info >/dev/null 2>&1
 # \`sleep 2\` lets avahi publish its first announce. Non-fatal on
 # unusual setups (no avahi installed) — falls through after 30 s.
 ExecStartPre=/bin/bash -c 'for i in \$(seq 1 30); do systemctl is-active --quiet avahi-daemon.service && [[ -S /run/avahi-daemon/socket ]] && break; sleep 1; done; sleep 2'
+# Detect-and-recreate on mem_limit drift, symmetric to snapclient.service
+# (PR #393). The first compose up during firstboot runs BEFORE the final
+# reboot that activates cgroup memory v2 (cmdline_ensure_memory_cgroup
+# patches cmdline.txt but takes effect only after reboot). So even though
+# deploy.sh:921 invokes \`docker compose up -d --force-recreate\`, the
+# resulting containers are created without cgroup memory v2 →
+# HostConfig.Memory=0. The next \`systemctl start\` (after reboot) runs
+# plain \`compose up -d\`, which is idempotent on existing containers and
+# keeps the limit-less ones. We probe snapserver (representative of the
+# stack — they're all created together) and force-recreate the whole
+# compose project exactly once when drift is detected. Empty inspect
+# output (fresh reflash, no container yet) returns "", neither "0" nor a
+# byte count, so the recreate is skipped — ExecStart will create the
+# containers fresh with proper limits.
+ExecStartPre=-/bin/bash -c 'mem=\$(/usr/bin/docker inspect snapserver --format "{{.HostConfig.Memory}}" 2>/dev/null || true); if [[ "\$\$mem" == "0" ]]; then cd ${PROJECT_ROOT} && /usr/bin/docker compose up -d --force-recreate; fi'
 ExecStart=/usr/bin/docker compose up -d
 # Self-heal mDNS publish race: 12 s after compose up, query the local
 # avahi cache for \`_snapcast._tcp\`. If the PTR record is present but

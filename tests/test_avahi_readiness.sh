@@ -99,6 +99,18 @@ assert '! echo "$server_unit" | grep -qF "\\+" && ! echo "$server_unit" | grep -
 assert 'echo "$server_unit" | grep -qE "ExecStartPost=-"' \
        'ExecStartPost is non-fatal (leading -)'
 
+# mem_limit drift recreate guard — symmetric to snapclient.service (PR #393).
+# Live evidence on pi4hatsrvusb post-reflash: 7 server containers had
+# HostConfig.Memory=0 because the first compose up ran before cgroup v2
+# was active. The guard probes snapserver and force-recreates the stack
+# when limit==0. Must be non-fatal (leading -) so a missing/transient
+# docker inspect does not hold the unit in failed state.
+assert 'echo "$server_unit" | grep -qE "ExecStartPre=-.*docker inspect snapserver.*HostConfig.Memory"' \
+       'server has mem-drift force-recreate ExecStartPre (symmetric to snapclient)'
+
+assert 'echo "$server_unit" | grep -qE "ExecStartPre=-.*if \[\[ .*mem.* == .0..*compose up -d --force-recreate"' \
+       'server mem-drift guard force-recreates when HostConfig.Memory=0'
+
 # PartOf=avahi-daemon.service has been removed: it gave Avahi full
 # lifecycle control over the audio stack, so a routine avahi restart
 # took the whole stack down. Server-side recovery from the snapcast
