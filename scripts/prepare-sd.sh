@@ -424,7 +424,7 @@ copy_client_files() {
     # /opt/snapmulti/... /opt/snapclient/... ; do source "$_cand"; done`
     # idiom in ro-mode.sh / cmdline-manager.sh is resilience for ad-hoc
     # operator invocations, not because the copies disagree.
-    for _shared in install-deps.sh install-docker.sh system-tune.sh unified-log.sh logging.sh sanitize.sh; do
+    for _shared in install-deps.sh install-docker.sh system-tune.sh unified-log.sh logging.sh sanitize.sh systemd-snippets.sh; do
         [[ -f "$SCRIPT_DIR/common/$_shared" ]] && cp "$SCRIPT_DIR/common/$_shared" "$dest/scripts/common/"
     done
     # boot-tune.sh is a server script but client also needs it for boot-time tuning
@@ -741,7 +741,7 @@ VERIFY_ERRORS=0
 # -- snapMULTI files --
 echo ""
 echo "--- snapMULTI files ---"
-for f in install.conf firstboot.sh common/progress.sh common/logging.sh common/unified-log.sh common/sanitize.sh common/system-tune.sh common/install-docker.sh common/install-deps.sh common/setup-docker.sh common/wait-network.sh common/mount-music.sh; do
+for f in install.conf firstboot.sh common/progress.sh common/logging.sh common/unified-log.sh common/sanitize.sh common/system-tune.sh common/install-docker.sh common/install-deps.sh common/setup-docker.sh common/wait-network.sh common/mount-music.sh common/systemd-snippets.sh; do
     if [[ -f "$DEST/$f" ]]; then
         echo "  [OK] snapmulti/$f"
     else
@@ -787,6 +787,7 @@ case "$INSTALL_TYPE" in
                  client/scripts/common/unified-log.sh \
                  client/scripts/common/logging.sh \
                  client/scripts/common/sanitize.sh \
+                 client/scripts/common/systemd-snippets.sh \
                  client/snapclient.conf; do
             if [[ -f "$DEST/$f" ]]; then
                 echo "  [OK] snapmulti/$f"

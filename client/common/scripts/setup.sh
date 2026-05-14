@@ -264,7 +264,8 @@ for _snippets_candidate in \
     "$SCRIPT_DIR/common/systemd-snippets.sh" \
     "$SCRIPT_DIR/../../../scripts/common/systemd-snippets.sh" \
     "$COMMON_DIR/../scripts/common/systemd-snippets.sh" \
-    "/boot/firmware/common/systemd-snippets.sh"; do
+    "/boot/firmware/snapmulti/common/systemd-snippets.sh" \
+    "/boot/snapmulti/common/systemd-snippets.sh"; do
     # shellcheck source=../../../scripts/common/systemd-snippets.sh
     [[ -f "$_snippets_candidate" ]] && source "$_snippets_candidate" && break
 done
