@@ -95,8 +95,7 @@ log_msg() {
     local level="$1" source="${2:-$LOG_SOURCE}" msg="$3"
 
     if (( _UNIFIED_LOG_WRITABLE )); then
-        # `$(date +%H:%M:%S)` is Bash-3.2 portable; printf '%(...)T' would be faster but is Bash 4.2+ only and no-ops silently on macOS.
-        # `{ ...; } 2>/dev/null` (not a trailing `2>/dev/null`) catches the redirect-setup error too.
+        # `$(date)` not `printf '%(...)T'`: latter is Bash 4.2+, no-ops on macOS 3.2.
         { printf '[%s] [%-5s] [%s] %s\n' "$(date +%H:%M:%S)" "$level" "$source" "$msg" \
             >> "$UNIFIED_LOG"; } 2>/dev/null || true
 

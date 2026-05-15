@@ -52,11 +52,7 @@ done
 assert 'grep -qE "^_net_emit_results\\(\\) \\{" "$SMOKE"' \
     "function _net_emit_results defined"
 
-# 3. All four checks are invoked WITH `&` (background) — drift to
-# serial execution would re-introduce the 30-45 s worst-case latency.
-# Lines are now indented under the SMOKE_SKIP_NETWORK guard (added
-# 2026-05-15 to keep the test suite portable to macOS / generic CI),
-# so the patterns tolerate leading whitespace.
+# 3. Four checks invoked with `&` (background); pattern tolerates leading whitespace since the SMOKE_SKIP_NETWORK guard indented them.
 for fn in _net_check_dns _net_check_ntp _net_check_mdns_self _net_check_arping; do
     assert "grep -qE '^[[:space:]]*${fn} &\$' \"\$SMOKE\"" \
         "$fn invoked with & (background)"

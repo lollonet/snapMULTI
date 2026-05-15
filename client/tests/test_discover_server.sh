@@ -1,20 +1,5 @@
 #!/usr/bin/env bash
-# Functional checks for discover-server.sh's _apply_server function.
-#
-# The function was renamed from _update_server in an earlier refactor;
-# this test was tracking the old name and silently failed against the
-# current code. The behaviour we care about is unchanged across the
-# rename:
-#   1. If new_ip == current, return 1 (no-change) — no .env write, no restart.
-#   2. If new_ip != current, write .env first, then (in watch mode) restart.
-#   3. The .env write must complete before the restart so the new
-#      SNAPSERVER_HOST is visible to the compose recreate. Bug we're
-#      guarding against: an earlier version restarted from in-memory
-#      state before flushing .env — a `systemctl restart snapclient`
-#      operator action would then race the script and read stale data.
-#   4. If the restart fails, the .env stays at the new value — caller's
-#      next pass re-discovers and retries, instead of reverting to the
-#      stale host.
+# Functional checks for discover-server.sh's _apply_server: write-before-restart ordering, no-op short-circuit, restart-failure preserves new .env.
 
 set -euo pipefail
 
@@ -68,8 +53,7 @@ COMPOSE_LOG=""
 COMPOSE_RC=0
 _log() { :; }
 _compose_up() {
-    # Record the host the .env contains AT THE MOMENT of restart so the
-    # assertion can verify .env was flushed BEFORE the restart, not after.
+    # Snapshot .env at restart time so the assertion can prove ordering (flush-then-restart, not the other way).
     if [[ -n "$COMPOSE_LOG" ]]; then
         grep '^SNAPSERVER_HOST=' "$ENV_FILE" | cut -d= -f2- > "$COMPOSE_LOG"
     fi
