@@ -537,8 +537,19 @@ else
         log_progress "Installing Docker CE via shared installer..."
         install_docker_apt
     else
-        log_progress "WARNING: install-docker.sh not found, installing Docker inline"
-        curl -fsSL https://get.docker.com | sh
+        # No `curl … | sh` fallback. The shared installer (install-docker.sh)
+        # is shipped by prepare-sd.sh on every SD-card layout, so its absence
+        # means the SD card was prepared incorrectly — failing loud is safer
+        # than silently piping an unverified script from the internet into
+        # root sh. Operator action: re-run prepare-sd.sh on the host, or
+        # copy the file manually if doing a hand install.
+        log_progress "ERROR: install-docker.sh not found in any candidate path"
+        log_progress "  Candidates checked:"
+        log_progress "    \$SCRIPT_DIR/common/install-docker.sh"
+        log_progress "    \$SCRIPT_DIR/../scripts/common/install-docker.sh"
+        log_progress "    \$(dirname \"\$0\")/common/install-docker.sh"
+        log_progress "  Re-run prepare-sd.sh to refresh the SD card."
+        exit 1
     fi
 fi
 

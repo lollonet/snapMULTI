@@ -80,14 +80,37 @@ echo "=== Bug #4 — ws_clients lock invariant ==="
 # difference_update under the lock.
 
 # Specifically the subscribe path must wrap discard+add together.
+# shellcheck disable=SC2034  # consumed via the eval'd assert below
 subscribe_block=$(awk '/if .subscribe. in data:/,/continue$/' "$METADATA" | head -25)
 assert 'echo "$subscribe_block" | grep -qE "async with ws_clients_lock:"' \
        'subscribe path is wrapped in ws_clients_lock'
 
 # The disconnect path (finally block) must also acquire the lock.
-finally_block=$(awk '/finally:/,/logger.info.*disconnected/' "$METADATA")
+# Scope the awk to `ws_handler()` only — metadata-service.py has three
+# other `finally:` blocks above (e.g. fetch_album_artwork's connection
+# cleanup at :665). Without the scope, awk would match the first
+# finally in the file and false-pass even if ws_handler's own finally
+# regressed. The scope starts at `async def ws_handler` and ends at
+# the next top-level `async def` / `def` (which marks the next
+# function) — that bounds the body unambiguously.
+ws_handler_body=$(awk '
+    /^async def ws_handler/ { flag=1 }
+    flag
+    flag && /^(async def|def) [a-z]/ && !/^async def ws_handler/ { exit }
+' "$METADATA")
+finally_block=$(echo "$ws_handler_body" | awk '/finally:/,/logger.info.*disconnected/')
 assert 'echo "$finally_block" | grep -qE "async with ws_clients_lock:"' \
-       'disconnect path acquires ws_clients_lock around discard'
+       'ws_handler disconnect path acquires ws_clients_lock around discard'
+
+# Belt-and-braces: the extracted finally_block must be non-empty (proves
+# we actually scoped to ws_handler, not silently fell through to EOF).
+if [[ -z "$finally_block" ]]; then
+    echo "  FAIL: finally_block empty — awk scope failed to find ws_handler's finally"
+    fail=$((fail + 1))
+else
+    echo "  PASS: ws_handler finally block extracted (non-empty)"
+    pass=$((pass + 1))
+fi
 
 # The two collect-then-flush broadcast paths in the poll loop now mutate
 # ws_clients via difference_update under the lock (instead of bare
