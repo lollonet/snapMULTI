@@ -81,15 +81,28 @@ check_snapcast() {
         elif ! command -v jq >/dev/null 2>&1; then
             info "jq not installed — RPC reachable but contents not inspected"
         else
-            # Extract client count and "any disconnected client" flag.
-            local client_count connected disconnected
+            # Extract client count and disconnected client list. Snapserver
+            # keeps paired clients in its state even when they are offline;
+            # that is useful context, not a smoke warning.
+            local client_count connected disconnected disconnected_clients
             client_count=$(jq -r '[.result.server.groups[]?.clients[]?] | length' <<<"$rpc_json" 2>/dev/null || echo 0)
             connected=$(jq -r '[.result.server.groups[]?.clients[]? | select(.connected==true)] | length' <<<"$rpc_json" 2>/dev/null || echo 0)
             disconnected=$(( client_count - connected ))
+            disconnected_clients=$(
+                jq -r '
+                    [.result.server.groups[]?.clients[]?
+                     | select(.connected != true)
+                     | (.host.name // .host.ip // .id // "unknown") as $name
+                     | (.host.ip // "") as $ip
+                     | if $ip != "" and $ip != $name then "\($name)(\($ip))" else $name end]
+                    | join(", ")
+                ' <<<"$rpc_json" 2>/dev/null || true
+            )
             if (( client_count == 0 )); then
                 warn "Snapcast: 0 clients in any group — multiroom has no listeners (intentional if no players paired yet)"
             elif (( disconnected > 0 )); then
-                warn "Snapcast: $connected/$client_count clients connected ($disconnected disconnected — paired but offline)"
+                pass_check "Snapcast: $connected/$client_count clients connected"
+                info "Disconnected Snapcast client(s): ${disconnected_clients:-unknown} — paired but offline"
             else
                 pass_check "Snapcast: $connected/$client_count clients connected"
             fi
