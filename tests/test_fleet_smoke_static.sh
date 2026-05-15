@@ -48,6 +48,9 @@ assert_contains "$src" "CONNECTED_NON_SNAPMULTI_JSON" "tracks connected non-snap
 assert_contains "$src" "connected_non_snapmulti_clients" "exposes connected non-snapMULTI clients in JSON output"
 assert_contains "$src" "Connected non-snapMULTI clients:" "lists connected non-snapMULTI clients in text output"
 assert_contains "$src" "trap - EXIT" "parallel probe workers do not inherit tmpdir cleanup trap"
+assert_contains "$src" "ServerAliveInterval=15" "SSH keepalive set (anti-hang when remote bash wedges)"
+assert_contains "$src" "ServerAliveCountMax=3" "SSH gives up after 3 missed keepalives (~45 s ceiling)"
+assert_contains "$src" '/^\{.*\}$/' "payload sanitiser strips MOTD/banner by picking the single JSON line"
 
 # Regression guard against the historic "device-smoke exit 1 + valid
 # JSON" concat bug. The previous `|| echo "{}"` form appended a second

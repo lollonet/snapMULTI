@@ -22,7 +22,14 @@ set -euo pipefail
 # ── Defaults ─────────────────────────────────────────────────────
 SERVER=""
 SSH_USER="${USER}"
-SSH_OPTS=(-o ConnectTimeout=8 -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
+# ServerAliveInterval=15 + ServerAliveCountMax=3 = client-side keepalive
+# every 15 s, give up after 3 missed (~45 s) so a host whose TCP socket
+# stays open but whose remote `bash -s` is wedged does not hang the
+# fleet probe. The external `timeout` binary set up below is the
+# primary kill switch, but macOS dev boxes routinely lack it; this
+# keeps the worst-case bounded regardless.
+SSH_OPTS=(-o ConnectTimeout=8 -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+          -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
 OUTPUT="text"
 CLIENT_ONLY=false
 TIMEOUT_SMOKE=120
@@ -272,6 +279,12 @@ REMOTE
             '{host:$h, role:$r, reachable:false, error:"ssh-timeout-or-fail"}' >"$out"
         return
     fi
+    # Sanitize: some hosts ship a stdout-echoing login banner (motd, last
+    # login, PAM echo) ahead of `bash -s`. The remote python3 prints the
+    # JSON as a SINGLE LINE (separators=(",",":")), so picking the line
+    # that starts with `{` and ends with `}` after the banner is robust
+    # and avoids breaking the subsequent jq parse.
+    payload=$(printf '%s\n' "$payload" | awk '/^\{.*\}$/' | tail -n 1)
     # Validate JSON; if smoke returned non-JSON (older snapMULTI?), mark partial.
     if ! jq -e . <<<"$payload" >/dev/null 2>&1; then
         jq -nc --arg h "$host" --arg r "$role" --arg raw "$payload" \
