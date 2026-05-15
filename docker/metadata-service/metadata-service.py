@@ -435,6 +435,17 @@ class MetadataService:
             # Remove failed clients outside iteration
             ws_clients.difference_update(clients_to_remove)
 
+    @staticmethod
+    def _match_client_id(client_id: str, identifiers: list[str]) -> bool:
+        # Exact match or `snapclient-`-prefix-stripped exact match. Substring matching here would mis-route "Sala" volume to "Sala Grande".
+        if any(client_id == i for i in identifiers if i):
+            return True
+        if client_id.startswith("snapclient-"):
+            stripped = client_id[len("snapclient-") :]
+            if any(stripped == i for i in identifiers if i):
+                return True
+        return False
+
     def _resolve_client_stream(self, client_id: str) -> str | None:
         """Resolve a CLIENT_ID to its stream_id using cached mapping.
 
@@ -488,7 +499,7 @@ class MetadataService:
                     client.get("config", {}).get("name", ""),
                     client.get("id", ""),
                 ]
-                if any(client_id in i or i in client_id for i in identifiers if i):
+                if self._match_client_id(client_id, identifiers):
                     return client.get("config", {}).get(
                         "volume", {"percent": 100, "muted": False}
                     )
@@ -1330,7 +1341,7 @@ class MetadataService:
                         client.get("config", {}).get("name", ""),
                         client.get("id", ""),
                     ]
-                    if any(client_id in i or i in client_id for i in identifiers if i):
+                    if self._match_client_id(client_id, identifiers):
                         snap_client_id = client.get("id")
                         break
                 if snap_client_id:

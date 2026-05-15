@@ -803,7 +803,8 @@ if [[ "$MODE" == "client" || "$MODE" == "both" ]]; then
         _hw_params_files+=("$f")
     done < <(ls /proc/asound/card*/pcm0p/sub*/hw_params 2>/dev/null)
     _audio_active=false
-    for f in "${_hw_params_files[@]}"; do
+    # Guard the array iteration so Bash 3.2 (macOS dev gates) does not abort with "unbound variable" when the glob produced no matches.
+    for f in ${_hw_params_files[@]+"${_hw_params_files[@]}"}; do
         # \`closed\` (single line) = no stream. Any other content = active.
         if grep -q 'access:' "$f" 2>/dev/null; then
             _audio_active=true

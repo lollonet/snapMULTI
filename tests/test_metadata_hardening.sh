@@ -16,6 +16,12 @@
 #   refusing to resolve, since wrong room receives metadata/volume.
 #   Now: exact match + `snapclient-` prefix strip only.
 #
+# Bug 3b — same exact-match rule applied to volume read/write paths.
+#   _resolve_client_stream was hardened, but _find_client_volume and
+#   set_client_volume kept `client_id in i or i in client_id` substring
+#   matching — so volume routing could still hit the wrong room. Fix:
+#   shared `_match_client_id` helper used by all three call sites.
+#
 # Bug 4 — MusicBrainz rate limiter releases lock before sleeping.
 #   Old code held threading.Lock during time.sleep(1.1), serialising
 #   the thread pool. Fix: reserve slot via timestamp under lock, sleep
@@ -98,6 +104,69 @@ cases = [
 fail = 0
 for client, mapping, expected, desc in cases:
     got = resolve(client, mapping)
+    if got == expected:
+        print(f"  PASS: {desc}")
+    else:
+        print(f"  FAIL: {desc} (got {got!r}, expected {expected!r})")
+        fail += 1
+sys.exit(fail)
+PY
+rc=$?
+if [[ "$rc" -eq 0 ]]; then
+    pass=$((pass + 6))
+else
+    fail=$((fail + rc))
+    pass=$((pass + 6 - rc))
+fi
+
+echo
+echo "=== Bug 3b — volume routing uses exact match ==="
+
+assert 'grep -qE "def _match_client_id\\(" "$SVC"' \
+       '_match_client_id helper defined'
+
+# All three call sites must use the helper. Substring matching anywhere
+# below would let "Sala" hit "Sala Grande" on the volume path.
+find_vol_block=$(grep -A 20 "def _find_client_volume" "$SVC")
+set_vol_block=$(grep -A 30 "    def set_client_volume" "$SVC")
+
+assert 'echo "$find_vol_block" | grep -qF "_match_client_id(client_id"' \
+       '_find_client_volume uses _match_client_id helper'
+
+assert 'echo "$set_vol_block" | grep -qF "_match_client_id(client_id"' \
+       'set_client_volume uses _match_client_id helper'
+
+assert '! echo "$find_vol_block" | grep -qE "client_id in i or i in client_id"' \
+       '_find_client_volume no longer substring-matches'
+
+assert '! echo "$set_vol_block" | grep -qE "client_id in i or i in client_id"' \
+       'set_client_volume no longer substring-matches'
+
+# Functional: replicate the helper and prove Sala / Sala Grande split correctly on the volume path.
+python3 - <<'PY'
+import sys
+
+def match(client_id, identifiers):
+    if any(client_id == i for i in identifiers if i):
+        return True
+    if client_id.startswith("snapclient-"):
+        stripped = client_id[len("snapclient-"):]
+        if any(stripped == i for i in identifiers if i):
+            return True
+    return False
+
+cases = [
+    # Volume read path: identifiers come from Snapcast client config (name + id).
+    ("Sala",        ["Sala Grande", "snap-host-1"],         False, "Sala volume read must NOT hit Sala Grande client"),
+    ("Sala Grande", ["Sala Grande", "snap-host-1"],         True,  "Sala Grande exact match"),
+    ("Cucina",      ["Cucinino", "snap-host-2"],            False, "Cucina volume read must NOT hit Cucinino"),
+    ("snapclient-pi-server", ["pi-server", "host-id"],      True,  "snapclient- prefix strip works for volume too"),
+    ("Studio",      ["Sala", "Camera"],                     False, "no match returns False"),
+    ("",            ["Sala"],                                False, "empty client_id never matches"),
+]
+fail = 0
+for client, ids, expected, desc in cases:
+    got = match(client, ids)
     if got == expected:
         print(f"  PASS: {desc}")
     else:
