@@ -52,6 +52,24 @@ assert 'echo "$body" | grep -qF "own_mac"' \
 assert 'echo "$body" | grep -qF "foreign MAC"' \
        'conflict signature is "reply from foreign MAC"'
 
+# Healthy-LAN semantics: managed switches / Wi-Fi APs do not reflect
+# broadcasts, so a non-DAD arping for our own IP usually returns rc=1
+# with no replies on a healthy network. That MUST be `pass` (no foreign
+# claim), not `warn`. Reserve `warn` for genuine probe errors.
+assert 'echo "$body" | grep -qF "No IP conflict on"' \
+       'no-reply branch emits pass "No IP conflict on ..."'
+
+assert 'echo "$body" | grep -qF "arping probe failed"' \
+       'genuine probe errors emit warn "arping probe failed"'
+
+if echo "$body" | grep -qF "probe inconclusive"; then
+    echo "  FAIL: function still emits 'probe inconclusive' on healthy networks (warn-vs-pass regression)"
+    fail=$((fail + 1))
+else
+    echo "  PASS: no 'probe inconclusive' branch (healthy-LAN no-reply is treated as pass)"
+    pass=$((pass + 1))
+fi
+
 # Reply-MAC parsing logic — replicate in Python and assert that
 # replies from our own MAC do NOT count as conflict, replies from a
 # different MAC DO.
@@ -93,7 +111,14 @@ for output, own, expected, desc in cases:
 sys.exit(fail)
 PY
 rc=$?
-if [[ "$rc" -eq 0 ]]; then
+# Guard: the Python block exits with the count of failed subtests (0..5).
+# Any rc > 5 means the heredoc itself crashed (syntax error, missing
+# interpreter, etc.); credit zero passes in that case so a green
+# summary cannot mask a broken test runner.
+if (( rc > 5 )); then
+    echo "  FAIL: Python helper crashed (rc=$rc) — all 5 subtests counted as failed"
+    fail=$((fail + 5))
+elif (( rc == 0 )); then
     pass=$((pass + 5))
 else
     fail=$((fail + rc))

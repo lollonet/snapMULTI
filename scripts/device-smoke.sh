@@ -584,8 +584,20 @@ _net_check_arping() {
         printf 'warn\tarping needs CAP_NET_RAW / sudo — IP-conflict check skipped (run as root, or "setcap cap_net_raw+ep $(command -v arping)")\n' > "$out"
         return
     fi
+    # Without `-D`, arping returns rc=1 when no replies arrive within
+    # the timeout. On a healthy LAN this is the COMMON case: managed
+    # switches and Wi-Fi APs do not reflect broadcasts back to the
+    # sender, so we never hear our own ARP request and the kernel
+    # suppresses self-replies — yet that is exactly the "no foreign
+    # host claims our IP" state we want to call `pass`. Reserve `warn`
+    # for genuine probe errors (interface missing, network unreachable)
+    # which produce distinct text on stderr.
     if [[ $arping_rc -ne 0 ]] && ! echo "$arping_out" | grep -qiE 'reply|bytes from'; then
-        printf 'warn\tarping returned rc=%s without replies — probe inconclusive (%s on %s)\n' "$arping_rc" "$own_ip" "$own_iface" > "$out"
+        if echo "$arping_out" | grep -qiE 'unknown host|no such device|network is unreachable|interface .* not found'; then
+            printf 'warn\tarping probe failed — check interface %s (%s)\n' "$own_iface" "$own_ip" > "$out"
+        else
+            printf 'pass\tNo IP conflict on %s (%s) — no other host replied\n' "$own_ip" "$own_iface" > "$out"
+        fi
         return
     fi
     # Replies are formatted as `Unicast reply from <ip> [<MAC>] ...`.
