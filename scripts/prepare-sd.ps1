@@ -282,6 +282,127 @@ function Get-NetworkType {
     }
 }
 
+# ── Audio output menus (client/both only) ────────────────────────
+# Mirror of the bash audio menu in prepare-sd.sh. See that file for
+# the design rationale; this file is the Windows host-side parity.
+function Show-AudioMenu {
+    Write-Host ''
+    Write-Host '  +---------------------------------------------+'
+    Write-Host '  |        Audio output                          |'
+    Write-Host '  |                                              |'
+    Write-Host '  |  1) Auto-detect (recommended)                |'
+    Write-Host '  |     Detects HAT via EEPROM/I2C, falls back   |'
+    Write-Host '  |     to USB DAC or built-in audio             |'
+    Write-Host '  |                                              |'
+    Write-Host '  |  2) I have an audio HAT (choose from list)   |'
+    Write-Host '  |                                              |'
+    Write-Host '  |  3) No HAT -- use Pi built-in audio          |'
+    Write-Host '  |     HDMI (TV/monitor) or 3.5mm jack          |'
+    Write-Host '  |                                              |'
+    Write-Host '  +---------------------------------------------+'
+    Write-Host ''
+    Write-Host '  Auto-detect is the right choice for >90% of installs.'
+    Write-Host '  Use 2 or 3 only if auto-detect failed on a previous attempt.'
+    Write-Host ''
+}
+
+function Get-AudioType {
+    while ($true) {
+        $choice = Read-Host '  Choose [1-3]'
+        switch ($choice) {
+            '1' { return 'auto' }
+            '2' { return 'hat' }
+            '3' { return 'internal' }
+            default { Write-Host '  Invalid choice. Enter 1, 2, or 3.' }
+        }
+    }
+}
+
+# Enumerate supported HATs from $ClientDir\common\audio-hats\*.conf,
+# excluding internal-audio (sub-menu 3) and usb-audio (auto-detect).
+# Returns @( @{Slug='..'; Name='..'}, ... ) sorted by friendly name.
+function Get-SupportedHats {
+    param([string]$ClientDir)
+    $hatDir = Join-Path $ClientDir 'common\audio-hats'
+    if (-not (Test-Path $hatDir)) { return @() }
+    $hats = @()
+    foreach ($f in Get-ChildItem -Path $hatDir -Filter '*.conf') {
+        $slug = [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
+        if ($slug -in @('internal-audio', 'usb-audio')) { continue }
+        $nameLine = Select-String -Path $f.FullName -Pattern '^HAT_NAME=' -SimpleMatch:$false | Select-Object -First 1
+        $name = $slug
+        if ($nameLine) {
+            # HAT_NAME="..." — strip the variable prefix and surrounding quotes.
+            $name = $nameLine.Line -replace '^HAT_NAME=', ''
+            $name = $name.Trim('"').Trim("'")
+            if (-not $name) { $name = $slug }
+        }
+        $hats += [PSCustomObject]@{ Slug = $slug; Name = $name }
+    }
+    return $hats | Sort-Object Name
+}
+
+function Show-HatMenu {
+    param([array]$Hats)
+    Write-Host ''
+    Write-Host '  +---------------------------------------------+'
+    Write-Host '  |        Choose your audio HAT                 |'
+    Write-Host '  +---------------------------------------------+'
+    Write-Host ''
+    for ($i = 0; $i -lt $Hats.Count; $i++) {
+        Write-Host ("  {0,2}) {1}" -f ($i + 1), $Hats[$i].Name)
+    }
+    Write-Host ''
+    Write-Host '  Cancel and return to auto-detect:'
+    Write-Host '   0) Back'
+    Write-Host ''
+}
+
+function Get-HatChoice {
+    param([array]$Hats)
+    $total = $Hats.Count
+    while ($true) {
+        $choice = Read-Host "  Choose [0-$total]"
+        if ($choice -eq '0') { return 'auto' }
+        $n = 0
+        if ([int]::TryParse($choice, [ref]$n) -and $n -ge 1 -and $n -le $total) {
+            return $Hats[$n - 1].Slug
+        }
+        Write-Host "  Invalid choice. Enter a number between 0 and $total."
+    }
+}
+
+function Show-InternalAudioMenu {
+    Write-Host ''
+    Write-Host '  +---------------------------------------------+'
+    Write-Host '  |        Built-in audio output                 |'
+    Write-Host '  |                                              |'
+    Write-Host '  |  1) HDMI (TV / monitor)                      |'
+    Write-Host '  |     Works on Pi 3, Pi 4, Pi 5                |'
+    Write-Host '  |                                              |'
+    Write-Host '  |  2) 3.5mm jack (Headphones)                  |'
+    Write-Host '  |     Works on Pi 3, Pi 4 only                 |'
+    Write-Host '  |     (Pi 5 has no analog jack -- pick 1)      |'
+    Write-Host '  |                                              |'
+    Write-Host '  +---------------------------------------------+'
+    Write-Host ''
+    Write-Host '  On Bookworm/Trixie the real ALSA card name is'
+    Write-Host "  detected at first boot via 'aplay -L' -- you do"
+    Write-Host '  not need to know it here.'
+    Write-Host ''
+}
+
+function Get-InternalOutput {
+    while ($true) {
+        $choice = Read-Host '  Choose [1-2]'
+        switch ($choice) {
+            '1' { return 'hdmi' }
+            '2' { return 'jack' }
+            default { Write-Host '  Invalid choice. Enter 1 or 2.' }
+        }
+    }
+}
+
 function Sanitize-Hostname {
     param([string]$Value)
     $cleaned = $Value -replace '[^A-Za-z0-9.\-]', ''
@@ -609,6 +730,34 @@ Write-Host ''
 Write-Host "Installing as: $InstallType"
 Write-Host ''
 
+# ── Audio output (client/both only) ──────────────────────────────
+$AudioHat = 'auto'
+$AudioInternalOutput = ''
+if ($InstallType -in @('client', 'both')) {
+    Show-AudioMenu
+    $audioType = Get-AudioType
+    switch ($audioType) {
+        'auto' { $AudioHat = 'auto' }
+        'hat' {
+            $hats = Get-SupportedHats -ClientDir $ClientDir
+            Show-HatMenu -Hats $hats
+            $AudioHat = Get-HatChoice -Hats $hats
+        }
+        'internal' {
+            $AudioHat = 'internal-audio'
+            Show-InternalAudioMenu
+            $AudioInternalOutput = Get-InternalOutput
+        }
+    }
+    Write-Host ''
+    if ($AudioInternalOutput) {
+        Write-Host "Audio: $AudioHat ($AudioInternalOutput)"
+    } else {
+        Write-Host "Audio: $AudioHat"
+    }
+    Write-Host ''
+}
+
 # ── Music source (server/both only) ─────────────────────────────
 $MusicSource = ''
 $NfsServer = ''
@@ -660,6 +809,9 @@ NFS_SERVER=$NfsServer
 NFS_EXPORT=$NfsExport
 SMB_SERVER=$SmbServer
 SMB_SHARE=$SmbShare
+# Audio output (client/both only — server installs ignore these)
+AUDIO_HAT=$AudioHat
+AUDIO_INTERNAL_OUTPUT=$AudioInternalOutput
 # Advanced options
 # (PowerShell prep currently uses defaults — the bash side has an
 # interactive Advanced menu that lets the user toggle these. Parity

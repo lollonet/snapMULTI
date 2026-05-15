@@ -24,6 +24,29 @@ SMB_SHARE=
 SMB_USER=
 SMB_PASS=
 #
+# Audio output (client/both only — server installs ignore these)
+#
+# AUDIO_HAT picks the soundcard profile setup.sh uses:
+#   auto              -- Detect HAT via EEPROM → I2C scan → USB → built-in (default).
+#                        Right for >90% of installs.
+#   <hat-slug>        -- Skip detection, use a specific HAT profile from
+#                        client/common/audio-hats/. Valid slugs:
+#                        hifiberry-dac-std, hifiberry-dac2hd, hifiberry-digi,
+#                        hifiberry-amp2, hifiberry-dacplusadc, hifiberry-dac,
+#                        iqaudio-codec, iqaudio-dac, iqaudio-digiamp,
+#                        justboom-dac, justboom-digi, allo-boss, allo-digione,
+#                        innomaker-dac-pro, waveshare-wm8960, usb-audio.
+#   internal-audio    -- Pi built-in audio (no HAT, no USB). Pair with
+#                        AUDIO_INTERNAL_OUTPUT below to pick HDMI or jack.
+AUDIO_HAT=auto
+#
+# AUDIO_INTERNAL_OUTPUT — only honoured when AUDIO_HAT=internal-audio:
+#   hdmi -- HDMI audio (TV/monitor). Works on Pi 3, Pi 4, Pi 5.
+#   jack -- 3.5mm headphone jack. Works on Pi 3, Pi 4 only.
+#           Pi 5 has no analog jack — leave blank or pick hdmi.
+# Leave empty for non-internal AUDIO_HAT values.
+AUDIO_INTERNAL_OUTPUT=
+#
 # Advanced options (defaults are production-safe)
 #
 # ENABLE_READONLY: Enable read-only filesystem (overlayroot).

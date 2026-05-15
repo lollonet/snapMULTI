@@ -269,3 +269,62 @@ resolve_hat_config_name() {
         *)                  echo "$name" ;;
     esac
 }
+
+# detect_internal_card_name MODE → echoes the real ALSA card name for the
+# built-in audio output. MODE is `hdmi` or `jack`.
+#
+# Why this exists: the `internal-audio.conf` profile hard-codes
+# HAT_CARD_NAME="Headphones" which is correct for Pi 3/4 with kernel ≤ 6.1
+# but wrong elsewhere. Recent kernels (Bookworm / Trixie, kernel 6.6+) name
+# HDMI outputs `vc4-hdmi-0` / `vc4-hdmi-1`, and Pi 5 has no analog jack at
+# all. `aplay -L` is the source of truth at runtime — this helper queries
+# it and returns the first matching card name, with a graceful fallback
+# chain.
+#
+# Returns:
+#   stdout: the resolved card name (e.g. "Headphones", "vc4-hdmi-0").
+#   exit 0: name resolved.
+#   exit 1: no match found OR aplay unavailable (caller falls back).
+#
+# Resolution order:
+#   hdmi → vc4-hdmi-0 | vc4-hdmi-1 | vc4hdmi0 | vc4hdmi1 | HDMI
+#   jack → Headphones    (Pi 3/4 only — Pi 5 must use hdmi)
+#
+# We probe `aplay -L` (PCM names, what ALSA actually exposes) rather than
+# `aplay -l` (verbose card list) because snapclient uses the PCM name form
+# `hw:CARD=NAME,DEV=0` which matches the -L output directly.
+detect_internal_card_name() {
+    local mode="${1:?detect_internal_card_name: mode required (hdmi|jack)}"
+    local aplay_bin
+    aplay_bin=$(command -v aplay 2>/dev/null) || return 1
+    local aplay_out
+    aplay_out=$("$aplay_bin" -L 2>/dev/null) || return 1
+    local candidate
+    case "$mode" in
+        hdmi)
+            # First-match wins. vc4-hdmi-0 covers Pi 4/5 with the modern KMS
+            # driver; vc4hdmi0 is the alternate spelling seen on some forks.
+            # Bare "HDMI" is the legacy bcm2835 name still present on older
+            # kernels and a useful last-resort fallback.
+            for candidate in vc4-hdmi-0 vc4-hdmi-1 vc4hdmi0 vc4hdmi1 HDMI; do
+                if grep -qE "^${candidate}$" <<<"$aplay_out"; then
+                    printf '%s\n' "$candidate"
+                    return 0
+                fi
+            done
+            ;;
+        jack)
+            # Headphones is the only canonical name. Pi 5 doesn't expose
+            # this card; the caller is expected to detect the empty output
+            # and fall back to hdmi (or warn the operator).
+            if grep -qE '^Headphones$' <<<"$aplay_out"; then
+                printf 'Headphones\n'
+                return 0
+            fi
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    return 1
+}
