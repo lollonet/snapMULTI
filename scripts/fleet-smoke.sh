@@ -144,15 +144,43 @@ RPC_OUT=$(curl -sS --max-time 8 \
 # Extract:
 #   - server hostname/IP from .result.server.host.name (snapcast reports its own host)
 #   - each connected client's host.name (preferred over IP for SSH)
+#   - connected non-snapMULTI clients for operator visibility only.
+#     Example: iOS/macOS Snapcast apps connected to the server. They are
+#     audio clients, not SSH-managed fleet nodes.
+#   - disconnected paired clients for operator visibility only. They are
+#     stale/offline peers remembered by Snapserver, not fleet-smoke
+#     targets and not failures.
 SERVER_REPORTED=$(jq -r '.result.server.host.name // ""' <<<"$RPC_OUT")
-# `connected: false` clients are kept in the list but skipped from smoke —
-# they're known peers that left the LAN, not new evidence.
+CONNECTED_NON_SNAPMULTI_JSON=$(jq -c '
+    [.result.server.groups[]?.clients[]?
+     | select(.connected == true)
+     | select(((.host.os // "") != "") and (((.host.os // "") | startswith("Debian GNU/Linux")) | not))
+     | {
+         name: (.host.name // .host.ip // .id // "unknown"),
+         ip: (.host.ip // ""),
+         os: (.host.os // ""),
+         id: (.id // "")
+       }]
+    | unique_by([.id, .name, .ip])
+' <<<"$RPC_OUT")
+DISCONNECTED_CLIENTS_JSON=$(jq -c '
+    [.result.server.groups[]?.clients[]?
+     | select(.connected != true)
+     | {
+         name: (.host.name // .host.ip // .id // "unknown"),
+         ip: (.host.ip // ""),
+         id: (.id // ""),
+         last_seen: (.lastSeen.sec // null)
+       }]
+    | unique_by([.id, .name, .ip])
+' <<<"$RPC_OUT")
 CLIENTS=()
 while IFS= read -r client_host; do
     [[ -n "$client_host" ]] && CLIENTS+=("$client_host")
 done < <(
     jq -r '.result.server.groups[]?.clients[]?
             | select(.connected == true)
+            | select(((.host.os // "") == "") or ((.host.os // "") | startswith("Debian GNU/Linux")))
             | .host.name' <<<"$RPC_OUT" | sort -u
 )
 
@@ -208,10 +236,23 @@ else
     smoke_json="{}"
 fi
 [ -z "$smoke_json" ] && smoke_json="{}"
-# Use jq -n to safely escape srv/cli/smoke_json — printf would emit broken
-# JSON if VERSION contains a double-quote or backslash.
-printf '%s' "$smoke_json" | jq -nc --arg srv "$srv" --arg cli "$cli" \
-    '{srv:$srv, cli:$cli, smoke:(input // {})}'
+# Use python3 instead of jq on the device: Pi Zero native installs are
+# intentionally lean and may not have jq, while python3 is part of the
+# snapMULTI dependency baseline.
+SMOKE_JSON="$smoke_json" python3 -c '
+import json
+import os
+import sys
+
+srv = sys.argv[1]
+cli = sys.argv[2]
+raw = os.environ.get("SMOKE_JSON", "").strip()
+try:
+    smoke = json.loads(raw) if raw else {}
+except json.JSONDecodeError:
+    smoke = {}
+print(json.dumps({"srv": srv, "cli": cli, "smoke": smoke}, separators=(",", ":")))
+' "$srv" "$cli"
 REMOTE
     ); then
         # SSH or smoke timed out / failed
@@ -236,7 +277,14 @@ REMOTE
 echo "Probing ${#HOSTS[@]} host(s) in parallel..." >&2
 declare -a PIDS=()
 for i in "${!HOSTS[@]}"; do
-    probe_host "${HOSTS[$i]}" "${ROLES[$i]}" &
+    # Background subshells inherit the parent's EXIT trap in bash. If a
+    # worker runs that trap, it deletes $TMP while sibling probes are
+    # still writing their JSON files. Disarm cleanup in workers; the
+    # parent trap below owns tmpdir removal.
+    (
+        trap - EXIT
+        probe_host "${HOSTS[$i]}" "${ROLES[$i]}"
+    ) &
     PIDS+=($!)
 done
 for pid in "${PIDS[@]}"; do
@@ -257,7 +305,9 @@ overall_fail=$(jq '
 # ── Render ───────────────────────────────────────────────────────
 if [[ "$OUTPUT" == "json" ]]; then
     jq --arg server "$SERVER" \
-       '{server:$server, generated_at: (now | todate), hosts:.}' <<<"$ALL"
+       --argjson connected_non_snapmulti "$CONNECTED_NON_SNAPMULTI_JSON" \
+       --argjson disconnected "$DISCONNECTED_CLIENTS_JSON" \
+       '{server:$server, generated_at: (now | todate), connected_non_snapmulti_clients:$connected_non_snapmulti, disconnected_clients:$disconnected, hosts:.}' <<<"$ALL"
     exit "$overall_fail"
 else
     baseline_version=$(jq -r --arg server "$SERVER" '
@@ -268,6 +318,24 @@ else
     ' <<<"$ALL")
 
     printf '\nFleet smoke against %s — %s\n\n' "$SERVER" "$(date -u +%FT%TZ)"
+    connected_non_snapmulti_count=$(jq 'length' <<<"$CONNECTED_NON_SNAPMULTI_JSON")
+    if (( connected_non_snapmulti_count > 0 )); then
+        connected_non_snapmulti_list=$(jq -r '
+            [.[] |
+             if (.ip != "" and .ip != .name) then "\(.name)(\(.ip), \(.os))" else "\(.name)(\(.os))" end]
+            | join(", ")
+        ' <<<"$CONNECTED_NON_SNAPMULTI_JSON")
+        printf 'Connected non-snapMULTI clients: %s\n\n' "$connected_non_snapmulti_list"
+    fi
+    disconnected_count=$(jq 'length' <<<"$DISCONNECTED_CLIENTS_JSON")
+    if (( disconnected_count > 0 )); then
+        disconnected_list=$(jq -r '
+            [.[] |
+             if (.ip != "" and .ip != .name) then "\(.name)(\(.ip))" else .name end]
+            | join(", ")
+        ' <<<"$DISCONNECTED_CLIENTS_JSON")
+        printf 'Disconnected paired clients: %s\n\n' "$disconnected_list"
+    fi
     printf '%-20s %-7s %-15s %-7s %-6s %-30s\n' "HOST" "ROLE" "VERSION" "SMOKE" "FAILS" "NOTES"
     printf '%-20s %-7s %-15s %-7s %-6s %-30s\n' \
         "--------------------" "-------" "---------------" "-------" "------" "------------------------------"
@@ -333,12 +401,14 @@ else
     reachable_snapmulti_count=$(jq '[.[] | select(.reachable==true and ((.non_snapmulti // false) | not))] | length' <<<"$ALL")
     pass_count=$(jq '[.[] | select(.reachable==true and ((.non_snapmulti // false) | not)) | select([.smoke.records[]? | select(.status=="fail")] | length == 0)] | length' <<<"$ALL")
     skipped_count=$(jq '[.[] | select(.reachable==true and (.non_snapmulti // false))] | length' <<<"$ALL")
+    rpc_skipped_count=$(jq 'length' <<<"$CONNECTED_NON_SNAPMULTI_JSON")
+    skipped_total=$((skipped_count + rpc_skipped_count))
     unreachable_count=$(jq '[.[] | select(.reachable==false)] | length' <<<"$ALL")
     if (( overall_fail == 0 )); then
-        echo "Overall: PASS — ${pass_count}/${reachable_snapmulti_count} reachable snapMULTI hosts green, ${skipped_count} non-snapMULTI skipped, ${unreachable_count} unreachable."
+        echo "Overall: PASS — ${pass_count}/${reachable_snapmulti_count} reachable snapMULTI hosts green, ${skipped_total} non-snapMULTI skipped, ${unreachable_count} unreachable."
         exit 0
     else
-        echo "Overall: FAIL — ${pass_count}/${reachable_snapmulti_count} reachable snapMULTI hosts green, ${skipped_count} non-snapMULTI skipped, ${unreachable_count} unreachable."
+        echo "Overall: FAIL — ${pass_count}/${reachable_snapmulti_count} reachable snapMULTI hosts green, ${skipped_total} non-snapMULTI skipped, ${unreachable_count} unreachable."
         exit 1
     fi
 fi

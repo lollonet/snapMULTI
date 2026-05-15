@@ -41,6 +41,13 @@ assert_contains "$src" "non_snapmulti" "tracks reachable non-snapMULTI peers exp
 assert_contains "$src" '"SKIP"' "renders non-snapMULTI peers as SKIP, not PASS"
 assert_contains "$src" "version drift vs" "surfaces version drift in fleet table"
 assert_contains "$src" "baseline_version" "computes a server baseline version for drift detection"
+assert_contains "$src" "DISCONNECTED_CLIENTS_JSON" "tracks disconnected paired clients separately"
+assert_contains "$src" "disconnected_clients" "exposes disconnected paired clients in JSON output"
+assert_contains "$src" "Disconnected paired clients:" "lists disconnected paired clients in text output"
+assert_contains "$src" "CONNECTED_NON_SNAPMULTI_JSON" "tracks connected non-snapMULTI Snapcast clients separately"
+assert_contains "$src" "connected_non_snapmulti_clients" "exposes connected non-snapMULTI clients in JSON output"
+assert_contains "$src" "Connected non-snapMULTI clients:" "lists connected non-snapMULTI clients in text output"
+assert_contains "$src" "trap - EXIT" "parallel probe workers do not inherit tmpdir cleanup trap"
 
 echo ""
 if [[ "$fail" -gt 0 ]]; then
