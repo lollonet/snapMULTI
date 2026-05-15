@@ -52,16 +52,15 @@ done
 assert 'grep -qE "^_net_emit_results\\(\\) \\{" "$SMOKE"' \
     "function _net_emit_results defined"
 
-# 3. All four checks are invoked WITH `&` (background) — drift to
-# serial execution would re-introduce the 30-45 s worst-case latency.
+# 3. Four checks invoked with `&` (background); pattern tolerates leading whitespace since the SMOKE_SKIP_NETWORK guard indented them.
 for fn in _net_check_dns _net_check_ntp _net_check_mdns_self _net_check_arping; do
-    assert "grep -qE '^${fn} &$' \"\$SMOKE\"" \
+    assert "grep -qE '^[[:space:]]*${fn} &\$' \"\$SMOKE\"" \
         "$fn invoked with & (background)"
 done
 
 # 4. `wait` follows the dispatch — without it the parent races past
 # the writes and the result tmpfiles may be empty at replay time.
-assert 'awk "/^_net_check_arping &$/{f=1; next} f&&/^wait$/{print; exit 0} f&&/^[^[:space:]]/{exit 1}" "$SMOKE" >/dev/null' \
+assert 'awk "/^[[:space:]]*_net_check_arping &$/{f=1; next} f&&/^[[:space:]]*wait$/{print; exit 0} f&&/^[^[:space:]]/{exit 1}" "$SMOKE" >/dev/null' \
     "wait follows the four background invocations"
 
 # 5. The tmpfile directory is mktemp'd and trap'd for cleanup.

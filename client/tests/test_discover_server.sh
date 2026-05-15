@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Functional checks for discover-server.sh's _apply_server: write-before-restart ordering, no-op short-circuit, restart-failure preserves new .env.
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,9 +20,13 @@ assert_eq() {
     fi
 }
 
-# Extract production functions from discover-server.sh
-# _update_server writes to ENV_FILE and LAST_IP_FILE (module-level vars)
-eval "$(sed -n '/^_update_server()/,/^}/p' "$DISCOVER_SH")"
+# Extract production functions. We need three:
+#   _current_host  — reads SNAPSERVER_HOST from $ENV_FILE
+#   _apply_server  — the actual subject under test
+# `_log` and `_compose_up` are stubbed below so the test stays
+# hermetic (no docker calls, no journald).
+eval "$(sed -n '/^_current_host()/,/^}/p' "$DISCOVER_SH")"
+eval "$(sed -n '/^_apply_server()/,/^}/p' "$DISCOVER_SH")"
 
 # macOS sed -i requires '' arg; production targets Linux (GNU sed).
 # Wrap sed so -i works portably in test environment.
@@ -39,51 +45,86 @@ WRAPPER
 chmod +x "$MOCK_BIN/sed"
 export PATH="$MOCK_BIN:$PATH"
 
-echo "Testing discover-server _update_server + restart ordering..."
+# Stubs replacing _log (production: writes to journal) and _compose_up
+# (production: cd /opt/snapclient && docker compose up -d). The stub for
+# _compose_up records its "restart" event to $COMPOSE_LOG and returns
+# the rc the test wants — that's how we simulate failure case below.
+COMPOSE_LOG=""
+COMPOSE_RC=0
+_log() { :; }
+_compose_up() {
+    # Snapshot .env at restart time so the assertion can prove ordering (flush-then-restart, not the other way).
+    if [[ -n "$COMPOSE_LOG" ]]; then
+        grep '^SNAPSERVER_HOST=' "$ENV_FILE" | cut -d= -f2- > "$COMPOSE_LOG"
+    fi
+    return "$COMPOSE_RC"
+}
 
-test_update_and_restart() {
-    local initial="$1" new_host="$2" do_restart="$3" restart_rc="$4" expected_rc="$5" expected_host="$6" desc="$7"
+echo "Testing discover-server _apply_server + restart ordering..."
+
+test_apply() {
+    local initial="$1" new_host="$2" watch_mode="$3" sim_compose_rc="$4" \
+          expected_rc="$5" expected_host="$6" desc="$7"
     local tmpdir
     tmpdir=$(mktemp -d)
 
-    # Set module-level vars used by the eval'd _update_server function
+    # shellcheck disable=SC2034  # module-level vars used by eval'd functions
     ENV_FILE="$tmpdir/.env"
-    # shellcheck disable=SC2034  # used by eval'd _update_server
+    # shellcheck disable=SC2034
     LAST_IP_FILE="$tmpdir/last-ip"
-    local log_file="$tmpdir/restart.log"
+    COMPOSE_LOG="$tmpdir/restart.log"
+    COMPOSE_RC="$sim_compose_rc"
+    # shellcheck disable=SC2034  # consumed by _apply_server
+    WATCH_MODE="$watch_mode"
 
     printf 'SNAPSERVER_HOST=%s\n' "$initial" > "$ENV_FILE"
 
-    # Simulate the production pattern: _update_server writes .env,
-    # then caller restarts if in watch mode (same ordering as discover-server.sh:77-79)
     local rc=0
-    if _update_server "$new_host"; then
-        # .env updated — now simulate restart (reads .env like docker compose would)
-        if [[ "$do_restart" == "true" ]]; then
-            grep '^SNAPSERVER_HOST=' "$ENV_FILE" | cut -d= -f2 > "$log_file"
-            (exit "$restart_rc") || rc=2
-        fi
-    else
-        rc=1  # unchanged
-    fi
+    _apply_server "$new_host" || rc=$?
 
     local current restarted_with
-    current=$(grep '^SNAPSERVER_HOST=' "$ENV_FILE" | cut -d= -f2)
-    restarted_with="$(cat "$log_file" 2>/dev/null || echo '')"
+    current=$(grep '^SNAPSERVER_HOST=' "$ENV_FILE" | cut -d= -f2-)
+    restarted_with="$(cat "$COMPOSE_LOG" 2>/dev/null || echo '')"
 
     assert_eq "$rc" "$expected_rc" "$desc: return code"
-    assert_eq "$current" "$expected_host" "$desc: .env updated"
-    if [[ "$do_restart" == "true" && "$rc" -ne 1 ]]; then
-        assert_eq "$restarted_with" "$expected_host" "$desc: restart sees new host"
+    assert_eq "$current" "$expected_host" "$desc: .env final value"
+    if [[ "$watch_mode" == "true" && "$initial" != "$new_host" ]]; then
+        # _compose_up should have been invoked AFTER .env was flushed —
+        # so $restarted_with equals the new host, not the old one.
+        assert_eq "$restarted_with" "$expected_host" \
+            "$desc: restart sees new host (ordering: .env flushed before compose up)"
+    fi
+    # Non-watch / no-change paths must NEVER invoke compose — $COMPOSE_LOG
+    # stays empty. Without this assertion a regression that accidentally
+    # called compose in non-watch mode (or on a same-host no-op) would
+    # silently pass the existing rc / .env checks.
+    if [[ "$watch_mode" == "false" || "$initial" == "$new_host" ]]; then
+        assert_eq "$restarted_with" "" \
+            "$desc: compose NOT invoked (no-op or non-watch mode)"
     fi
 
     rm -rf "$tmpdir"
 }
 
-test_update_and_restart "10.0.0.5" "127.0.0.1" "true"  0 0 "127.0.0.1"    "both mode change"
-test_update_and_restart "10.0.0.5" "192.168.1.20" "true"  0 0 "192.168.1.20" "mDNS host change"
-test_update_and_restart "10.0.0.5" "127.0.0.1" "true"  1 2 "127.0.0.1"    "restart failure preserves updated host"
-test_update_and_restart "10.0.0.5" "10.0.0.5"  "true"  0 1 "10.0.0.5"     "same host is no-op"
+# Both-mode swap: discover-server picks 127.0.0.1, watch_mode invokes restart.
+test_apply "10.0.0.5" "127.0.0.1" "true"  0 0 "127.0.0.1"    "both-mode change"
+
+# mDNS host change: classic failover scenario.
+test_apply "10.0.0.5" "192.168.1.20" "true"  0 0 "192.168.1.20" "mDNS host change"
+
+# Restart failure: _compose_up returns non-zero, but .env stays at the new
+# value. _apply_server itself returns 0 (the change WAS applied to .env);
+# operator/caller can detect the compose failure via journald.
+test_apply "10.0.0.5" "127.0.0.1" "true"  1 0 "127.0.0.1" \
+    "restart failure preserves updated .env"
+
+# Same-host no-op: _apply_server returns 1, .env unchanged, no compose call.
+test_apply "10.0.0.5" "10.0.0.5" "true"  0 1 "10.0.0.5" "same host is no-op"
+
+# Non-watch mode: still write .env but skip the compose restart. Some
+# callers (one-shot discovery, dry-runs) rely on this path.
+test_apply "10.0.0.5" "192.168.1.20" "false" 0 0 "192.168.1.20" \
+    "non-watch mode writes .env but does not restart"
 
 echo ""
 if [[ "$fail" -gt 0 ]]; then

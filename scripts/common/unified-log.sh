@@ -95,12 +95,8 @@ log_msg() {
     local level="$1" source="${2:-$LOG_SOURCE}" msg="$3"
 
     if (( _UNIFIED_LOG_WRITABLE )); then
-        # bash printf builtin for timestamps — no fork, fast on Pi Zero.
-        # Requires bash 4.2+ (Pi OS Bookworm ships 5.2+).
-        # `{ ...; } 2>/dev/null` silences bash-level redirect errors
-        # (e.g. disk full, permission revoked after the probe) — a bare
-        # `2>/dev/null` after the redirect target does NOT.
-        { printf '[%(%H:%M:%S)T] [%-5s] [%s] %s\n' -1 "$level" "$source" "$msg" \
+        # `$(date)` not `printf '%(...)T'`: latter is Bash 4.2+, no-ops on macOS 3.2.
+        { printf '[%s] [%-5s] [%s] %s\n' "$(date +%H:%M:%S)" "$level" "$source" "$msg" \
             >> "$UNIFIED_LOG"; } 2>/dev/null || true
 
         # Feed TUI progress display (progress.sh reads this file).

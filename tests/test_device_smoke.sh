@@ -122,13 +122,27 @@ echo "up 5 minutes"
 MOCK
 chmod +x "$MOCK_BIN/uptime"
 
+# Mock Linux-only commands as no-op exits: absent binaries make `$(cmd …)` exit 127, which `set -e` propagates and kills device-smoke before assertions run.
+for _linux_only_cmd in journalctl ip ss vcgencmd chronyc dig arping \
+                       avahi-browse nm-online nmcli tc sysctl lsmod \
+                       free lscpu; do
+    cat > "$MOCK_BIN/$_linux_only_cmd" <<'MOCK'
+#!/usr/bin/env bash
+exit 0
+MOCK
+    chmod +x "$MOCK_BIN/$_linux_only_cmd"
+done
+unset _linux_only_cmd
+
 echo "Testing device-smoke.sh..."
 
+# SMOKE_SKIP_NETWORK=1 bypasses real-network + Linux-only probes inside device-smoke.sh; production paths must NOT set it.
 output="$(
     PATH="$MOCK_BIN:$PATH" \
     MOCK_OVERLAY=1 \
     MOCK_DOCKER_DRIVER=fuse-overlayfs \
     MOCK_STACK=server \
+    SMOKE_SKIP_NETWORK=1 \
     bash "$SMOKE_SH" --server --server-dir "$TMP_SERVER" 2>&1
 )"
 rc=$?
@@ -136,6 +150,7 @@ assert_rc "$rc" "0" "server mode passes with overlayroot + fuse-overlayfs"
 assert_contains "$output" "Mode: server" "reports selected mode"
 assert_contains "$output" "Smoke check passed" "reports passing summary"
 assert_contains "$output" "server: 2/2 running, 2/2 healthy" "reports compose counts"
+assert_contains "$output" "SMOKE_SKIP_NETWORK=1" "skip flag is visible in log so the run is identifiable"
 
 set +e
 output="$(
@@ -143,6 +158,7 @@ output="$(
     MOCK_OVERLAY=0 \
     MOCK_DOCKER_DRIVER=fuse-overlayfs \
     MOCK_STACK=client \
+    SMOKE_SKIP_NETWORK=1 \
     bash "$SMOKE_SH" --client --client-dir "$TMP_CLIENT" 2>&1
 )"
 rc=$?

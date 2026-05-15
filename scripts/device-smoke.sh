@@ -593,21 +593,25 @@ _net_emit_results() {
     done < "$out"
 }
 
-# Run all four checks in parallel — the slowest (DNS retry, up to 30 s)
-# now overlaps with NTP/mDNS/arping (all <= 5 s) instead of serialising
-# behind them.
-_net_check_dns &
-_net_check_ntp &
-_net_check_mdns_self &
-_net_check_arping &
-wait
-
-# Replay results in canonical order so the human + JSON output looks
-# identical to the pre-parallel layout.
-_net_emit_results dns
-_net_emit_results ntp
-_net_emit_results mdns_self
-_net_emit_results arping
+# SMOKE_SKIP_NETWORK=1: local-gate escape hatch so tests stay deterministic without a real DNS/NTP/mDNS stack. Production paths (firstboot, fleet-smoke, ADR-005) leave it unset.
+if [[ "${SMOKE_SKIP_NETWORK:-0}" != "1" ]]; then
+    # Run all four checks in parallel — the slowest (DNS retry, up to 30 s)
+    # now overlaps with NTP/mDNS/arping (all <= 5 s) instead of serialising
+    # behind them.
+    _net_check_dns &
+    _net_check_ntp &
+    _net_check_mdns_self &
+    _net_check_arping &
+    wait
+    # Replay results in canonical order so the human + JSON output looks
+    # identical to the pre-parallel layout.
+    _net_emit_results dns
+    _net_emit_results ntp
+    _net_emit_results mdns_self
+    _net_emit_results arping
+else
+    info "SMOKE_SKIP_NETWORK=1 — DNS / NTP / mDNS / arping checks skipped (local gate mode)"
+fi
 
 # mDNS strict-client publishing (server-only) — services must answer
 # SRV+TXT, not just PTR. Strict clients (Python zeroconf, macOS
@@ -672,7 +676,7 @@ _check_mdns_service() {
         fi
     fi
 }
-if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
+if [[ "$MODE" == "server" || "$MODE" == "both" ]] && [[ "${SMOKE_SKIP_NETWORK:-0}" != "1" ]]; then
     if command -v avahi-browse >/dev/null 2>&1; then
         _own_mdns_host="$(hostname).local"
         _check_mdns_service "_snapcast._tcp"        "Snapcast" "docker compose restart snapserver"     "$_own_mdns_host"
@@ -879,7 +883,14 @@ if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
     # server config + streams + groups. A 200 with valid JSON is the
     # smallest functional check that proves snapserver is not just
     # \`Up\` per docker but actually serving control requests.
-    if command -v curl >/dev/null 2>&1; then
+    # SMOKE_SKIP_NETWORK also gates these live-service HTTP probes: a
+    # macOS / container CI runner without a live snapserver/metadata
+    # stack on 127.0.0.1 would always fail them. Production runs
+    # (firstboot, fleet-smoke, ADR-005 release gate) leave the flag
+    # unset so the probes execute and surface a real regression.
+    if [[ "${SMOKE_SKIP_NETWORK:-0}" == "1" ]]; then
+        info "SMOKE_SKIP_NETWORK=1 — Snapcast JSON-RPC / metadata /health / /status probes skipped"
+    elif command -v curl >/dev/null 2>&1; then
         _rpc_response=$(curl -sS --max-time 5 \
             -X POST -H 'Content-Type: application/json' \
             -d '{"jsonrpc":"2.0","method":"Server.GetStatus","id":1}' \
@@ -927,35 +938,42 @@ if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
 fi
 
 # ── Modular checks (boot health, mounts, QoS, timers, system, audio) ──
-# Each function is defined in scripts/smoke/check_<name>.sh and was
-# sourced near the top of this file. Mode-gating happens inside each.
-declare -F check_boot_health    >/dev/null && check_boot_health
-declare -F check_mounts         >/dev/null && check_mounts
-declare -F check_qos            >/dev/null && check_qos
-declare -F check_timers         >/dev/null && check_timers
-declare -F check_system         >/dev/null && check_system
-declare -F check_audio_modules  >/dev/null && check_audio_modules
-declare -F check_containers     >/dev/null && check_containers
-declare -F check_env            >/dev/null && check_env
-declare -F check_mdns           >/dev/null && check_mdns
-declare -F check_snapcast       >/dev/null && check_snapcast
+# Same SMOKE_SKIP_NETWORK gate as above — these read /proc, /sys, run journalctl/vcgencmd/lsmod/tc (all Linux-only), so they're skipped on portable test runners.
+if [[ "${SMOKE_SKIP_NETWORK:-0}" != "1" ]]; then
+    declare -F check_boot_health    >/dev/null && check_boot_health
+    declare -F check_mounts         >/dev/null && check_mounts
+    declare -F check_qos            >/dev/null && check_qos
+    declare -F check_timers         >/dev/null && check_timers
+    declare -F check_system         >/dev/null && check_system
+    declare -F check_audio_modules  >/dev/null && check_audio_modules
+    declare -F check_containers     >/dev/null && check_containers
+    declare -F check_env            >/dev/null && check_env
+    declare -F check_mdns           >/dev/null && check_mdns
+    declare -F check_snapcast       >/dev/null && check_snapcast
+else
+    info "SMOKE_SKIP_NETWORK=1 — modular Linux-only checks (boot health, mounts, QoS, timers, system, audio, env, mDNS, snapcast) skipped"
+fi
 
 section "Recent Errors"
-_error_count=0
-for log_src in "snapmulti-server" "snapclient" "docker"; do
-    local_errors=$(journalctl -u "${log_src}.service" --since "10 min ago" --priority err --no-pager -q 2>/dev/null | wc -l | tr -d ' ') || local_errors=0
-    if [[ "$local_errors" -gt 0 ]]; then
-        warn "$log_src: $local_errors error(s) in last 10 min"
-        journalctl -u "${log_src}.service" --since "10 min ago" --priority err --no-pager -q 2>/dev/null | tail -3 | while IFS= read -r line; do
-            info "  $line"
-        done
-        _error_count=$((_error_count + local_errors))
-    fi
-done
-if [[ "$_error_count" -eq 0 ]]; then
-    pass_check "No errors in systemd logs (last 10 min)"
+if [[ "${SMOKE_SKIP_NETWORK:-0}" == "1" ]]; then
+    info "SMOKE_SKIP_NETWORK=1 — recent-errors journalctl scan skipped"
 else
-    warn "$_error_count total error(s) in recent logs (non-blocking)"
+    _error_count=0
+    for log_src in "snapmulti-server" "snapclient" "docker"; do
+        local_errors=$(journalctl -u "${log_src}.service" --since "10 min ago" --priority err --no-pager -q 2>/dev/null | wc -l | tr -d ' ') || local_errors=0
+        if [[ "$local_errors" -gt 0 ]]; then
+            warn "$log_src: $local_errors error(s) in last 10 min"
+            journalctl -u "${log_src}.service" --since "10 min ago" --priority err --no-pager -q 2>/dev/null | tail -3 | while IFS= read -r line; do
+                info "  $line"
+            done
+            _error_count=$((_error_count + local_errors))
+        fi
+    done
+    if [[ "$_error_count" -eq 0 ]]; then
+        pass_check "No errors in systemd logs (last 10 min)"
+    else
+        warn "$_error_count total error(s) in recent logs (non-blocking)"
+    fi
 fi
 
 # ── Final emit ──
