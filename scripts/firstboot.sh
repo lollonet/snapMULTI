@@ -496,6 +496,9 @@ if command -v tune_avahi_daemon &>/dev/null; then
     # the real primary route (eth0 on wired installs, wlan0 on WiFi-only).
     tune_avahi_daemon "$(hostname)"
 fi
+if command -v tune_nm_docker_unmanaged &>/dev/null; then
+    tune_nm_docker_unmanaged
+fi
 milestone "$CURRENT_STEP" "Network ready" 2 2>/dev/null || true
 
 # ══════════════════════════════════════════════════════════════════

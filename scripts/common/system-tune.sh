@@ -525,6 +525,68 @@ AVEOF
     fi
 }
 
+# Tell NetworkManager to ignore Docker bridges + veth pairs. Without
+# this, NM adopts every `br-*` / `veth*` / `docker0` interface that
+# Docker creates as "connected (externally)". That state leaks netlink
+# address-change events when host-side probes run on eth0 (notably
+# device-smoke's `arping -D`), which makes avahi-daemon briefly
+# withdraw its address record on eth0, re-register, and then see its
+# own re-announce coming back through the NM-tracked bridge — declared
+# as a foreign claim of the hostname and resolved by renaming the host
+# to `<hostname>-2`. Snapcast / AirPlay / MPD then publish via the -2
+# name and clients searching for `<hostname>.local` fail.
+#
+# Root-cause reproducer on snapvideo (both mode, 2026-05-15 11:53:17):
+# arping -D on eth0 → avahi "Withdrawing address record for ..." →
+# "Host name conflict, retrying with snapvideo-2". With NM excluded
+# from Docker interfaces this loop does not arm.
+#
+# Idempotent. Only acts when NetworkManager is installed.
+tune_nm_docker_unmanaged() {
+    command -v nmcli >/dev/null 2>&1 || return 0
+    [[ -d /etc/NetworkManager ]] || return 0
+
+    local conf_dir="/etc/NetworkManager/conf.d"
+    local conf="${conf_dir}/99-docker-unmanaged.conf"
+    local desired
+    desired=$(cat <<'NMCONF'
+# Managed by snapMULTI tune_nm_docker_unmanaged() — see system-tune.sh
+# for the rationale (avahi hostname conflict triggered by NM-tracked
+# Docker bridges during arping DAD probes).
+[keyfile]
+unmanaged-devices=interface-name:veth*;interface-name:br-*;interface-name:docker*
+NMCONF
+)
+
+    mkdir -p "$conf_dir" 2>/dev/null || return 0
+
+    if [[ -f "$conf" ]] && [[ "$(cat "$conf" 2>/dev/null)" == "$desired" ]]; then
+        ok "NetworkManager already ignores Docker bridges"
+        return 0
+    fi
+
+    printf '%s\n' "$desired" > "$conf" || {
+        warn "Failed to write $conf — NM may still adopt Docker bridges"
+        return 0
+    }
+
+    systemctl reload NetworkManager 2>/dev/null || \
+        systemctl restart NetworkManager 2>/dev/null || true
+
+    # Detach interfaces NM already adopted before the rule landed.
+    # `set managed no` is idempotent and a no-op if the interface is
+    # already unmanaged.
+    local iface
+    while IFS= read -r iface; do
+        [[ -z "$iface" ]] && continue
+        nmcli device set "$iface" managed no >/dev/null 2>&1 || true
+    done < <(nmcli -t -f DEVICE,TYPE device 2>/dev/null \
+        | awk -F: '/:bridge$|:ethernet$/ {print $1}' \
+        | grep -E '^(veth|br-|docker)' || true)
+
+    ok "NetworkManager configured to ignore Docker bridges (veth*, br-*, docker*)"
+}
+
 # ── Read-only filesystem (overlayroot) ──────────────────────────
 
 # Install ro-mode helper and persist SSH host keys for overlayroot.
