@@ -231,14 +231,24 @@ elif [ -x /opt/snapclient/scripts/device-smoke.sh ]; then
     smoke_script=/opt/snapclient/scripts/device-smoke.sh
 fi
 if [ -n "$smoke_script" ]; then
-    smoke_json=$(sudo -n "$smoke_script" --json --no-fail-on-warn 2>/dev/null || echo "{}")
+    # device-smoke.sh --json prints a complete JSON document and exits 1
+    # when records fail. The previous `|| echo "{}"` appended a second
+    # JSON object on failure, producing `{...real...}{}` — jq's input
+    # reader stopped at the first document, but the python3 parser
+    # below raises JSONDecodeError("Extra data") and silently falls
+    # back to {} so the host's failure records would be lost and the
+    # fleet would report PASS. Capture stdout regardless of exit code;
+    # fall back to {} only when truly empty.
+    smoke_json=$(sudo -n "$smoke_script" --json --no-fail-on-warn 2>/dev/null || true)
 else
-    smoke_json="{}"
+    smoke_json=""
 fi
 [ -z "$smoke_json" ] && smoke_json="{}"
 # Use python3 instead of jq on the device: Pi Zero native installs are
 # intentionally lean and may not have jq, while python3 is part of the
-# snapMULTI dependency baseline.
+# snapMULTI dependency baseline. raw_decode is also a belt-and-suspenders
+# against the historic concat bug: it stops at the first valid JSON
+# document so any trailing garbage cannot mask real smoke failures.
 SMOKE_JSON="$smoke_json" python3 -c '
 import json
 import os
@@ -247,10 +257,12 @@ import sys
 srv = sys.argv[1]
 cli = sys.argv[2]
 raw = os.environ.get("SMOKE_JSON", "").strip()
-try:
-    smoke = json.loads(raw) if raw else {}
-except json.JSONDecodeError:
-    smoke = {}
+smoke = {}
+if raw:
+    try:
+        smoke, _ = json.JSONDecoder().raw_decode(raw)
+    except json.JSONDecodeError:
+        smoke = {}
 print(json.dumps({"srv": srv, "cli": cli, "smoke": smoke}, separators=(",", ":")))
 ' "$srv" "$cli"
 REMOTE
