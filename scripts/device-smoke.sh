@@ -319,6 +319,7 @@ if [[ -d "$SMOKE_MODULES_DIR" ]]; then
         check_qos.sh \
         check_timers.sh \
         check_system.sh \
+        check_thermal.sh \
         check_audio_modules.sh \
         check_containers.sh \
         check_env.sh \
@@ -995,13 +996,14 @@ if [[ "${SMOKE_SKIP_NETWORK:-0}" != "1" ]]; then
     declare -F check_qos            >/dev/null && check_qos
     declare -F check_timers         >/dev/null && check_timers
     declare -F check_system         >/dev/null && check_system
+    declare -F check_thermal        >/dev/null && check_thermal
     declare -F check_audio_modules  >/dev/null && check_audio_modules
     declare -F check_containers     >/dev/null && check_containers
     declare -F check_env            >/dev/null && check_env
     declare -F check_mdns           >/dev/null && check_mdns
     declare -F check_snapcast       >/dev/null && check_snapcast
 else
-    info "SMOKE_SKIP_NETWORK=1 — modular Linux-only checks (boot health, mounts, QoS, timers, system, audio, env, mDNS, snapcast) skipped"
+    info "SMOKE_SKIP_NETWORK=1 — modular Linux-only checks (boot health, mounts, QoS, timers, system, thermal, audio, env, mDNS, snapcast) skipped"
 fi
 
 section "Recent Errors"
