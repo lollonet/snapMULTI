@@ -158,36 +158,81 @@ setup_music_source() {
             log_info "Streaming-only mode — no local music library"
             ;;
         usb)
+            # USB music persistence — same hand-crafted systemd .mount +
+            # .automount pair as NFS/SMB. The previous fstab-based path
+            # was rewritten by the overlayroot initramfs hook into a
+            # broken double-line scheme (UUID mount routed into the ro
+            # lower layer + an overlay union on /media/usb-music whose
+            # lowerdir resolved to an empty stub), and the eager
+            # systemd-fstab-generator mount had no retry on transient
+            # device flicker. Cheap USB-to-SATA enclosures
+            # (Inateck/JMicron 2109:0715 etc.) routinely
+            # disconnect/reconnect once early in boot — observed live on
+            # cicciosrv 2026-05-15: `usb 2-2: USB disconnect` at +46.9 s,
+            # reconnect at +47.6 s, exactly the window
+            # systemd-fstab-generator was trying the mount in.
+            #
+            # Fix: drop fstab entirely, use the same .mount+.automount
+            # pair as the network paths. `x-systemd.device-timeout=30`
+            # gives systemd 30 s to resolve `/dev/disk/by-uuid/...` so a
+            # disconnect/reconnect at boot does not abort the mount, and
+            # the lazy .automount retries on every access.
             local usb_dev="" usb_mount="/media/usb-music"
             local dev
             for dev in /dev/sd?1 /dev/sd?; do
                 [[ -b "$dev" ]] || continue
                 blkid "$dev" &>/dev/null && { usb_dev="$dev"; break; }
             done
-            if [[ -n "$usb_dev" ]]; then
-                mkdir -p "$usb_mount"
-                log_info "Mounting USB: $usb_dev → $usb_mount"
-                if mount "$usb_dev" "$usb_mount" -o ro; then
-                    # Use UUID in fstab (stable across port/device changes)
-                    local usb_uuid
-                    usb_uuid=$(blkid -s UUID -o value "$usb_dev" 2>/dev/null) || true
-                    local fstab_entry
-                    if [[ -n "$usb_uuid" ]]; then
-                        fstab_entry="UUID=$usb_uuid"
-                    else
-                        fstab_entry="$usb_dev"  # fallback if no UUID
-                    fi
-                    if ! grep -qF "$fstab_entry" /etc/fstab; then
-                        echo "$fstab_entry $usb_mount auto ro,nofail 0 0" >> /etc/fstab
-                    fi
-                    export MUSIC_PATH="$usb_mount"
-                    export MUSIC_SOURCE="usb"
-                    log_info "USB mounted: $usb_dev at $usb_mount"
-                else
-                    log_warn "Failed to mount $usb_dev — deploy.sh will try auto-detect"
-                fi
-            else
+            if [[ -z "$usb_dev" ]]; then
                 log_warn "No USB drive found — plug in before powering on"
+            else
+                mkdir -p "$usb_mount"
+                local usb_uuid usb_fstype
+                usb_uuid=$(blkid -s UUID -o value "$usb_dev" 2>/dev/null) || true
+                usb_fstype=$(blkid -s TYPE -o value "$usb_dev" 2>/dev/null) || true
+                [[ -z "$usb_fstype" ]] && usb_fstype="auto"
+
+                # Migration: strip the pre-fix fstab entry if a reflash from
+                # an older snapMULTI left one behind. Without this, the
+                # broken fstab line + the new systemd .automount would race
+                # and the install would still inherit the original bug.
+                if grep -qE "^(UUID=[^ ]+|/dev/sd[a-z][0-9]?) ${usb_mount} " /etc/fstab 2>/dev/null; then
+                    log_info "Removing legacy /etc/fstab USB entry (replaced by systemd .automount)"
+                    sed -i.bak -E "\\|^(UUID=[^ ]+\\|/dev/sd[a-z][0-9]?) ${usb_mount} |d" /etc/fstab
+                    rm -f /etc/fstab.bak
+                fi
+
+                if [[ -z "$usb_uuid" ]]; then
+                    # No UUID = ephemeral mount only (UUID is the stable
+                    # handle for /dev/disk/by-uuid/; without it the
+                    # .automount can't survive a port/device change).
+                    log_warn "USB $usb_dev has no UUID — one-shot mount only, will not persist"
+                    if mount "$usb_dev" "$usb_mount" -o ro 2>/dev/null; then
+                        log_info "USB mounted (one-shot): $usb_dev at $usb_mount"
+                    else
+                        log_warn "Failed to mount $usb_dev — deploy.sh will try auto-detect"
+                    fi
+                else
+                    log_info "Installing USB automount: UUID=$usb_uuid → $usb_mount"
+                    if ! _write_systemd_mount_unit "$usb_fstype" \
+                        "/dev/disk/by-uuid/$usb_uuid" \
+                        "$usb_mount" \
+                        "ro,nofail,x-systemd.device-timeout=30" \
+                        30; then
+                        log_error "USB music mount setup aborted — automount not active"
+                        return 1
+                    fi
+                    # Try an immediate mount so the rest of the install
+                    # (mpd scan, smoke) can see the path. Failure is
+                    # non-fatal — the .automount retries on every access.
+                    if timeout 10 mount "$usb_dev" "$usb_mount" -o ro 2>/dev/null; then
+                        log_info "USB mounted: $usb_dev at $usb_mount"
+                    else
+                        log_warn "USB initial mount timed out — systemd .automount will retry on first access"
+                    fi
+                fi
+                export MUSIC_PATH="$usb_mount"
+                export MUSIC_SOURCE="usb"
             fi
             ;;
         nfs)
