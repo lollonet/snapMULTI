@@ -15,10 +15,10 @@
 #     as the "limit" column, and nothing complains until first OOM.
 #     This check inspects HostConfig.Memory directly and fails when 0
 #     on a container that the compose file declares a limit for.
-#   - Containers in crash-loop. RestartCount > 0 means the container
-#     has exited at least once. Compose `restart: unless-stopped`
-#     papers over this silently — the container keeps coming back but
-#     loses state each time. Surface it.
+#   - Containers in active restart failure. RestartCount is lifetime
+#     history, so a healthy running container with RestartCount > 0 is
+#     a past event, not a current smoke failure. Surface that history
+#     as info, but fail when the current state is still bad.
 #   - Containers reporting unhealthy. Compose `healthcheck:` runs the
 #     declared probe; State.Health.Status goes through `starting` →
 #     `healthy` or `unhealthy`. We treat `unhealthy` as fail, anything
@@ -135,7 +135,8 @@ check_containers() {
     # Track containers without enforced memory limit so we can fail once
     # with a useful aggregate message instead of one fail per container.
     local -a no_limit=()
-    local -a crashing=()
+    local -a active_restart_failures=()
+    local -a restart_history=()
     local checked=0
 
     local name
@@ -144,12 +145,23 @@ check_containers() {
         _is_snapmulti_container "$name" || continue
         checked=$((checked + 1))
 
-        # 1. Crash-loop detection. RestartCount is the lifetime restart
-        # counter; non-zero means the container has died at least once.
-        local rc
+        # 1. Restart detection. RestartCount is a lifetime counter; do
+        # not classify a recovered, healthy container as an active
+        # crash-loop just because it restarted once during boot/install.
+        local rc state health
         rc=$("${docker_cmd[@]}" inspect "$name" --format '{{.RestartCount}}' 2>/dev/null || echo "?")
+        state=$("${docker_cmd[@]}" inspect "$name" --format '{{.State.Status}}' 2>/dev/null || echo "?")
+        health=$("${docker_cmd[@]}" inspect "$name" --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null || echo "")
         if [[ "$rc" =~ ^[0-9]+$ ]] && (( rc > 0 )); then
-            crashing+=("$name(RC=$rc)")
+            # `paused` and `created` intentionally NOT classified as
+            # failure. paused = explicit operator action (`docker pause`);
+            # smoke should not override that. created + RC>0 is
+            # unreachable in normal docker semantics.
+            if [[ "$state" == "restarting" || "$state" == "dead" || "$state" == "exited" || "$health" == "unhealthy" ]]; then
+                active_restart_failures+=("$name(RC=$rc,status=$state,health=${health:-none})")
+            else
+                restart_history+=("$name(RC=$rc)")
+            fi
         fi
 
         # 2. Memory limit drift. HostConfig.Memory == 0 means "unlimited"
@@ -165,8 +177,7 @@ check_containers() {
         # 3. Healthcheck (only for containers that declare one). Output
         # is empty string if no healthcheck. After start_period grace
         # the status stabilises at `healthy` or `unhealthy`.
-        local health started_at uptime_s
-        health=$("${docker_cmd[@]}" inspect "$name" --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null || echo "")
+        local started_at uptime_s
         if [[ -n "$health" ]]; then
             case "$health" in
                 healthy)
@@ -202,13 +213,19 @@ check_containers() {
         return
     fi
 
-    # Aggregate crash-loop report.
-    if (( ${#crashing[@]} > 0 )); then
+    # Aggregate restart report. Historical restarts are OK when the
+    # container has recovered; active bad state remains a failure.
+    if (( ${#active_restart_failures[@]} > 0 )); then
         local joined
-        printf -v joined "%s, " "${crashing[@]}"; joined="${joined%, }"
-        fail_check "Container(s) with RestartCount > 0 (crash-loop): $joined"
+        printf -v joined "%s, " "${active_restart_failures[@]}"; joined="${joined%, }"
+        fail_check "Container(s) with active restart failure: $joined"
     else
-        pass_check "All $checked snapMULTI container(s) have RestartCount=0"
+        pass_check "No active container restart failures among $checked snapMULTI container(s)"
+        if (( ${#restart_history[@]} > 0 )); then
+            local joined
+            printf -v joined "%s, " "${restart_history[@]}"; joined="${joined%, }"
+            info "Past container restart(s) observed, current state not failing: $joined"
+        fi
     fi
 
     # Aggregate memory-limit drift report.
