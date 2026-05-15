@@ -593,13 +593,7 @@ _net_emit_results() {
     done < "$out"
 }
 
-# Local-gate escape hatch. The four network checks fire real `dig` /
-# `chronyc` / `avahi-browse` / `arping` calls — each can stall a CI run
-# on macOS or in a container with no DNS resolver or mDNS responder.
-# `SMOKE_SKIP_NETWORK=1` short-circuits them so `tests/test_device_smoke
-# .sh` and `test_fleet_smoke_static.sh` stay deterministic. Production
-# device-smoke runs (firstboot, fleet-smoke, ADR-005 release gate) must
-# NOT set this — the variable is undefined there by default.
+# SMOKE_SKIP_NETWORK=1: local-gate escape hatch so tests stay deterministic without a real DNS/NTP/mDNS stack. Production paths (firstboot, fleet-smoke, ADR-005) leave it unset.
 if [[ "${SMOKE_SKIP_NETWORK:-0}" != "1" ]]; then
     # Run all four checks in parallel — the slowest (DNS retry, up to 30 s)
     # now overlaps with NTP/mDNS/arping (all <= 5 s) instead of serialising
@@ -944,17 +938,7 @@ if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
 fi
 
 # ── Modular checks (boot health, mounts, QoS, timers, system, audio) ──
-# Each function is defined in scripts/smoke/check_<name>.sh and was
-# sourced near the top of this file. Mode-gating happens inside each.
-#
-# SMOKE_SKIP_NETWORK is overloaded here as a broader "non-portable
-# checks" gate. The modular checks read /proc/*, /sys/*, run journalctl
-# / vcgencmd / lsmod / tc — all Linux-only. On a macOS / generic CI
-# runner they emit a forest of false-error lines and end up flipping
-# the overall result. SKIP=1 keeps the smoke "shape" of the output
-# (sections, headers) but bypasses the Linux-specific probes. The flag
-# remains UNSET in production (firstboot, fleet-smoke, device-smoke on
-# real Pis), so the checks run as designed there.
+# Same SMOKE_SKIP_NETWORK gate as above — these read /proc, /sys, run journalctl/vcgencmd/lsmod/tc (all Linux-only), so they're skipped on portable test runners.
 if [[ "${SMOKE_SKIP_NETWORK:-0}" != "1" ]]; then
     declare -F check_boot_health    >/dev/null && check_boot_health
     declare -F check_mounts         >/dev/null && check_mounts
@@ -968,11 +952,6 @@ if [[ "${SMOKE_SKIP_NETWORK:-0}" != "1" ]]; then
     declare -F check_snapcast       >/dev/null && check_snapcast
 else
     info "SMOKE_SKIP_NETWORK=1 — modular Linux-only checks (boot health, mounts, QoS, timers, system, audio, env, mDNS, snapcast) skipped"
-fi
-
-# Recent-errors journalctl scan is also Linux-only; same gate.
-if [[ "${SMOKE_SKIP_NETWORK:-0}" == "1" ]]; then
-    info "SMOKE_SKIP_NETWORK=1 — journalctl recent-error scan skipped"
 fi
 
 section "Recent Errors"

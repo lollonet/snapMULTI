@@ -122,14 +122,7 @@ echo "up 5 minutes"
 MOCK
 chmod +x "$MOCK_BIN/uptime"
 
-# Linux-only commands used by device-smoke.sh and the scripts/smoke/*.sh
-# modules. On macOS / generic CI runners these binaries don't exist;
-# absent binaries make `$(cmd …)` exit 127, which under `set -e` would
-# kill device-smoke before reaching the test assertions. Mock each as a
-# no-op so the corresponding section reports its "skipped"/"empty" path
-# but the script keeps running. The SMOKE_SKIP_NETWORK guard already
-# bypasses the genuinely network-touching probes (dig/chronyc/avahi-
-# browse/arping); these mocks only cover the rest of the binary set.
+# Mock Linux-only commands as no-op exits: absent binaries make `$(cmd …)` exit 127, which `set -e` propagates and kills device-smoke before assertions run.
 for _linux_only_cmd in journalctl ip ss vcgencmd chronyc dig arping \
                        avahi-browse nm-online nmcli tc sysctl lsmod \
                        free lscpu; do
@@ -143,10 +136,7 @@ unset _linux_only_cmd
 
 echo "Testing device-smoke.sh..."
 
-# SMOKE_SKIP_NETWORK=1 short-circuits the dig/chronyc/avahi-browse/arping
-# real-network checks inside device-smoke.sh. Without this flag the test
-# hung in CI on macOS/Linux runners with no DNS resolver or mDNS responder.
-# Production smoke runs (firstboot, fleet-smoke) must NOT set the flag.
+# SMOKE_SKIP_NETWORK=1 bypasses real-network + Linux-only probes inside device-smoke.sh; production paths must NOT set it.
 output="$(
     PATH="$MOCK_BIN:$PATH" \
     MOCK_OVERLAY=1 \

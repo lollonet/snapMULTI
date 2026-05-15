@@ -110,6 +110,14 @@ test_apply() {
         assert_eq "$restarted_with" "$expected_host" \
             "$desc: restart sees new host (ordering: .env flushed before compose up)"
     fi
+    # Non-watch / no-change paths must NEVER invoke compose — $COMPOSE_LOG
+    # stays empty. Without this assertion a regression that accidentally
+    # called compose in non-watch mode (or on a same-host no-op) would
+    # silently pass the existing rc / .env checks.
+    if [[ "$watch_mode" == "false" || "$initial" == "$new_host" ]]; then
+        assert_eq "$restarted_with" "" \
+            "$desc: compose NOT invoked (no-op or non-watch mode)"
+    fi
 
     rm -rf "$tmpdir"
 }

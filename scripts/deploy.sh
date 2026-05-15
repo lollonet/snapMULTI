@@ -911,18 +911,7 @@ start_services() {
     # registered yet (e.g. manual `deploy.sh` from a dev host or tests).
     if systemctl list-unit-files snapmulti-server.service --no-legend 2>/dev/null | grep -q snapmulti-server.service; then
         info "Starting via systemd (snapmulti-server.service)..."
-        # A prior install may have a running compose project bound to an
-        # OLDER .env. We need ExecStart to pick up the just-written .env,
-        # so force-recreate first. Avoid `compose down`: that tears down
-        # the network and forces a full image pull/restart chain on the
-        # next start (30-40 s of audio silence in `both` mode). `up -d
-        # --force-recreate` re-evaluates compose+env, recreates containers
-        # whose effective config changed, and is a no-op for those that
-        # didn't — typical cost is 5-10 s. The systemd unit's own
-        # ExecStartPre mem-drift guard handles a separate edge (cgroup v2
-        # not active at first create); this line covers the .env-change
-        # path. The `|| true` keeps deploy.sh resilient when the compose
-        # project doesn't exist yet (fresh install, no recreate needed).
+        # `up -d --force-recreate` (NOT `compose down`) so ExecStart picks up the new .env without a 30-40 s network teardown; `|| true` covers fresh installs with no compose project yet.
         docker compose up -d --force-recreate >/dev/null 2>&1 || true
         if ! systemctl start snapmulti-server.service; then
             error "Failed to start snapmulti-server.service"

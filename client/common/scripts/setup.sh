@@ -537,12 +537,7 @@ else
         log_progress "Installing Docker CE via shared installer..."
         install_docker_apt
     else
-        # No `curl … | sh` fallback. The shared installer (install-docker.sh)
-        # is shipped by prepare-sd.sh on every SD-card layout, so its absence
-        # means the SD card was prepared incorrectly — failing loud is safer
-        # than silently piping an unverified script from the internet into
-        # root sh. Operator action: re-run prepare-sd.sh on the host, or
-        # copy the file manually if doing a hand install.
+        # No `curl … | sh` fallback — prepare-sd.sh always ships install-docker.sh, so its absence means a broken SD prep; fail loud rather than pipe unverified scripts as root.
         log_progress "ERROR: install-docker.sh not found in any candidate path"
         log_progress "  Candidates checked:"
         log_progress "    \$SCRIPT_DIR/common/install-docker.sh"
