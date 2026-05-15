@@ -532,41 +532,78 @@ _net_check_mdns_self() {
     fi
 }
 
-# IP conflict detection — duplicate-address probe. `arping -D` returns
-# exit 0 if NO replies (good: nobody else claims our IP) and exit 1 if
-# replies received (bad: another host on the LAN has our IP, will cause
-# intermittent packet loss like the F8:17:2D historic .95 case from
-# 2026-05-07). Requires `iputils-arping` (already installed by
-# install-deps.sh on snapMULTI 0.6.4+).
+# IP conflict detection — non-DAD ARP probe. The earlier
+# implementation used `arping -D` (RFC 5227 Duplicate Address Detection)
+# which sources the probe from 0.0.0.0 and asks the kernel to put the
+# interface address into a tentative state. On hosts where
+# NetworkManager has adopted Docker bridges (br-*, veth*) as "connected
+# (externally)" — the default when running snapMULTI in both / client
+# mode — that tentative transition makes avahi-daemon briefly withdraw
+# its address record on eth0, re-register, and then see its own
+# re-announce coming back through the NM-tracked bridge as a foreign
+# claim of the hostname. Avahi resolves the apparent conflict by
+# renaming the host to `<hostname>-2`; snapcast / AirPlay / MPD then
+# publish via the -2 name and `<hostname>.local` lookups fail.
+# Observed live on snapvideo 2026-05-15 at 11:53:17.
+#
+# The non-DAD probe below sends a normal ARP request for our own IP
+# from our own MAC, then inspects replies: if any reply comes from a
+# DIFFERENT MAC than the local one, that's a real conflict. This does
+# not flip the interface address into tentative state, so the avahi
+# rename loop never arms.
 _net_check_arping() {
     local out="$_NET_RESULTS_DIR/arping"
     if ! command -v arping >/dev/null 2>&1; then
         printf 'warn\tarping not installed — skipping IP conflict check (apt-get install iputils-arping)\n' > "$out"
         return
     fi
-    local own_iface own_ip
+    local own_iface own_ip own_mac
     own_iface=$(ip -4 -o route get 1.1.1.1 2>/dev/null | awk '{print $5; exit}')
     own_ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
     if [[ -z "$own_iface" ]] || [[ -z "$own_ip" ]]; then
         printf 'warn\tCould not determine own IP/iface for conflict check\n' > "$out"
         return
     fi
-    # `arping -D` exits 0 if no replies (no conflict), 1 if replies
-    # received (conflict). Probe sudo capability ONCE to choose the
-    # right invocation; never retry with a less-privileged invocation
-    # if the privileged one returned a definitive answer.
+    own_mac=$(ip -o link show "$own_iface" 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="link/ether"){print $(i+1); exit}}')
+    if [[ -z "$own_mac" ]]; then
+        printf 'warn\tCould not read MAC for %s — skipping IP conflict check\n' "$own_iface" > "$out"
+        return
+    fi
+
+    # Non-DAD probe: regular ARP request for our own IP. -c sets count,
+    # -w sets total deadline, -q would silence output (we want it).
+    # Without -D the source IP is our own, so the kernel does not put
+    # the address into tentative state.
     local arping_rc=0 arping_out
     if sudo -n true 2>/dev/null; then
-        arping_out=$(sudo -n arping -D -c 3 -w 5 -I "$own_iface" "$own_ip" 2>&1) || arping_rc=$?
+        arping_out=$(sudo -n arping -c 3 -w 5 -I "$own_iface" "$own_ip" 2>&1) || arping_rc=$?
     else
-        arping_out=$(arping -D -c 3 -w 5 -I "$own_iface" "$own_ip" 2>&1) || arping_rc=$?
+        arping_out=$(arping -c 3 -w 5 -I "$own_iface" "$own_ip" 2>&1) || arping_rc=$?
     fi
-    if [[ $arping_rc -eq 0 ]]; then
-        printf 'pass\tNo IP conflict on %s (%s)\n' "$own_ip" "$own_iface" > "$out"
-    elif echo "$arping_out" | grep -qiE 'permission|not permitted|capabilities|password is required'; then
+    if echo "$arping_out" | grep -qiE 'permission|not permitted|capabilities|password is required'; then
         printf 'warn\tarping needs CAP_NET_RAW / sudo — IP-conflict check skipped (run as root, or "setcap cap_net_raw+ep $(command -v arping)")\n' > "$out"
+        return
+    fi
+    if [[ $arping_rc -ne 0 ]] && ! echo "$arping_out" | grep -qiE 'reply|bytes from'; then
+        printf 'warn\tarping returned rc=%s without replies — probe inconclusive (%s on %s)\n' "$arping_rc" "$own_ip" "$own_iface" > "$out"
+        return
+    fi
+    # Replies are formatted as `Unicast reply from <ip> [<MAC>] ...`.
+    # Any reply MAC that is not OUR MAC means a different host on the
+    # LAN responded as the authoritative owner of our IP — that is the
+    # conflict signature. Compare case-insensitively.
+    local own_mac_lc
+    own_mac_lc=$(echo "$own_mac" | tr 'A-Z' 'a-z')
+    local foreign_mac
+    foreign_mac=$(echo "$arping_out" \
+        | grep -oE '\[([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}\]' \
+        | tr -d '[]' \
+        | tr 'A-Z' 'a-z' \
+        | awk -v me="$own_mac_lc" '$0 != me {print; exit}')
+    if [[ -n "$foreign_mac" ]]; then
+        printf 'fail\tPossible IP conflict on %s — replied by foreign MAC %s (our MAC: %s)\n' "$own_ip" "$foreign_mac" "$own_mac" > "$out"
     else
-        printf 'fail\tPossible IP conflict on %s — another host replied to our ARP probe\n' "$own_ip" > "$out"
+        printf 'pass\tNo IP conflict on %s (%s) — only our MAC replied\n' "$own_ip" "$own_iface" > "$out"
     fi
 }
 
