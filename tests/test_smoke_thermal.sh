@@ -68,19 +68,27 @@ info()      { printf '[INFO] %s\n' "$*"; }
 run_check_thermal() {
     local vcgen_value="$1" sysfs_value="$2"
 
-    # Build a per-invocation MOCK_BIN containing only vcgencmd (when
-    # vcgen_value is given). PATH search picks our stub before the real
-    # binary on the host (in particular: macOS dev machines never have
-    # vcgencmd, so the absence-case naturally works there too).
+    # Build a per-invocation MOCK_BIN containing vcgencmd. PATH search
+    # picks our stub before the real binary on the host. On a Pi runner
+    # /usr/bin/vcgencmd exists and would otherwise leak the device's real
+    # temperature into ABSENT cases — so we install a *failing* stub for
+    # ABSENT (exit 1) which masks the real binary and exercises the
+    # `vcgencmd present but command failed` codepath (combined with the
+    # `|| true` guard in check_thermal.sh) → fall through to sysfs.
     rm -f "$MOCK_BIN/vcgencmd"
-    if [[ "$vcgen_value" != "ABSENT" ]]; then
+    if [[ "$vcgen_value" == "ABSENT" ]]; then
+        cat > "$MOCK_BIN/vcgencmd" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+    else
         cat > "$MOCK_BIN/vcgencmd" <<EOF
 #!/usr/bin/env bash
 [[ "\${1:-}" == "measure_temp" ]] && { printf 'temp=%s\\n' "$vcgen_value"; exit 0; }
 exit 1
 EOF
-        chmod +x "$MOCK_BIN/vcgencmd"
     fi
+    chmod +x "$MOCK_BIN/vcgencmd"
 
     # Sysfs stub: rewrite the path in a copy of check_thermal.sh so the
     # function reads from our temp file. Less brittle than shadowing

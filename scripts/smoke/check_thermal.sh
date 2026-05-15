@@ -44,8 +44,12 @@ check_thermal() {
     local temp_milli="" source=""
 
     if command -v vcgencmd >/dev/null 2>&1; then
+        # `|| true` so a vcgencmd that exists but fails (missing VideoCore
+        # permissions, stub package on a non-Pi runner, firmware iface
+        # unavailable) doesn't abort the smoke under the caller's `set -e`.
+        # Empty `raw` then naturally falls through to the sysfs branch.
         local raw
-        raw=$(vcgencmd measure_temp 2>/dev/null)
+        raw=$(vcgencmd measure_temp 2>/dev/null || true)
         # Format is `temp=58.3'C`. Strip prefix and unit, multiply by 1000
         # so we can do integer-only comparisons (avoid floats / bc).
         if [[ "$raw" =~ ^temp=([0-9]+)\.([0-9])\'?C ]]; then
