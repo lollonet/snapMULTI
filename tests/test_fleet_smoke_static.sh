@@ -64,6 +64,8 @@ assert_contains "$src" '/^\{.*\}$/' "payload sanitiser strips MOTD/banner by pic
 #   3. The probe step tries BOTH bare host and `.local` form, because mDNS
 #      resolution paths vary by platform.
 assert_contains "$src" "stdbuf" "dns-sd output is line-buffered to survive pipe + timeout"
+assert_contains "$src" "run_with_timeout" "mDNS discovery uses timeout/gtimeout/fallback wrapper"
+assert_not_contains "$src" "timeout 4 dns-sd" "mDNS discovery does not hardcode GNU timeout"
 assert_contains "$src" "dns-sd -L" "instance name from -B is resolved to hostname via -L"
 assert_contains "$src" "can be reached at" "SRV Target regex extracts hostname from -L response"
 assert_contains "$src" '"http://${h}.local:1780/jsonrpc"' "probe tries both bare host and .local fallback"

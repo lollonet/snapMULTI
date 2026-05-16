@@ -606,10 +606,9 @@ if [[ "$(cd "$COMMON_DIR" 2>/dev/null && pwd)" != "$(cd "$INSTALL_DIR" 2>/dev/nu
     cp "$COMMON_DIR/docker-compose.yml" "$INSTALL_DIR/"
     cp -r "$COMMON_DIR/docker" "$INSTALL_DIR/"
     # Copy the entire public/ tree — fb-display bind-mounts it at
-    # /app/public, and uses standby.png + default-radio.png/svg in
-    # addition to index.html. Copying only index.html left those
-    # fallback assets missing → fb-display logged "Failed to load
-    # standby image" and showed a black rectangle in standby state.
+    # /app/public to render standby.png + default-radio.png/svg
+    # fallback assets. A previous version copied a single file and
+    # left the fallbacks missing → black rectangle in standby state.
     mkdir -p "$INSTALL_DIR/public"
     cp -r "$COMMON_DIR/public/." "$INSTALL_DIR/public/"
 fi
@@ -749,33 +748,43 @@ echo ""
 # ============================================
 # Step 7b: Audible confirmation tone (440 Hz, 1 s)
 # ============================================
-# Catches "install completed silently but no sound" at HAT time, not
-# 5 min later. Opt-out: TEST_TONE=false in install.conf.
-if [[ "${TEST_TONE:-true}" == "true" ]]; then
-    if command -v speaker-test >/dev/null 2>&1; then
-        echo "Playing 440 Hz test tone on $HAT_CARD_NAME..."
-        speaker-test -t sine -f 440 -l 1 -p 100 >/dev/null 2>&1 &
-        _tone_pid=$!
-        sleep 1.2
-        # `kill -0` checks if the PID is still running. speaker-test exits
-        # in milliseconds if ALSA refuses the device (busy, wrong card,
-        # asound.conf bad), so process-alive-after-sleep == "tone actually
-        # played" while process-gone == "ALSA error swallowed by 2>&1".
-        if kill -0 "$_tone_pid" 2>/dev/null; then
-            kill "$_tone_pid" 2>/dev/null || true
-            wait "$_tone_pid" 2>/dev/null || true
-            echo "  - tone played (set TEST_TONE=false in install.conf to silence)"
-        else
-            wait "$_tone_pid" 2>/dev/null || true
-            echo "  [WARN] speaker-test exited early - ALSA error. Check: aplay -L"
-        fi
-    else
-        echo "Skipping test tone: speaker-test not installed (alsa-utils missing?)"
+_play_test_tone() {
+    # Run after _apply_boot_config so non-EEPROM I2S HATs get a chance to
+    # load their dtoverlay at runtime before speaker-test opens ALSA.
+    if [[ "${TEST_TONE:-true}" != "true" ]]; then
+        echo "Test tone disabled (TEST_TONE=false in install.conf)"
+        echo ""
+        return
     fi
-else
-    echo "Test tone disabled (TEST_TONE=false in install.conf)"
-fi
-echo ""
+    if ! command -v speaker-test >/dev/null 2>&1; then
+        echo "Skipping test tone: speaker-test not installed (alsa-utils missing?)"
+        echo ""
+        return
+    fi
+    if command -v aplay >/dev/null 2>&1 && ! aplay -l 2>/dev/null | grep -qF -- "$HAT_CARD_NAME"; then
+        echo "Skipping test tone: ALSA card '$HAT_CARD_NAME' not visible yet (will be available after reboot)"
+        echo ""
+        return
+    fi
+
+    echo "Playing 440 Hz test tone on $HAT_CARD_NAME..."
+    speaker-test -t sine -f 440 -l 1 -p 100 >/dev/null 2>&1 &
+    _tone_pid=$!
+    sleep 1.2
+    # `kill -0` checks if the PID is still running. speaker-test exits
+    # in milliseconds if ALSA refuses the device (busy, wrong card,
+    # asound.conf bad), so process-alive-after-sleep == "tone actually
+    # played" while process-gone == "ALSA error swallowed by 2>&1".
+    if kill -0 "$_tone_pid" 2>/dev/null; then
+        kill "$_tone_pid" 2>/dev/null || true
+        wait "$_tone_pid" 2>/dev/null || true
+        echo "  - tone played (set TEST_TONE=false in install.conf to silence)"
+    else
+        wait "$_tone_pid" 2>/dev/null || true
+        echo "  [WARN] speaker-test exited early - ALSA error. Check: aplay -L"
+    fi
+    echo ""
+}
 
 # ============================================
 # Step 8: Configure Boot Settings (Idempotent)
@@ -987,6 +996,7 @@ fi
 echo ""
 }
 _apply_boot_config
+_play_test_tone
 
 # ============================================
 # Step 9: Detect Hardware Profile & Configure Docker

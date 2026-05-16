@@ -56,6 +56,10 @@ copy_block=$(sed -n '/for _shared in/,/done$/p' "$PREPARE_SD_SH" | head -10)
 assert_contains "$copy_block" "systemd-snippets.sh" \
     "bash selective copy loop includes systemd-snippets.sh"
 
+server_verify_block=$(sed -n '/server\/docker-compose.yml/,/server\/ro-mode.sh/p' "$PREPARE_SD_SH")
+assert_contains "$server_verify_block" "server/scripts/tidal/tidal-meta-bridge.sh" \
+    "server verify list includes Tidal metadata bridge bind-mount source"
+
 # PowerShell parity — Windows users go through prepare-sd.ps1, which has
 # its own $requiredBase / client-required arrays and its own selective copy
 # foreach. All three must include systemd-snippets.sh for parity.
@@ -72,6 +76,10 @@ if [[ -f "$PREPARE_SD_PS1" ]]; then
     ps1_client_required=$(sed -n '/client\/scripts\/common\/install-deps.sh/,/)) {/p' "$PREPARE_SD_PS1")
     assert_contains "$ps1_client_required" "client/scripts/common/systemd-snippets.sh" \
         "ps1 client-required list includes systemd-snippets.sh"
+
+    ps1_server_required=$(sed -n '/server\/docker-compose.yml/,/server\/config\/shairport-sync.conf/p' "$PREPARE_SD_PS1")
+    assert_contains "$ps1_server_required" "server/scripts/tidal/tidal-meta-bridge.sh" \
+        "ps1 server-required list includes Tidal metadata bridge bind-mount source"
 
     ps1_copy_foreach=$(sed -n '/foreach (\$shared in @(/,/))/p' "$PREPARE_SD_PS1")
     assert_contains "$ps1_copy_foreach" "systemd-snippets.sh" \

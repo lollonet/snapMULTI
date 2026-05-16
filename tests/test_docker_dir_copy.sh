@@ -58,6 +58,15 @@ assert '! echo "$copy_block" | grep -qE "cp -r \"\\\$PROJECT_DIR/docker\" \"\\\$
        'copy_server_files does NOT use the non-idempotent `cp -r src dst/` form'
 
 echo
+echo "=== prepare-sd.sh — copy scripts/tidal/ to boot partition ==="
+
+assert 'echo "$copy_block" | grep -qE "cp -r \"\\\$SCRIPT_DIR/tidal/\\.\" \"\\\$dest/scripts/tidal/\""' \
+       'copy_server_files copies scripts/tidal/ contents idempotently'
+
+assert 'echo "$copy_block" | grep -qE "\\[\\[ -d \"\\\$SCRIPT_DIR/tidal\" \\]\\]"' \
+       'tidal script copy is guarded on the source directory existing'
+
+echo
 echo "=== firstboot.sh — copy docker/ from boot to /opt/snapmulti ==="
 
 # Inside the server-copy block we should copy SNAP_BOOT/server/docker.
@@ -77,6 +86,15 @@ assert 'echo "$fb_block" | grep -qE "\\[\\[ -d \"\\\$SNAP_BOOT/server/docker\" \
 # /opt/snapmulti/docker/docker/ nesting on partial-install retry.
 assert '! echo "$fb_block" | grep -qE "cp -r \"\\\$SNAP_BOOT/server/docker\" \"\\\$SERVER_DIR/\""' \
        'cp -r without -T is NOT used (would nest on retry)'
+
+echo
+echo "=== firstboot.sh — copy scripts/tidal/ from boot to /opt/snapmulti ==="
+
+assert 'echo "$fb_block" | grep -qE "cp -r \"\\\$SNAP_BOOT/server/scripts/tidal/\\.\" \"\\\$SERVER_DIR/scripts/tidal/\""' \
+       'firstboot copies server/scripts/tidal/ to /opt/snapmulti/scripts/tidal/'
+
+assert 'echo "$fb_block" | grep -qE "\\[\\[ -d \"\\\$SNAP_BOOT/server/scripts/tidal\" \\]\\]"' \
+       'firstboot tidal copy is guarded on the source directory existing'
 
 echo
 echo "=== Bash syntax ==="

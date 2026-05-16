@@ -91,6 +91,29 @@ else
     TIMEOUT_CMD=()
 fi
 
+run_with_timeout() {
+    local seconds="$1"
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$seconds" "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "$seconds" "$@"
+    else
+        "$@" &
+        local pid=$!
+        (
+            sleep "$seconds"
+            kill "$pid" 2>/dev/null || true
+        ) &
+        local watchdog=$!
+        wait "$pid" 2>/dev/null
+        local rc=$?
+        kill "$watchdog" 2>/dev/null || true
+        wait "$watchdog" 2>/dev/null || true
+        return "$rc"
+    fi
+}
+
 # ── Discover server (if not given) ────────────────────────────────
 discover_server() {
     # Try mDNS browse — prefer dns-sd (macOS) then avahi-browse (linux).
@@ -126,7 +149,7 @@ discover_server() {
                 inst=$(echo "$line" | awk '{print $NF}')
                 [[ -n "$inst" ]] && instances+=("$inst")
             fi
-        done < <("${stdbuf_cmd[@]}" timeout 4 dns-sd -B _snapcast._tcp local 2>/dev/null || true)
+        done < <(run_with_timeout 4 "${stdbuf_cmd[@]}" dns-sd -B _snapcast._tcp local 2>/dev/null || true)
 
         # Deduplicate instances (mDNS often echoes Add on multiple interfaces).
         local uniq_instances=()
@@ -142,7 +165,7 @@ discover_server() {
         # Resolve each instance to its SRV Target.
         local resolve_line host
         for inst in "${uniq_instances[@]}"; do
-            resolve_line=$("${stdbuf_cmd[@]}" timeout 3 dns-sd -L "$inst" _snapcast._tcp local 2>/dev/null \
+            resolve_line=$(run_with_timeout 3 "${stdbuf_cmd[@]}" dns-sd -L "$inst" _snapcast._tcp local 2>/dev/null \
                             | grep -m1 'can be reached at' || true)
             # Line format: `<fqdn>. can be reached at <host>.local.:<port> (interface N)`
             host=$(echo "$resolve_line" | sed -nE 's/.*can be reached at ([^ :]+):[0-9]+.*/\1/p')
@@ -153,7 +176,7 @@ discover_server() {
     elif command -v avahi-browse >/dev/null 2>&1; then
         while IFS= read -r host; do
             [[ -n "$host" ]] && candidates+=("${host%.local}")
-        done < <("${stdbuf_cmd[@]}" timeout 4 avahi-browse -prt _snapcast._tcp 2>/dev/null \
+        done < <(run_with_timeout 4 "${stdbuf_cmd[@]}" avahi-browse -prt _snapcast._tcp 2>/dev/null \
                   | awk -F';' '/^=/ {print $7}' | sort -u || true)
     fi
 

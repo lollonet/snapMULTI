@@ -128,6 +128,7 @@ function Assert-PreparedSdCard {
             'server/docker-compose.yml',
             'server/deploy.sh',
             'server/diagnostic.sh',
+            'server/scripts/tidal/tidal-meta-bridge.sh',
             'server/config/snapserver.conf',
             'server/config/mpd.conf',
             'server/config/shairport-sync.conf'
@@ -534,6 +535,15 @@ function Copy-ServerFiles {
     $reconcileSh = Join-Path $ScriptDir 'docker-driver-reconcile.sh'
     if (Test-Path $reconcileSh) {
         Copy-Item $reconcileSh -Destination $serverDest
+    }
+    # scripts/tidal/ contains bind-mounted runtime scripts used by
+    # docker-compose.yml. Keep it under server/scripts/ so firstboot copies
+    # it to /opt/snapmulti/scripts/tidal/.
+    $tidalSrc = Join-Path $ScriptDir 'tidal'
+    if (Test-Path $tidalSrc) {
+        $tidalDest = Join-Path $serverDest 'scripts\tidal'
+        New-Item -ItemType Directory -Path $tidalDest -Force | Out-Null
+        Copy-Item (Join-Path $tidalSrc '*') -Destination $tidalDest -Recurse -Force
     }
     # diagnostic.sh — install-failed trap in firstboot.sh invokes this to
     # bundle journalctl + install.log + smoke output to the FAT32 boot
