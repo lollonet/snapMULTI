@@ -114,10 +114,16 @@ discover_server() {
     if command -v dns-sd >/dev/null 2>&1; then
         local instances=() line inst
         while IFS= read -r line; do
-            # Only `Add` rows expose an instance. The instance is the trailing
-            # token of the row, after the service type column.
+            # Only `Add` rows expose an instance. The instance name is always
+            # the LAST whitespace-delimited field on the row, regardless of
+            # whether macOS emits a domain column between the service type and
+            # the instance (e.g. `Add 2 0 _snapcast._tcp. local. Snapcast` vs
+            # `Add 2 0 _snapcast._tcp. Snapcast`). $NF is format-agnostic and
+            # handles both layouts; the previous `-F` split on the service-
+            # type token silently produced "local.<spaces>Snapcast" on the
+            # domain-column variant, which then failed silently in `dns-sd -L`.
             if [[ "$line" == *"Add"* && "$line" == *"_snapcast._tcp."* ]]; then
-                inst=$(echo "$line" | awk -F'_snapcast._tcp.[[:space:]]+' '{print $2}' | sed 's/[[:space:]]*$//')
+                inst=$(echo "$line" | awk '{print $NF}')
                 [[ -n "$inst" ]] && instances+=("$inst")
             fi
         done < <("${stdbuf_cmd[@]}" timeout 4 dns-sd -B _snapcast._tcp local 2>/dev/null || true)
