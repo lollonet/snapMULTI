@@ -331,6 +331,12 @@ services:
     volumes:
       - ./audio:/audio
       - ./config/tidal-asound.conf:/userconfig/asound.conf:ro
+      # Bind-mount the metadata bridge from the repo so script-only fixes
+      # (e.g. the Tidal-base-image sed range bug, the TUI panel-marker regex
+      # bug) take effect on `compose up -d` without rebuilding snapmulti-tidal.
+      # The image still ships its own copy as a baseline; this mount overrides
+      # it on devices that have the repo checked out at /opt/snapmulti.
+      - ./scripts/tidal/tidal-meta-bridge.sh:/tidal-meta-bridge.sh:ro
       - /var/run/dbus:/var/run/dbus
       - /etc/hostname:/etc/hostname:ro
     environment:

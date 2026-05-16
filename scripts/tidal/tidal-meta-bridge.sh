@@ -37,15 +37,14 @@ extract_field() {
     while IFS= read -r line; do
         if [[ "$line" == "${prefix}"* ]]; then
             value="${line#"$prefix"}"   # strip prefix
-            # Strip the trailing TUI panel marker. The TUI renders
-            #   "<field-content>  ...padding...  xx"
-            # where the panel-end "xx" is preceded by AT LEAST 2 spaces
-            # of column padding. Artist names like "Jamie xx" or song
-            # titles containing "xx" have at most one space inside, so
-            # the 2-space discriminator distinguishes panel marker from
-            # content. The previous `${value%%xx*}` matched the FIRST
-            # "xx" anywhere and truncated names like "Jamie xx" → "Jamie ".
-            if [[ "$value" =~ ^(.*[^[:space:]])[[:space:]]{2,}xx[[:space:]]*$ ]]; then
+            # Strip the TUI panel separator. Captured rows often contain
+            # the right-hand panel on the same line:
+            #   "<field-content>  ...padding...  xxsession state: ..."
+            # The separator "xx" is preceded by AT LEAST 2 spaces of
+            # column padding. Artist names like "Jamie xx" or titles
+            # containing "xx" have at most one space inside, so the 2-space
+            # discriminator preserves content while trimming the panel.
+            if [[ "$value" =~ ^(.*[^[:space:]])[[:space:]]{2,}xx.*$ ]]; then
                 value="${BASH_REMATCH[1]}"
             fi
             value="${value% x}"          # also strip trailing ' x' (half-panel)
@@ -58,14 +57,18 @@ extract_field() {
 
 # Strip ANSI/VT100 escape sequences and tmux 8-bit C1 representations.
 # speaker_controller_application sets the terminal to 8-bit mode; tmux encodes
-# C1 control chars (U+0080–U+009F) as ~@~X in 7-bit captures where X = char - 0x40,
-# so the X character ranges from @ (0x40) to _ (0x5F), matched by [@-_].
+# C1 control chars (U+0080–U+009F) as ~@~X in 7-bit captures where X = char - 0x40.
+# Do not use a compact sed range like [@-_]: the Tidal base image's sed rejects
+# that range ("Invalid range end") under its locale, which stalls metadata.
 strip_escapes() {
     sed \
         -e 's/\x1b\[[0-9;]*[A-Za-z]//g' \
         -e 's/\x1b[()][AB01]//g' \
         -e 's/\x1b.//g' \
-        -e 's/~@~[@-_]//g'
+        -e 's/~@~[ABCDEFGHIJKLMNOPQRSTUVWXYZ@_^]//g' \
+        -e 's/~@~\[//g' \
+        -e 's/~@~]//g' \
+        -e 's/~@~\\//g'
 }
 
 # Escape a string for safe JSON embedding.
