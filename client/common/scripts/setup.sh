@@ -761,15 +761,13 @@ if [[ "${TEST_TONE:-true}" == "true" ]]; then
         # in milliseconds if ALSA refuses the device (busy, wrong card,
         # asound.conf bad), so process-alive-after-sleep == "tone actually
         # played" while process-gone == "ALSA error swallowed by 2>&1".
-        # The previous "kill then echo tone played" reported success even
-        # when nothing came out of the speaker.
         if kill -0 "$_tone_pid" 2>/dev/null; then
             kill "$_tone_pid" 2>/dev/null || true
             wait "$_tone_pid" 2>/dev/null || true
             echo "  - tone played (set TEST_TONE=false in install.conf to silence)"
         else
             wait "$_tone_pid" 2>/dev/null || true
-            echo "  [WARN] speaker-test exited early — ALSA error. Check: aplay -L"
+            echo "  [WARN] speaker-test exited early - ALSA error. Check: aplay -L"
         fi
     else
         echo "Skipping test tone: speaker-test not installed (alsa-utils missing?)"
