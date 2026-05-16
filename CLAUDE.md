@@ -16,6 +16,7 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 | Value prop + quick start | `README.md` |
 | Changelog | `CHANGELOG.md` |
 | Quality gates (tools, paths, thresholds) | `CONTROL.yaml` |
+| Client integration patterns (UI / displays / external controllers consuming metadata) | `docs/CLIENT-METADATA.md` |
 
 **Rules:**
 - README is an appliance manual — what it does, how to install, how to connect. No jargon. The "Quick start" section in README covers the 4-step onramp; the detailed walk-through lives in `docs/INSTALL.md`.

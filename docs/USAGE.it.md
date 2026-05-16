@@ -16,7 +16,7 @@ Stack server (7 container, host networking):
 | `shairport-sync` | Ricevitore AirPlay (output FIFO) | 5000, 5858 |
 | `librespot` | Spotify Connect (output FIFO) | 24879 + porta effimera |
 | `tidal-connect` | Tidal Connect, solo ARM (output FIFO) | 2019 |
-| `metadata` | Copertine + info brano | 8082 (WS), 8083 (HTTP) |
+| `metadata` | Copertine + info brano | 8082 (WS), 8083 (HTTP) — vedi [CLIENT-METADATA.md](CLIENT-METADATA.md) per i pattern di integrazione |
 
 Catena audio: sorgente → pipe FIFO in `/audio/` → snapserver → FLAC sulla rete → snapclient → uscita ALSA. Formato unificato `44100:16:2` (44,1 kHz / 16-bit / stereo) su tutte le sorgenti, niente resampling.
 
