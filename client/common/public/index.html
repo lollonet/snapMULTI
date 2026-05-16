@@ -387,6 +387,11 @@
                 // we want whatever is playing. The WS subscription below pins
                 // us to this client's room going forward.
                 const response = await fetch('/metadata.json');
+                // 4xx/5xx with a JSON body (e.g. {"error":"not found"}) would
+                // otherwise clobber currentTrack with the error object and
+                // clear the display. CLIENT-METADATA.md §error-handling:
+                // "/metadata.json 5xx: keep last-known state".
+                if (!response.ok) return;
                 applyMetadata(await response.json());
             } catch (error) {
                 console.error('Error fetching metadata seed:', error);
