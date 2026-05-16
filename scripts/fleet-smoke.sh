@@ -97,31 +97,81 @@ discover_server() {
     # Pick the first _snapcast._tcp service that resolves to a reachable
     # JSON-RPC endpoint. We DO NOT pick blindly — many things publish PTR
     # without SRV+TXT; require a successful curl probe.
+    #
+    # macOS quirks that previously broke discovery:
+    #   1. `dns-sd | awk` buffers in pipes → `timeout 4` killed the process
+    #      before any output flushed. Wrap with `stdbuf -oL` (present in
+    #      /usr/bin since macOS 12 and also via brew coreutils).
+    #   2. The instance name returned by `dns-sd -B` is the service label
+    #      (e.g. literal "Snapcast"), NOT a resolvable hostname. We must
+    #      follow up with `dns-sd -L <instance>` and pull the SRV Target.
     local candidates=()
+    local stdbuf_cmd=()
+    if command -v stdbuf >/dev/null 2>&1; then
+        stdbuf_cmd=(stdbuf -oL)
+    fi
+
     if command -v dns-sd >/dev/null 2>&1; then
-        # macOS: dns-sd doesn't terminate cleanly; tee with timeout
+        local instances=() line inst
         while IFS= read -r line; do
-            local h
-            h=$(echo "$line" | awk '{print $7}')
-            [[ -n "$h" && "$h" != "Name" ]] && candidates+=("$h")
-        done < <(timeout 4 dns-sd -B _snapcast._tcp local 2>/dev/null | awk 'NR>4 {print}' || true)
+            # Only `Add` rows expose an instance. The instance name is always
+            # the LAST whitespace-delimited field on the row, regardless of
+            # whether macOS emits a domain column between the service type and
+            # the instance (e.g. `Add 2 0 _snapcast._tcp. local. Snapcast` vs
+            # `Add 2 0 _snapcast._tcp. Snapcast`). $NF is format-agnostic and
+            # handles both layouts; the previous `-F` split on the service-
+            # type token silently produced "local.<spaces>Snapcast" on the
+            # domain-column variant, which then failed silently in `dns-sd -L`.
+            if [[ "$line" == *"Add"* && "$line" == *"_snapcast._tcp."* ]]; then
+                inst=$(echo "$line" | awk '{print $NF}')
+                [[ -n "$inst" ]] && instances+=("$inst")
+            fi
+        done < <("${stdbuf_cmd[@]}" timeout 4 dns-sd -B _snapcast._tcp local 2>/dev/null || true)
+
+        # Deduplicate instances (mDNS often echoes Add on multiple interfaces).
+        local uniq_instances=()
+        local seen
+        for inst in "${instances[@]}"; do
+            seen=0
+            for s in "${uniq_instances[@]}"; do
+                [[ "$s" == "$inst" ]] && { seen=1; break; }
+            done
+            (( seen == 0 )) && uniq_instances+=("$inst")
+        done
+
+        # Resolve each instance to its SRV Target.
+        local resolve_line host
+        for inst in "${uniq_instances[@]}"; do
+            resolve_line=$("${stdbuf_cmd[@]}" timeout 3 dns-sd -L "$inst" _snapcast._tcp local 2>/dev/null \
+                            | grep -m1 'can be reached at' || true)
+            # Line format: `<fqdn>. can be reached at <host>.local.:<port> (interface N)`
+            host=$(echo "$resolve_line" | sed -nE 's/.*can be reached at ([^ :]+):[0-9]+.*/\1/p')
+            host="${host%.}"        # strip trailing dot
+            host="${host%.local}"   # strip .local suffix (curl resolves it locally)
+            [[ -n "$host" ]] && candidates+=("$host")
+        done
     elif command -v avahi-browse >/dev/null 2>&1; then
         while IFS= read -r host; do
             [[ -n "$host" ]] && candidates+=("${host%.local}")
-        done < <(timeout 4 avahi-browse -prt _snapcast._tcp 2>/dev/null \
+        done < <("${stdbuf_cmd[@]}" timeout 4 avahi-browse -prt _snapcast._tcp 2>/dev/null \
                   | awk -F';' '/^=/ {print $7}' | sort -u || true)
     fi
 
-    # Probe each candidate; first one that responds wins.
-    local h
+    # Probe each candidate; first one that responds wins. Try bare and
+    # `.local` form — bare may resolve only on systems with mDNS as the
+    # default resolver, `.local` works wherever an mDNS responder is up.
+    local h url
     for h in "${candidates[@]}"; do
-        if curl -sS --max-time 3 \
-              -X POST -H 'Content-Type: application/json' \
-              -d '{"jsonrpc":"2.0","id":0,"method":"Server.GetStatus"}' \
-              "http://${h}:1780/jsonrpc" >/dev/null 2>&1; then
-            echo "$h"
-            return 0
-        fi
+        for url in "http://${h}:1780/jsonrpc" "http://${h}.local:1780/jsonrpc"; do
+            if curl -sS --max-time 3 \
+                  -X POST -H 'Content-Type: application/json' \
+                  -d '{"jsonrpc":"2.0","id":0,"method":"Server.GetStatus"}' \
+                  "$url" >/dev/null 2>&1; then
+                # Strip trailing path so the caller gets just the host token.
+                echo "$h"
+                return 0
+            fi
+        done
     done
     return 1
 }
