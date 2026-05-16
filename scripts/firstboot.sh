@@ -536,6 +536,10 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         if [[ -d "$SNAP_BOOT/server/smoke" ]]; then
             cp -r "$SNAP_BOOT/server/smoke" "$SERVER_DIR/scripts/" 2>/dev/null || true
         fi
+        if [[ -d "$SNAP_BOOT/server/scripts/tidal" ]]; then
+            mkdir -p "$SERVER_DIR/scripts/tidal"
+            cp -r "$SNAP_BOOT/server/scripts/tidal/." "$SERVER_DIR/scripts/tidal/"
+        fi
         cp "$SNAP_BOOT/server/docker-driver-reconcile.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/ro-mode.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/.version" "$SERVER_DIR/" 2>/dev/null || true

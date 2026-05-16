@@ -487,6 +487,13 @@ copy_server_files() {
     # subdirectory is missed.
     [[ -d "$SCRIPT_DIR/smoke" ]] && cp -r "$SCRIPT_DIR/smoke" "$dest/" 2>/dev/null || true
     cp "$SCRIPT_DIR/docker-driver-reconcile.sh" "$dest/" 2>/dev/null || true
+    # scripts/tidal/ contains bind-mounted runtime scripts used by
+    # docker-compose.yml. Keep it under server/scripts/ so firstboot copies
+    # it to /opt/snapmulti/scripts/tidal/.
+    if [[ -d "$SCRIPT_DIR/tidal" ]]; then
+        mkdir -p "$dest/scripts/tidal"
+        cp -r "$SCRIPT_DIR/tidal/." "$dest/scripts/tidal/"
+    fi
     # ro-mode helper (client has its own copy, server needs one too)
     [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/"
     cp -r "$PROJECT_DIR/config" "$dest/"
@@ -961,6 +968,7 @@ case "$INSTALL_TYPE" in
     server|both)
         for f in server/docker-compose.yml server/deploy.sh server/boot-tune.sh \
                  server/device-smoke.sh server/docker-driver-reconcile.sh \
+                 server/scripts/tidal/tidal-meta-bridge.sh \
                  server/config/snapserver.conf server/config/mpd.conf \
                  server/config/shairport-sync.conf server/config/go-librespot.yml \
                  server/config/tidal-asound.conf server/ro-mode.sh; do
