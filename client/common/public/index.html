@@ -202,7 +202,6 @@
     <script>
         let currentTrack = null;
         let visualizerWs = null;
-        let artworkCacheBust = Date.now();
 
         // Spectrum state — NUM_BANDS auto-detected from first WS message
         let NUM_BANDS = 21; // default, updated on first WS message
@@ -372,17 +371,30 @@
             } catch { return false; }
         }
 
-        async function fetchMetadata() {
+        // Snapshot replace — used both by the one-shot HTTP seed and by the
+        // metadata WS push handler. Same code path = same behavior on first
+        // paint and on every subsequent track change.
+        function applyMetadata(data) {
+            if (!data || typeof data !== 'object') return;
+            if (JSON.stringify(data) === JSON.stringify(currentTrack)) return;
+            currentTrack = data;
+            updateDisplay(data);
+        }
+
+        async function seedMetadata() {
             try {
-                const response = await fetch('/metadata.json', { cache: 'no-store' });
-                const data = await response.json();
-                if (JSON.stringify(data) !== JSON.stringify(currentTrack)) {
-                    artworkCacheBust = Date.now();
-                    currentTrack = data;
-                    updateDisplay(data);
-                }
+                // No ?stream= : status page is a generic "now-playing" view, so
+                // we want whatever is playing. The WS subscription below pins
+                // us to this client's room going forward.
+                const response = await fetch('/metadata.json');
+                // 4xx/5xx with a JSON body (e.g. {"error":"not found"}) would
+                // otherwise clobber currentTrack with the error object and
+                // clear the display. CLIENT-METADATA.md §error-handling:
+                // "/metadata.json 5xx: keep last-known state".
+                if (!response.ok) return;
+                applyMetadata(await response.json());
             } catch (error) {
-                console.error('Error fetching metadata:', error);
+                console.error('Error fetching metadata seed:', error);
             }
         }
 
@@ -401,8 +413,11 @@
 
                 const imageUrl = data.artwork || data.artist_image || '';
                 if (imageUrl && isValidImageUrl(imageUrl)) {
-                    const cacheBust = imageUrl.startsWith('/') ? `?t=${artworkCacheBust}` : '';
-                    albumArt.style.backgroundImage = `url("${imageUrl.replace(/"/g, '\\"')}${cacheBust}")`;
+                    // No cache-buster: artwork URLs are hash-named (immutable)
+                    // and the metadata-service already sends
+                    // `Cache-Control: max-age=3600`. A different cover ⇒ a
+                    // different URL, so the browser refreshes naturally.
+                    albumArt.style.backgroundImage = `url("${imageUrl.replace(/"/g, '\\"')}")`;
                     albumArt.classList.add('visible');
                 } else {
                     albumArt.style.backgroundImage = '';
@@ -456,8 +471,80 @@
             };
         }
 
-        setInterval(fetchMetadata, 2000);
-        fetchMetadata();
+        // ── Metadata WS (port 8082) — push-driven now-playing ─────
+        // Replaces the previous 2 s polling on /metadata.json:
+        // - Push delivery: title/artwork update with ~zero latency.
+        // - One-shot HTTP seed on connect (and after every reconnect):
+        //   the WS push is the source of truth, but a fresh tab needs
+        //   the current snapshot before the first push arrives.
+        // - Reconnect with exponential backoff (1 s → 30 s).
+        // - Polling fallback only if the WS never opens (corporate
+        //   proxies, captive WiFi). The fallback runs at 5 s, not 2 s.
+        let metadataWs = null;
+        let metadataReconnectMs = 1000;
+        let metadataFallbackTimer = null;
+
+        function startFallbackPolling() {
+            if (metadataFallbackTimer) return;
+            console.warn('Metadata WS unreachable, falling back to 5 s polling.');
+            metadataFallbackTimer = setInterval(seedMetadata, 5000);
+        }
+        function stopFallbackPolling() {
+            if (!metadataFallbackTimer) return;
+            clearInterval(metadataFallbackTimer);
+            metadataFallbackTimer = null;
+        }
+
+        function connectMetadataWs() {
+            const url = `ws://${window.location.hostname}:8082`;
+            try {
+                metadataWs = new WebSocket(url);
+            } catch (e) {
+                console.error('Metadata WS construct failed:', e);
+                startFallbackPolling();
+                return;
+            }
+
+            metadataWs.onopen = () => {
+                console.log('Metadata WS connected');
+                stopFallbackPolling();
+                metadataReconnectMs = 1000;
+                // Follow the local snapcast client (and therefore whichever
+                // stream the operator assigns to this room). location.hostname
+                // matches the snapclient host.name on the server-side metadata
+                // map, so this works without a hardcoded client-id.
+                metadataWs.send(JSON.stringify({ subscribe: window.location.hostname }));
+                // Re-seed after every connect: WS push is authoritative going
+                // forward, but at this instant our state may be stale.
+                seedMetadata();
+            };
+
+            metadataWs.onmessage = (event) => {
+                let msg;
+                try { msg = JSON.parse(event.data); } catch { return; }
+                // Skip server status frames — they are not track metadata.
+                if (msg && msg.type === 'server_info') return;
+                applyMetadata(msg);
+            };
+
+            metadataWs.onclose = () => {
+                console.log(`Metadata WS closed, reconnecting in ${metadataReconnectMs} ms`);
+                setTimeout(connectMetadataWs, metadataReconnectMs);
+                // Exponential backoff, capped at 30 s.
+                metadataReconnectMs = Math.min(metadataReconnectMs * 2, 30000);
+                // If backoff has plateaued (≥ 16 s), the server clearly is not
+                // reachable — engage polling fallback so the UI keeps refreshing.
+                if (metadataReconnectMs >= 16000) startFallbackPolling();
+            };
+
+            metadataWs.onerror = () => {
+                // Let onclose handle the retry; just close to trigger it.
+                try { metadataWs.close(); } catch {}
+            };
+        }
+
+        seedMetadata();
+        connectMetadataWs();
         connectVisualizer();
     </script>
 </body>
