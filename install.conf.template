@@ -68,3 +68,13 @@ IMAGE_TAG=latest
 #   false (default) -- Only milestones and key events
 #   true            -- Full apt/docker output (useful for debugging)
 VERBOSE_INSTALL=false
+#
+# TEST_TONE: Play a 1 s 440 Hz tone right after audio HAT detection.
+#   true (default) -- Audible confirmation that the HAT, ALSA routing
+#                     and speaker chain are working at the moment of
+#                     install. Catches "no sound" before the user has
+#                     to wait for snapclient + a phone cast.
+#   false          -- Silent install (overnight reflash, speakers
+#                     disconnected, or installer running near anyone
+#                     who would mind a brief beep).
+TEST_TONE=true

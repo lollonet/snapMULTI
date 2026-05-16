@@ -747,6 +747,41 @@ fi
 echo ""
 
 # ============================================
+# Step 7b: Audible confirmation tone (440 Hz, 1 s)
+# ============================================
+# Plays a brief 440 Hz sine on the just-configured ALSA default device so
+# the operator gets immediate audible confirmation that:
+#   1. the HAT was detected correctly and matches the wired hardware,
+#   2. /etc/asound.conf is routing to the right card,
+#   3. the speaker/amp chain is live.
+# This catches the "install completed silently but no sound" failure mode
+# at the moment of HAT decision, not 5 minutes later when the user tries
+# to cast from a phone.
+#
+# Opt-out: set TEST_TONE=false in install.conf for overnight reflashes or
+# installs done with speakers disconnected.
+#
+# No new dependency: speaker-test ships with alsa-utils which is already
+# part of the snapclient install. If absent (custom slim image) the step
+# is a no-op with a log line.
+if [[ "${TEST_TONE:-true}" == "true" ]]; then
+    if command -v speaker-test >/dev/null 2>&1; then
+        echo "Playing 440 Hz test tone on $HAT_CARD_NAME..."
+        speaker-test -t sine -f 440 -l 1 -p 100 >/dev/null 2>&1 &
+        _tone_pid=$!
+        sleep 1.2
+        kill "$_tone_pid" 2>/dev/null || true
+        wait "$_tone_pid" 2>/dev/null || true
+        echo "  - tone played (set TEST_TONE=false in install.conf to silence)"
+    else
+        echo "Skipping test tone: speaker-test not installed (alsa-utils missing?)"
+    fi
+else
+    echo "Test tone disabled (TEST_TONE=false in install.conf)"
+fi
+echo ""
+
+# ============================================
 # Step 8: Configure Boot Settings (Idempotent)
 # ============================================
 progress 5 "Updating boot settings..."
