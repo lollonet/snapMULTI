@@ -52,6 +52,22 @@ assert_contains "$src" "ServerAliveInterval=15" "SSH keepalive set (anti-hang wh
 assert_contains "$src" "ServerAliveCountMax=3" "SSH gives up after 3 missed keepalives (~45 s ceiling)"
 assert_contains "$src" '/^\{.*\}$/' "payload sanitiser strips MOTD/banner by picking the single JSON line"
 
+# mDNS discovery hardening (macOS dns-sd path).
+#   1. stdbuf -oL: dns-sd buffers stdout in a pipe, so `timeout 4 dns-sd … | awk`
+#      killed the process before any line flushed. The line-buffer wrapper
+#      makes the browsing output arrive immediately.
+#   2. dns-sd -B returns the SERVICE INSTANCE name (e.g. "Snapcast"), not a
+#      resolvable hostname. The previous code piped that into curl as if it
+#      were a host, so discovery silently failed even when the server was
+#      visible. The fix follows up each instance with `dns-sd -L <inst>` and
+#      pulls the SRV Target via "can be reached at <host>.local.:<port>".
+#   3. The probe step tries BOTH bare host and `.local` form, because mDNS
+#      resolution paths vary by platform.
+assert_contains "$src" "stdbuf" "dns-sd output is line-buffered to survive pipe + timeout"
+assert_contains "$src" "dns-sd -L" "instance name from -B is resolved to hostname via -L"
+assert_contains "$src" "can be reached at" "SRV Target regex extracts hostname from -L response"
+assert_contains "$src" '"http://${h}.local:1780/jsonrpc"' "probe tries both bare host and .local fallback"
+
 # Regression guard against the historic "device-smoke exit 1 + valid
 # JSON" concat bug. The previous `|| echo "{}"` form appended a second
 # JSON document on failure, so a host with real failures got reported
