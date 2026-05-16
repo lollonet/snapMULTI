@@ -747,6 +747,37 @@ fi
 echo ""
 
 # ============================================
+# Step 7b: Audible confirmation tone (440 Hz, 1 s)
+# ============================================
+# Catches "install completed silently but no sound" at HAT time, not
+# 5 min later. Opt-out: TEST_TONE=false in install.conf.
+if [[ "${TEST_TONE:-true}" == "true" ]]; then
+    if command -v speaker-test >/dev/null 2>&1; then
+        echo "Playing 440 Hz test tone on $HAT_CARD_NAME..."
+        speaker-test -t sine -f 440 -l 1 -p 100 >/dev/null 2>&1 &
+        _tone_pid=$!
+        sleep 1.2
+        # `kill -0` checks if the PID is still running. speaker-test exits
+        # in milliseconds if ALSA refuses the device (busy, wrong card,
+        # asound.conf bad), so process-alive-after-sleep == "tone actually
+        # played" while process-gone == "ALSA error swallowed by 2>&1".
+        if kill -0 "$_tone_pid" 2>/dev/null; then
+            kill "$_tone_pid" 2>/dev/null || true
+            wait "$_tone_pid" 2>/dev/null || true
+            echo "  - tone played (set TEST_TONE=false in install.conf to silence)"
+        else
+            wait "$_tone_pid" 2>/dev/null || true
+            echo "  [WARN] speaker-test exited early - ALSA error. Check: aplay -L"
+        fi
+    else
+        echo "Skipping test tone: speaker-test not installed (alsa-utils missing?)"
+    fi
+else
+    echo "Test tone disabled (TEST_TONE=false in install.conf)"
+fi
+echo ""
+
+# ============================================
 # Step 8: Configure Boot Settings (Idempotent)
 # ============================================
 progress 5 "Updating boot settings..."
