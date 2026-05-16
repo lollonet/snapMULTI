@@ -1,5 +1,7 @@
 # Client metadata integration guide
 
+> **For the architectural rationale** (why the metadata pipeline is centralized server-side, trade-offs, cover-art lookup chain), see [`docs/adr/ADR-004.metadata-architecture.md`](adr/ADR-004.metadata-architecture.md). This file is the operational integration contract; the ADR is the frozen decision record.
+
 How to write a client (UI, mobile app, kiosk display, secondary controller)
 that consumes snapMULTI's metadata pipeline correctly. Drop this file into
 the context of whatever AI coding assistant or human contributor is working
