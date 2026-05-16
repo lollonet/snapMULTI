@@ -91,7 +91,7 @@ extract_field() {
     while IFS= read -r line; do
         if [[ "$line" == "${prefix}"* ]]; then
             value="${line#"$prefix"}"
-            if [[ "$value" =~ ^(.*[^[:space:]])[[:space:]]{2,}xx[[:space:]]*$ ]]; then
+            if [[ "$value" =~ ^(.*[^[:space:]])[[:space:]]{2,}xx.*$ ]]; then
                 value="${BASH_REMATCH[1]}"
             fi
             value="${value% x}"
@@ -118,6 +118,25 @@ assert_eq "$result" "Hozier" "extract_field strips panel marker for plain artist
 
 result=$(extract_field "xtitle: " "xtitle: Normal Track              xx")
 assert_eq "$result" "Normal Track" "extract_field strips panel marker for plain title"
+
+result=$(extract_field "xartists: " "xartists: Hole                         xxsession state: SessionState::CASTING  x")
+assert_eq "$result" "Hole" "extract_field strips right-hand TUI panel suffix"
+
+result=$(extract_field "xtitle: " "xtitle: Malibu                         xxapp_name: TIDAL                       x")
+assert_eq "$result" "Malibu" "extract_field strips right-hand TUI app panel suffix"
+
+# Functional regression: the Tidal base image's sed rejects the compact
+# bracket range [@-_] ("Invalid range end"). The bridge must use explicit
+# patterns for tmux's ~@~X C1-control encodings instead.
+strip_body=$(awk '/^strip_escapes\(\)/,/^}/' "$TIDAL_BRIDGE")
+assert '! echo "$strip_body" | grep -qF "[@-_]"' \
+       'strip_escapes avoids non-portable sed range [@-_]'
+
+assert 'echo "$strip_body" | grep -qF "s/~@~[ABCDEFGHIJKLMNOPQRSTUVWXYZ@_^]//g"' \
+       'strip_escapes handles @/A-Z/^/_ C1 markers explicitly'
+
+assert 'echo "$strip_body" | grep -qF "s/~@~\\\\//g"' \
+       'strip_escapes handles backslash C1 marker explicitly'
 
 echo
 echo "=== Bug C — metadata-service.py fuzzy match removed ==="
