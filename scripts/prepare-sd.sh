@@ -739,6 +739,7 @@ ENABLE_READONLY=$ADV_READONLY
 SKIP_UPGRADE=$ADV_SKIP_UPGRADE
 IMAGE_TAG=$ADV_IMAGE_TAG
 VERBOSE_INSTALL=$ADV_VERBOSE_INSTALL
+TEST_TONE=true
 EOF
 # Write credentials outside heredoc — unquoted <<EOF expands $, backticks,
 # and $() which corrupts passwords containing shell metacharacters.
@@ -1018,6 +1019,7 @@ echo "  install.conf -> ENABLE_READONLY=$(grep '^ENABLE_READONLY=' "$DEST/instal
 echo "  install.conf -> SKIP_UPGRADE=$(grep '^SKIP_UPGRADE=' "$DEST/install.conf" | cut -d= -f2)"
 echo "  install.conf -> IMAGE_TAG=$(grep '^IMAGE_TAG=' "$DEST/install.conf" | cut -d= -f2)"
 echo "  install.conf -> VERBOSE_INSTALL=$(grep '^VERBOSE_INSTALL=' "$DEST/install.conf" | cut -d= -f2)"
+echo "  install.conf -> TEST_TONE=$(grep '^TEST_TONE=' "$DEST/install.conf" | cut -d= -f2)"
 
 # Version files
 # Check version files (avoid ;;& which requires Bash 4+, macOS has 3.2)
