@@ -37,7 +37,7 @@ snapMULTI is for people who want an **open-source multi-room audio system** with
 - **Skill floor**: you should be comfortable flashing an SD with Raspberry Pi Imager, finding your Pi by hostname (`.local`) or IP, and copying a small file off the SD card if something goes wrong. You do **not** need to know Docker, systemd, ALSA, or Snapcast — snapMULTI handles them.
 - **SD card matters**: cheap microSDs are the #1 cause of "install hangs". Use a SanDisk / Samsung A1 (or better). 16 GB is the minimum.
 - **Network**: 2.4 GHz works but 5 GHz or Ethernet is more stable. mDNS (`*.local`) must traverse the LAN (single subnet, no VLAN isolation).
-- **Streaming services have their own requirements**: Spotify Connect needs Premium. Tidal Connect is ARM-only and opt-in (see [security note](docs/USAGE.md#tidal-connect-security-note)). AirPlay needs an Apple device.
+- **Streaming services have their own requirements**: Spotify Connect needs Premium. Tidal Connect is ARM-only and enabled by default on ARM installs (opt-out by removing `tidal` from `COMPOSE_PROFILES`, see [security note](docs/USAGE.md#tidal-connect-security-note)). AirPlay needs an Apple device.
 
 ## Recommended first build
 
@@ -47,7 +47,7 @@ If this is your first snapMULTI install, use the boring path: **Raspberry Pi 4 (
 
 - **Pi Zero 2 W** is supported as a headless Audio Player only; it is not a server or "Server + Player" target.
 - **NAS share paths with spaces** are rejected. Rename `Music Share` to `Music_Share` on the NAS side.
-- **Tidal Connect** uses an upstream proprietary component and is opt-in; skip it if you want a fully free-software stack.
+- **Tidal Connect** uses an upstream proprietary component. It is enabled by default on ARM installs; remove `tidal` from `COMPOSE_PROFILES` in `/opt/snapmulti/.env` if you want a fully free-software stack.
 - **Read-only installs are reflash-first**. In-place updates are intentionally not the supported user path.
 - **Hardware quality matters**. Bad SD cards, weak PSUs and flaky WiFi cause most first-install failures.
 
@@ -105,7 +105,7 @@ Replace `hostname` with what you set in Step 1.
 |--------|-----|
 | **Spotify** | Open app → select "*hostname* Spotify" (Premium) |
 | **AirPlay** | AirPlay icon → "*hostname* AirPlay" |
-| **Tidal** | Cast to "*hostname* Tidal" (ARM/Pi only, **opt-in** — see [security note](docs/USAGE.md#tidal-connect-security-note)) |
+| **Tidal** | Cast to "*hostname* Tidal" (ARM/Pi only, **enabled by default** — see [security note](docs/USAGE.md#tidal-connect-security-note) to opt-out) |
 | **Any app** | Stream raw PCM to port 4953 ([details](docs/USAGE.md#streaming-from-android-no-native-cast)) |
 
 ## Add speakers

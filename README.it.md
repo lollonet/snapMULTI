@@ -37,7 +37,7 @@ snapMULTI è pensato per chi vuole un **sistema audio multi-room open source** s
 - **Livello richiesto**: devi sapere flashare un'SD con Raspberry Pi Imager, trovare il Pi tramite hostname (`.local`) o IP, e copiare un piccolo file dalla SD card se qualcosa va storto. **Non** ti serve conoscere Docker, systemd, ALSA o Snapcast — li gestisce snapMULTI.
 - **L'SD è importante**: le microSD economiche sono la prima causa di "install che si blocca". Usa una SanDisk / Samsung A1 (o migliore). Minimo 16 GB.
 - **Rete**: il 2,4 GHz funziona ma il 5 GHz o Ethernet sono più stabili. L'mDNS (`*.local`) deve attraversare la LAN (una sola sottorete, niente isolamento VLAN).
-- **I servizi di streaming hanno requisiti propri**: Spotify Connect richiede Premium. Tidal Connect è solo ARM ed è opt-in (vedi [nota sicurezza](docs/USAGE.it.md#nota-sicurezza-tidal-connect)). AirPlay richiede un dispositivo Apple.
+- **I servizi di streaming hanno requisiti propri**: Spotify Connect richiede Premium. Tidal Connect è solo ARM ed è abilitato di default sugli install ARM (disabilitalo rimuovendo `tidal` da `COMPOSE_PROFILES`, vedi [nota sicurezza](docs/USAGE.it.md#nota-sicurezza-tidal-connect)). AirPlay richiede un dispositivo Apple.
 
 ## Configurazione consigliata per iniziare
 
@@ -47,7 +47,7 @@ Se è la tua prima installazione snapMULTI, scegli il percorso noioso: **Raspber
 
 - **Pi Zero 2 W** è supportato solo come Audio Player headless; non è un target server o "Server + Player".
 - **Path NAS con spazi** vengono rifiutati. Rinomina `Music Share` in `Music_Share` lato NAS.
-- **Tidal Connect** usa un componente proprietario upstream ed è opt-in; saltalo se vuoi uno stack interamente free software.
+- **Tidal Connect** usa un componente proprietario upstream. È abilitato di default sugli install ARM; rimuovi `tidal` da `COMPOSE_PROFILES` in `/opt/snapmulti/.env` se vuoi uno stack interamente free software.
 - **Le installazioni read-only sono reflash-first**. Gli update in-place non sono il percorso utente supportato.
 - **La qualità hardware conta**. SD scadenti, alimentatori deboli e WiFi instabile causano la maggior parte dei fallimenti iniziali.
 
@@ -105,7 +105,7 @@ Sostituisci `hostname` con quello che hai impostato allo Step 1.
 |----------|------|
 | **Spotify** | Apri l'app → seleziona "*hostname* Spotify" (Premium) |
 | **AirPlay** | Icona AirPlay → "*hostname* AirPlay" |
-| **Tidal** | Cast su "*hostname* Tidal" (solo ARM/Pi, **opt-in** — vedi [nota sicurezza](docs/USAGE.it.md#nota-sicurezza-tidal-connect)) |
+| **Tidal** | Cast su "*hostname* Tidal" (solo ARM/Pi, **abilitato di default** — vedi [nota sicurezza](docs/USAGE.it.md#nota-sicurezza-tidal-connect) per disabilitarlo) |
 | **Qualsiasi app** | Stream PCM raw sulla porta 4953 ([dettagli](docs/USAGE.it.md#streaming-da-android-niente-cast-nativo)) |
 
 ## Aggiungere altoparlanti

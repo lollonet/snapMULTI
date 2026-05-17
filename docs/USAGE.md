@@ -37,7 +37,7 @@ Defaults applied to every container in `docker-compose.yml`:
 
 **Exception 1 — D-Bus / Avahi containers** (`snapserver`, `shairport-sync`, `librespot`): need `apparmor:unconfined` to access the host's D-Bus socket for mDNS advertisement (Avahi) and `cap_add: DAC_OVERRIDE` to write to the named-pipe FIFOs owned by the host's `PUID` user. AppArmor in the default Ubuntu profile blocks the D-Bus connection otherwise. `mpd` mounts the same Avahi/D-Bus sockets but keeps the default AppArmor profile — it does not require `apparmor:unconfined`. Everything else stays dropped.
 
-**Exception 2 — `tidal-connect`** (ARM only): runs as root because the proprietary upstream binary needs it. The Compose profile is **opt-in** — `tidal-connect` only runs when you explicitly enable the `tidal` profile (see [Tidal Connect security note](#tidal-connect-security-note)).
+**Exception 2 — `tidal-connect`** (ARM only): runs as root because the proprietary upstream binary needs it. **Enabled by default on ARM installs** — `deploy.sh` writes `COMPOSE_PROFILES=tidal` into `/opt/snapmulti/.env` so the `tidal` profile is active out of the box on Pi 3/4/5. To **opt out** (e.g. for a fully free-software stack), remove `tidal` from `COMPOSE_PROFILES` in `/opt/snapmulti/.env` and run `sudo systemctl restart snapmulti-server.service`. See [Tidal Connect security note](#tidal-connect-security-note) for the full disclosure.
 
 **Threat model**: snapMULTI is designed for a trusted LAN — server and clients on the same subnet behind a residential router. Out-of-scope: WAN exposure (no authentication on JSON-RPC, Snapweb or myMPD), multi-tenant scenarios, malicious clients on the LAN. If you need any of those, put a reverse proxy with auth in front and use `bind 127.0.0.1` in `config/snapserver.conf`.
 
@@ -66,7 +66,7 @@ Spotify and Tidal default to `<hostname> Spotify` / `<hostname> Tidal`. Override
 ### Tidal Connect security note
 
 <a id="tidal-connect-security-note"></a>
-Tidal Connect is **opt-in** (enable the `tidal` Compose profile). The upstream container is built on Raspbian Stretch (EOL 2019), pulls packages from `archive.debian.org` with `trusted=yes`, and contains a proprietary unmaintained binary. ARM only (no x86_64 build exists). Read the disclosure block in `docker-compose.yml` before enabling.
+Tidal Connect is **enabled by default on ARM installs** (`deploy.sh` writes `COMPOSE_PROFILES=tidal` to `/opt/snapmulti/.env` on Pi 3/4/5). To opt out for a fully free-software stack, remove `tidal` from `COMPOSE_PROFILES` in `/opt/snapmulti/.env` and restart `snapmulti-server.service`. The upstream container is built on Raspbian Stretch (EOL 2019), pulls packages from `archive.debian.org` with `trusted=yes`, and contains a proprietary unmaintained binary. ARM only (no x86_64 build exists). Read the disclosure block in `docker-compose.yml` before keeping it enabled.
 
 ### Streaming from Android (no native cast)
 
@@ -97,7 +97,7 @@ Power-user commands (MPD CLI, JSON-RPC source switching, custom `.env`): [ADVANC
 
 Snapcast, AirPlay, Spotify and Tidal advertise themselves on the LAN via the **host's** `avahi-daemon` (D-Bus socket bind-mounted into the relevant containers). Required at the host: `systemctl is-active avahi-daemon` returns `active`. **Do not run avahi-daemon inside containers** — port 5353 conflicts with the host.
 
-Snapcast 0.35.x quits its Avahi poll loop on `AVAHI_CLIENT_FAILURE` with no retry. The systemd units include `PartOf=avahi-daemon.service` so a host avahi restart recreates the Compose stacks automatically (~3 s audio gap).
+Snapcast 0.35.x quits its Avahi poll loop on `AVAHI_CLIENT_FAILURE` with no retry. As of v0.7.5 the systemd units no longer use `PartOf=avahi-daemon.service` — that cascade was too aggressive (any host avahi restart tore down the whole Compose stack). Recovery is now explicit and operator-initiated: `scripts/common/system-tune.sh::tune_avahi_daemon` restarts `avahi-daemon` and then explicitly restarts `snapmulti-server.service` + `snapclient.service` so the libavahi-client connections inside snapcast are re-established. Routine `ExecStop` is `docker compose stop -t 5` (non-destructive), so a clean start cycle is 2–5 s instead of the 30–40 s teardown of the previous `compose down` model.
 
 Quick verify:
 
