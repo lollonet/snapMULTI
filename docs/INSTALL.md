@@ -111,7 +111,7 @@ Pick one of the two options. Both produce a folder named `snapMULTI/` that the n
 
 1. Open [https://github.com/lollonet/snapMULTI/releases/latest](https://github.com/lollonet/snapMULTI/releases/latest) in your browser
 2. Under **Assets**, click **Source code (zip)** to download the latest release
-3. Extract the ZIP — you get a folder named `snapMULTI-<version>` (e.g. `snapMULTI-0.7.4`). The folder name doesn't matter — `prepare-sd.sh` finds its project root via its own location
+3. Extract the ZIP — you get a folder named `snapMULTI-<version>`. The folder name doesn't matter — `prepare-sd.sh` finds its project root via its own location
 4. Open a terminal inside that extracted folder
 
 > Prefer the tagged release ZIP over the green **Code → Download ZIP** button on the repo home page — the latter ships the `main` branch, which may include unreleased work-in-progress.
@@ -358,7 +358,7 @@ mpd                Up X minutes (healthy)
 mympd              Up X minutes (healthy)
 metadata           Up X minutes (healthy)
 ```
-On Raspberry Pi (ARM): `tidal-connect` also appears if you have a Pi 4/5.
+On Raspberry Pi (ARM — Pi 3 B+ / 4 / 5): `tidal-connect` also appears (enabled by default on ARM installs; remove `tidal` from `COMPOSE_PROFILES` in `/opt/snapmulti/.env` to opt out).
 
 **Audio Player (option 1)** — expected output:
 ```

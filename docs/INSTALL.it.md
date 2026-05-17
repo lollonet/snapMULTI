@@ -111,7 +111,7 @@ Scegli una delle due opzioni. Entrambe producono una cartella `snapMULTI/` che i
 
 1. Apri [https://github.com/lollonet/snapMULTI/releases/latest](https://github.com/lollonet/snapMULTI/releases/latest) nel browser
 2. Sotto **Assets**, clicca **Source code (zip)** per scaricare l'ultima release
-3. Estrai lo ZIP — ottieni una cartella chiamata `snapMULTI-<versione>` (per es. `snapMULTI-0.7.4`). Il nome della cartella non è vincolante — `prepare-sd.sh` ricava la project root dalla propria posizione
+3. Estrai lo ZIP — ottieni una cartella chiamata `snapMULTI-<versione>`. Il nome della cartella non è vincolante — `prepare-sd.sh` ricava la project root dalla propria posizione
 4. Apri un terminale dentro quella cartella estratta
 
 > Preferisci lo ZIP della release taggata al pulsante verde **Code → Download ZIP** della home page del repo — quest'ultimo scarica il branch `main`, che può contenere lavori non rilasciati.
@@ -360,7 +360,7 @@ mpd                Up X minutes (healthy)
 mympd              Up X minutes (healthy)
 metadata           Up X minutes (healthy)
 ```
-Su Raspberry Pi (ARM): appare anche `tidal-connect` se hai un Pi 4/5.
+Su Raspberry Pi (ARM — Pi 3 B+ / 4 / 5): appare anche `tidal-connect` (abilitato di default sugli install ARM; rimuovi `tidal` da `COMPOSE_PROFILES` in `/opt/snapmulti/.env` per disabilitarlo).
 
 **Audio Player (opzione 1)** — output atteso:
 ```

@@ -37,7 +37,7 @@ Default applicati a ogni container in `docker-compose.yml`:
 
 **Eccezione 1 — container D-Bus / Avahi** (`snapserver`, `shairport-sync`, `librespot`): hanno bisogno di `apparmor:unconfined` per accedere al socket D-Bus dell'host per l'annuncio mDNS (Avahi) e di `cap_add: DAC_OVERRIDE` per scrivere sulle named-pipe FIFO possedute dall'utente `PUID` dell'host. AppArmor nel profilo Ubuntu default blocca la connessione D-Bus altrimenti. `mpd` monta gli stessi socket Avahi/D-Bus ma mantiene il profilo AppArmor di default — non richiede `apparmor:unconfined`. Tutto il resto resta dropped.
 
-**Eccezione 2 — `tidal-connect`** (solo ARM): gira come root perché il binario proprietario upstream lo richiede. Il profilo Compose è **opt-in** — `tidal-connect` parte solo se abiliti esplicitamente il profilo `tidal` (vedi [Nota sicurezza Tidal Connect](#nota-sicurezza-tidal-connect)).
+**Eccezione 2 — `tidal-connect`** (solo ARM): gira come root perché il binario proprietario upstream lo richiede. **Abilitato di default sugli install ARM** — `deploy.sh` scrive `COMPOSE_PROFILES=tidal` in `/opt/snapmulti/.env` quindi il profilo `tidal` è attivo subito su Pi 3/4/5. Per **disabilitarlo** (es. per uno stack completamente free-software), rimuovi `tidal` da `COMPOSE_PROFILES` in `/opt/snapmulti/.env` e fai `sudo systemctl restart snapmulti-server.service`. Vedi [Nota sicurezza Tidal Connect](#nota-sicurezza-tidal-connect) per la disclosure completa.
 
 **Threat model**: snapMULTI è progettato per una LAN fidata — server e client sulla stessa sottorete dietro un router residenziale. Fuori scope: esposizione WAN (niente autenticazione su JSON-RPC, Snapweb o myMPD), scenari multi-tenant, client malevoli sulla LAN. Se ti serve uno di questi casi, metti davanti un reverse proxy con auth e usa `bind 127.0.0.1` in `config/snapserver.conf`.
 
@@ -66,7 +66,7 @@ Spotify e Tidal usano per default `<hostname> Spotify` / `<hostname> Tidal`. Ove
 ### Nota sicurezza Tidal Connect
 
 <a id="nota-sicurezza-tidal-connect"></a>
-Tidal Connect è **opt-in** (abilita il profilo Compose `tidal`). Il container upstream è costruito su Raspbian Stretch (EOL 2019), prende i pacchetti da `archive.debian.org` con `trusted=yes`, e contiene un binario proprietario non manutenuto. Solo ARM (non esiste una build x86_64). Leggi il blocco di disclosure in `docker-compose.yml` prima di abilitarlo.
+Tidal Connect è **abilitato di default sugli install ARM** (`deploy.sh` scrive `COMPOSE_PROFILES=tidal` in `/opt/snapmulti/.env` su Pi 3/4/5). Per disabilitarlo per uno stack completamente free-software, rimuovi `tidal` da `COMPOSE_PROFILES` in `/opt/snapmulti/.env` e riavvia `snapmulti-server.service`. Il container upstream è costruito su Raspbian Stretch (EOL 2019), prende i pacchetti da `archive.debian.org` con `trusted=yes`, e contiene un binario proprietario non manutenuto. Solo ARM (non esiste una build x86_64). Leggi il blocco di disclosure in `docker-compose.yml` prima di tenerlo abilitato.
 
 ### Streaming da Android (niente cast nativo)
 
@@ -97,7 +97,7 @@ Comandi avanzati (MPD CLI, switch sorgente via JSON-RPC, `.env` personalizzato):
 
 Snapcast, AirPlay, Spotify e Tidal si annunciano sulla LAN tramite l'`avahi-daemon` **dell'host** (socket D-Bus bind-mounted nei container che lo richiedono). Requisito host: `systemctl is-active avahi-daemon` deve restituire `active`. **Non eseguire avahi-daemon dentro i container** — la porta 5353 va in conflitto con l'host.
 
-Snapcast 0.35.x esce dal suo poll loop Avahi su `AVAHI_CLIENT_FAILURE` senza retry. I systemd unit contengono `PartOf=avahi-daemon.service` quindi un riavvio dell'avahi host ricrea automaticamente gli stack Compose (~3 s di buco audio).
+Snapcast 0.35.x esce dal suo poll loop Avahi su `AVAHI_CLIENT_FAILURE` senza retry. A partire da v0.7.5 le unit systemd non usano più `PartOf=avahi-daemon.service` — quel cascade era troppo aggressivo (qualunque restart di avahi sull'host smontava l'intero stack Compose). Il recovery è ora esplicito e operator-driven: `scripts/common/system-tune.sh::tune_avahi_daemon` riavvia `avahi-daemon` e poi esplicitamente `snapmulti-server.service` + `snapclient.service` così le connessioni libavahi-client dentro snapcast vengono ristabilite. `ExecStop` di routine è `docker compose stop -t 5` (non distruttivo), così un ciclo clean start è 2–5 s invece dei 30–40 s di teardown del precedente modello `compose down`.
 
 Verifica rapida:
 

@@ -84,7 +84,7 @@ JSON for scripts / dashboards: `sudo bash /opt/snapmulti/scripts/device-smoke.sh
 
 **Try this.**
 1. On the client device: `docker exec snapclient snapclient --list` (or `snapclient --list` on the Pi Zero 2 W native install) to enumerate cards. The right card is the one matching your HAT (e.g. `sndrpihifiberry`).
-2. Set `SOUND_CARD` in `/opt/snapclient/.env` to that name, then `cd /opt/snapclient && sudo docker compose up -d` (NOT `restart` — that doesn't reload `.env`).
+2. Set `SOUNDCARD` in `/opt/snapclient/.env` to that name (no underscore — that's the exact env-var name `docker-compose.yml` reads), then `cd /opt/snapclient && sudo docker compose up -d` (NOT `restart` — that doesn't reload `.env`).
 3. Check the hardware mixer: `alsamixer -c 0`, press F6 to pick the right card, raise the master and any "Digital" / "Speaker" controls.
 4. Verify the HAT was detected: `aplay -l` should show your DAC; `dmesg | grep -i 'snd\|hifiberry\|wm8'` should show driver load messages.
 
@@ -113,7 +113,7 @@ JSON for scripts / dashboards: `sudo bash /opt/snapmulti/scripts/device-smoke.sh
 1. Confirm the container is up: `cd /opt/snapmulti && docker compose ps` — `librespot` (Spotify), `shairport-sync` (AirPlay), `tidal-connect` (Tidal, ARM only) all `healthy`.
 2. From the server: `avahi-browse -r _spotify-connect._tcp --terminate`, `avahi-browse -r _raop._tcp --terminate` (AirPlay) — must list your server.
 3. Phone and server on the same WiFi SSID? Guest networks and VLANs block discovery.
-4. Tidal Connect is **opt-in** and ARM-only — see [USAGE.md — Tidal Connect security note](USAGE.md#tidal-connect-security-note) to enable.
+4. Tidal Connect is ARM-only and **enabled by default on ARM installs**. If it doesn't appear: confirm you're on an ARM Pi (`uname -m` returns `aarch64`), check `COMPOSE_PROFILES` includes `tidal` in `/opt/snapmulti/.env`, and verify the `tidal-connect` container is `healthy`. See [USAGE.md — Tidal Connect security note](USAGE.md#tidal-connect-security-note) for the disclosure and opt-out path.
 5. Spotify Connect needs **Premium** — Free accounts don't show the device.
 
 **If still broken.** Restart the relevant container: `cd /opt/snapmulti && sudo docker compose up -d --force-recreate librespot` (or `shairport-sync` / `tidal-connect`). Then re-check `avahi-browse`. See also the "Speakers don't find the server" section above for detailed mDNS triage.
@@ -171,7 +171,7 @@ JSON for scripts / dashboards: `sudo bash /opt/snapmulti/scripts/device-smoke.sh
    sudo systemctl edit "$(systemd-escape -p --suffix=mount /media/nfs-music)"
    # then add under [Mount]: TimeoutStopSec=10s
    ```
-3. For container shutdown: snapMULTI's systemd units run `docker compose down`, which in turn signals each container and waits for the per-service stop-grace (Docker's default is 10 s unless overridden in `docker-compose.yml`). On healthy stops the whole cycle is a few seconds; on an unresponsive container, expect to wait up to the per-service Docker timeout, then up to the systemd unit's own `TimeoutStopSec` (90 s default) before systemd SIGKILLs.
+3. For container shutdown: snapMULTI's systemd units run `docker compose stop -t 5` (non-destructive — stops the processes but keeps containers + network in place, so the next start is a fast `compose up -d` rather than a recreate). On healthy stops the whole cycle is 2–5 s; on an unresponsive container, expect to wait up to the per-service Docker timeout, then up to the systemd unit's own `TimeoutStopSec` (90 s default) before systemd SIGKILLs.
 
 **If still broken.** A 60–90 second shutdown is not a bug per se — systemd's default unit timeout is 90 s. If everything still completes, ignore it. If shutdown actually never finishes, that's a hardware-level hang and a `dmesg` post-reboot will usually show the cause (USB device, SD card timeout, etc.).
 

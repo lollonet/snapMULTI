@@ -72,7 +72,7 @@ body:
     id: version
     attributes:
       label: snapMULTI version
-      placeholder: "e.g., v0.4.1 (check http://hostname.local:8083/health)"
+      placeholder: "e.g., v0.7.6 (check http://hostname.local:8083/health)"
     validations:
       required: true
 
@@ -94,5 +94,5 @@ body:
         ```
         docker compose logs --tail 50
         ```
-        Or check `/boot/firmware/diagnostics/` for saved snapshots.
+        For install-time failures, recover the diagnostic bundle from the SD card's boot partition: look for `/boot/firmware/snapmulti-diag-install-failed-*.tar.gz` (the install captured logs before reboot). Attach the tarball to this issue.
       render: shell

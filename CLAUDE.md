@@ -37,7 +37,7 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 | **Beginners** | Raspberry Pi 4 | Zero-touch SD | `prepare-sd.sh` → `firstboot.sh` → `deploy.sh`/`setup.sh` |
 | **Advanced** | Pi4 or x86_64 | Automated or Manual | `deploy.sh` (optional) |
 
-**Beginners**: No terminal required. Flash SD card on another computer, run `prepare-sd.sh` (or `prepare-sd.ps1` on Windows), choose what to install, insert in Pi, power on. HDMI shows a TUI progress display during installation (~5-10 min). The Pi becomes a dedicated audio appliance.
+**Beginners**: No Linux administration required. Flash SD card on another computer, run `prepare-sd.sh` (or `prepare-sd.ps1` on Windows), choose what to install, insert in Pi, power on. HDMI shows a TUI progress display during installation (~10-15 min). The Pi becomes a dedicated audio appliance.
 
 **Advanced**: Clone repo on any Linux host (Pi, x86_64, VM, NAS). Use `deploy.sh` for automation (hardware detection, directory setup, resource profiles) or skip it and just run `docker compose up`.
 
@@ -134,7 +134,7 @@ snapMULTI/
   Dockerfile.snapserver      # Snapserver + Snapweb (from badaix/snapcast, multi-stage)
   Dockerfile.shairport-sync  # AirPlay receiver (pipe output)
   Dockerfile.mpd             # MPD + ffmpeg (Alpine)
-  Dockerfile.metadata        # Metadata service (Python 3.13, aiohttp + websockets)
+  Dockerfile.metadata        # Metadata service (Python 3.14, aiohttp + websockets)
   Dockerfile.tidal           # Tidal Connect (extends edgecrush3r base with ALSA plugins)
   docker-compose.yml         # 7 service definitions (6 core + tidal [ARM]), host networking
   .env.example               # Environment template

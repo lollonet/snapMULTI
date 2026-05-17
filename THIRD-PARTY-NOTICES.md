@@ -57,7 +57,7 @@ recipe.
 - Note: Spotify Connect protocol is reverse-engineered; snapMULTI does not
   bundle any Spotify proprietary code
 
-### tidal-connect — Tidal Connect receiver (ARM only, opt-in)
+### tidal-connect — Tidal Connect receiver (ARM only, enabled by default on ARM installs)
 
 - Project: <https://github.com/edgecrush3r/tidal-connect-docker>
 - Upstream binary: `ifi-companion` (proprietary, distributed by upstream image)
@@ -74,12 +74,18 @@ recipe.
   it. Users pulling `lollonet/snapmulti-tidal` are receiving the same
   binary that ships in `edgecrush3r/tidal-connect:latest`, with snapMULTI's
   runtime additions on top
-- **Default profile**: Tidal is opt-in and is NOT started by the default
-  `docker compose up`. The service is gated behind the `tidal` profile
-  in `docker-compose.yml` and must be enabled explicitly
-- **For a 100 % free-software stack**: do not enable the `tidal` profile;
-  the other six containers (snapserver, mpd, shairport-sync, go-librespot,
-  metadata, mympd) ship from sources without proprietary binaries
+- **Default profile**: Tidal is **enabled by default on ARM installs**.
+  `scripts/deploy.sh` writes `COMPOSE_PROFILES=tidal` to
+  `/opt/snapmulti/.env` on Pi 3 B+ / 4 / 5, so the `tidal` profile is
+  active out of the box. The service is still gated by the Compose
+  profile, but the gate is open by default. To opt out, remove `tidal`
+  from `COMPOSE_PROFILES` in `/opt/snapmulti/.env` and restart
+  `snapmulti-server.service`
+- **For a 100 % free-software stack**: opt out of the `tidal` profile as
+  described above. The other six containers (snapserver, mpd,
+  shairport-sync, go-librespot, metadata, mympd) ship from sources
+  without proprietary binaries. A future release will track issue #432
+  ("make Tidal truly opt-in") to flip this default
 
 ## Display & visualisation
 

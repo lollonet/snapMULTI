@@ -25,9 +25,11 @@ Per un report hardware, includi: modello Pi + RAM, modello/classe SD se nota, al
 3. Testa in locale:
    ```bash
    shellcheck scripts/*.sh scripts/**/*.sh
-   bash tests/run-all-tests.sh
+   for f in tests/test_*.sh; do bash "$f" || break; done   # test shell
+   pytest tests/                                            # test Python (metadata service + plugin)
    docker compose config --quiet
    ```
+   La CI (`validate.yml` + `build-test.yml`) è la fonte di verità — i comandi locali sono best-effort.
 4. Apri una PR su `main`. CI esegue `validate.yml` (shellcheck + sintassi docker-compose) e `build-test.yml` (build Docker).
 
 ## Documentazione
