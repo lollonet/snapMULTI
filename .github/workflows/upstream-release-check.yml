@@ -169,9 +169,13 @@ jobs:
           _Auto-created by `.github/workflows/upstream-release-check.yml`. New issues are de-duplicated by title (`[upstream] __NAME__ __LATEST__`)._
           TEMPLATE
           )
-          # Substitute via the env vars (NOT via ${{ … }}) to keep
-          # untrusted-input handling consistent even though matrix
-          # values are workflow-controlled today.
+          # Substitute via env vars rather than GitHub Actions expressions
+          # to keep untrusted-input handling consistent even though matrix
+          # values are workflow-controlled today. Avoid writing the literal
+          # expression delimiters in any comment inside a run block — the
+          # parser scans run-block text for expression patterns before the
+          # shell sees it, and a non-ASCII char inside such a pattern
+          # silently invalidates the whole workflow file at registration.
           body=${body//__NAME__/${NAME}}
           body=${body//__LATEST__/${LATEST}}
           body=${body//__PINNED__/${PINNED}}
