@@ -42,6 +42,7 @@ Each topic has ONE authoritative file (full SSOT table in [CLAUDE.md](CLAUDE.md)
 | `docs/ADVANCED.md` | Operational customisation — multi-room, NAS (NFS / SMB), custom `.env`, manual deploy, read-only fs, update strategy, MPD CLI, JSON-RPC |
 | `docs/HARDWARE.md` | Supported Pi models, audio outputs, SD / network / hardware choice, Pi Zero 2 W notes |
 | `docs/USAGE.md` | Architecture reference — services, ports, audio sources, security model |
+| `docs/CLIENT-METADATA.md` | Client integration guide — Snapserver JSON-RPC + metadata-service WS/HTTP contracts, subscribe forms, artwork rules, transport control, anti-patterns (for anyone writing a UI / dashboard / external controller) |
 | `config/snapserver.conf` | Authoritative source-parameter schema (inline comments) |
 
 Italian mirrors (`*.it.md`) follow the English files 1:1 — update them in the same PR when you change English docs. Full diacritical correctness (use `à è é ì ò ù`, never the ASCII equivalents).

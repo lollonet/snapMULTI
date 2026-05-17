@@ -316,7 +316,7 @@ snapMULTI Auto-Install
 
 The Pi **reboots automatically** when installation is complete. After the reboot, the display goes dark (normal — no desktop on Lite OS).
 
-> If the HDMI stays blank throughout: the installation is still running in the background — `firstboot.sh` is a systemd service that does not need a display. Wait 10 minutes; to check progress without a screen, `ssh <username>@<hostname>.local` and run `sudo journalctl -u snapmulti-firstboot.service -f`.
+> If the HDMI stays blank throughout: the installation is still running in the background — `firstboot.sh` is a systemd service that does not need a display. **The green ACT LED on the Pi will flash irregularly throughout the 10–15 min — that's SD-card activity, your sign the install is making progress.** Wait the full window; to check progress without a screen, `ssh <username>@<hostname>.local` and run `sudo journalctl -u snapmulti-firstboot.service -f`.
 
 ---
 
