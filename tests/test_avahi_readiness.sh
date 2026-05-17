@@ -232,6 +232,20 @@ assert 'grep -qF "ip -o route show default" "$SYSTEM_TUNE_SH"' \
 assert 'grep -qF "ip -o -4 addr show scope global up" "$SYSTEM_TUNE_SH"' \
        'tune_avahi_daemon has IPv4-up physical-interface fallback'
 
+# #425 — wired-carrier priority prevents the dual-publish race during
+# the 6-sec window where wlan0 still has its DHCP address before
+# boot-tune.sh disables WiFi. When eth*/en* has carrier we restrict
+# Avahi to wired only, so the reflector never sees a transient WiFi
+# announcement that would force a <host>-2.local rename on conflict.
+assert 'grep -qF "for iface in /sys/class/net/eth* /sys/class/net/en*" "$SYSTEM_TUNE_SH"' \
+       'tune_avahi_daemon enumerates wired interfaces by /sys/class/net'
+
+assert 'grep -qF "carrier" "$SYSTEM_TUNE_SH"' \
+       'tune_avahi_daemon checks wired carrier state'
+
+assert 'grep -qF "wired_iface" "$SYSTEM_TUNE_SH"' \
+       'tune_avahi_daemon prefers wired interface when carrier is up'
+
 echo
 echo "=== firstboot.sh — Avahi retune after network ==="
 

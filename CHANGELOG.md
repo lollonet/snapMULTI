@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Avahi wired-priority defeats the `<host>-2.local` rename race (#425)** — on installs where the user configured WiFi credentials *and* Ethernet is plugged at first boot, `tune_avahi_daemon` previously enumerated both interfaces from the default route table during the 6-second window before `boot-tune.sh` disabled WiFi. Both wlan0 and eth0 momentarily published the same `<host>.local`, and LAN mDNS reflectors (e.g. FritzBox) cached the WiFi address; when eth0 then claimed the same name, Avahi negotiated a conflict and renamed to `<host>-2.local` (observed live on snapvideo 2026-05-16). `tune_avahi_daemon` now checks `/sys/class/net/eth*` and `/sys/class/net/en*` for `carrier=1` first: if a wired interface has carrier we restrict `allow-interfaces=<eth>` to wired only, so the reflector never sees a transient WiFi announcement to cache. WiFi-only devices (no wired carrier) fall through to the existing default-route + IPv4-up enumeration, unchanged. Defensive — does not change the steady-state behaviour after `boot-tune.sh` disables WiFi, but eliminates the first-boot race window. `tests/test_avahi_readiness.sh` gains 3 assertions covering the `/sys/class/net` enumeration, carrier check, and `wired_iface` precedence.
+
 ## [0.7.6] — 2026-05-16
 
 > Consolidates changes from v0.7.4 (2026-05-13) and v0.7.5 (2026-05-15) which shipped without separate CHANGELOG sections — see per-tag [GitHub Releases](https://github.com/lollonet/snapMULTI/releases) for the tag-level narrative.
