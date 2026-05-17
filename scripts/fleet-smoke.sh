@@ -273,8 +273,18 @@ if [[ "$CLIENT_ONLY" != "true" ]]; then
     ROLES+=("server")
 fi
 for c in "${CLIENTS[@]}"; do
-    # Skip the server hostname appearing in the client list (a `both`-mode
-    # device shows up as both — we keep it as "server" only).
+    # Skip the server hostname if it also appears in the client list:
+    # a `both`-mode device (server + colocated client) shows up in
+    # snapcast's client list AND is the SSH target hostname. Avoid the
+    # duplicate SSH probe — the single probe already covers BOTH sides
+    # because `device-smoke.sh` auto-detects MODE=both when /opt/snapmulti/
+    # AND /opt/snapclient/ are present (see device-smoke.sh ~line 183),
+    # and runs every server-side AND client-side check module in one
+    # pass. The "server" label in the ROLE column therefore reflects
+    # the SSH-target role, not the coverage scope; on a `both` device
+    # the smoke records JSON contains both server-side records (e.g.
+    # `snapmulti-server.service`, server compose stack) and client-side
+    # ones (e.g. `snapclient.service`, fb-display container).
     if [[ "$CLIENT_ONLY" != "true" ]]; then
         [[ "$c" == "$SERVER" || "$c" == "$SERVER_REPORTED" ]] && continue
     fi
