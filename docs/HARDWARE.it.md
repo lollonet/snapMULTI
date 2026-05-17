@@ -231,7 +231,7 @@ Configurazione del firewall (regole `ufw`) e setup QoS / `cake` qdisc sono docum
 |----------|------------|
 | `lollonet/snapmulti-server:latest` | ~80–120 MB |
 | `lollonet/snapmulti-airplay:latest` | ~30–50 MB |
-| `ghcr.io/devgianlu/go-librespot:v0.7.0` | ~30–50 MB |
+| `ghcr.io/devgianlu/go-librespot:v0.7.1` | ~30–50 MB |
 | `lollonet/snapmulti-mpd:latest` | ~50–80 MB |
 | `lollonet/snapmulti-metadata:latest` | ~60–80 MB |
 | `ghcr.io/jcorporation/mympd/mympd:latest` | ~30–50 MB |

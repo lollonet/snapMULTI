@@ -318,7 +318,7 @@ snapMULTI Auto-Install
 
 Il Pi **si riavvia automaticamente** quando l'installazione è completa. Dopo il riavvio, il display diventa scuro (normale — nessun desktop su Lite OS).
 
-> Se l'HDMI rimane nero per tutto il tempo: l'installazione continua comunque in background — `firstboot.sh` gira come servizio systemd e non ha bisogno del display. Aspetta 10 minuti; per controllare lo stato senza schermo, fai `ssh <username>@<hostname>.local` ed esegui `sudo journalctl -u snapmulti-firstboot.service -f`.
+> Se l'HDMI rimane nero per tutto il tempo: l'installazione continua comunque in background — `firstboot.sh` gira come servizio systemd e non ha bisogno del display. **Il LED verde ACT del Pi lampeggerà in modo irregolare per tutti i 10–15 minuti — è attività sulla scheda SD, il tuo segnale che l'install sta procedendo.** Aspetta tutta la finestra; per controllare lo stato senza schermo, fai `ssh <username>@<hostname>.local` ed esegui `sudo journalctl -u snapmulti-firstboot.service -f`.
 
 ---
 

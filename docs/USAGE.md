@@ -107,7 +107,7 @@ avahi-browse -r _raop._tcp --terminate
 ss -tlnp | grep -E '1704|1705|1780'
 ```
 
-When discovery fails (Spotify / AirPlay / Tidal not visible, speakers missing in Snapweb): [TROUBLESHOOTING.md — mDNS discovery](TROUBLESHOOTING.md#mdns-discovery).
+When discovery fails, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — the relevant sections are "Device doesn't show up on the network / `.local` doesn't resolve" (your Pi is invisible to clients), "Speakers don't find the server (snapclient won't connect)" (snapclient discovery), and "Spotify / AirPlay / Tidal not visible in the casting app" (source-app discovery).
 
 ## Systemd Units
 

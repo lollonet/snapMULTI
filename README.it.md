@@ -86,7 +86,7 @@ Lo script chiede: **Audio Player** (solo altoparlante) / **Music Server** (Spoti
 
 Espelli l'SD, inseriscila nel Pi, accendi. Aspetta circa 10-15 minuti. L'installer al primo boot gira senza SSH, mostra l'avanzamento su HDMI se hai uno schermo collegato. Fatto.
 
-> **Procedura dettagliata** con screenshot e troubleshooting: [docs/INSTALL.it.md](docs/INSTALL.it.md).
+> **Procedura dettagliata** con troubleshooting e percorso di recupero diagnostico: [docs/INSTALL.it.md](docs/INSTALL.it.md).
 > **Matrice di compatibilità** (modelli Pi, DAC HAT, setup di rete): [docs/HARDWARE.it.md](docs/HARDWARE.it.md).
 
 ## Dopo l'installazione
