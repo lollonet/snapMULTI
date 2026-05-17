@@ -454,26 +454,46 @@ tune_avahi_daemon() {
     # Restrict to the primary physical interface. On Ethernet+WiFi
     # devices, Avahi can otherwise publish the same hostname on the
     # transient WiFi DHCP address before WiFi exclusivity disables wlan0;
-    # macOS then keeps the stale .local address in cache.
+    # macOS and consumer mDNS reflectors (e.g. FritzBox) then keep the
+    # stale .local address in cache, which forces a hostname rename to
+    # <host>-2.local on conflict (issue #425).
+    #
+    # Wired-carrier priority: if any eth*/en* interface has carrier we
+    # restrict Avahi to wired only — this mirrors boot-tune.sh which
+    # disables WiFi when Ethernet has an IP, but takes effect during the
+    # first-boot window before boot-tune has run. WiFi-only devices (no
+    # eth carrier) fall through to the default-route enumeration.
     local ifaces=""
     local iface
-    for iface in $(ip -o route show default 2>/dev/null | awk '
-        {
-            for (i = 1; i <= NF; i++) {
-                if ($i == "dev" && $(i + 1) ~ /^(eth|wlan|en)/ && !seen[$(i + 1)]++) {
-                    print $(i + 1)
+    local wired_iface=""
+    for iface in /sys/class/net/eth* /sys/class/net/en*; do
+        [[ -e "$iface" ]] || continue
+        if [[ "$(cat "$iface/carrier" 2>/dev/null)" == "1" ]]; then
+            wired_iface="${iface##*/}"
+            break
+        fi
+    done
+    if [[ -n "$wired_iface" ]]; then
+        ifaces="$wired_iface"
+    else
+        for iface in $(ip -o route show default 2>/dev/null | awk '
+            {
+                for (i = 1; i <= NF; i++) {
+                    if ($i == "dev" && $(i + 1) ~ /^(eth|wlan|en)/ && !seen[$(i + 1)]++) {
+                        print $(i + 1)
+                    }
                 }
             }
-        }
-    '); do
-        [[ -n "$ifaces" ]] && ifaces="${ifaces},"
-        ifaces="${ifaces}${iface}"
-    done
-    if [[ -z "$ifaces" ]]; then
-        for iface in $(ip -o -4 addr show scope global up 2>/dev/null | awk '$2 ~ /^(eth|wlan|en)/ && !seen[$2]++ {print $2}'); do
+        '); do
             [[ -n "$ifaces" ]] && ifaces="${ifaces},"
             ifaces="${ifaces}${iface}"
         done
+        if [[ -z "$ifaces" ]]; then
+            for iface in $(ip -o -4 addr show scope global up 2>/dev/null | awk '$2 ~ /^(eth|wlan|en)/ && !seen[$2]++ {print $2}'); do
+                [[ -n "$ifaces" ]] && ifaces="${ifaces},"
+                ifaces="${ifaces}${iface}"
+            done
+        fi
     fi
     if [[ -n "$ifaces" ]]; then
         if ! grep -q "^allow-interfaces=${ifaces}$" "$conf"; then
