@@ -68,11 +68,14 @@ Con `git clone https://github.com/lollonet/snapMULTI.git`, oppure scarica ed est
 
 ### 3. Reinserisci l'SD ed esegui lo script di preparazione
 
-Reinserisci la SD appena flashata in modo che la partizione `bootfs` compaia sul computer, poi dall'interno della cartella snapMULTI:
+Reinserisci la SD appena flashata. Su macOS potrebbe comparire un pop-up *"Il disco inserito non è leggibile"* per la partizione Linux del Pi — clicca **Ignora**; la partizione `bootfs` viene montata comunque.
+
+Se hai scaricato lo ZIP, estrailo prima. Apri un terminale (**Terminale** su macOS/Linux, **PowerShell** su Windows), entra con `cd` nella cartella snapMULTI che hai clonato o estratto, poi esegui:
 
 ```bash
 # macOS / Linux:
 ./scripts/prepare-sd.sh
+# permission denied? esegui: bash scripts/prepare-sd.sh
 
 # Windows PowerShell:
 .\scripts\prepare-sd.ps1
@@ -84,7 +87,9 @@ Lo script ti guida con poche domande: il ruolo (**Audio Player** / **Music Serve
 
 ### 4. Avvia il Pi
 
-Espelli l'SD, inseriscila nel Pi, accendi. Aspetta circa 10-15 minuti. L'installer al primo boot gira senza SSH, mostra l'avanzamento su HDMI se hai uno schermo collegato. Fatto.
+Espelli l'SD, inseriscila nel Pi, accendi. Aspetta circa 10-15 minuti — l'installer al primo boot gira da solo (niente SSH), mostra l'avanzamento su HDMI se hai uno schermo collegato, poi si riavvia una volta.
+
+**Ha funzionato quando**: con uno schermo collegato, il display HDMI mostra la schermata "in riproduzione" di snapMULTI (copertina / spettro). In ogni caso, da un altro dispositivo apri `http://<hostname>.local:8083/status` — tutti i controlli devono essere verdi. Poi fai cast di qualcosa (vedi **Dopo l'installazione** più sotto).
 
 > **Procedura dettagliata** con troubleshooting e percorso di recupero diagnostico: [docs/INSTALL.it.md](docs/INSTALL.it.md).
 > **Matrice di compatibilità** (modelli Pi, DAC HAT, setup di rete): [docs/HARDWARE.it.md](docs/HARDWARE.it.md).
@@ -122,7 +127,9 @@ Prima di riflashare, esegui `./scripts/backup-from-sd.sh` per conservare l'indic
 
 ## Se qualcosa fallisce
 
-snapMULTI esegue l'installazione come servizio systemd e cattura tutto strada facendo. Se il primo boot si interrompe, la trap di cleanup scrive un bundle diagnostico anonimizzato sulla **partizione boot** dell'SD (FAT32, leggibile da qualsiasi computer — niente SSH necessario):
+**Installato ma non lo raggiungi?** Se il Pi ha finito ma `http://<hostname>.local:1780` non si apre: cerca l'indirizzo IP del Pi nella lista dispositivi del router e usa quello. La risoluzione `.local` (mDNS) non funziona su alcune configurazioni Windows e su Wi-Fi guest / mesh / VLAN che isolano i client — tieni il Pi e il telefono/laptop sulla stessa rete normale. Altro aiuto mDNS: [docs/TROUBLESHOOTING.it.md](docs/TROUBLESHOOTING.it.md).
+
+Se è il primo boot a interrompersi: snapMULTI esegue l'installazione come servizio systemd e cattura tutto strada facendo. La trap di cleanup scrive un bundle diagnostico anonimizzato sulla **partizione boot** dell'SD (FAT32, leggibile da qualsiasi computer — niente SSH necessario):
 
 ```
 /boot/firmware/snapmulti-diag-install-failed-<UTC-ts>.tar.gz
