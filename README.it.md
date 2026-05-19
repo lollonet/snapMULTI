@@ -7,7 +7,7 @@
 [![Docker pulls](https://img.shields.io/docker/pulls/lollonet/snapmulti-server?color=green)](https://hub.docker.com/r/lollonet/snapmulti-server)
 [![License GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-snapMULTI è pensato per chi vuole un **sistema audio multi-room open source** senza costruirsi a mano tutto lo stack Linux audio. Devi comunque flashare Raspberry Pi OS, scaricare il software (uno ZIP, oppure git se hai dimestichezza con la riga di comando) e rispondere a poche domande sulla tua configurazione; snapMULTI automatizza la parte difficile — Snapcast, Docker, routing audio, discovery dei servizi (mDNS), boot read-only e diagnostica di recupero. Fai cast da **Spotify**, **AirPlay**, **Tidal** o dalla tua libreria; tutti gli altoparlanti suonano insieme con deriva inferiore al millisecondo. Local-first: niente cloud o telemetria snapMULTI; i servizi di streaming mantengono i loro requisiti di account.
+snapMULTI è pensato per chi vuole un **sistema audio multi-room open source** senza costruirsi a mano tutto lo stack Linux audio. Devi comunque flashare Raspberry Pi OS, scaricare il software (uno ZIP, oppure git se hai dimestichezza con la riga di comando) e rispondere a poche domande sulla tua configurazione; snapMULTI automatizza la parte difficile — Snapcast, Docker, routing audio, discovery dei servizi (mDNS), boot read-only e diagnostica di recupero. Fai cast da **Spotify**, **AirPlay**, **Tidal** o dalla tua libreria; tutti gli altoparlanti suonano insieme con deriva inferiore al millisecondo. I servizi di streaming mantengono i loro requisiti di account.
 
 <p align="center">
   <img src="docs/images/display-playing.png" alt="Display HDMI snapMULTI: copertina + spettro + info brano" width="640">
