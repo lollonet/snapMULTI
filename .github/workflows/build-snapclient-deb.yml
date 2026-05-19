@@ -64,7 +64,7 @@ jobs:
 
       - name: Set up QEMU
         if: matrix.arch != 'amd64'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: ${{ matrix.arch == 'arm64' && 'linux/arm64' || 'linux/arm/v7' }}
 
