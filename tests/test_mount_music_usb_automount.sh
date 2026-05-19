@@ -2,7 +2,7 @@
 # Static + integration tests for the USB branch of mount-music.sh after
 # the systemd .automount refactor.
 #
-# WHY THIS EXISTS — observed live on cicciosrv 2026-05-15: the previous
+# WHY THIS EXISTS — observed live on pi-server 2026-05-15: the previous
 # USB branch wrote a fstab entry that the overlayroot initramfs hook
 # rewrote into a broken double-line scheme (UUID mount routed into the
 # ro lower layer + an overlay union on /media/usb-music whose lowerdir

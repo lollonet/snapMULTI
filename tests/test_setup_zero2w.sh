@@ -88,7 +88,7 @@ assert 'grep -qF "audio-hats" "$SETUP"' \
 # Subshell scope discards HAT_DETECTION_SOURCE side-effect, so the
 # downstream log reads "source: none" even on a successful detection.
 # Use tempfile capture (same pattern as setup.sh:279-285) to preserve
-# the global. Observed live on pizero before this fix.
+# the global. Observed live on pi-zero before this fix.
 assert '! grep -qE "_hat_config=\\\$\\(detect_hat" "$SETUP"' \
     "detect_hat NOT called in command substitution (would lose HAT_DETECTION_SOURCE)"
 assert 'grep -qE "mktemp.*snapclient-hat" "$SETUP"' \

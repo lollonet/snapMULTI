@@ -241,7 +241,7 @@ if _source_first_match "audio-hat-detect.sh"; then
         # `$(detect_hat)` would discard that side-effect (subshell scope),
         # so the log line below would always read "source: none" even on
         # a successful I2C / ALSA / EEPROM detection — observed live on
-        # pizero where the PCM5122 was correctly found via I2C but the
+        # pi-zero where the PCM5122 was correctly found via I2C but the
         # log claimed the source was missing. Mirror the tempfile pattern
         # already used by setup.sh:279-285 so the global survives.
         _hat_tmp=$(mktemp /tmp/snapclient-hat-XXXXX)
@@ -290,7 +290,7 @@ info "SOUNDCARD=$SOUNDCARD MIXER=$MIXER ALSA_BUFFER_TIME=$ALSA_BUFFER_TIME ALSA_
 # comments on `dtoverlay=` / `dtparam=` lines. Anything after the
 # value (`# comment ...`) is treated as part of the value, and
 # the overlay silently fails to load (only learned this the hard
-# way on pizero 2026-05-12 — no overlay = HDMI-only audio =
+# way on pi-zero 2026-05-12 — no overlay = HDMI-only audio =
 # snapclient ALSA error 524 on headless).
 if [[ -n "$HAT_OVERLAY" ]]; then
     step "Writing audio HAT overlay to /boot/firmware/config.txt"

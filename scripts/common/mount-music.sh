@@ -168,7 +168,7 @@ setup_music_source() {
             # device flicker. Cheap USB-to-SATA enclosures
             # (Inateck/JMicron 2109:0715 etc.) routinely
             # disconnect/reconnect once early in boot — observed live on
-            # cicciosrv 2026-05-15: `usb 2-2: USB disconnect` at +46.9 s,
+            # pi-server 2026-05-15: `usb 2-2: USB disconnect` at +46.9 s,
             # reconnect at +47.6 s, exactly the window
             # systemd-fstab-generator was trying the mount in.
             #

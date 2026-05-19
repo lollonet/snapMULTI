@@ -58,9 +58,9 @@ cat <<'JSON'
       "groups": [
         {
           "clients": [
-            {"connected": true, "host": {"name": "snapvideo", "ip": "127.0.0.1"}},
-            {"connected": true, "host": {"name": "pizero", "ip": "192.168.63.95"}},
-            {"connected": false, "host": {"name": "pi3hat", "ip": "192.168.63.89"}}
+            {"connected": true, "host": {"name": "pi-server", "ip": "127.0.0.1"}},
+            {"connected": true, "host": {"name": "pi-zero", "ip": "192.0.2.95"}},
+            {"connected": false, "host": {"name": "pi3-1gb", "ip": "192.0.2.89"}}
           ]
         }
       ]
@@ -117,7 +117,7 @@ snapcast_output="$(
     bash -c "section() { printf 'SECTION %s\\n' \"\$*\"; }; pass_check() { printf '[OK] %s\\n' \"\$*\"; }; fail_check() { printf '[ERROR] %s\\n' \"\$*\"; }; warn() { printf '[WARN] %s\\n' \"\$*\"; }; info() { printf '[INFO] %s\\n' \"\$*\"; }; source '$CHECK_SNAPCAST'; check_snapcast"
 )"
 assert_contains "$snapcast_output" "[OK] Snapcast: 2/3 clients connected" "offline Snapcast clients do not prevent pass"
-assert_contains "$snapcast_output" "[INFO] Disconnected Snapcast client(s): pi3hat(192.168.63.89)" "offline Snapcast clients are listed"
+assert_contains "$snapcast_output" "[INFO] Disconnected Snapcast client(s): pi3-1gb(192.0.2.89)" "offline Snapcast clients are listed"
 assert_not_contains "$snapcast_output" "[WARN] Snapcast: 2/3 clients connected" "offline Snapcast clients are not warnings"
 
 set +e

@@ -545,7 +545,7 @@ _net_check_mdns_self() {
 # claim of the hostname. Avahi resolves the apparent conflict by
 # renaming the host to `<hostname>-2`; snapcast / AirPlay / MPD then
 # publish via the -2 name and `<hostname>.local` lookups fail.
-# Observed live on snapvideo 2026-05-15 at 11:53:17.
+# Observed live on pi-server 2026-05-15 at 11:53:17.
 #
 # The non-DAD probe below sends a normal ARP request for our own IP
 # from our own MAC, then inspects replies: if any reply comes from a

@@ -298,7 +298,7 @@ Queste combinazioni hardware sono state verificate end-to-end (firstboot → smo
 | Hostname | Modello Pi | HAT Audio | Chip DAC | Modalità | Display | Sorgente Musica | Validato | Stato |
 |---|---|---|---|---|---|---|---|---|
 | pi-server | Pi 4 B (8 GB) | HiFiBerry DAC+ | PCM5122 (analogico) | both | HDMI 800×600 (display cover art) | locale | 2026-04-27 | Funzionante |
-| pi4-2gb-srv | Pi 4 B (2 GB) | HiFiBerry DAC+ Standard | PCM5122 (analogico) | both | headless | USB | 2026-04-27 | Funzionante |
+| pi4-test | Pi 4 B (2 GB) | HiFiBerry DAC+ Standard | PCM5122 (analogico) | both | headless | USB | 2026-04-27 | Funzionante |
 | pi-display | Pi 4 B (2 GB) | HiFiBerry Digi+ | WM8804 (S/PDIF) | client | HDMI verso TV LG 50" | n/d | 2026-04-27 | Funzionante |
 | pi4-2gb-cli | Pi 4 B (2 GB) | nessuno (bcm2835 onboard) | — | client | headless | n/d | 2026-04-27 | Funzionante |
 | pi3-1gb-cli | Pi 3 B+ (1 GB) | InnoMaker HIFI DAC HAT | PCM5122 (analogico) | client | headless | n/d | 2026-04-27 | Funzionante |
@@ -340,18 +340,18 @@ I limiti di memoria dei container vengono applicati automaticamente in base all'
 
 Due scenari di produzione catturati il **2026-05-13** con `docker stats --no-stream`, `free -h` e `vcgencmd measure_temp`. Pensati come limiti superiori realistici mentre il sistema sta attivamente trasmettendo, *non* come baseline a riposo.
 
-### Scenario A — `snapvideo` fan-out: 3 sorgenti → 3 gruppi di client
+### Scenario A — `pi-server` fan-out: 3 sorgenti → 3 gruppi di client
 
-`snapvideo` serve tre sorgenti audio diverse simultaneamente a tre client distinti, ognuno sul proprio gruppo Snapweb.
+`pi-server` serve tre sorgenti audio diverse simultaneamente a tre client distinti, ognuno sul proprio gruppo Snapweb.
 
 | Ruolo | Hostname | Scheda | RAM | Audio | Sorgente riprodotta |
 |-------|----------|--------|-----|-------|---------------------|
-| Server + display | `snapvideo` | Pi 4 B Rev 1.4 | 8 GB | HiFiBerry DAC+ (analogico) | — (serve tutti e 3) |
-| Client gruppo A | `pi3hat` | Pi 3 B+ Rev 1.4 | 1 GB | InnoMaker HIFI DAC HAT (PCM5122) | Libreria MPD |
-| Client gruppo B | `pizero` | Pi Zero 2 W Rev 1.0 | 512 MB | InnoMaker DAC (PCM5122), snapclient nativo | Spotify |
-| Client gruppo C | `snapdigi` | Pi 4 B Rev 1.1 | 2 GB | HDMI verso LG 50" (con display copertine) | Tidal Connect |
+| Server + display | `pi-server` | Pi 4 B Rev 1.4 | 8 GB | HiFiBerry DAC+ (analogico) | — (serve tutti e 3) |
+| Client gruppo A | `pi3-1gb` | Pi 3 B+ Rev 1.4 | 1 GB | InnoMaker HIFI DAC HAT (PCM5122) | Libreria MPD |
+| Client gruppo B | `pi-zero` | Pi Zero 2 W Rev 1.0 | 512 MB | InnoMaker DAC (PCM5122), snapclient nativo | Spotify |
+| Client gruppo C | `pi-display` | Pi 4 B Rev 1.1 | 2 GB | HDMI verso LG 50" (con display copertine) | Tidal Connect |
 
-**Carico server** (`snapvideo`, uptime 6 h, load avg `1.62`):
+**Carico server** (`pi-server`, uptime 6 h, load avg `1.62`):
 
 | Container | CPU % | RAM | Note |
 |-----------|-------|-----|------|
@@ -361,7 +361,7 @@ Due scenari di produzione catturati il **2026-05-13** con `docker stats --no-str
 | audio-visualizer | 7.53% | 54 MiB | Server-con-display |
 | librespot (Spotify) | 3.02% | 58 MiB | Il gruppo B sta facendo cast da Spotify |
 | metadata | 2.02% | 62 MiB | Serve copertina / brano in corso a client + display |
-| snapclient (loopback) | 1.65% | 18 MiB | snapvideo suona anche localmente |
+| snapclient (loopback) | 1.65% | 18 MiB | pi-server suona anche localmente |
 | tidal-connect | 1.47% | 95 MiB | Il gruppo C sta facendo cast da Tidal |
 | shairport-sync | 0.00% | 18 MiB | AirPlay a riposo (nessuno stream attivo) |
 | mympd | 0.00% | 18 MiB | Web UI a riposo |
@@ -373,15 +373,15 @@ Host: 2,8 GiB usati / 7,5 GiB totali, **4,6 GiB disponibili**. Temperatura **64,
 
 | Client | CPU % snapclient | RAM snapclient | RAM host usata / totale | Temp |
 |--------|------------------|----------------|--------------------------|------|
-| `pi3hat` (Pi 3 B+ 1 GB, headless) | 1,36% | 18 MiB | 223 / 955 MiB | 49,4 °C |
-| `pizero` (Pi Zero 2 W, install nativa) | 1,8% (processo) | 13 MiB RSS | 159 / 416 MiB | 44,0 °C |
-| `snapdigi` (Pi 4 2 GB + display HDMI 4K) | 1,80% | 9 MiB | 848 / 1,6 GiB | 59,9 °C |
+| `pi3-1gb` (Pi 3 B+ 1 GB, headless) | 1,36% | 18 MiB | 223 / 955 MiB | 49,4 °C |
+| `pi-zero` (Pi Zero 2 W, install nativa) | 1,8% (processo) | 13 MiB RSS | 159 / 416 MiB | 44,0 °C |
+| `pi-display` (Pi 4 2 GB + display HDMI 4K) | 1,80% | 9 MiB | 848 / 1,6 GiB | 59,9 °C |
 
-Su `snapdigi`, lo stack copertine aggiunge: `fb-display` **66,16% / 124 MiB** (il rendering 4K è il costo dominante) e `audio-visualizer` 8,92% / 33 MiB. snapclient di per sé resta trascurabile su ogni client.
+Su `pi-display`, lo stack copertine aggiunge: `fb-display` **66,16% / 124 MiB** (il rendering 4K è il costo dominante) e `audio-visualizer` 8,92% / 33 MiB. snapclient di per sé resta trascurabile su ogni client.
 
 > **Nota sul Pi Zero 2 W.** Esegue snapclient nativo da `.deb` (niente Docker, niente container display — vedi [Note Pi Zero 2 W](#note-pi-zero-2-w)). Il risultato è un singolo processo a 13 MiB RSS / 1,8% CPU, ed è per questo che una scheda da 512 MB lo sostiene a tempo indefinito. Lo stesso ruolo sotto Docker non starebbe in RAM.
 
-### Scenario B — `pi4hatsrvusb` both-mode single-host (solo libreria locale)
+### Scenario B — `pi4-test` both-mode single-host (solo libreria locale)
 
 Un singolo Pi che esegue server + client simultaneamente, riproducendo dalla propria libreria MPD verso il proprio snapclient. Nessun fan-out, nessun client remoto.
 
@@ -402,10 +402,10 @@ Scheda: Pi 4 B Rev 1.5 / **2 GB RAM**. Host: 798 / 1,9 GiB usati (1,1 GiB dispon
 ### Osservazioni
 
 - **Il Pi 4 8 GB regge comodamente un fan-out 3 sorgenti × 3 gruppi** anche con il display copertine lato server attivo. ~51% CPU e ~800 MiB di RAM container lasciano il resto della scheda libero per i picchi (scansioni MPD, cambi simultanei Spotify / Tidal). Il costo dominante era lo streaming dalla libreria MPD, non il fan-out di snapserver in sé.
-- **La CPU per client è dominata dallo stack display, non da `snapclient`.** Su `snapdigi`, `fb-display` a 4K HDMI prende il 66% di CPU mentre `snapclient` resta sotto il 2%. I client headless costano praticamente nulla.
+- **La CPU per client è dominata dallo stack display, non da `snapclient`.** Su `pi-display`, `fb-display` a 4K HDMI prende il 66% di CPU mentre `snapclient` resta sotto il 2%. I client headless costano praticamente nulla.
 - **L'install nativo del Pi Zero 2 W è decisamente più leggero di Docker** — 13 MiB RSS / 1,8% CPU contro ~64 MiB e l'overhead del demone Docker. È questo che rende una scheda da 512 MB usabile per snapMULTI.
 - **Un singolo Pi 4 2 GB regge comodamente la modalità both** quando non ci sono client in fan-out (Scenario B): ~18% CPU e ~390 MiB. Il modello da 2 GB ha margine evidente; 4 GB è sovradimensionato per questo caso d'uso.
-- **Le temperature sono ampiamente sotto il margine** su tutte e cinque le schede — la più calda (`snapvideo` a 64 °C) è lontana dalla soglia di throttling (80 °C). Il raffreddamento passivo è stato sufficiente.
+- **Le temperature sono ampiamente sotto il margine** su tutte e cinque le schede — la più calda (`pi-server` a 64 °C) è lontana dalla soglia di throttling (80 °C). Il raffreddamento passivo è stato sufficiente.
 
 > **Come è stato raccolto.** Su ogni dispositivo: `docker stats --no-stream` (o `ps -o pcpu,pmem,rss -C snapclient` per l'install nativa del Pi Zero 2 W), `free -h`, `vcgencmd measure_temp`. Lo smoke test (`scripts/device-smoke.sh`) era verde su ogni dispositivo prima dello snapshot. Le percentuali CPU sono campioni puntuali e variano con l'attività di riproduzione.
 

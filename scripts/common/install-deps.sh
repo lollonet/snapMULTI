@@ -130,7 +130,7 @@ install_dependencies() {
     # SysV init script that floods journald with
     # `systemd-sysv-generator: SysV service '/etc/init.d/pcp' lacks a
     # native systemd unit file` on every `systemctl daemon-reload`
-    # (observed during pizero install: 6+ events per second across the
+    # (observed during pi-zero install: 6+ events per second across the
     # 10-min apt-upgrade phase). The base `apt-get install -y` call
     # below installs the always-want packages WITH Recommends.
     local -a monitoring_pkgs=()
@@ -232,7 +232,7 @@ install_dependencies() {
 
     # Drop unused packages pulled in as Recommends earlier in the install
     # (mesa/wayland/GL libs from a previous desktop image, locales, etc.).
-    # Observed live on a fresh pizero install: 19 packages flagged by apt
+    # Observed live on a fresh pi-zero install: 19 packages flagged by apt
     # as "automatically installed and are no longer required" — all of them
     # mesa/wayland/X11 libraries irrelevant to snapMULTI's framebuffer-only
     # display path. `--purge` also removes conffiles for a cleaner appliance

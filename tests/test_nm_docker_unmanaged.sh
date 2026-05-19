@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Tests for tune_nm_docker_unmanaged() in scripts/common/system-tune.sh.
 #
-# WHY THIS EXISTS — observed live on snapvideo (both mode, 2026-05-15
+# WHY THIS EXISTS — observed live on pi-server (both mode, 2026-05-15
 # 11:53:17): a routine `arping -D` from device-smoke.sh's IP conflict
 # check triggered avahi-daemon to declare a "Host name conflict" and
-# rename the host to `snapvideo-2`. Snapcast / AirPlay / MPD then
+# rename the host to `pi-server-2`. Snapcast / AirPlay / MPD then
 # published via the -2 hostname and any client looking up
-# `snapvideo.local` failed. Root cause: NetworkManager had adopted
+# `pi-server.local` failed. Root cause: NetworkManager had adopted
 # Docker bridges (br-*, veth*, docker0) as "connected (externally)";
 # the arping DAD probe's address-state flicker on eth0 propagated as a
 # netlink address change avahi observed, and the re-announce echoed

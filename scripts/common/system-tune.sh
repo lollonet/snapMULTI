@@ -177,9 +177,9 @@ BCMEOF
 # reflash-first update policy, so swap is disabled on every install.
 #
 # Observed live:
-#   - pizero: /var/swap filled the 256 MB overlay tmpfs → reboot loop
-#   - pi3hat: rpi-resize-swap-file repeatedly tried 580 MB in tmpfs
-#   - snapvideo: rpi-resize-swap-file peaked at 4 GB while making swap
+#   - pi-zero: /var/swap filled the 256 MB overlay tmpfs → reboot loop
+#   - pi3-1gb: rpi-resize-swap-file repeatedly tried 580 MB in tmpfs
+#   - pi-server: rpi-resize-swap-file peaked at 4 GB while making swap
 #
 # Fix: disable the generator path, mask the generated/helper units, and
 # remove any pre-existing /var/swap.
@@ -189,7 +189,7 @@ tune_appliance_swap_safety() {
     # /etc/rpi/swap.conf at every boot and regenerates dev-zram0.swap
     # + the writeback timer in /run/systemd/generator/. systemctl mask
     # symlinks under /etc/systemd/system/ should outrank /run/... but
-    # were observed live on pizero to leave /dev/zram0 attached as
+    # were observed live on pi-zero to leave /dev/zram0 attached as
     # swap after reboot. Replacing /etc/rpi/swap.conf with a config
     # that has neither a [File] nor a [Zram] section makes the
     # generator emit zero swap units — the root-cause fix. systemctl
@@ -556,9 +556,9 @@ AVEOF
 # to `<hostname>-2`. Snapcast / AirPlay / MPD then publish via the -2
 # name and clients searching for `<hostname>.local` fail.
 #
-# Root-cause reproducer on snapvideo (both mode, 2026-05-15 11:53:17):
+# Root-cause reproducer on pi-server (both mode, 2026-05-15 11:53:17):
 # arping -D on eth0 → avahi "Withdrawing address record for ..." →
-# "Host name conflict, retrying with snapvideo-2". With NM excluded
+# "Host name conflict, retrying with pi-server-2". With NM excluded
 # from Docker interfaces this loop does not arm.
 #
 # Idempotent. Only acts when NetworkManager is installed.
