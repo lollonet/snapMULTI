@@ -36,8 +36,8 @@ snapMULTI è pensato per chi vuole un **sistema audio multi-room open source** s
 - **Tempo**: ~10–15 min dall'inserimento dell'SD al primo suono. Il primo boot installa via rete, poi si riavvia una volta.
 - **Livello richiesto**: devi sapere flashare un'SD con Raspberry Pi Imager, trovare il Pi tramite hostname (`.local`) o IP, e copiare un piccolo file dalla SD card se qualcosa va storto. **Non** ti serve conoscere Docker, systemd, ALSA o Snapcast — li gestisce snapMULTI.
 - **L'SD è importante**: le microSD economiche sono la prima causa di "install che si blocca". Usa una SanDisk / Samsung A1 (o migliore). Minimo 16 GB.
-- **Rete**: il 2,4 GHz funziona ma il 5 GHz o Ethernet sono più stabili. L'mDNS (`*.local`) deve attraversare la LAN (una sola sottorete, niente isolamento VLAN).
-- **I servizi di streaming hanno requisiti propri**: Spotify Connect richiede Premium. Tidal Connect è solo ARM ed è abilitato di default sugli install ARM (disabilitalo rimuovendo `tidal` da `COMPOSE_PROFILES`, vedi [nota sicurezza](docs/USAGE.it.md#nota-sicurezza-tidal-connect)). AirPlay richiede un dispositivo Apple.
+- **Rete**: il 2,4 GHz funziona ma il 5 GHz o Ethernet sono più stabili.
+- **I servizi di streaming hanno requisiti propri**: Spotify Connect richiede Premium. Tidal Connect funziona solo su ARM (l'architettura della CPU dei Raspberry Pi — quindi va su qualsiasi Pi, ma non su un server x86) ed è abilitato di default sugli install Pi (disabilitalo rimuovendo `tidal` da `COMPOSE_PROFILES`, vedi [nota sicurezza](docs/USAGE.it.md#nota-sicurezza-tidal-connect)). AirPlay richiede un dispositivo Apple.
 
 ## Configurazione consigliata per iniziare
 
@@ -48,7 +48,7 @@ Se è la tua prima installazione snapMULTI, scegli il percorso noioso: **Raspber
 - **Pi Zero 2 W** è supportato solo come Audio Player headless; non è un target server o "Server + Player".
 - **Path NAS con spazi** vengono rifiutati. Rinomina `Music Share` in `Music_Share` lato NAS.
 - **Tidal Connect** usa un componente proprietario upstream. È abilitato di default sugli install ARM; rimuovi `tidal` da `COMPOSE_PROFILES` in `/opt/snapmulti/.env` se vuoi uno stack interamente free software.
-- **Le installazioni read-only sono reflash-first**. Gli update in-place non sono il percorso utente supportato.
+- **Gli aggiornamenti sono reflash-first**. Il filesystem è read-only: aggiorni riscrivendo l'SD con una nuova release (~10 min, le impostazioni si auto-rilevano), non applicando patch a un sistema in esecuzione.
 - **La qualità hardware conta**. SD scadenti, alimentatori deboli e WiFi instabile causano la maggior parte dei fallimenti iniziali.
 
 ## Quick start
@@ -78,7 +78,7 @@ Reinserisci la SD appena flashata in modo che la partizione `bootfs` compaia sul
 .\scripts\prepare-sd.ps1
 ```
 
-Lo script chiede: **Audio Player** (solo altoparlante) / **Music Server** (Spotify+AirPlay+Tidal+libreria) / **Server + Player** (entrambi sullo stesso Pi).
+Lo script ti guida con poche domande: il ruolo (**Audio Player** / **Music Server** / **Server + Player**), la sorgente musicale (streaming / USB / NAS), l'uscita audio (auto-rilevamento o scelta dell'HAT), i dati di connessione al NAS se hai scelto una libreria di rete, e impostazioni avanzate opzionali (modalità read-only, tag immagine). I default sono sensati — puoi premere Invio sulla maggior parte.
 
 > Prima esecuzione PowerShell su Windows? `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
@@ -97,7 +97,7 @@ Sostituisci `hostname` con quello che hai impostato allo Step 1.
 |-----|---------|
 | `http://hostname.local:1780` | **Snapweb** — volume per stanza, raggruppa altoparlanti, cambia sorgente |
 | `http://hostname.local:8180` | **myMPD** — sfoglia e riproduce la libreria musicale |
-| `http://hostname.local:8083/status` | **Pagina di salute** — stato container + audio + NFS |
+| `http://hostname.local:8083/status` | **Pagina di stato** — stato container + audio + NFS |
 
 ### Cast dalle tue app
 
@@ -116,7 +116,9 @@ O su qualsiasi Linux: `sudo apt install snapclient`.
 
 ## Aggiornamento
 
-Riflasha l'SD con l'ultima release — tutta la config si auto-rileva al primo boot. Per mantenere l'indice della libreria MPD fra reflash: `./scripts/backup-from-sd.sh` prima di riflashare.
+snapMULTI si aggiorna riscrivendo l'SD, non applicando patch. Il Pi gira con un filesystem read-only (un blackout non può corromperlo), quindi non esiste un upgrade in-place: riscrivi l'ultima release sull'SD esattamente come la prima volta. Ci vogliono gli stessi ~10–15 min, e ogni impostazione (ruolo, HAT audio, path NAS, rete) si auto-rileva al primo boot, quindi non riconfiguri nulla.
+
+Prima di riflashare, esegui `./scripts/backup-from-sd.sh` per conservare l'indice della libreria MPD — altrimenti la scansione della libreria riparte da zero.
 
 ## Se qualcosa fallisce
 

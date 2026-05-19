@@ -36,8 +36,8 @@ snapMULTI is for people who want an **open-source multi-room audio system** with
 - **Time**: ~10–15 min from inserting the SD to hearing audio. First boot does the install over the network, then reboots once.
 - **Skill floor**: you should be comfortable flashing an SD with Raspberry Pi Imager, finding your Pi by hostname (`.local`) or IP, and copying a small file off the SD card if something goes wrong. You do **not** need to know Docker, systemd, ALSA, or Snapcast — snapMULTI handles them.
 - **SD card matters**: cheap microSDs are the #1 cause of "install hangs". Use a SanDisk / Samsung A1 (or better). 16 GB is the minimum.
-- **Network**: 2.4 GHz works but 5 GHz or Ethernet is more stable. mDNS (`*.local`) must traverse the LAN (single subnet, no VLAN isolation).
-- **Streaming services have their own requirements**: Spotify Connect needs Premium. Tidal Connect is ARM-only and enabled by default on ARM installs (opt-out by removing `tidal` from `COMPOSE_PROFILES`, see [security note](docs/USAGE.md#tidal-connect-security-note)). AirPlay needs an Apple device.
+- **Network**: 2.4 GHz works but 5 GHz or Ethernet is more stable.
+- **Streaming services have their own requirements**: Spotify Connect needs Premium. Tidal Connect runs only on ARM (the Raspberry Pi CPU architecture — so it works on any Pi, but not on an x86 server) and is enabled by default on Pi installs (opt-out by removing `tidal` from `COMPOSE_PROFILES`, see [security note](docs/USAGE.md#tidal-connect-security-note)). AirPlay needs an Apple device.
 
 ## Recommended first build
 
@@ -48,7 +48,7 @@ If this is your first snapMULTI install, use the boring path: **Raspberry Pi 4 (
 - **Pi Zero 2 W** is supported as a headless Audio Player only; it is not a server or "Server + Player" target.
 - **NAS share paths with spaces** are rejected. Rename `Music Share` to `Music_Share` on the NAS side.
 - **Tidal Connect** uses an upstream proprietary component. It is enabled by default on ARM installs; remove `tidal` from `COMPOSE_PROFILES` in `/opt/snapmulti/.env` if you want a fully free-software stack.
-- **Read-only installs are reflash-first**. In-place updates are intentionally not the supported user path.
+- **Updates are reflash-first**. The filesystem is read-only, so you update by re-flashing the SD with a new release (~10 min, settings auto-detect) rather than patching a running system.
 - **Hardware quality matters**. Bad SD cards, weak PSUs and flaky WiFi cause most first-install failures.
 
 ## Quick start
@@ -78,7 +78,7 @@ Re-insert the freshly-flashed SD so the `bootfs` partition appears on your compu
 .\scripts\prepare-sd.ps1
 ```
 
-The script asks: **Audio Player** (speaker only) / **Music Server** (Spotify+AirPlay+Tidal+library) / **Server + Player** (both on one Pi).
+The script walks you through a few questions: the role (**Audio Player** / **Music Server** / **Server + Player**), the music source (streaming / USB / NAS), the audio output (auto-detect or pick a HAT), the NAS connection details if you chose a network library, and optional advanced settings (read-only mode, image tag). Defaults are sane — you can press Enter through most of it.
 
 > First PowerShell run on Windows? `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
@@ -97,7 +97,7 @@ Replace `hostname` with what you set in Step 1.
 |-----|--------------|
 | `http://hostname.local:1780` | **Snapweb** — per-room volume, group speakers, switch source |
 | `http://hostname.local:8180` | **myMPD** — browse and play music library |
-| `http://hostname.local:8083/status` | **Health page** — container + audio + NFS status |
+| `http://hostname.local:8083/status` | **Status page** — container + audio + NFS status |
 
 ### Cast from your apps
 
@@ -116,7 +116,9 @@ Or any Linux box: `sudo apt install snapclient`.
 
 ## Updating
 
-Reflash the SD with the latest release — all config auto-detects on first boot. To keep your MPD music index across reflashes: `./scripts/backup-from-sd.sh` before flashing.
+snapMULTI updates by re-flashing, not by patching. The Pi runs a read-only filesystem (a power cut can't corrupt it), so there is no in-place upgrade — you write the latest release onto the SD again, exactly like the first time. It takes the same ~10–15 min, and every setting (role, audio HAT, NAS path, network) is auto-detected on first boot, so you reconfigure nothing.
+
+Before re-flashing, run `./scripts/backup-from-sd.sh` to preserve your MPD music index — otherwise the library re-scan starts from scratch.
 
 ## If something fails
 
