@@ -214,7 +214,7 @@ EOF
 # For: Pi 4 2GB, systems with 2-4GB RAM
 # Measured baseline (idle): snapserver 87M, shairport 18M, librespot 22M,
 #   mpd 90M (6k songs), mympd 8M, metadata 52M, tidal 32M
-# 2026-05-12 fleet measurements (pi4hatsrvusb, NFS library): MPD steady-state
+# 2026-05-12 fleet measurements (pi4-test, NFS library): MPD steady-state
 #   200 MB observed once cache warms → 256 MB limit → 78 % utilisation, too tight.
 #   Headroom check: 1895 MB total RAM, sum of limits previously 1120 MB +
 #   200 MB host overhead = 1320 MB worst-case; raising MPD by 128 MB still
@@ -933,7 +933,7 @@ verify_services() {
     # Verify timeout is decoupled from MPD_START_PERIOD: the healthcheck
     # (TCP ping on 6600) does not wait for library scan, but Pi 4/Zero during
     # firstboot has cold caches + post-pull I/O contention that can delay MPD's
-    # listener bind beyond 120s (observed on pi4-2gb-srv Pi 4 2GB --both:
+    # listener bind beyond 120s (observed on pi4-test Pi 4 2GB --both:
     # 130-150s needed). Floor at 180s for local mounts; honor extended
     # MPD_START_PERIOD for network mounts (NFS/SMB).
     local start_period

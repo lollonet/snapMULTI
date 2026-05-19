@@ -137,7 +137,7 @@ assert 'echo "$server_unit" | grep -qE "ExecStartPost=-"' \
        'ExecStartPost is non-fatal (leading -)'
 
 # mem_limit drift recreate guard — symmetric to snapclient.service (PR #393).
-# Live evidence on pi4hatsrvusb post-reflash: 7 server containers had
+# Live evidence on pi4-test post-reflash: 7 server containers had
 # HostConfig.Memory=0 because the first compose up ran before cgroup v2
 # was active. The guard probes snapserver and force-recreates the stack
 # when limit==0. Must be non-fatal (leading -) so a missing/transient

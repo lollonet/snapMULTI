@@ -90,7 +90,7 @@ INSTALL_DEPS="$SCRIPT_DIR/../scripts/common/install-deps.sh"
 # Verify autoremove --purge fires at the end of install_dependencies().
 # Without this, fresh Pi OS images drag in mesa/wayland/X11/GL libs as
 # Recommends from packages that get later orphaned — observed live on
-# pizero: 19 stale auto-installed packages flagged by apt.
+# pi-zero: 19 stale auto-installed packages flagged by apt.
 assert 'grep -qE "apt-get autoremove --purge -y" "$INSTALL_DEPS"' \
        'install_dependencies calls apt-get autoremove --purge -y'
 assert 'awk "/log_info .System dependencies installed.$/{end=NR} /apt-get autoremove --purge/{rm=NR} END{exit !(rm<end)}" "$INSTALL_DEPS"' \

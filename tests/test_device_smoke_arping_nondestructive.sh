@@ -84,21 +84,21 @@ def parse_foreign(output, own_mac):
 
 cases = [
     # No conflict: only our own MAC replies
-    ("Unicast reply from 192.168.63.4 [dc:a6:32:b4:c6:16] 0.745ms",
-     "dc:a6:32:b4:c6:16", None, "own MAC reply is not a conflict"),
+    ("Unicast reply from 192.0.2.4 [dc:a6:32:00:00:01] 0.745ms",
+     "dc:a6:32:00:00:01", None, "own MAC reply is not a conflict"),
     # Conflict: another host replies with different MAC
-    ("Unicast reply from 192.168.63.4 [f8:17:2d:11:22:33] 0.812ms",
-     "dc:a6:32:b4:c6:16", "f8:17:2d:11:22:33", "foreign MAC reply IS a conflict"),
+    ("Unicast reply from 192.0.2.4 [f8:17:2d:11:22:33] 0.812ms",
+     "dc:a6:32:00:00:01", "f8:17:2d:11:22:33", "foreign MAC reply IS a conflict"),
     # Mixed: our own MAC + a foreign MAC — foreign wins (real conflict)
-    ("Unicast reply from 192.168.63.4 [dc:a6:32:b4:c6:16] 0.5ms\n"
-     "Unicast reply from 192.168.63.4 [aa:bb:cc:dd:ee:ff] 0.6ms",
-     "dc:a6:32:b4:c6:16", "aa:bb:cc:dd:ee:ff", "foreign reply alongside own reply still flags conflict"),
+    ("Unicast reply from 192.0.2.4 [dc:a6:32:00:00:01] 0.5ms\n"
+     "Unicast reply from 192.0.2.4 [aa:bb:cc:dd:ee:ff] 0.6ms",
+     "dc:a6:32:00:00:01", "aa:bb:cc:dd:ee:ff", "foreign reply alongside own reply still flags conflict"),
     # Empty output (no replies): not a conflict, just inconclusive
     ("",
-     "dc:a6:32:b4:c6:16", None, "no replies is not a conflict"),
+     "dc:a6:32:00:00:01", None, "no replies is not a conflict"),
     # Case-insensitive MAC comparison
-    ("Unicast reply from 192.168.63.4 [DC:A6:32:B4:C6:16] 0.5ms",
-     "dc:a6:32:b4:c6:16", None, "case-insensitive MAC match (uppercase reply, lowercase own)"),
+    ("Unicast reply from 192.0.2.4 [DC:A6:32:00:00:01] 0.5ms",
+     "dc:a6:32:00:00:01", None, "case-insensitive MAC match (uppercase reply, lowercase own)"),
 ]
 fail = 0
 for output, own, expected, desc in cases:

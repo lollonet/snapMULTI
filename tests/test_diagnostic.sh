@@ -136,7 +136,7 @@ ssid="MyHomeWifi"
 psk="reallybadpassword"
 Authorization: Bearer fake-synthetic-bearer-not-real-token
 mac aa:bb:cc:dd:ee:ff seen
-peer 192.168.63.42 reached
+peer 192.168.1.42 reached
 nas 10.0.0.5 mounted
 docker bridge 172.17.0.1 active
 container 172.20.5.8 active
@@ -161,7 +161,7 @@ assert_contains "$scrubbed" "x.x.x.x" "RFC1918 IP redacted"
 assert_not_contains "$scrubbed" "hunter2" "raw SMB password gone"
 assert_not_contains "$scrubbed" "reallybadpassword" "raw WiFi PSK gone"
 assert_not_contains "$scrubbed" "aa:bb:cc:dd:ee:ff" "raw MAC gone"
-assert_not_contains "$scrubbed" "192.168.63.42" "raw 192.168 IP gone"
+assert_not_contains "$scrubbed" "192.168.1.42" "raw 192.168 IP gone"
 assert_not_contains "$scrubbed" "10.0.0.5" "raw 10.x IP gone"
 assert_not_contains "$scrubbed" "172.17.0.1" "raw 172.16/12 IP gone (low end)"
 assert_not_contains "$scrubbed" "172.20.5.8" "raw 172.16/12 IP gone (mid end)"
