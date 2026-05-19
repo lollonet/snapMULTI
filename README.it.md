@@ -37,6 +37,7 @@ snapMULTI è pensato per chi vuole un **sistema audio multi-room open source** s
 - **Livello richiesto**: devi sapere flashare un'SD con Raspberry Pi Imager, trovare il Pi tramite hostname (`.local`) o IP, e copiare un piccolo file dalla SD card se qualcosa va storto. **Non** ti serve conoscere Docker, systemd, ALSA o Snapcast — li gestisce snapMULTI.
 - **L'SD è importante**: le microSD economiche sono la prima causa di "install che si blocca". Usa una SanDisk / Samsung A1 (o migliore). Minimo 16 GB.
 - **Rete**: il 2,4 GHz funziona ma il 5 GHz o Ethernet sono più stabili.
+- **Privacy**: snapMULTI non fa telemetria, non ha un servizio cloud snapMULTI e non richiede account snapMULTI. Gira nella tua LAN. Installazione e aggiornamenti scaricano comunque pacchetti e immagini Docker, e le integrazioni streaming contattano i rispettivi servizi esterni (Spotify, Tidal, Apple/AirPlay, sorgenti metadati/copertine).
 - **I servizi di streaming hanno requisiti propri**: Spotify Connect richiede Premium. Tidal Connect funziona solo su ARM (l'architettura della CPU dei Raspberry Pi — quindi va su qualsiasi Pi, ma non su un server x86) ed è abilitato di default sugli install Pi (disabilitalo rimuovendo `tidal` da `COMPOSE_PROFILES`, vedi [nota sicurezza](docs/USAGE.it.md#nota-sicurezza-tidal-connect)). AirPlay richiede un dispositivo Apple.
 
 ## Configurazione consigliata per iniziare
@@ -64,7 +65,7 @@ snapMULTI dipende dai metadati cloud-init che Imager scrive quando imposti hostn
 
 ### 2. Scarica i file snapMULTI
 
-Con `git clone https://github.com/lollonet/snapMULTI.git`, oppure scarica ed estrai lo [ZIP dell'ultima release](https://github.com/lollonet/snapMULTI/releases/latest). Il nome della cartella non importa — `prepare-sd.sh` risolve da solo il proprio path.
+Per una prima installazione, scarica ed estrai lo [ZIP dell'ultima release](https://github.com/lollonet/snapMULTI/releases/latest). Usa `git clone https://github.com/lollonet/snapMULTI.git` solo se usi già Git o vuoi contribuire. Il nome della cartella non importa — `prepare-sd.sh` risolve da solo il proprio path.
 
 ### 3. Reinserisci l'SD ed esegui lo script di preparazione
 
@@ -127,15 +128,15 @@ Prima di riflashare, esegui `./scripts/backup-from-sd.sh` per conservare l'indic
 
 ## Se qualcosa fallisce
 
-**Installato ma non lo raggiungi?** Se il Pi ha finito ma `http://<hostname>.local:1780` non si apre: cerca l'indirizzo IP del Pi nella lista dispositivi del router e usa quello. La risoluzione `.local` (mDNS) non funziona su alcune configurazioni Windows e su Wi-Fi guest / mesh / VLAN che isolano i client — tieni il Pi e il telefono/laptop sulla stessa rete normale. Altro aiuto mDNS: [docs/TROUBLESHOOTING.it.md](docs/TROUBLESHOOTING.it.md).
+**Installato ma non lo raggiungi?** Se il Pi ha finito ma `http://<hostname>.local:1780` non si apre: cerca l'indirizzo IP del Pi nella lista dispositivi del router e usa quello. La risoluzione `.local` (mDNS) non funziona su alcune configurazioni Windows e su WiFi ospiti / mesh / VLAN che isolano i client — tieni il Pi e il telefono/laptop sulla stessa rete normale. Altro aiuto mDNS: [docs/TROUBLESHOOTING.it.md](docs/TROUBLESHOOTING.it.md).
 
-Se è il primo boot a interrompersi: snapMULTI esegue l'installazione come servizio systemd e cattura tutto strada facendo. La trap di cleanup scrive un bundle diagnostico anonimizzato sulla **partizione boot** dell'SD (FAT32, leggibile da qualsiasi computer — niente SSH necessario):
+Se è il primo boot a interrompersi: snapMULTI esegue l'installazione come servizio systemd e cattura tutto strada facendo. La trap di cleanup scrive un pacchetto diagnostico anonimizzato sulla **partizione boot** dell'SD (FAT32, leggibile da qualsiasi computer — niente SSH necessario):
 
 ```
 /boot/firmware/snapmulti-diag-install-failed-<UTC-ts>.tar.gz
 ```
 
-Estrai la SD, collegala al laptop, allega il bundle a una [issue GitHub](https://github.com/lollonet/snapMULTI/issues/new/choose). Il bundle è anonimizzato (niente MAC, niente IP della LAN, niente SSID, niente password, niente token API) — si può condividere pubblicamente in sicurezza. Sintomi comuni e smoke test (`scripts/device-smoke.sh`): [docs/TROUBLESHOOTING.it.md](docs/TROUBLESHOOTING.it.md).
+Estrai la SD, collegala al computer, allega il pacchetto diagnostico a una [issue GitHub](https://github.com/lollonet/snapMULTI/issues/new/choose). Il pacchetto è anonimizzato (niente MAC, niente IP della LAN, niente SSID, niente password, niente token API) — si può condividere pubblicamente in sicurezza. Sintomi comuni e test di salute (`scripts/device-smoke.sh`): [docs/TROUBLESHOOTING.it.md](docs/TROUBLESHOOTING.it.md).
 
 ## Glossario
 
@@ -150,7 +151,7 @@ Definizioni rapide dei termini che incontrerai in questo README e nella document
 | **mDNS** / `.local` | "Multicast DNS" — come i dispositivi si annunciano in LAN senza configurare IP manualmente. `pi-server.local` si risolve automaticamente sulla maggior parte delle reti |
 | **NAS** | Network-attached storage — un box separato (Synology, QNAP, custom) che ospita la libreria musicale, montato da snapMULTI via NFS o SMB |
 | **Filesystem read-only** | snapMULTI monta il root in sola lettura dopo l'install (overlayroot + fuse-overlayfs), così un blackout non può corrompere la SD. Le modifiche vengono cancellate al reboot a meno che tu non disattivi la modalità RO |
-| **Bundle diagnostico** | Tarball anonimizzato sulla partizione boot della SD (`snapmulti-diag-*.tar.gz`) — scritto automaticamente quando un'installazione fallisce, allegabile a una issue GitHub senza far trapelare segreti |
+| **Pacchetto diagnostico** | Archivio `.tar.gz` anonimizzato sulla partizione boot della SD (`snapmulti-diag-*.tar.gz`) — scritto automaticamente quando un'installazione fallisce, allegabile a una issue GitHub senza far trapelare segreti |
 
 ## Documentazione
 

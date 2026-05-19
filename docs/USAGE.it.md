@@ -39,6 +39,8 @@ Default applicati a ogni container in `docker-compose.yml`:
 
 **Eccezione 2 — `tidal-connect`** (solo ARM): gira come root perché il binario proprietario upstream lo richiede. **Abilitato di default sugli install ARM** — `deploy.sh` scrive `COMPOSE_PROFILES=tidal` in `/opt/snapmulti/.env` quindi il profilo `tidal` è attivo subito su Pi 3/4/5. Per **disabilitarlo** (es. per uno stack completamente free-software), rimuovi `tidal` da `COMPOSE_PROFILES` in `/opt/snapmulti/.env` e fai `sudo systemctl restart snapmulti-server.service`. Vedi [Nota sicurezza Tidal Connect](#nota-sicurezza-tidal-connect) per la disclosure completa.
 
+**Privacy / telemetria**: snapMULTI in sé non "chiama casa". Non esistono un servizio cloud snapMULTI, un piano di controllo ospitato, endpoint di telemetria, SDK di analisi o account snapMULTI. Le API di controllo e metadati girano sulla LAN locale. Traffico esterno esiste comunque per dipendenze e integrazioni scelte: download OS/Docker durante installazione o aggiornamento, scaricamento immagini da Docker Hub, traffico dei servizi Spotify/Tidal/AirPlay e ricerche di metadati/copertine.
+
 **Threat model**: snapMULTI è progettato per una LAN fidata — server e client sulla stessa sottorete dietro un router residenziale. Fuori scope: esposizione WAN (niente autenticazione su JSON-RPC, Snapweb o myMPD), scenari multi-tenant, client malevoli sulla LAN. Se ti serve uno di questi casi, metti davanti un reverse proxy con auth e usa `bind 127.0.0.1` in `config/snapserver.conf`.
 
 ## Sorgenti audio
@@ -73,7 +75,7 @@ Tidal Connect è **abilitato di default sugli install ARM** (`deploy.sh` scrive 
 | Metodo | App | Qualità | Setup |
 |--------|-----|---------|-------|
 | Mittente AirPlay | AirMusic, AllStream | Buona | Installa app → seleziona target AirPlay = hostname del server |
-| TCP via BubbleUPnP | BubbleUPnP + relay ffmpeg | Buona | Cattura in BubbleUPnP, rilancia con `ffmpeg ... tcp://server:4953` |
+| TCP via BubbleUPnP | BubbleUPnP + rilancio con ffmpeg | Buona | Cattura in BubbleUPnP, rilancia con `ffmpeg ... tcp://server:4953` |
 | TCP diretto | Termux + ffmpeg | Lossless | `ffmpeg -f pulse -i default -f s16le -ar 44100 -ac 2 tcp://server:4953` |
 
 ## Interfacce di controllo
@@ -134,4 +136,4 @@ docker inspect --format='{{.State.Health.Status}}' snapserver
 http://<server>:8083/status
 ```
 
-Fallimenti all'install e post-install (con la procedura del bundle diagnostico): [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md).
+Fallimenti all'install e post-install (con la procedura del pacchetto diagnostico): [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md).

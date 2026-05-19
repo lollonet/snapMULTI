@@ -22,6 +22,8 @@ sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp
 
 Same redaction rules.
 
+> **Not comfortable with terminal commands?** Stop here: attach the diagnostic bundle to a GitHub issue and describe what you saw on HDMI / LEDs / router app. The commands below are useful, but the bundle is the support-first path.
+
 ## First check — run the smoke test
 
 Before drilling into a specific symptom, run the all-in-one health check on the device:

@@ -293,7 +293,7 @@ Se un nodo è collegato a un ricevitore AV via cavo ottico, usa HiFiBerry Digi+ 
 
 ## Combinazioni Testate
 
-Queste combinazioni hardware sono state verificate end-to-end (firstboot → smoke test → playback audio) nelle date indicate. Il batch del 2026-04-27 è la validazione release-gate per v0.6.x: 6 device riflashati da `main`, smoke test PASS su ognuno, `hw_ptr` ALSA che avanza durante la riproduzione (audio che raggiunge davvero il DAC, non solo la FIFO).
+Queste combinazioni hardware sono state verificate end-to-end (firstboot → test di salute → playback audio) nelle date indicate. Il batch del 2026-04-27 è la validazione release-gate per v0.6.x: 6 device riflashati da `main`, test di salute PASS su ognuno, `hw_ptr` ALSA che avanza durante la riproduzione (audio che raggiunge davvero il DAC, non solo la FIFO).
 
 | Hostname | Modello Pi | HAT Audio | Chip DAC | Modalità | Display | Sorgente Musica | Validato | Stato |
 |---|---|---|---|---|---|---|---|---|
@@ -369,7 +369,7 @@ Due scenari di produzione catturati il **2026-05-13** con `docker stats --no-str
 
 Host: 2,8 GiB usati / 7,5 GiB totali, **4,6 GiB disponibili**. Temperatura **64,2 °C**.
 
-**Carico client** (per gruppo, tutti verdi al smoke test):
+**Carico client** (per gruppo, tutti verdi al test di salute):
 
 | Client | CPU % snapclient | RAM snapclient | RAM host usata / totale | Temp |
 |--------|------------------|----------------|--------------------------|------|
@@ -407,7 +407,7 @@ Scheda: Pi 4 B Rev 1.5 / **2 GB RAM**. Host: 798 / 1,9 GiB usati (1,1 GiB dispon
 - **Un singolo Pi 4 2 GB regge comodamente la modalità both** quando non ci sono client in fan-out (Scenario B): ~18% CPU e ~390 MiB. Il modello da 2 GB ha margine evidente; 4 GB è sovradimensionato per questo caso d'uso.
 - **Le temperature sono ampiamente sotto il margine** su tutte e cinque le schede — la più calda (`pi-server` a 64 °C) è lontana dalla soglia di throttling (80 °C). Il raffreddamento passivo è stato sufficiente.
 
-> **Come è stato raccolto.** Su ogni dispositivo: `docker stats --no-stream` (o `ps -o pcpu,pmem,rss -C snapclient` per l'install nativa del Pi Zero 2 W), `free -h`, `vcgencmd measure_temp`. Lo smoke test (`scripts/device-smoke.sh`) era verde su ogni dispositivo prima dello snapshot. Le percentuali CPU sono campioni puntuali e variano con l'attività di riproduzione.
+> **Come è stato raccolto.** Su ogni dispositivo: `docker stats --no-stream` (o `ps -o pcpu,pmem,rss -C snapclient` per l'install nativa del Pi Zero 2 W), `free -h`, `vcgencmd measure_temp`. Il test di salute (`scripts/device-smoke.sh`) era verde su ogni dispositivo prima dello snapshot. Le percentuali CPU sono campioni puntuali e variano con l'attività di riproduzione.
 
 ---
 
