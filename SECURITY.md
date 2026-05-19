@@ -35,6 +35,12 @@ snapMULTI is designed for **home/prosumer networks** behind a firewall:
 - **Secrets**: SMB credentials stored in `/etc/snapmulti-smb-credentials` (mode 600), referenced by a systemd `.mount` unit in `/etc/systemd/system/`; NFS uses host-based auth
 - **Updates**: Docker images built in CI on GitHub Actions, published multi-arch (amd64 + arm64) to Docker Hub. Image signing (cosign / sigstore) is not yet implemented — track via SECURITY advisories if integrity attestation is required for your deployment. Full upgrades use the reflash path (DEC-003)
 
+## Privacy and Telemetry
+
+snapMULTI itself does not collect telemetry and does not depend on a hosted snapMULTI cloud service or snapMULTI account. Control, status, metadata and playback APIs run on the local network.
+
+External traffic can still happen through normal dependencies and integrations: package/image downloads during install or update, Docker Hub pulls, GitHub release downloads, Spotify/Tidal/AirPlay provider traffic, and metadata/artwork lookups. Those services are outside the snapMULTI control plane.
+
 ## Known Limitations
 
 - Host networking exposes service ports to the local network (not just localhost)

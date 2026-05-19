@@ -4,7 +4,7 @@
 
 Guida per sintomi quando qualcosa di snapMULTI non funziona. Per l'installazione da zero vedi [INSTALL.it.md](INSTALL.it.md); per operazioni e personalizzazioni vedi [ADVANCED.it.md](ADVANCED.it.md).
 
-## In caso di dubbio — prendi il bundle diagnostico
+## In caso di dubbio — prendi il pacchetto diagnostico
 
 Se `firstboot.sh` si interrompe, la trap di cleanup scrive un tarball anonimizzato sulla **partizione FAT32 di boot** della SD — leggibile da qualsiasi computer senza SSH:
 
@@ -12,7 +12,7 @@ Se `firstboot.sh` si interrompe, la trap di cleanup scrive un tarball anonimizza
 /boot/firmware/snapmulti-diag-install-failed-<UTC-ts>.tar.gz
 ```
 
-Cosa contiene: l'ultima ora di log di installazione, l'output del rilevamento hardware (modello, HAT audio, rete), il nome dello step fallito, i log dei container. Il bundle è **anonimizzato** prima di finire sulla SD — niente MAC address, niente IP della LAN, niente SSID, niente password, niente token API — quindi è sicuro allegarlo a una [issue GitHub](https://github.com/lollonet/snapMULTI/issues/new/choose) pubblica. La partizione boot sopravvive all'attivazione di overlayroot e alla corruzione del rootfs; è per questo che scriviamo lì invece che in `/var/log`.
+Cosa contiene: l'ultima ora di log di installazione, l'output del rilevamento hardware (modello, HAT audio, rete), il nome dello step fallito, i log dei container. Il pacchetto è **anonimizzato** prima di finire sulla SD — niente MAC address, niente IP della LAN, niente SSID, niente password, niente token API — quindi è sicuro allegarlo a una [issue GitHub](https://github.com/lollonet/snapMULTI/issues/new/choose) pubblica. La partizione boot sopravvive all'attivazione di overlayroot e alla corruzione del rootfs; è per questo che scriviamo lì invece che in `/var/log`.
 
 Lo puoi anche generare manualmente su un device in esecuzione per supporto:
 
@@ -22,7 +22,9 @@ sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp
 
 Stesse regole di anonimizzazione.
 
-## Prima cosa da fare — esegui lo smoke test
+> **Non ti senti a tuo agio con i comandi da terminale?** Fermati qui: allega il pacchetto diagnostico a una issue GitHub e descrivi cosa hai visto su HDMI / LED / app del router. I comandi sotto sono utili, ma il pacchetto diagnostico è il percorso di supporto principale.
+
+## Prima cosa da fare — esegui il test di salute
 
 Prima di addentrarti nei singoli sintomi, esegui il controllo di salute generale sul device:
 
@@ -47,13 +49,13 @@ Output JSON per script / dashboard: `sudo bash /opt/snapmulti/scripts/device-smo
 2. Dal laptop: `ping <hostname>.local`. Se risponde, la rete è OK.
 3. Se SSH funziona: `ssh <username>@<hostname>.local`, poi `sudo journalctl -u snapmulti-firstboot.service -f` per vedere l'install in tempo reale.
 
-**Se è ancora bloccato.** Estrai la SD e cerca `snapmulti-diag-install-failed-*.tar.gz` sulla partizione boot — significa che l'install si è arreso. Allegalo a una issue GitHub. Se nessun bundle esiste e il Pi è completamente irraggiungibile dopo 20 minuti, la SD è la causa più comune (usa SanDisk / Samsung A1 o migliore — vedi [HARDWARE.it.md](HARDWARE.it.md#se-non-sai-cosa-comprareusare)).
+**Se è ancora bloccato.** Estrai la SD e cerca `snapmulti-diag-install-failed-*.tar.gz` sulla partizione boot — significa che l'install si è arreso. Allegalo a una issue GitHub. Se non esiste nessun pacchetto diagnostico e il Pi è completamente irraggiungibile dopo 20 minuti, la SD è la causa più comune (usa SanDisk / Samsung A1 o migliore — vedi [HARDWARE.it.md](HARDWARE.it.md#se-non-sai-cosa-comprareusare)).
 
 ## Il device non compare in rete / `.local` non risolve
 
 **Sintomi.** `ping <hostname>.local` non risponde. Il Pi non appare mai nella lista client DHCP del router.
 
-**Causa probabile.** Mismatch nella configurazione WiFi di Imager (country code sbagliato, SSID 5 GHz su una scheda solo 2,4 GHz, canale DFS che il Pi non riesce a usare al primo boot), oppure il telefono / laptop è su una rete diversa dal Pi (WiFi guest, VLAN separata), oppure il router non relay'a l'mDNS.
+**Causa probabile.** Disallineamento nella configurazione WiFi di Imager (paese sbagliato, SSID 5 GHz su una scheda solo 2,4 GHz, canale DFS che il Pi non riesce a usare al primo boot), oppure il telefono / laptop è su una rete diversa dal Pi (WiFi ospiti, VLAN separata), oppure il router non inoltra l'mDNS.
 
 **Cosa provare.**
 1. Usa l'IP direttamente. Lo trovi nella lista client DHCP del router, o collega l'HDMI: il Pi stampa l'IP sulla console dopo il boot.
@@ -88,7 +90,7 @@ Output JSON per script / dashboard: `sudo bash /opt/snapmulti/scripts/device-smo
 3. Controlla il mixer hardware: `alsamixer -c 0`, F6 per scegliere la card, alza il master e tutti i controlli "Digital" / "Speaker".
 4. Verifica che l'HAT sia rilevato: `aplay -l` deve mostrare il tuo DAC; `dmesg | grep -i 'snd\|hifiberry\|wm8'` deve mostrare il caricamento del driver.
 
-**Se è ancora bloccato.** Esegui lo smoke test (ha un check `audio_modules` che segnala mismatch fra moduli kernel e HAT). Se `config.txt` non ha `dtoverlay=hifiberry-*` ecc., rilancia `setup.sh` e conferma che il rilevamento HAT scelga il modello giusto — le schede senza EEPROM richiedono una scelta manuale.
+**Se è ancora bloccato.** Esegui il test di salute (ha un controllo `audio_modules` che segnala disallineamenti fra moduli kernel e HAT). Se `config.txt` non ha `dtoverlay=hifiberry-*` ecc., rilancia `setup.sh` e conferma che il rilevamento HAT scelga il modello giusto — le schede senza EEPROM richiedono una scelta manuale.
 
 ## Gli speaker non trovano il server (snapclient non si connette)
 
@@ -101,7 +103,7 @@ Output JSON per script / dashboard: `sudo bash /opt/snapmulti/scripts/device-smo
 2. Sul client: `avahi-browse -r _snapcast._tcp --terminate` — deve elencare il server. Se non lo fa, l'mDNS non attraversa la rete.
 3. Come workaround, imposta un server statico nel `.env` del client: `SNAPSERVER_HOST=<server-ip>` e `cd /opt/snapclient && sudo docker compose up -d`.
 
-**Se è ancora bloccato.** La causa più comune è un router che non inoltra l'mDNS tra SSID / VLAN (mesh router e funzioni "guest network" sono tipiche). Metti server e client sullo stesso SSID, oppure installa un mDNS repeater sul router (DD-WRT, OpenWrt, UniFi lo supportano tutti).
+**Se è ancora bloccato.** La causa più comune è un router che non inoltra l'mDNS tra SSID / VLAN (mesh router e rete ospiti sono tipici). Metti server e client sullo stesso SSID, oppure installa un ripetitore mDNS sul router (DD-WRT, OpenWrt, UniFi lo supportano tutti).
 
 ## Spotify / AirPlay / Tidal non visibili nell'app di cast
 
@@ -112,7 +114,7 @@ Output JSON per script / dashboard: `sudo bash /opt/snapmulti/scripts/device-smo
 **Cosa provare.**
 1. Conferma che il container sia up: `cd /opt/snapmulti && docker compose ps` — `librespot` (Spotify), `shairport-sync` (AirPlay), `tidal-connect` (Tidal, solo ARM) tutti `healthy`.
 2. Dal server: `avahi-browse -r _spotify-connect._tcp --terminate`, `avahi-browse -r _raop._tcp --terminate` (AirPlay) — deve elencare il server.
-3. Telefono e server sullo stesso SSID WiFi? Le reti guest e le VLAN bloccano il discovery.
+3. Telefono e server sullo stesso SSID WiFi? Le reti ospiti e le VLAN bloccano il rilevamento automatico.
 4. Tidal Connect è solo ARM ed è **abilitato di default sugli install ARM**. Se non appare: conferma che il Pi sia ARM (`uname -m` restituisce `aarch64`), controlla che `COMPOSE_PROFILES` contenga `tidal` in `/opt/snapmulti/.env` e verifica che il container `tidal-connect` sia `healthy`. Vedi [USAGE.it.md — Nota sicurezza Tidal Connect](USAGE.it.md#nota-sicurezza-tidal-connect) per la disclosure e il path di disabilitazione.
 5. Spotify Connect richiede **Premium** — gli account Free non mostrano il device.
 
@@ -213,11 +215,11 @@ cat /var/log/snapmulti-install.log
 http://<server>:8083/status
 ```
 
-Per un bundle portabile e anonimizzato da allegare a una bug report: `sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp`.
+Per creare un pacchetto diagnostico portabile e anonimizzato da allegare a una segnalazione bug: `sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp`.
 
 ## Ancora bloccato?
 
 - Problema specifico del Pi → [HARDWARE.it.md](HARDWARE.it.md)
 - Personalizzazione / operazioni → [ADVANCED.it.md](ADVANCED.it.md)
 - Architettura / domande a livello servizio → [USAGE.it.md](USAGE.it.md)
-- Bug o comportamento poco chiaro → [apri una issue GitHub](https://github.com/lollonet/snapMULTI/issues/new/choose) e allega il bundle diagnostico.
+- Bug o comportamento poco chiaro → [apri una issue GitHub](https://github.com/lollonet/snapMULTI/issues/new/choose) e allega il pacchetto diagnostico.

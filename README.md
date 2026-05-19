@@ -37,6 +37,7 @@ snapMULTI is for people who want an **open-source multi-room audio system** with
 - **Skill floor**: you should be comfortable flashing an SD with Raspberry Pi Imager, finding your Pi by hostname (`.local`) or IP, and copying a small file off the SD card if something goes wrong. You do **not** need to know Docker, systemd, ALSA, or Snapcast — snapMULTI handles them.
 - **SD card matters**: cheap microSDs are the #1 cause of "install hangs". Use a SanDisk / Samsung A1 (or better). 16 GB is the minimum.
 - **Network**: 2.4 GHz works but 5 GHz or Ethernet is more stable.
+- **Privacy**: snapMULTI has no telemetry, no hosted snapMULTI cloud, and no account system. It runs on your LAN. Install/update steps still download packages and Docker images, and streaming integrations contact their own providers (Spotify, Tidal, Apple/AirPlay, metadata/artwork sources).
 - **Streaming services have their own requirements**: Spotify Connect needs Premium. Tidal Connect runs only on ARM (the Raspberry Pi CPU architecture — so it works on any Pi, but not on an x86 server) and is enabled by default on Pi installs (opt-out by removing `tidal` from `COMPOSE_PROFILES`, see [security note](docs/USAGE.md#tidal-connect-security-note)). AirPlay needs an Apple device.
 
 ## Recommended first build
@@ -64,7 +65,7 @@ snapMULTI relies on the cloud-init metadata that Imager writes when you set host
 
 ### 2. Get the snapMULTI files
 
-Either `git clone https://github.com/lollonet/snapMULTI.git`, or download and extract the [latest release ZIP](https://github.com/lollonet/snapMULTI/releases/latest). The folder name does not matter — `prepare-sd.sh` resolves its own path.
+For a first install, download and extract the [latest release ZIP](https://github.com/lollonet/snapMULTI/releases/latest). Use `git clone https://github.com/lollonet/snapMULTI.git` only if you already use Git or plan to contribute. The folder name does not matter — `prepare-sd.sh` resolves its own path.
 
 ### 3. Re-insert the SD and run the prep script
 

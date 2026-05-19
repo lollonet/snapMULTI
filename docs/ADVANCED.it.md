@@ -148,7 +148,7 @@ Ispeziona con `systemctl cat <unit>`. I file di unit sono installati da `firstbo
 
 Riflashare per primo è il default del progetto (DEC-003). Tutta la config si auto-rileva al primo boot — stesso hostname / stessa sorgente musica / stesso HAT.
 
-Dopo ogni reflash o aggiornamento in-place, esegui lo smoke test sul device per confermare che la piattaforma sia tornata sana: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server` (oppure `--client` / `--both`). È lo stesso release gate (ADR-005) che `fleet-smoke.sh` esegue su più device. Descrizione completa in [TROUBLESHOOTING.it.md — Prima cosa da fare](TROUBLESHOOTING.it.md#prima-cosa-da-fare--esegui-lo-smoke-test).
+Dopo ogni reflash o aggiornamento in-place, esegui il test di salute sul device per confermare che la piattaforma sia tornata sana: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server` (oppure `--client` / `--both`). È lo stesso release gate (ADR-005) che `fleet-smoke.sh` esegue su più device. Descrizione completa in [TROUBLESHOOTING.it.md — Prima cosa da fare](TROUBLESHOOTING.it.md#prima-cosa-da-fare--esegui-il-test-di-salute).
 
 ## Profili risorse
 

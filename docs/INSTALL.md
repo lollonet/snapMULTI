@@ -105,18 +105,16 @@ lsblk -o NAME,LABEL,MOUNTPOINT | grep bootfs
 
 ## Step 3 — Get the snapMULTI files
 
-Pick one of the two options. Both produce a folder named `snapMULTI/` that the next step expects.
+Pick one of the two options. If you are not a developer, use **Option A — Download the ZIP**.
 
 ### Option A — Download the ZIP (no Git required)
 
 1. Open [https://github.com/lollonet/snapMULTI/releases/latest](https://github.com/lollonet/snapMULTI/releases/latest) in your browser
 2. Under **Assets**, click **Source code (zip)** to download the latest release
 3. Extract the ZIP — you get a folder named `snapMULTI-<version>`. The folder name doesn't matter — `prepare-sd.sh` finds its project root via its own location
-4. Open a terminal inside that extracted folder
+4. Keep the folder open — the next section shows how to open a terminal there
 
 > Prefer the tagged release ZIP over the green **Code → Download ZIP** button on the repo home page — the latter ships the `main` branch, which may include unreleased work-in-progress.
->
-> Run `./scripts/prepare-sd.sh` from inside the project folder. The folder name does not matter — `prepare-sd.sh` resolves its own path. Alternatively, from the parent folder, use `./<folder-name>/scripts/prepare-sd.sh`.
 
 ### Option B — Clone with Git (recommended for updates)
 
@@ -142,6 +140,18 @@ cd snapMULTI
 ```
 
 > The repository includes both server and client software in a single monorepo.
+
+### Open a terminal in the snapMULTI folder
+
+You need the terminal only to run the SD preparation script.
+
+| OS | Easiest way |
+|----|-------------|
+| macOS | Open the extracted folder in Finder, then drag the folder into a Terminal window after typing `cd ` |
+| Windows | Open the extracted folder in File Explorer, right-click empty space, choose **Open in Terminal** |
+| Linux | Open the folder in your file manager, right-click empty space, choose **Open in Terminal** |
+
+You are in the right place if `ls scripts` (macOS/Linux) or `dir scripts` (Windows) shows `prepare-sd.sh` / `prepare-sd.ps1`.
 
 ---
 
@@ -272,6 +282,8 @@ If you pick **3**, a sub-menu asks for the output:
 | **3 — Network share** | You'll be asked for server hostname/IP and share path. NFS for Linux/Mac/NAS; SMB for Windows shares. Credentials are stored on the SD card temporarily and removed after first boot |
 | **4 — Set up later** | Skips music config. Add your library to `/opt/snapmulti/.env` after install (see [ADVANCED.md — Music library on the network](ADVANCED.md#music-library-on-the-network)) |
 
+> **First install?** Choose **1 — Streaming only** unless you already know your NAS protocol, hostname/IP, share name and credentials. You can add a NAS later after one clean boot.
+
 If you choose **Network share**, you'll then enter:
 - **NFS:** server hostname or IP (e.g. `nas.local`) and export path (e.g. `/volume1/music`)
 - **SMB:** server hostname or IP, share name (e.g. `Music`), and optional username/password
@@ -297,7 +309,7 @@ You should see **"All checks passed."** and **"SD card ready!"** at the end.
 1. **Remove the SD card** from your computer
 2. Insert it into the Pi
 3. Connect power
-4. **Wait ~5–10 minutes** — the Pi installs Docker, pulls images, and starts all services
+4. **Wait ~10–15 minutes** — the Pi installs Docker, pulls images, starts all services, verifies them, then reboots once
 
 ### What you'll see on HDMI
 
@@ -324,6 +336,16 @@ The Pi **reboots automatically** when installation is complete. After the reboot
 
 > **Hostname placeholder.** From here on, `<hostname>.local` means the hostname you set in Imager at Step 1c. If you set `myradio`, use `myradio.local` everywhere `<hostname>.local` appears below.
 
+### Beginner check — open the status page
+
+From another computer or phone on the same network, open:
+
+```
+http://<hostname>.local:8083/status
+```
+
+If the page opens and every check is green, the platform is healthy. If it does not open, try the same URL with the Pi's IP address instead of `<hostname>.local`.
+
 ### Find the Pi on your network
 
 From your computer, ping the Pi using its hostname:
@@ -340,9 +362,9 @@ ssh <username>@<hostname>.local
 
 > **Windows users:** Use Windows Terminal, PowerShell, or [PuTTY](https://putty.org) with `<hostname>.local` as the host.
 
-> **If `.local` doesn't resolve:** Use the IP address instead. Find it in your router's DHCP client list, or check the HDMI output after reboot — the Pi prints its IP on the console.
+> **If `.local` doesn't resolve:** Use the IP address instead. Find it in your router or mesh-WiFi app under connected devices / DHCP clients, or check the HDMI output after reboot — the Pi prints its IP on the console.
 
-### Check running containers
+### Advanced check — running containers
 
 ```bash
 sudo docker ps --format 'table {{.Names}}\t{{.Status}}'

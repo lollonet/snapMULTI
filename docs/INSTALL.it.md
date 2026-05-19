@@ -19,7 +19,7 @@ Hai già dimestichezza con Raspberry Pi Imager e terminale? Questa è tutta l'in
 7. Espelli la SD, avvia il Pi e attendi circa 10-15 minuti. Installa, verifica e poi riavvia una volta.
 8. Apri `http://<hostname>.local:1780` per Snapweb oppure `http://<hostname>.local:8180` per myMPD.
 
-Se un passaggio non è chiaro, continua con la procedura dettagliata qui sotto. Se il primo boot fallisce, recupera il bundle diagnostico dalla SD come descritto in [TROUBLESHOOTING.it.md — In caso di dubbio](TROUBLESHOOTING.it.md#in-caso-di-dubbio--prendi-il-bundle-diagnostico).
+Se un passaggio non è chiaro, continua con la procedura dettagliata qui sotto. Se il primo boot fallisce, recupera il pacchetto diagnostico dalla SD come descritto in [TROUBLESHOOTING.it.md — In caso di dubbio](TROUBLESHOOTING.it.md#in-caso-di-dubbio--prendi-il-pacchetto-diagnostico).
 
 ---
 
@@ -105,18 +105,16 @@ lsblk -o NAME,LABEL,MOUNTPOINT | grep bootfs
 
 ## Passo 3 — Scaricare i file snapMULTI
 
-Scegli una delle due opzioni. Entrambe producono una cartella `snapMULTI/` che il passo successivo si aspetta.
+Scegli una delle due opzioni. Se non sei sviluppatore, usa **Opzione A — Scaricare lo ZIP**.
 
 ### Opzione A — Scaricare lo ZIP (senza Git)
 
 1. Apri [https://github.com/lollonet/snapMULTI/releases/latest](https://github.com/lollonet/snapMULTI/releases/latest) nel browser
 2. Sotto **Assets**, clicca **Source code (zip)** per scaricare l'ultima release
 3. Estrai lo ZIP — ottieni una cartella chiamata `snapMULTI-<versione>`. Il nome della cartella non è vincolante — `prepare-sd.sh` ricava la project root dalla propria posizione
-4. Apri un terminale dentro quella cartella estratta
+4. Tieni aperta la cartella — la sezione successiva mostra come aprire un terminale lì
 
 > Preferisci lo ZIP della release taggata al pulsante verde **Code → Download ZIP** della home page del repo — quest'ultimo scarica il branch `main`, che può contenere lavori non rilasciati.
->
-> Esegui `./scripts/prepare-sd.sh` dall'interno della cartella del progetto. Il nome della cartella non importa — `prepare-sd.sh` risolve da solo il proprio path. In alternativa, dalla cartella superiore, usa `./<nome-cartella>/scripts/prepare-sd.sh`.
 
 ### Opzione B — Clone con Git (consigliato se vuoi aggiornare)
 
@@ -142,6 +140,18 @@ cd snapMULTI
 ```
 
 > Il repository include sia il software server che client in un unico monorepo.
+
+### Aprire un terminale nella cartella snapMULTI
+
+Ti serve il terminale solo per eseguire lo script di preparazione della SD.
+
+| OS | Metodo più semplice |
+|----|---------------------|
+| macOS | Apri la cartella estratta nel Finder, poi trascina la cartella dentro una finestra Terminale dopo aver scritto `cd ` |
+| Windows | Apri la cartella estratta in Esplora file, clic destro su uno spazio vuoto, scegli **Apri nel Terminale** |
+| Linux | Apri la cartella nel file manager, clic destro su uno spazio vuoto, scegli **Apri nel Terminale** |
+
+Sei nel posto giusto se `ls scripts` (macOS/Linux) o `dir scripts` (Windows) mostra `prepare-sd.sh` / `prepare-sd.ps1`.
 
 ---
 
@@ -274,6 +284,8 @@ Se scegli **3**, un sotto-menu ti chiede l'uscita:
 | **3 — Condivisione di rete** | Ti verranno chiesti hostname/IP del server e percorso di condivisione. NFS per Linux/Mac/NAS; SMB per condivisioni Windows. Le credenziali sono memorizzate sulla scheda SD temporaneamente e rimosse dopo il primo avvio |
 | **4 — Configurare dopo** | Salta la configurazione musicale. Aggiungi la tua libreria a `/opt/snapmulti/.env` dopo l'installazione (vedi [ADVANCED.it.md — Libreria musicale in rete](ADVANCED.it.md#libreria-musicale-in-rete)) |
 
+> **Prima installazione?** Scegli **1 — Solo streaming** a meno che tu conosca già protocollo NAS, hostname/IP, nome condivisione e credenziali. Puoi aggiungere un NAS dopo un primo boot pulito.
+
 Se scegli **Condivisione di rete**, dovrai quindi inserire:
 - **NFS:** hostname o IP del server (es. `nas.local`) e percorso di export (es. `/volume1/music`)
 - **SMB:** hostname o IP del server, nome condivisione (es. `Music`) e username/password opzionali
@@ -299,7 +311,7 @@ Dovresti vedere **"All checks passed."** e **"SD card ready!"** alla fine.
 1. **Rimuovi la scheda SD** dal tuo computer
 2. Inseriscila nel Pi
 3. Collega l'alimentazione
-4. **Aspetta ~5–10 minuti** — il Pi installa Docker, scarica le immagini e avvia tutti i servizi
+4. **Aspetta ~10–15 minuti** — il Pi installa Docker, scarica le immagini, avvia tutti i servizi, li verifica e poi riavvia una volta
 
 ### Cosa vedrai sull'HDMI
 
@@ -326,6 +338,16 @@ Il Pi **si riavvia automaticamente** quando l'installazione è completa. Dopo il
 
 > **Placeholder hostname.** Da qui in avanti, `<hostname>.local` significa l'hostname che hai impostato in Imager al Passo 1c. Se hai impostato `myradio`, usa `myradio.local` ovunque appaia `<hostname>.local` qui sotto.
 
+### Controllo per principianti — aprire la pagina di stato
+
+Da un altro computer o telefono sulla stessa rete, apri:
+
+```
+http://<hostname>.local:8083/status
+```
+
+Se la pagina si apre e tutti i controlli sono verdi, la piattaforma è sana. Se non si apre, prova lo stesso URL usando l'indirizzo IP del Pi al posto di `<hostname>.local`.
+
 ### Trovare il Pi sulla tua rete
 
 Dal tuo computer, fai ping al Pi usando il suo hostname:
@@ -342,9 +364,9 @@ ssh <username>@<hostname>.local
 
 > **Utenti Windows:** Usa Windows Terminal, PowerShell o [PuTTY](https://putty.org) con `<hostname>.local` come host.
 
-> **Se `.local` non si risolve:** Usa l'indirizzo IP invece. Trovalo nella lista client DHCP del tuo router, o controlla l'output HDMI dopo il riavvio — il Pi stampa il suo IP sulla console.
+> **Se `.local` non si risolve:** Usa l'indirizzo IP invece. Trovalo nell'app del router o del mesh WiFi sotto dispositivi connessi / client DHCP, oppure controlla l'output HDMI dopo il riavvio — il Pi stampa il suo IP sulla console.
 
-### Controllare i container in esecuzione
+### Controllo avanzato — container in esecuzione
 
 ```bash
 sudo docker ps --format 'table {{.Names}}\t{{.Status}}'

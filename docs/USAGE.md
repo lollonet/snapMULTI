@@ -39,6 +39,8 @@ Defaults applied to every container in `docker-compose.yml`:
 
 **Exception 2 — `tidal-connect`** (ARM only): runs as root because the proprietary upstream binary needs it. **Enabled by default on ARM installs** — `deploy.sh` writes `COMPOSE_PROFILES=tidal` into `/opt/snapmulti/.env` so the `tidal` profile is active out of the box on Pi 3/4/5. To **opt out** (e.g. for a fully free-software stack), remove `tidal` from `COMPOSE_PROFILES` in `/opt/snapmulti/.env` and run `sudo systemctl restart snapmulti-server.service`. See [Tidal Connect security note](#tidal-connect-security-note) for the full disclosure.
 
+**Privacy / telemetry**: snapMULTI itself does not phone home. There is no snapMULTI cloud service, hosted control plane, telemetry endpoint, analytics SDK, or snapMULTI account. Runtime control and metadata APIs are local LAN services. External network traffic still exists for normal dependencies and chosen integrations: OS/Docker downloads during install/update, Docker Hub image pulls, Spotify/Tidal/AirPlay provider traffic, and metadata/artwork lookups.
+
 **Threat model**: snapMULTI is designed for a trusted LAN — server and clients on the same subnet behind a residential router. Out-of-scope: WAN exposure (no authentication on JSON-RPC, Snapweb or myMPD), multi-tenant scenarios, malicious clients on the LAN. If you need any of those, put a reverse proxy with auth in front and use `bind 127.0.0.1` in `config/snapserver.conf`.
 
 ## Audio Sources
