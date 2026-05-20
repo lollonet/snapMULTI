@@ -882,6 +882,26 @@ if [[ -f "$CMDLINE" ]]; then
         fi
     done
     unset _swap_unit SWAP_MASK_UNITS
+
+    # Mask non-swap units that we know we never want active. Cmdline
+    # masks survive overlayroot upper-layer wipes (a systemctl mask
+    # written into /etc/systemd/system/ after overlayroot activates
+    # would be lost on every reboot). Parsed by PID 1 before any unit
+    # starts.
+    BOOT_MASK_UNITS=(
+        # NetworkManager-wait-online stalls up to 75s when Imager-staged
+        # WiFi credentials don't authenticate (profile in need-auth, no
+        # secret agent). snapMULTI doesn't need wait-online: NFS uses
+        # lazy automount, containers self-retry.
+        NetworkManager-wait-online.service
+    )
+    for _boot_mask_unit in "${BOOT_MASK_UNITS[@]}"; do
+        if ! ( cmdline_path() { printf '%s\n' "$CMDLINE"; }
+               cmdline_add_token "systemd.mask=${_boot_mask_unit}" ); then
+            echo "  WARNING: Failed to mask ${_boot_mask_unit} in cmdline.txt"
+        fi
+    done
+    unset _boot_mask_unit BOOT_MASK_UNITS
 fi
 
 # ── Patch boot scripts ────────────────────────────────────────────
