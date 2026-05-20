@@ -173,7 +173,35 @@ log "Collecting snapMULTI diagnostics (reason=$REASON, out=$BUNDLE_PATH)"
                           || grep -m1 '^INSTALL_TYPE=' /boot/firmware/snapmulti/install.conf 2>/dev/null \
                           || grep -m1 '^INSTALL_TYPE=' /boot/snapmulti/install.conf 2>/dev/null \
                           || echo unknown)"
+    # Release identity (manifest-aware). Reads SNAPMULTI_RELEASE /
+    # SNAPMULTI_IMAGE_SET from the .env file that deploy.sh writes;
+    # falls through to the manifest at the boot-partition staging
+    # path; finally "unknown" so the diagnostic bundle has consistent
+    # shape across all installs (legacy + new).
+    echo "snapmulti_release=$(grep -m1 '^SNAPMULTI_RELEASE=' /opt/snapmulti/.env 2>/dev/null \
+                              || grep -m1 '^SNAPMULTI_RELEASE=' /opt/snapclient/.env 2>/dev/null \
+                              || echo unknown)"
+    echo "snapmulti_image_set=$(grep -m1 '^SNAPMULTI_IMAGE_SET=' /opt/snapmulti/.env 2>/dev/null \
+                                 || grep -m1 '^SNAPMULTI_IMAGE_SET=' /opt/snapclient/.env 2>/dev/null \
+                                 || echo unknown)"
 } > "$STAGE_DIR/meta.txt"
+
+# release-manifest.json from the boot partition (no secrets, no
+# scrubbing needed — but pass through anonymise for consistency with
+# install.conf handling). Pinned to the SD-staged copy because that's
+# the artefact that drove this install.
+for candidate in /boot/firmware/snapmulti/release-manifest.json \
+                 /boot/snapmulti/release-manifest.json \
+                 /opt/snapmulti/release-manifest.json \
+                 /opt/snapclient/release-manifest.json; do
+    if [[ -f "$candidate" ]]; then
+        {
+            echo "# Source: $candidate"
+            anonymise < "$candidate"
+        } > "$STAGE_DIR/release-manifest.json"
+        break
+    fi
+done
 
 # install.conf copy (scrubbed). Look in all canonical locations.
 for candidate in /boot/firmware/snapmulti/install.conf \

@@ -28,6 +28,28 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
 $ClientDir = Join-Path $ProjectDir 'client'
 
+# ── Read release manifest ─────────────────────────────────────────
+# Resolved from $ScriptDir (script-anchored) so the manifest is found
+# regardless of the cwd the operator invoked us from. Missing manifest
+# falls back to empty strings + the legacy 'latest' IMAGE_TAG default.
+$ManifestPath = Join-Path $ProjectDir 'release-manifest.json'
+$ManifestRelease = ''
+$ManifestImageSet = ''
+if (Test-Path $ManifestPath) {
+    try {
+        $manifest = Get-Content -Raw -Path $ManifestPath | ConvertFrom-Json
+        if ($manifest.PSObject.Properties.Name -contains 'snapmulti_release') {
+            $ManifestRelease = [string]$manifest.snapmulti_release
+        }
+        if ($manifest.PSObject.Properties.Name -contains 'image_set') {
+            $ManifestImageSet = [string]$manifest.image_set
+        }
+    } catch {
+        Write-Warning "release-manifest.json parse failed: $_ — falling back to 'latest'"
+    }
+}
+$DefaultImageTag = if ($ManifestImageSet) { $ManifestImageSet } else { 'latest' }
+
 # ── Auto-detect boot partition ────────────────────────────────────
 function Find-BootPartition {
     # Look for a volume labeled "bootfs"
@@ -101,6 +123,7 @@ function Assert-PreparedSdCard {
     $requiredBase = @(
         'install.conf',
         'firstboot.sh',
+        'release-manifest.json',
         'common/progress.sh',
         'common/logging.sh',
         'common/unified-log.sh',
@@ -111,7 +134,8 @@ function Assert-PreparedSdCard {
         'common/setup-docker.sh',
         'common/wait-network.sh',
         'common/mount-music.sh',
-        'common/systemd-snippets.sh'
+        'common/systemd-snippets.sh',
+        'common/release-manifest.sh'
     )
     foreach ($file in $requiredBase) {
         $path = Join-Path $Dest $file
@@ -830,13 +854,16 @@ SMB_SHARE=$SmbShare
 # Audio output (client/both only — server installs ignore these)
 AUDIO_HAT=$AudioHat
 AUDIO_INTERNAL_OUTPUT=$AudioInternalOutput
+# Release identity (machine-readable, consumed by firstboot + deploy + smoke)
+SNAPMULTI_RELEASE=$ManifestRelease
+SNAPMULTI_IMAGE_SET=$ManifestImageSet
 # Advanced options
 # (PowerShell prep currently uses defaults — the bash side has an
 # interactive Advanced menu that lets the user toggle these. Parity
 # work tracked in #322 follow-up.)
 ENABLE_READONLY=true
 SKIP_UPGRADE=false
-IMAGE_TAG=latest
+IMAGE_TAG=$DefaultImageTag
 VERBOSE_INSTALL=false
 TEST_TONE=true
 SMB_USER=$SmbUser
@@ -847,6 +874,14 @@ SMB_PASS=$SmbPass
 # Always: firstboot + common
 Copy-Item (Join-Path $ScriptDir 'firstboot.sh') -Destination $Dest
 Copy-Item (Join-Path $ScriptDir 'common') -Destination $Dest -Recurse
+
+# Stage release-manifest.json next to install.conf so firstboot can read
+# it via "$SNAP_BOOT/release-manifest.json". Guarded copy so the script
+# tolerates a custom-built tree without the manifest (parser already
+# returns empty in that case).
+if (Test-Path $ManifestPath) {
+    Copy-Item $ManifestPath -Destination $Dest
+}
 
 # Mode-specific files
 switch ($InstallType) {

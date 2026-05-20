@@ -112,11 +112,48 @@ if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     _rc() { grep -m1 "^$1=" "$SNAP_BOOT/install.conf" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true; }
     local_val=$(_rc ENABLE_READONLY); [[ -n "$local_val" ]] && ENABLE_READONLY="$local_val"
     local_val=$(_rc SKIP_UPGRADE);    [[ -n "$local_val" ]] && SKIP_UPGRADE="$local_val"
-    local_val=$(_rc IMAGE_TAG);       [[ -n "$local_val" ]] && IMAGE_TAG="$local_val"
     local_val=$(_rc VERBOSE_INSTALL); [[ -n "$local_val" ]] && VERBOSE_INSTALL="$local_val"
     unset -f _rc
     unset local_val
 fi
+
+# ── Release identity (manifest + install.conf precedence chains) ───
+# Precedence — see scripts/common/release-manifest.sh header for the
+# formal chain definition:
+#   (A) IMAGE_TAG           = install.conf IMAGE_TAG
+#                           > install.conf SNAPMULTI_IMAGE_SET
+#                           > manifest image_set > 'latest'
+#   (B) SNAPMULTI_RELEASE   = install.conf SNAPMULTI_RELEASE
+#                           > manifest snapmulti_release > ''
+#   (C) SNAPMULTI_IMAGE_SET = install.conf SNAPMULTI_IMAGE_SET
+#                           > manifest image_set > ''
+#
+# Guarded source: a custom-built SD without the helper falls through to
+# the legacy IMAGE_TAG path (install.conf > 'latest'), exactly today's
+# behaviour. The inline fallback covers test rigs that stage firstboot
+# without the common/ tree.
+SNAPMULTI_RELEASE=""
+SNAPMULTI_IMAGE_SET=""
+if [[ -f "$SNAP_BOOT/common/release-manifest.sh" ]]; then
+    # shellcheck source=common/release-manifest.sh
+    source "$SNAP_BOOT/common/release-manifest.sh"
+    parse_release_manifest "$SNAP_BOOT/release-manifest.json"
+    _explicit_release=$(read_install_conf_key "$SNAP_BOOT/install.conf" SNAPMULTI_RELEASE)
+    _explicit_image_set=$(read_install_conf_key "$SNAP_BOOT/install.conf" SNAPMULTI_IMAGE_SET)
+    _explicit_image_tag=$(read_install_conf_key "$SNAP_BOOT/install.conf" IMAGE_TAG)
+    SNAPMULTI_RELEASE="${_explicit_release:-$MANIFEST_RELEASE}"
+    SNAPMULTI_IMAGE_SET="${_explicit_image_set:-$MANIFEST_IMAGE_SET}"
+    IMAGE_TAG=$(derive_image_tag "$_explicit_image_tag" "$SNAPMULTI_IMAGE_SET")
+    unset _explicit_release _explicit_image_set _explicit_image_tag
+else
+    # Inline fallback — legacy IMAGE_TAG path only.
+    if [[ -f "$SNAP_BOOT/install.conf" ]]; then
+        _legacy=$(grep -m1 '^IMAGE_TAG=' "$SNAP_BOOT/install.conf" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true)
+        [[ -n "$_legacy" ]] && IMAGE_TAG="$_legacy"
+        unset _legacy
+    fi
+fi
+export SNAPMULTI_RELEASE SNAPMULTI_IMAGE_SET IMAGE_TAG
 
 # Install directories
 SERVER_DIR="/opt/snapmulti"

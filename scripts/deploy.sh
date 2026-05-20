@@ -36,6 +36,23 @@ source "$SCRIPT_DIR/common/resource-detect.sh"
 source "$SCRIPT_DIR/common/pull-images.sh"
 # shellcheck source=common/systemd-snippets.sh
 source "$SCRIPT_DIR/common/systemd-snippets.sh"
+# Guarded source: custom-built trees without the helper fall through to
+# the legacy IMAGE_TAG-only path. Inline `derive_image_tag` fallback
+# below preserves today's behaviour when the file is absent.
+if [[ -f "$SCRIPT_DIR/common/release-manifest.sh" ]]; then
+    # shellcheck source=common/release-manifest.sh
+    source "$SCRIPT_DIR/common/release-manifest.sh"
+else
+    # Minimal inline shim — only derive_image_tag is consumed below.
+    derive_image_tag() {
+        local e="${1:-}" f="${2:-}"
+        e="${e#"${e%%[![:space:]]*}"}"; e="${e%"${e##*[![:space:]]}"}"
+        f="${f#"${f%%[![:space:]]*}"}"; f="${f%"${f##*[![:space:]]}"}"
+        if [[ -n "$e" ]]; then printf '%s\n' "$e"
+        elif [[ -n "$f" ]]; then printf '%s\n' "$f"
+        else printf 'latest\n'; fi
+    }
+fi
 
 # Global: set by preflight_checks based on architecture
 IS_ARM=false
@@ -756,14 +773,41 @@ EOF
         info "Tidal Connect skipped (ARM-only, current arch: $(uname -m))"
     fi
 
-    # Persist IMAGE_TAG (covers both new and existing .env)
-    if [[ "${IMAGE_TAG:-latest}" != "latest" ]]; then
-        if grep -q '^IMAGE_TAG=' "$ENV_FILE" 2>/dev/null; then
-            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$IMAGE_TAG/" "$ENV_FILE"
+    # Persist release identity (SNAPMULTI_RELEASE + SNAPMULTI_IMAGE_SET
+    # + IMAGE_TAG). Values come from firstboot via env vars — deploy
+    # does NOT re-read install.conf or the manifest (firstboot is
+    # authoritative for the precedence chain). The IMAGE_TAG line is
+    # always written via derive_image_tag so a stale value in an
+    # existing .env is overwritten coherently instead of being trusted
+    # as input to the chain.
+    local _release="${SNAPMULTI_RELEASE:-}"
+    local _image_set="${SNAPMULTI_IMAGE_SET:-}"
+    local _coherent_tag
+    _coherent_tag=$(derive_image_tag "${IMAGE_TAG:-}" "$_image_set")
+
+    persist_env_kv() {
+        local key="$1" value="$2"
+        if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+            sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
         else
-            printf '\n# Docker image tag (non-default, set by --dev or advanced options)\nIMAGE_TAG=%s\n' "$IMAGE_TAG" >> "$ENV_FILE"
+            printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
         fi
-        info "IMAGE_TAG=$IMAGE_TAG"
+    }
+
+    # SNAPMULTI_RELEASE / SNAPMULTI_IMAGE_SET always persisted so smoke
+    # and diagnostic surface the live release identity; empty values are
+    # still written (downstream readers treat empty as "unknown").
+    persist_env_kv "SNAPMULTI_RELEASE" "$_release"
+    persist_env_kv "SNAPMULTI_IMAGE_SET" "$_image_set"
+
+    # IMAGE_TAG only persisted when non-default (preserves the existing
+    # "latest is the implicit default in docker-compose.yml" pattern).
+    if [[ "$_coherent_tag" != "latest" ]]; then
+        persist_env_kv "IMAGE_TAG" "$_coherent_tag"
+        info "IMAGE_TAG=$_coherent_tag"
+    fi
+    if [[ -n "$_release" || -n "$_image_set" ]]; then
+        info "Release $_release (images $_image_set)"
     fi
 }
 

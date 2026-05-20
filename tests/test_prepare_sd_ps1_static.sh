@@ -50,6 +50,26 @@ assert_contains "$content" "SKIP_UPGRADE=" "install.conf carries SKIP_UPGRADE"
 assert_contains "$content" "IMAGE_TAG=" "install.conf carries IMAGE_TAG"
 assert_contains "$content" "VERBOSE_INSTALL=" "install.conf carries VERBOSE_INSTALL"
 
+# Release-manifest wiring (#433). Path resolution MUST use script-anchored
+# variables ($ProjectDir / $ScriptDir), never $PWD or bare relative paths,
+# so a user running the script from a different cwd still finds the file.
+assert_contains "$content" "Join-Path \$ProjectDir 'release-manifest.json'" \
+    "release-manifest.json path resolved via \$ProjectDir (script-anchored)"
+assert_contains "$content" "Get-Content -Raw -Path \$ManifestPath" \
+    "release-manifest.json read with Get-Content -Raw"
+assert_contains "$content" "ConvertFrom-Json" \
+    "release-manifest.json parsed via ConvertFrom-Json"
+assert_contains "$content" "SNAPMULTI_RELEASE=\$ManifestRelease" \
+    "install.conf emits SNAPMULTI_RELEASE from manifest"
+assert_contains "$content" "SNAPMULTI_IMAGE_SET=\$ManifestImageSet" \
+    "install.conf emits SNAPMULTI_IMAGE_SET from manifest"
+assert_contains "$content" "Copy-Item \$ManifestPath -Destination \$Dest" \
+    "release-manifest.json staged to SD destination"
+assert_contains "$content" "'release-manifest.json'" \
+    "release-manifest.json appears in verifyrequiredBase list"
+assert_contains "$content" "'common/release-manifest.sh'" \
+    "common/release-manifest.sh appears in verifyrequiredBase list"
+
 echo ""
 if [[ "$fail" -gt 0 ]]; then
     echo "FAILED: $fail tests failed, $pass passed"

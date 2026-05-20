@@ -23,6 +23,14 @@ source "$SCRIPT_DIR/common/sanitize.sh"
 # shellcheck source=common/cmdline-manager.sh
 source "$SCRIPT_DIR/common/cmdline-manager.sh"
 
+# shellcheck source=common/release-manifest.sh
+source "$SCRIPT_DIR/common/release-manifest.sh"
+# Populate MANIFEST_* globals so the advanced-menu default + install.conf
+# writer can pin to the manifest's image_set. Returns 0 always (set -e
+# safe) — missing manifest yields empty fields and the existing 'latest'
+# fallback path is preserved.
+parse_release_manifest "$PROJECT_DIR/release-manifest.json"
+
 # ── Preflight: check client directory ─────────────────────────────
 check_client_dir() {
     if [[ ! -d "$CLIENT_DIR/common/scripts" ]]; then
@@ -311,7 +319,10 @@ get_internal_output() {
 # Defaults (production)
 ADV_READONLY="true"
 ADV_SKIP_UPGRADE="false"
-ADV_IMAGE_TAG="latest"
+# Image tag default follows the release manifest (image_set field) so a
+# fresh SD card pins to the shipped images. Fallback 'latest' preserves
+# the legacy behaviour when the manifest is missing.
+ADV_IMAGE_TAG="${MANIFEST_IMAGE_SET:-latest}"
 ADV_VERBOSE_INSTALL="false"
 
 show_advanced_menu() {
@@ -741,6 +752,14 @@ SMB_SHARE=$SMB_SHARE
 #   jack → bind to "Headphones" card (Pi 3/4 only — Pi 5 falls back to HDMI)
 AUDIO_HAT=$AUDIO_HAT
 AUDIO_INTERNAL_OUTPUT=$AUDIO_INTERNAL_OUTPUT
+# Release identity (machine-readable, consumed by firstboot + deploy + smoke)
+#   SNAPMULTI_RELEASE  — git tag of the release this SD was prepared from
+#   SNAPMULTI_IMAGE_SET — Docker image tag (image_set in release-manifest.json)
+#   IMAGE_TAG          — operator override, takes precedence over the
+#                         manifest image_set (see precedence chain (A) in
+#                         scripts/common/release-manifest.sh)
+SNAPMULTI_RELEASE=$MANIFEST_RELEASE
+SNAPMULTI_IMAGE_SET=$MANIFEST_IMAGE_SET
 # Advanced options
 ENABLE_READONLY=$ADV_READONLY
 SKIP_UPGRADE=$ADV_SKIP_UPGRADE
@@ -755,6 +774,14 @@ printf 'SMB_PASS=%s\n' "$SMB_PASS" >> "$DEST/install.conf"
 
 cp "$SCRIPT_DIR/firstboot.sh" "$DEST/"
 cp -r "$SCRIPT_DIR/common" "$DEST/"
+
+# Stage release-manifest.json next to install.conf so firstboot can read
+# it via "$SNAP_BOOT/release-manifest.json". Guarded copy so set -e
+# tolerates the manifest being absent in a custom-built staging tree
+# (the parser already returns empty in that case).
+if [[ -f "$PROJECT_DIR/release-manifest.json" ]]; then
+    cp "$PROJECT_DIR/release-manifest.json" "$DEST/"
+fi
 
 # Mode-specific files
 case "$INSTALL_TYPE" in
@@ -955,7 +982,7 @@ VERIFY_ERRORS=0
 # -- snapMULTI files --
 echo ""
 echo "--- snapMULTI files ---"
-for f in install.conf firstboot.sh common/progress.sh common/logging.sh common/unified-log.sh common/sanitize.sh common/system-tune.sh common/install-docker.sh common/install-deps.sh common/setup-docker.sh common/wait-network.sh common/mount-music.sh common/systemd-snippets.sh; do
+for f in install.conf firstboot.sh release-manifest.json common/progress.sh common/logging.sh common/unified-log.sh common/sanitize.sh common/system-tune.sh common/install-docker.sh common/install-deps.sh common/setup-docker.sh common/wait-network.sh common/mount-music.sh common/systemd-snippets.sh common/release-manifest.sh; do
     if [[ -f "$DEST/$f" ]]; then
         echo "  [OK] snapmulti/$f"
     else
@@ -1023,6 +1050,8 @@ esac
 
 echo "  install.conf -> INSTALL_TYPE=$(grep '^INSTALL_TYPE=' "$DEST/install.conf" | cut -d= -f2)"
 echo "  install.conf -> MUSIC_SOURCE=$(grep '^MUSIC_SOURCE=' "$DEST/install.conf" | cut -d= -f2)"
+echo "  install.conf -> SNAPMULTI_RELEASE=$(grep '^SNAPMULTI_RELEASE=' "$DEST/install.conf" | cut -d= -f2)"
+echo "  install.conf -> SNAPMULTI_IMAGE_SET=$(grep '^SNAPMULTI_IMAGE_SET=' "$DEST/install.conf" | cut -d= -f2)"
 echo "  install.conf -> ENABLE_READONLY=$(grep '^ENABLE_READONLY=' "$DEST/install.conf" | cut -d= -f2)"
 echo "  install.conf -> SKIP_UPGRADE=$(grep '^SKIP_UPGRADE=' "$DEST/install.conf" | cut -d= -f2)"
 echo "  install.conf -> IMAGE_TAG=$(grep '^IMAGE_TAG=' "$DEST/install.conf" | cut -d= -f2)"
