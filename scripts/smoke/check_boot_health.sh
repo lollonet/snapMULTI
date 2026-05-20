@@ -90,6 +90,8 @@ check_boot_health() {
         # (/var/cache/man/pt_BR/<PID>) races with fuse-overlayfs file
         # ops. Not snapMULTI-related and we don't ship man pages anyway.
         "man-db.service"
+        # Imager-staged WiFi creds can stall NM in need-auth → 75s timeout
+        "NetworkManager-wait-online.service"
     )
 
     local sys_state

@@ -767,5 +767,9 @@ DEOF
     systemctl daemon-reload
     systemctl enable snapmulti-boot-tune.service 2>/dev/null
     systemctl enable snapmulti-docker-driver.service 2>/dev/null || true
+
+    # 75s boot stall risk when Imager-staged WiFi creds fail to auth
+    systemctl mask NetworkManager-wait-online.service 2>/dev/null || true
+
     ok "Boot tuning service installed (CPU, USB, CAKE persist across reboots)"
 }
