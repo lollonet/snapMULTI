@@ -179,3 +179,19 @@ ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian 
 - **CI gates**: shellcheck on all `scripts/**/*.sh`, docker-compose syntax, server+client bash tests
 - **Debian support**: bookworm (primary) + trixie (Docker repo falls back to bookworm)
 - **Console display**: ASCII-only for `/dev/tty1` output — PSF fonts lack Unicode symbols (✓▶○⠋). Use `[x]`/`[>]`/`[ ]` and `|/-\` spinner
+
+## Non-goals
+
+Explicitly out of scope — refuse scope-creep PRs that propose any of these without first opening an architectural discussion:
+
+- **Custom Linux distribution.** Use Debian bookworm + cloud-init. No Buildroot, no Yocto, no custom OS.
+- **Custom PCB / proprietary hardware.** Pi 3/4/5 + commodity HATs only.
+- **Vendor cloud / hosted services.** No snapMULTI account system, telemetry endpoint, or hosted control plane. Everything runs on the user's LAN.
+- **Unified UI replacing snapweb + myMPD + metadata-service.** The project federates existing tools; building a new web app is years of work with dubious ROI.
+- **AI / voice assistants / DSP / spatial audio / room correction.** Audio enhancement belongs in the amp or a dedicated DSP upstream of snapMULTI.
+- **Marketplace plugin system for sources.** Sources are pinned in `config/snapserver.conf` + `docker-compose.yml`. Adding a source is a deliberate architectural change, not user-configurable.
+- **Multi-site / fleet enterprise orchestration.** snapMULTI is per-LAN. Multi-site = different product.
+- **First-class support for boards outside Pi 3/4/5.** Rock 5 / Banana Pi M5 / x86 server are best-effort on the manual deploy path only — never wired into `prepare-sd.sh` or guaranteed by smoke gate.
+- **Commercial support / SLA / paid licenses / CLA.** Project is GPL-3.0 community-maintained. No commercial offering, no contributor license agreement.
+
+When a contributor proposes one of these, point to this section and ask for the underlying problem — there is usually a less-invasive way to solve it within scope.

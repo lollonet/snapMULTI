@@ -62,3 +62,17 @@ Italian mirrors (`*.it.md`) follow the English files 1:1 — update them in the 
 ## License
 
 By contributing, you agree your contributions are licensed under `GPL-3.0-only` (see [LICENSE](LICENSE)).
+
+## Governance
+
+snapMULTI is currently maintained by a single principal maintainer (architectural decisions, code review, releases). PRs from external contributors go through CI gates (shellcheck, smoke gate per ADR-005, automated review) and a human review before merge. Dependabot PRs are admin-squash-merged after diff + release-notes review.
+
+The project is intentionally appliance-shaped — see the `## Non-goals` section in [CLAUDE.md](CLAUDE.md) for what we will NOT accept as scope. A "no" to a feature is not personal; it usually means the change belongs in a separate layer (the amp, Home Assistant, a custom snapclient deployment) rather than in snapMULTI itself.
+
+### Path to co-maintainership
+
+Open to consideration after a contributor demonstrates sustained engagement: several substantive PRs landed, active participation in issue triage, and a working understanding of the reflash-first update model (DEC-003) + smoke gate (ADR-005). Not an automatism — the principal maintainer decides. If you're interested, start by tackling open issues labelled `help wanted`.
+
+### Exit strategy
+
+If the principal maintainer steps away, the project is designed to be auto-verifiable so a successor can continue without tribal knowledge: `device-smoke.sh` + `fleet-smoke.sh` + `release-manifest.json` + the bilingual documentation + the test suite collectively let a new contributor detect breakages and confirm a deploy is healthy. The fork path is technically open. Continuity is not guaranteed but the foundation exists.

@@ -61,6 +61,16 @@ Defaults applied to every container in `docker-compose.yml`:
 
 Source-specific params (FIFO path, controlscript, sample format) live inline in `config/snapserver.conf` — that file is the authoritative reference.
 
+### Source support tiers
+
+snapMULTI does not promise the same level of long-term support for every source. Read this before you build a workflow that depends on one.
+
+| Source | Tier | Note |
+|--------|------|------|
+| Snapcast, MPD, AirPlay (shairport-sync), TCP-Input | First-class | Open-source dependencies, snapMULTI's long-term commitment to keep working |
+| Spotify Connect | Best-effort | Requires Premium. Depends on reverse-engineered `go-librespot` upstream; historical crashes tracked per release |
+| Tidal Connect | Best-effort, sunset expected | Proprietary `ifi-companion` binary on EOL Raspbian Stretch base image. Bookworm migration verified infeasible (2026-05-06). Will be removed when the upstream container breaks. **Do not build workflows that depend on Tidal long-term.** |
+
 ### Customising device names
 
 Spotify and Tidal default to `<hostname> Spotify` / `<hostname> Tidal`. Override via `SPOTIFY_NAME` / `TIDAL_NAME` in `.env` — see [ADVANCED.md — Custom config](ADVANCED.md#custom-config--env-files).

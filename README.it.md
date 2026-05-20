@@ -21,6 +21,16 @@ snapMULTI è pensato per chi vuole un **sistema audio multi-room open source** s
 >
 > Esempi di setup completi e combinazioni testate: [docs/HARDWARE.it.md#configurazioni-consigliate](docs/HARDWARE.it.md#configurazioni-consigliate).
 
+## Per chi è snapMULTI
+
+| Pubblico | Adatto? | Cosa promettiamo |
+|----------|---------|------------------|
+| **Maker / self-hosted / Home Assistant** | Primario | Controllo locale, hardware economico, integrazione col resto del tuo stack self-hosted. A tuo agio con flash SD + terminale. |
+| **Audio enthusiast Linux-friendly** | Secondario | Un sistema multi-room che non dipende da un'app vendor. Adatto se già usi MPD / Snapcast e vuoi orchestrare meglio. |
+| **Piccoli ambienti professionali** (coworking, B&B, studi) | Opportunistico, non target | Realistico solo se hai un tecnico interno o un integratore — snapMULTI non fornisce SLA né supporto commerciale. |
+
+snapMULTI non è "Sonos open-source". È un'appliance mantenuta dalla community per chi vuole il controllo completo del proprio audio locale.
+
 ## Scegli il tuo setup
 
 | La tua situazione | Cosa installare su ogni Pi | Note |
