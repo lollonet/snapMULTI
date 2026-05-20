@@ -178,12 +178,19 @@ log "Collecting snapMULTI diagnostics (reason=$REASON, out=$BUNDLE_PATH)"
     # falls through to the manifest at the boot-partition staging
     # path; finally "unknown" so the diagnostic bundle has consistent
     # shape across all installs (legacy + new).
-    echo "snapmulti_release=$(grep -m1 '^SNAPMULTI_RELEASE=' /opt/snapmulti/.env 2>/dev/null \
-                              || grep -m1 '^SNAPMULTI_RELEASE=' /opt/snapclient/.env 2>/dev/null \
-                              || echo unknown)"
-    echo "snapmulti_image_set=$(grep -m1 '^SNAPMULTI_IMAGE_SET=' /opt/snapmulti/.env 2>/dev/null \
-                                 || grep -m1 '^SNAPMULTI_IMAGE_SET=' /opt/snapclient/.env 2>/dev/null \
-                                 || echo unknown)"
+    # `cut -d= -f2-` strips the `KEY=` prefix so meta.txt emits
+    # `snapmulti_release=v0.7.7` (not the double-prefixed
+    # `snapmulti_release=SNAPMULTI_RELEASE=v0.7.7` form). Mirrors the
+    # pattern already used by scripts/smoke/check_system.sh for the
+    # same .env keys. Fixes claude-review MEDIUM finding on PR #447.
+    echo "snapmulti_release=$( \
+        (grep -m1 '^SNAPMULTI_RELEASE=' /opt/snapmulti/.env  2>/dev/null | cut -d= -f2-) \
+        || (grep -m1 '^SNAPMULTI_RELEASE=' /opt/snapclient/.env 2>/dev/null | cut -d= -f2-) \
+        || echo unknown)"
+    echo "snapmulti_image_set=$( \
+        (grep -m1 '^SNAPMULTI_IMAGE_SET=' /opt/snapmulti/.env  2>/dev/null | cut -d= -f2-) \
+        || (grep -m1 '^SNAPMULTI_IMAGE_SET=' /opt/snapclient/.env 2>/dev/null | cut -d= -f2-) \
+        || echo unknown)"
 } > "$STAGE_DIR/meta.txt"
 
 # release-manifest.json from the boot partition (no secrets, no

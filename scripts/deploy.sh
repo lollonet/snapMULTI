@@ -785,10 +785,22 @@ EOF
     local _coherent_tag
     _coherent_tag=$(derive_image_tag "${IMAGE_TAG:-}" "$_image_set")
 
+    # awk-based replacement avoids sed metacharacter issues with values
+    # containing `|`, `\`, or `&` (latent bug pre-fix in claude-review
+    # LOW finding on PR #447). awk treats k and v as plain strings; the
+    # temp-file + mv is also atomic, so a kernel panic mid-write cannot
+    # leave a truncated .env. In production these values are version
+    # strings (`v0.7.7`, `dev`, `0.7.7`) — the fix is preventive, not
+    # responding to a live incident.
     persist_env_kv() {
         local key="$1" value="$2"
         if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
-            sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+            awk -v k="$key" -v v="$value" '
+                BEGIN { pat = "^" k "=" }
+                $0 ~ pat { print k "=" v; next }
+                { print }
+            ' "$ENV_FILE" > "${ENV_FILE}.tmp" \
+                && mv -- "${ENV_FILE}.tmp" "$ENV_FILE"
         else
             printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
         fi
