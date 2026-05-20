@@ -84,8 +84,7 @@ recipe.
 - **For a 100 % free-software stack**: opt out of the `tidal` profile as
   described above. The other six containers (snapserver, mpd,
   shairport-sync, go-librespot, metadata, mympd) ship from sources
-  without proprietary binaries. A future release will track issue #432
-  ("make Tidal truly opt-in") to flip this default
+  without proprietary binaries
 
 ## Display & visualisation
 
