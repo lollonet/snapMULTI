@@ -15,11 +15,11 @@ snapMULTI è pensato per chi vuole un **sistema audio multi-room open source** s
 
 > **Uscita audio.** snapMULTI manda un segnale di linea dal Pi — non amplifica. Serve uno di:
 > - una **cassa attiva** (amplificatore integrato, es. Edifier R1280T, Audioengine A2+),
-> - un **HAT con amplificatore integrato** (es. [HiFiBerry AMP2](https://www.hifiberry.com/shop/boards/hifiberry-amp2/)) che pilota casse passive,
-> - un **DAC HAT** (es. HiFiBerry DAC+ / DAC2 Pro) verso amplificatore esterno e casse passive, oppure
-> - un **HAT digitale** (es. HiFiBerry Digi+) verso un sintoamplificatore AV via S/PDIF.
+> - un **DAC HAT validato** (famiglia HiFiBerry DAC+ o InnoMaker PCM5122) verso amplificatore esterno e casse passive,
+> - un **HAT digitale validato** (famiglia HiFiBerry Digi+) verso un sintoamplificatore AV via S/PDIF, oppure
+> - un'uscita configurata manualmente (DAC USB, HDMI, jack del Pi, HAT amplificato) se ti senti a tuo agio nel diagnosticare hardware audio.
 >
-> Esempi di setup completi e combinazioni testate: [docs/HARDWARE.it.md#configurazioni-consigliate](docs/HARDWARE.it.md#configurazioni-consigliate).
+> Esempi di setup completi, stato di validazione e uscite sperimentali: [docs/HARDWARE.it.md#configurazioni-consigliate](docs/HARDWARE.it.md#configurazioni-consigliate).
 
 ## Per chi è snapMULTI
 
@@ -103,7 +103,7 @@ Espelli l'SD, inseriscila nel Pi, accendi. Aspetta circa 10-15 minuti — l'inst
 **Ha funzionato quando**: con uno schermo collegato, il display HDMI mostra la schermata "in riproduzione" di snapMULTI (copertina / spettro). In ogni caso, da un altro dispositivo apri `http://<hostname>.local:8083/status` — tutti i controlli devono essere verdi. Poi fai cast di qualcosa (vedi **Dopo l'installazione** più sotto).
 
 > **Procedura dettagliata** con troubleshooting e percorso di recupero diagnostico: [docs/INSTALL.it.md](docs/INSTALL.it.md).
-> **Matrice di compatibilità** (modelli Pi, DAC HAT, setup di rete): [docs/HARDWARE.it.md](docs/HARDWARE.it.md).
+> **Policy hardware** (combinazioni Pi/audio validate vs sperimentali): [docs/HARDWARE.it.md](docs/HARDWARE.it.md).
 
 ## Dopo l'installazione
 
@@ -157,7 +157,7 @@ Definizioni rapide dei termini che incontrerai in questo README e nella document
 | **Server** | Il Raspberry Pi (o qualsiasi box Linux) che ospita le sorgenti musicali — Snapcast, MPD, Spotify Connect, AirPlay, Tidal — e distribuisce l'audio a uno o più altoparlanti |
 | **Audio Player** *(o "client" / "altoparlante")* | Un Raspberry Pi che riceve l'audio dal server e lo riproduce attraverso un DAC / amplificatore / altoparlante collegato. Uno per stanza |
 | **Snapcast** | Il motore open source di sincronizzazione multi-room su cui snapMULTI è costruito. Lato server: `snapserver`; lato client: `snapclient` |
-| **HAT** | "Hardware Attached on Top" — una piccola scheda che si innesta sul GPIO del Pi. snapMULTI funziona con HAT audio (DAC, amplificatore o digitale S/PDIF) |
+| **HAT** | "Hardware Attached on Top" — una piccola scheda che si innesta sul GPIO del Pi. La validazione di lancio snapMULTI copre famiglie HAT audio specifiche; controlla la policy hardware prima di comprare |
 | **mDNS** / `.local` | "Multicast DNS" — come i dispositivi si annunciano in LAN senza configurare IP manualmente. `pi-server.local` si risolve automaticamente sulla maggior parte delle reti |
 | **NAS** | Network-attached storage — un box separato (Synology, QNAP, custom) che ospita la libreria musicale, montato da snapMULTI via NFS o SMB |
 | **Filesystem read-only** | snapMULTI monta il root in sola lettura dopo l'install (overlayroot + fuse-overlayfs), così un blackout non può corrompere la SD. Le modifiche vengono cancellate al reboot a meno che tu non disattivi la modalità RO |

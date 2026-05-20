@@ -16,12 +16,33 @@ Quick recommendations if you don't want to read the whole guide.
 
 | Role | Buy / use | Why |
 |------|-----------|-----|
-| **Server + Player** (one Pi does everything) | **Pi 4 4 GB** (or **Pi 5**), good-brand A1/A2 SD ≥ 16 GB, official 15 W PSU, **USB DAC** or **HiFiBerry DAC+ / DAC2 Pro** | The 4 GB model leaves headroom for MPD scans + Spotify / Tidal peaks; A1/A2 cards are the #1 install-hang preventer |
+| **Server + Player** (one Pi does everything) | **Pi 4 4 GB**, good-brand A1/A2 SD ≥ 16 GB, official 15 W PSU, **HiFiBerry DAC+ family** or **InnoMaker PCM5122 HAT** | This is the launch-validated path. The 4 GB model leaves headroom for MPD scans + Spotify / Tidal peaks; A1/A2 cards are the #1 install-hang preventer |
 | **Server only** (speakers live in other rooms) | **Pi 4 2 GB+** or any mini PC / NAS with Docker | Server stack is ~1 GB of container limits; 2 GB host RAM is enough |
-| **Speaker / client** | Any **Pi 3 B+ / Pi 4 / Pi 5** with a DAC HAT or USB DAC, or a **Pi Zero 2 W** headless (native install — no Docker) | snapclient is tiny; the choice depends on whether you want the cover-art HDMI display (Pi 4 only) |
+| **Speaker / client** | **Pi 3 B+ / Pi 4** with HiFiBerry DAC+/Digi+ or InnoMaker PCM5122, or **Pi Zero 2 W + InnoMaker PCM5122** headless (native install — no Docker) | These are the launch-validated client paths. Use other DACs only if you are comfortable troubleshooting ALSA |
 | **Avoid** | Pi Zero 2 W as server or in both-mode (512 MB RAM is not enough), 32-bit Raspberry Pi OS, no-brand cheap SD cards, USB-powered hubs without their own PSU when driving multiple Pis | These are the recurring failure modes in real installs |
 
 The rest of this guide goes into the *why* and the corner cases.
+
+## Hardware support policy
+
+snapMULTI intentionally keeps the launch hardware matrix small. Audio on Raspberry Pi is where most "almost works" failures happen, so the public promise is based on devices we have actually reflashed, booted, smoke-tested and heard playing audio.
+
+| Tier | Meaning | Support expectation |
+|------|---------|---------------------|
+| **Validated** | Tested end-to-end by the project: first boot, read-only reboot, smoke/fleet smoke, and real playback through the output | Recommended for first installs and commercial/reference builds |
+| **Expected to work** | Same chipset or Linux audio path as validated hardware, but not physically tested by the project yet | Good for experienced users; please report results |
+| **Experimental / manual** | Present in the installer menu or configurable with ALSA, but not launch-validated | No compatibility promise; use only if you can debug audio devices |
+
+Launch-validated audio outputs:
+
+| Output family | Validation status |
+|---------------|-------------------|
+| HiFiBerry DAC+ family / PCM5122 analog | **Validated** |
+| InnoMaker PCM5122 analog HATs, including Pi Zero 2 W headless | **Validated** |
+| HiFiBerry Digi+ family / WM8804 S/PDIF | **Validated** |
+| Pi onboard/bcm2835 audio on Pi 4 client | **Validated, but quality-limited** |
+| HDMI output on Pi 4 display client | **Validated for display/client path** |
+| Generic USB DACs, amplifier HATs, IQaudio, JustBoom, Allo, Waveshare | **Experimental / manual until physically validated** |
 
 ## Server Requirements
 
@@ -76,17 +97,17 @@ Snapcast clients are lightweight — they receive audio and play it through spea
 | CPU | Any ARMv6+ or x86_64 | Even Pi Zero W (original) works |
 | RAM | 256 MB | Snapclient uses very little memory |
 | Storage | 8 GB microSD | 16 GB recommended |
-| Audio output | 3.5mm, HDMI, USB DAC, or I2S HAT | See audio output section |
+| Audio output | Validated I2S HAT, HDMI/onboard, or manual USB DAC | See hardware support policy and audio output section |
 
 ### Client Device Options
 
 | Device | Audio Output | Power | Notes |
 |--------|--------------|-------|-------|
-| **Raspberry Pi Zero 2 W** | USB DAC or I2S HAT | 0.75 W | Best budget option; 2.4 GHz WiFi only; audio-only (no display) |
+| **Raspberry Pi Zero 2 W** | Validated I2S HAT | 0.75 W | Best budget option; 2.4 GHz WiFi only; audio-only (no display) |
 | **Raspberry Pi Zero W** (v1) | USB DAC or I2S HAT | 0.5 W | Works but slow; no GPIO audio; 2.4 GHz WiFi only |
-| **Raspberry Pi 3B/3B+** | 3.5mm jack, HDMI, USB DAC | 2.5 W | Built-in audio output, 5 GHz WiFi + Ethernet |
-| **Raspberry Pi 4** (2 GB+) | 3.5mm jack, HDMI, USB DAC | 3–6 W | Required for client with cover art display (fb-display) |
-| **Raspberry Pi 5** | HDMI, USB DAC | 4–8 W | Overkill for client use |
+| **Raspberry Pi 3B/3B+** | Validated I2S HAT, manual onboard/USB | 2.5 W | 5 GHz WiFi + Ethernet; onboard/USB paths are not the recommended launch path |
+| **Raspberry Pi 4** (2 GB+) | Validated I2S HAT, HDMI, onboard, manual USB | 3–6 W | Required for client with cover art display (fb-display) |
+| **Raspberry Pi 5** | HDMI, manual USB | 4–8 W | Overkill for client use; launch validation is thinner than Pi 4 |
 | **Old Android phone** | Built-in speaker | Battery | Via [Snapcast Android app](https://github.com/badaix/snapdroid) |
 | **Any Linux PC** | Built-in audio | Varies | `apt install snapclient` |
 
@@ -113,22 +134,22 @@ Detail:
 - **Hardware guard for server / both** — at the start of `firstboot.sh`, `_validate_profile_hardware()` rejects `INSTALL_TYPE=server` and `INSTALL_TYPE=both` on Pi Zero 2 W. The first boot aborts with `log_error` and `exit 1`, surfacing the constraint immediately instead of failing later during `docker compose pull` with a cryptic OOM. Reflash the SD card with the Audio Player choice to recover
 - **Zram swap disabled** — `tune_pi_zero_2w_swap_safety()` in `scripts/common/system-tune.sh` masks `dev-zram0.swap` / `rpi-zram-writeback.service` and removes `/var/swap` at first boot. Without this fix, `rpi-zram-writeback` writes to the swap file living in the 256 MB overlay tmpfs upper layer and the kernel panics when the tmpfs fills (observed 2026-05-11)
 - **Single-client role, no multi-server failover** — the native snapclient uses libavahi-client autodiscovery directly. The multi-server failover state machine from `discover-server.sh` (TCP probing, anti-flapping, smart IPv4 selection) is not available on Pi Zero 2 W. Acceptable for typical single-room headless setups; if you need failover, use a Pi 3 B+ or Pi 4 client
-- **I2S HAT compatibility** — works with PCM5122-based HATs (HiFiBerry DAC+, InnoMaker Mini). The USB `otg_mode=1` setting from Imager conflicts with I2S — `prepare-sd.sh` and `setup.sh` fix this automatically
+- **I2S HAT compatibility** — launch validation covers PCM5122-based HiFiBerry/InnoMaker HATs. Other PCM5122 boards are expected to work but should be treated as unvalidated until tested. The USB `otg_mode=1` setting from Imager conflicts with I2S — `prepare-sd.sh` and `setup.sh` fix this automatically
 - **USB gadget mode** — for debugging without WiFi, connect the data USB port to your computer. Requires `dtoverlay=dwc2` under `[all]` in config.txt (not under `[cm5]`)
 
 ### Audio Output Quality
 
 | Output Method | Quality | Notes |
 |---------------|---------|-------|
-| **I2S DAC HAT** (HiFiBerry DAC+, DAC2 Pro) | Excellent | Best analog quality, RCA output, connects directly to Pi GPIO |
-| **I2S S/PDIF HAT** (HiFiBerry Digi+) | Excellent | Digital optical/coaxial out to AV receiver or external DAC; no analog conversion on the Pi |
-| **USB DAC** | Very good | Wide range of options; works with Pi Zero (no GPIO header needed) |
-| **HDMI** | Good | Use your TV/AV receiver as output device. ALSA card name varies by kernel: `vc4-hdmi-0` (Bookworm/Trixie KMS), `HDMI` (legacy). Resolved automatically at first boot via `aplay -L` |
-| **3.5mm jack** (Pi 3/4) | Adequate | Noticeable noise floor on some boards; fine for casual listening. **Pi 5 has no analog jack** — picking "jack" in the install menu auto-falls back to HDMI |
+| **I2S DAC HAT** (validated HiFiBerry DAC+ / InnoMaker PCM5122) | Excellent | Best analog quality, RCA output, connects directly to Pi GPIO |
+| **I2S S/PDIF HAT** (validated HiFiBerry Digi+) | Excellent | Digital optical/coaxial out to AV receiver or external DAC; no analog conversion on the Pi |
+| **USB DAC** | Very good when supported by Linux | Manual/experimental until a specific model is physically validated |
+| **HDMI** | Good | Validated on Pi 4 display/client path. ALSA card name varies by kernel: `vc4-hdmi-0` (Bookworm/Trixie KMS), `HDMI` (legacy). Resolved automatically at first boot via `aplay -L` |
+| **3.5mm jack** (Pi 3/4) | Adequate | Validated only as onboard fallback. Noticeable noise floor on some boards; fine for casual listening. **Pi 5 has no analog jack** — picking "jack" in the install menu auto-falls back to HDMI |
 
-> **Tip:** Use an I2S HAT for the best quality. [HiFiBerry DAC+ Zero](https://www.hifiberry.com/shop/boards/dacplus-zero/) for client nodes, [HiFiBerry DAC2 Pro](https://www.hifiberry.com/shop/boards/dac2-pro/) or [HiFiBerry Digi+](https://www.hifiberry.com/shop/boards/hifiberry-digi/) for nodes connected to AV receivers.
+> **Tip:** Use launch-validated I2S HATs for the first install: HiFiBerry DAC+ family or InnoMaker PCM5122 for analog output, HiFiBerry Digi+ family for S/PDIF.
 
-> **Manual override:** `prepare-sd.sh` offers an *Audio output* menu (auto-detect, pick a HAT from the list, or pick built-in HDMI/jack). Auto-detect is right for >90% of installs — use the manual paths only if auto-detect failed previously. See [INSTALL.md — Menu 2 — Audio output](INSTALL.md#menu-2--audio-output-audio-player-and-serverplayer-only).
+> **Manual override:** `prepare-sd.sh` offers an *Audio output* menu (auto-detect, pick a HAT from the list, or pick built-in HDMI/jack). Menu entries beyond the validated matrix are compatibility helpers, not a launch support promise. See [INSTALL.md — Menu 2 — Audio output](INSTALL.md#menu-2--audio-output-audio-player-and-serverplayer-only).
 
 ### Client Install Method
 
@@ -293,7 +314,7 @@ If a node connects to an AV receiver via optical cable, use HiFiBerry Digi+ inst
 
 ## Tested Combinations
 
-These hardware combinations have been verified end-to-end (firstboot → smoke test → audio playback) on the dates indicated. The 2026-04-27 batch was the v0.6.x release-gate validation: 6 devices reflashed from `main`, smoke test PASS on each, ALSA `hw_ptr` advancing during playback (audio actually reaching the DAC, not just the FIFO).
+These hardware combinations have been verified end-to-end (firstboot → smoke test → audio playback) on the dates indicated. Treat this table as the source of truth for launch-validated hardware. The 2026-04-27 batch was the v0.6.x release-gate validation: 6 devices reflashed from `main`, smoke test PASS on each, ALSA `hw_ptr` advancing during playback (audio actually reaching the DAC, not just the FIFO).
 
 | Hostname | Pi Model | Audio HAT | DAC chip | Mode | Display | Music Source | Validated | Status |
 |---|---|---|---|---|---|---|---|---|
