@@ -31,6 +31,31 @@
 check_system() {
     section "System"
 
+    # 0. Release identity. Surface SNAPMULTI_RELEASE + SNAPMULTI_IMAGE_SET
+    # from the deployed .env so an operator running `device-smoke.sh`
+    # on a freshly-flashed device can confirm at a glance which
+    # release / image-set is actually live (catches stale .env after
+    # a partial upgrade or a custom-staged tree). Falls through
+    # silently when the keys are absent — legacy installs predating
+    # the release-manifest still pass this check, just without the
+    # info line.
+    local _env_file=""
+    for _candidate in /opt/snapmulti/.env /opt/snapclient/.env; do
+        [[ -f "$_candidate" ]] && { _env_file="$_candidate"; break; }
+    done
+    if [[ -n "$_env_file" ]]; then
+        local _release _image_set
+        _release=$(grep -m1 '^SNAPMULTI_RELEASE=' "$_env_file" 2>/dev/null | cut -d= -f2- || true)
+        _image_set=$(grep -m1 '^SNAPMULTI_IMAGE_SET=' "$_env_file" 2>/dev/null | cut -d= -f2- || true)
+        if [[ -n "$_release" && -n "$_image_set" ]]; then
+            info "Release $_release (images $_image_set)"
+        elif [[ -n "$_release" ]]; then
+            info "Release $_release (image_set unknown)"
+        elif [[ -n "$_image_set" ]]; then
+            info "Image set $_image_set (release unknown)"
+        fi
+    fi
+
     # 1. Cmdline — quiet boot flags. Only meaningful when display is
     # connected; on headless devices their absence is fine. We grep
     # /proc/cmdline directly inside the loop below — no need to slurp
