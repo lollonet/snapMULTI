@@ -1,5 +1,14 @@
 name: Build and Push Images
 
+# Production tags (lollonet/snapmulti-*:<image_set>) are pushed only on
+# tag push (refs/tags/v*) or explicit workflow_dispatch — NEVER on PR
+# CI. The gate job below additionally suppresses the build matrix when
+# release-manifest.json's requires_image_rebuild=false flag says the
+# previous image set still covers this release (script-only releases).
+# Operators forcing a rebuild for emergencies (security CVE in a base
+# image, accidentally-deleted Docker Hub tag) set
+# workflow_dispatch.force_rebuild=true.
+
 on:
   push:
     tags: ['v*']
@@ -10,9 +19,103 @@ on:
         required: false
         type: boolean
         default: false
+      force_rebuild:
+        description: 'Bypass the manifest gate and rebuild even when requires_image_rebuild=false (emergency override)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
+  gate:
+    # Reads release-manifest.json to decide whether the build matrix
+    # runs. Three outputs: should_rebuild ('true' must run; 'false'
+    # safe to skip), image_set (Docker tag — decoupled from
+    # github.ref_name so a script-only release tagged v0.7.8 can
+    # still publish 0.7.7 images), release (git tag for x-ref).
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should_rebuild: ${{ steps.decide.outputs.should_rebuild }}
+      image_set: ${{ steps.decide.outputs.image_set }}
+      release: ${{ steps.decide.outputs.release }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read release-manifest.json
+        id: manifest
+        run: |
+          set -euo pipefail
+          if [[ ! -f release-manifest.json ]]; then
+            echo "::error::release-manifest.json missing at repo root"
+            exit 1
+          fi
+          IMAGE_SET=$(jq -r '.image_set' release-manifest.json)
+          RELEASE=$(jq -r '.snapmulti_release' release-manifest.json)
+          REBUILD=$(jq -r '.requires_image_rebuild' release-manifest.json)
+          if [[ ! "$IMAGE_SET" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::image_set '$IMAGE_SET' does not match X.Y.Z"
+            exit 1
+          fi
+          if [[ "$REBUILD" != "true" && "$REBUILD" != "false" ]]; then
+            echo "::error::requires_image_rebuild '$REBUILD' is not literal true/false"
+            exit 1
+          fi
+          {
+            echo "image_set=$IMAGE_SET"
+            echo "release=$RELEASE"
+            echo "rebuild=$REBUILD"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Decide should_rebuild
+        id: decide
+        env:
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
+          USE_SANTCASP: ${{ inputs.use_santcasp }}
+          MANIFEST_REBUILD: ${{ steps.manifest.outputs.rebuild }}
+          MANIFEST_IMAGE_SET: ${{ steps.manifest.outputs.image_set }}
+          MANIFEST_RELEASE: ${{ steps.manifest.outputs.release }}
+        run: |
+          set -euo pipefail
+          if [[ "$FORCE_REBUILD" == "true" ]] \
+              || [[ "$USE_SANTCASP" == "true" ]] \
+              || [[ "$MANIFEST_REBUILD" == "true" ]]; then
+            SHOULD_REBUILD=true
+          else
+            SHOULD_REBUILD=false
+          fi
+          {
+            echo "should_rebuild=$SHOULD_REBUILD"
+            echo "image_set=$MANIFEST_IMAGE_SET"
+            echo "release=$MANIFEST_RELEASE"
+          } >> "$GITHUB_OUTPUT"
+          echo "Gate decision: should_rebuild=$SHOULD_REBUILD image_set=$MANIFEST_IMAGE_SET"
+
+      - name: Verify image set on Docker Hub
+        if: steps.decide.outputs.should_rebuild == 'false'
+        env:
+          IMAGE_SET: ${{ steps.decide.outputs.image_set }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for image in lollonet/snapmulti-server lollonet/snapmulti-airplay \
+                       lollonet/snapmulti-mpd lollonet/snapmulti-metadata \
+                       lollonet/snapmulti-tidal; do
+            if ! docker manifest inspect "${image}:${IMAGE_SET}" >/dev/null 2>&1; then
+              missing+=("${image}:${IMAGE_SET}")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::manifest gate: required image tags missing on Docker Hub"
+            printf '  - %s\n' "${missing[@]}"
+            echo "::error::Rerun with workflow_dispatch.force_rebuild=true to bypass."
+            exit 1
+          fi
+          echo "manifest gate: all 5 image tags exist on Hub, skip rebuild safe"
+
   build:
+    needs: gate
+    if: needs.gate.outputs.should_rebuild == 'true'
     strategy:
       matrix:
         include:
@@ -36,20 +139,30 @@ jobs:
         id: version
         env:
           USE_SANTCASP: ${{ inputs.use_santcasp }}
+          # Image tag for tagged releases comes from the gate's
+          # manifest read — NOT github.ref_name — so a force-rebuilt
+          # script-only release publishes the manifest's image_set
+          # (e.g. 0.7.7), not the just-cut release tag (e.g. v0.7.8).
+          GATE_IMAGE_SET: ${{ needs.gate.outputs.image_set }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            # Tagged release: push :latest + :version (badaix/snapcast)
-            VERSION="${GITHUB_REF#refs/tags/v}"
-            echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
-            echo "label=latest" >> "$GITHUB_OUTPUT"
+            # Tagged release: push :latest + :<image_set> from manifest.
+            {
+              echo "tag=$GATE_IMAGE_SET"
+              echo "label=latest"
+            } >> "$GITHUB_OUTPUT"
           elif [[ "$USE_SANTCASP" == "true" ]]; then
             # Manual dispatch with santcasp: push :dev (santcasp fork)
-            echo "tag=" >> "$GITHUB_OUTPUT"
-            echo "label=dev" >> "$GITHUB_OUTPUT"
+            {
+              echo "tag="
+              echo "label=dev"
+            } >> "$GITHUB_OUTPUT"
           else
             # Manual dispatch without santcasp: push :manual (badaix)
-            echo "tag=" >> "$GITHUB_OUTPUT"
-            echo "label=manual" >> "$GITHUB_OUTPUT"
+            {
+              echo "tag="
+              echo "label=manual"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Determine snapcast source
