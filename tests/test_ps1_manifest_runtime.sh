@@ -71,6 +71,7 @@ EOF
 # Run from /tmp (different cwd) so we prove the script-anchored
 # resolution actually works — a $PWD-based path would NOT find the
 # manifest from /tmp.
+# shellcheck disable=SC2034 # output consumed via <<< in eval'd asserts
 output=$(cd /tmp && pwsh -NoProfile -NonInteractive -File "$SNIPPET" 2>&1)
 
 assert "grep -q '^RELEASE=v' <<<\"\$output\"" \

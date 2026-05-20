@@ -150,6 +150,78 @@ Riflashare per primo è il default del progetto (DEC-003). Tutta la config si au
 
 Dopo ogni reflash o aggiornamento in-place, esegui il test di salute sul device per confermare che la piattaforma sia tornata sana: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server` (oppure `--client` / `--both`). È lo stesso release gate (ADR-005) che `fleet-smoke.sh` esegue su più device. Descrizione completa in [TROUBLESHOOTING.it.md — Prima cosa da fare](TROUBLESHOOTING.it.md#prima-cosa-da-fare--esegui-il-test-di-salute).
 
+## Strategia release & pinning image-set
+
+snapMULTI separa due concetti di versione, così una release di soli script (CHANGELOG, docs, fix nell'installer) non costringe a ricostruire e ripubblicare le immagini Docker:
+
+- **`SNAPMULTI_RELEASE`** — il tag git della release (es. `v0.7.7`). Quello che `gh release view` mostra.
+- **`SNAPMULTI_IMAGE_SET`** — il tag Docker delle immagini a cui la release si aggancia (es. `0.7.7`). Quello che `docker compose pull` scarica.
+
+La maggior parte delle release incrementa entrambi. Una release di soli script incrementa `SNAPMULTI_RELEASE` e mantiene `SNAPMULTI_IMAGE_SET` all'ultimo valore pubblicato. La fonte di verità è `release-manifest.json` alla radice del repo.
+
+### Catena di precedenza — `IMAGE_TAG`
+
+Il tag Docker effettivamente usato si calcola in questo ordine (vince il primo non vuoto):
+
+1. `install.conf` `IMAGE_TAG=` (override operatore — `dev`, `0.7.6`, ecc.)
+2. `install.conf` `SNAPMULTI_IMAGE_SET=` (scritto da prepare-sd a partire dal manifest)
+3. `release-manifest.json` `image_set` (fallback dal manifest)
+4. `latest` (fallback finale)
+
+Implementata una sola volta in `scripts/common/release-manifest.sh::derive_image_tag()` e consumata da `firstboot.sh`, `deploy.sh`, e dal `setup.sh` del client. Ogni consumer usa la stessa catena — zero drift.
+
+### Tabella di backward-compat
+
+| install.conf | manifest | `IMAGE_TAG` risultante |
+|--------------|----------|------------------------|
+| solo `IMAGE_TAG=0.7.4` | — | `0.7.4` (SD legacy da v0.7.4) |
+| solo `IMAGE_TAG=latest` | — | `latest` (default legacy) |
+| `SNAPMULTI_IMAGE_SET=0.7.5`, no IMAGE_TAG | — | `0.7.5` |
+| `SNAPMULTI_IMAGE_SET=0.7.5`, `IMAGE_TAG=dev` | — | `dev` (override vince) |
+| vuoto | assente | `latest` |
+| vuoto | `image_set=0.7.7` | `0.7.7` |
+
+Riprodotta in `tests/test_firstboot_image_tag_derivation.sh`.
+
+### Tagliare una release di soli script
+
+1. Modifica `release-manifest.json`:
+   - Incrementa `snapmulti_release` al nuovo tag (es. `v0.7.8`)
+   - Mantieni `image_set` all'ultimo valore pubblicato (es. `0.7.7`)
+   - Imposta `requires_image_rebuild` a `false`
+2. Aggiorna `CHANGELOG.md` `[Unreleased]` → nuovo header di versione.
+3. Apri la PR, fai merge, fai push del tag (`git tag v0.7.8 && git push v0.7.8`).
+4. Il gate di `build-push.yml` legge il manifest, vede `requires_image_rebuild=false`, verifica che tutte e 5 le immagini di produzione esistano su Docker Hub al tag `:0.7.7`, e **salta la matrice di build**. Viene pubblicata una nuova GitHub Release; gli utenti fanno `docker compose pull` e continuano con le stesse immagini.
+
+### Tagliare una release che cambia i container
+
+1. Modifica `release-manifest.json`:
+   - Incrementa `snapmulti_release` al nuovo tag (es. `v0.8.0`)
+   - Incrementa `image_set` a corrispondere (es. `0.8.0`)
+   - Imposta `requires_image_rebuild` a `true`
+2. Aggiorna `CHANGELOG.md`, apri PR, fai merge, fai tag.
+3. Il gate vede `requires_image_rebuild=true` e fa girare la matrice completa, pubblicando le immagini `:0.8.0` su Docker Hub.
+
+### Override d'emergenza — `force_rebuild`
+
+Se l'image-set pubblicato su Docker Hub è mancante o corrotto (CVE di sicurezza in un'immagine base, cancellazione accidentale di un tag, incidente su GitHub Container Registry), lancia `build-push.yml` a mano con `force_rebuild=true`:
+
+```text
+GitHub → Actions → Build and Push Images → Run workflow
+  force_rebuild: ☑ true
+```
+
+Il gate bypassa sia `requires_image_rebuild=false` sia il check di esistenza su Docker Hub; la matrice gira e ripubblica l'`image_set` che il manifest dichiara (NON il tag appena tagliato).
+
+### Ispezionare l'identità della release live
+
+Dopo deploy / reflash:
+
+- Riga info del test di salute: `device-smoke.sh` → sezione `System` → `Release v0.7.7 (images 0.7.7)`
+- Pacchetto diagnostico: `scripts/diagnostic.sh` produce `meta.txt` con `snapmulti_release=...` e `snapmulti_image_set=...`; il pacchetto include anche il `release-manifest.json` (scrubbato) dalla partizione di boot.
+- `.env` del server: `grep ^SNAPMULTI_ /opt/snapmulti/.env`
+- `.env` del client: `grep ^SNAPMULTI_ /opt/snapclient/.env`
+
 ## Profili risorse
 
 `deploy.sh` (server) e `setup.sh` (client) rilevano automaticamente l'hardware e applicano uno dei tre profili — **minimal**, **standard** o **performance**. I limiti possono essere sovrascritti in `.env`.
