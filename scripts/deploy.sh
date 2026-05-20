@@ -785,10 +785,16 @@ EOF
     local _coherent_tag
     _coherent_tag=$(derive_image_tag "${IMAGE_TAG:-}" "$_image_set")
 
+    # awk -v avoids sed metacharacter corruption; temp-file mv is atomic
     persist_env_kv() {
         local key="$1" value="$2"
         if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
-            sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+            awk -v k="$key" -v v="$value" '
+                BEGIN { pat = "^" k "=" }
+                $0 ~ pat { print k "=" v; next }
+                { print }
+            ' "$ENV_FILE" > "${ENV_FILE}.tmp" \
+                && mv -- "${ENV_FILE}.tmp" "$ENV_FILE"
         else
             printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
         fi
