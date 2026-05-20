@@ -125,6 +125,11 @@ done
 if [[ -n "$COMMON_MODULE_DIR" ]]; then
     # shellcheck source=common/system-tune.sh
     [[ -f "$COMMON_MODULE_DIR/system-tune.sh" ]] && source "$COMMON_MODULE_DIR/system-tune.sh"
+    # release-manifest.sh provides derive_image_tag (and parse_release_manifest
+    # which we don't need here — firstboot is authoritative). Inline fallback
+    # below preserves today's IMAGE_TAG-only behaviour on custom-staged trees.
+    # shellcheck source=common/release-manifest.sh
+    [[ -f "$COMMON_MODULE_DIR/release-manifest.sh" ]] && source "$COMMON_MODULE_DIR/release-manifest.sh"
     # shellcheck source=common/resource-detect.sh
     [[ -f "$COMMON_MODULE_DIR/resource-detect.sh" ]] && source "$COMMON_MODULE_DIR/resource-detect.sh"
     # shellcheck source=common/pull-images.sh
@@ -1209,8 +1214,14 @@ declare -A env_vars=(
     ["CONNECTION_TYPE"]="$CONNECTION_TYPE"
     # Read-only filesystem (--no-readonly disables)
     ["ENABLE_READONLY"]="$ENABLE_READONLY"
-    # Docker image tag — inherited from firstboot/prepare-sd (e.g. "dev" for --dev mode)
-    ["IMAGE_TAG"]="${IMAGE_TAG:-latest}"
+    # Release identity — inherited from firstboot (precedence chain in
+    # scripts/common/release-manifest.sh). IMAGE_TAG goes through
+    # derive_image_tag when available so a stale .env is overwritten
+    # coherently; missing helper falls through to the legacy
+    # ${IMAGE_TAG:-latest} expansion.
+    ["SNAPMULTI_RELEASE"]="${SNAPMULTI_RELEASE:-}"
+    ["SNAPMULTI_IMAGE_SET"]="${SNAPMULTI_IMAGE_SET:-}"
+    ["IMAGE_TAG"]="$(if declare -F derive_image_tag >/dev/null; then derive_image_tag "${IMAGE_TAG:-}" "${SNAPMULTI_IMAGE_SET:-}"; else printf '%s\n' "${IMAGE_TAG:-latest}"; fi)"
     # Version tag (for display) — prefer VERSION file baked by prepare-sd.sh,
     # fall back to git describe (dev clones), then short SHA, then "dev".
     ["APP_VERSION"]="$(cat "$INSTALL_DIR/VERSION" 2>/dev/null \
