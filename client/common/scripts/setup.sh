@@ -298,8 +298,10 @@ _ensure_hat_detect_tools() {
     if (( ${#_missing[@]} > 0 )); then
         if [[ "${AUDIO_HAT:-auto}" == "auto" ]]; then
             echo "Installing minimal HAT detection tools: ${_missing[*]}"
-            DEBIAN_FRONTEND=noninteractive apt-get update -qq 2>&1 | tail -3 || true
-            if ! DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${_missing[@]}"; then
+            # Redirect apt output to the install log so it cannot stomp the
+            # TUI on /dev/tty3 (kernel console = active VT during install).
+            DEBIAN_FRONTEND=noninteractive apt-get update -qq >> "${UNIFIED_LOG:-/dev/null}" 2>&1 || true
+            if ! DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${_missing[@]}" >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
                 echo "FATAL: AUDIO_HAT=auto requested but cannot install detection tools (${_missing[*]})" >&2
                 echo "FATAL: Set AUDIO_HAT explicitly in install.conf to skip auto-detection." >&2
                 exit 1
@@ -548,7 +550,9 @@ elif declare -F install_dependencies &>/dev/null; then
     INSTALL_ROLE=client SKIP_UPGRADE=true install_dependencies
 else
     log_progress "WARNING: install-deps.sh not found, installing base packages inline"
-    apt-get update && apt-get install -y ca-certificates curl alsa-utils avahi-daemon avahi-utils
+    # apt output to log only — keeps the install TUI on /dev/tty3 unstomped
+    DEBIAN_FRONTEND=noninteractive apt-get update -qq >> "${UNIFIED_LOG:-/dev/null}" 2>&1 \
+        && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates curl alsa-utils avahi-daemon avahi-utils >> "${UNIFIED_LOG:-/dev/null}" 2>&1
 fi
 
 progress 2 "Installing Docker CE..."
@@ -1476,7 +1480,8 @@ if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
 
     # Install fuse-overlayfs package (needed after reboot when overlayroot is active)
     log_progress "Installing fuse-overlayfs..."
-    if ! apt-get install -y fuse-overlayfs; then
+    # apt output → install log, not the install TUI on /dev/tty3
+    if ! DEBIAN_FRONTEND=noninteractive apt-get install -y -qq fuse-overlayfs >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
         log_progress "ERROR: fuse-overlayfs not available — read-only mode will be skipped"
         ENABLE_READONLY=false
         return 0
@@ -1564,9 +1569,14 @@ DefaultEnvironment="LIBMOUNT_FORCE_MOUNT2=always"
 SYSDEOF
     log_progress "systemd overlayfs workaround installed (trixie remount fix)"
 
-    # Enable overlayfs (takes effect after reboot)
-    log_progress "Enabling overlayfs..."
-    if ! raspi-config nonint do_overlayfs 0; then
+    # Enable overlayfs (takes effect after reboot). raspi-config internally
+    # apt-installs overlayroot/cryptsetup which triggers update-initramfs
+    # to rebuild BOTH kernels (rpi-v8 + rpi-2712) — ~20s of progress output
+    # that previously stomped the install TUI on /dev/tty3 visually
+    # (functional install was fine, but the HDMI display went messy until
+    # the next progress.sh redraw tick). Redirecting to the install log
+    # keeps the TUI clean.
+    if ! raspi-config nonint do_overlayfs 0 >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
         log_progress "WARNING: raspi-config failed to enable overlayfs"
         log_progress "         Reverting systemd workaround"
         rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
