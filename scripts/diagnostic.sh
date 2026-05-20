@@ -178,11 +178,7 @@ log "Collecting snapMULTI diagnostics (reason=$REASON, out=$BUNDLE_PATH)"
     # falls through to the manifest at the boot-partition staging
     # path; finally "unknown" so the diagnostic bundle has consistent
     # shape across all installs (legacy + new).
-    # `cut -d= -f2-` strips the `KEY=` prefix so meta.txt emits
-    # `snapmulti_release=v0.7.7` (not the double-prefixed
-    # `snapmulti_release=SNAPMULTI_RELEASE=v0.7.7` form). Mirrors the
-    # pattern already used by scripts/smoke/check_system.sh for the
-    # same .env keys. Fixes claude-review MEDIUM finding on PR #447.
+    # cut -d= -f2- strips the KEY= prefix that grep -m1 includes
     echo "snapmulti_release=$( \
         (grep -m1 '^SNAPMULTI_RELEASE=' /opt/snapmulti/.env  2>/dev/null | cut -d= -f2-) \
         || (grep -m1 '^SNAPMULTI_RELEASE=' /opt/snapclient/.env 2>/dev/null | cut -d= -f2-) \
