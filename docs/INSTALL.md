@@ -27,14 +27,14 @@ If any step is unclear, continue with the detailed walkthrough below. If first b
 
 | Item | Notes |
 |------|-------|
-| Raspberry Pi 4 or 5 (2 GB+ RAM) | Pi 5 fully supported; Pi 3B+ tested (minimal profile) |
+| Raspberry Pi 4 (2 GB+ RAM) | Pi 4 is the best launch target; Pi 5 and Pi 3B+ are usable but have a thinner validation matrix |
 | microSD card (16 GB+) | Class 10 / A1 or better. 32 GB recommended |
 | Power supply | Official 15W USB-C for Pi 4 |
 | A second computer | macOS, Linux, or Windows — to prepare the SD card |
 | Network connection | Ethernet (recommended) or WiFi |
-| Audio output | USB DAC, HiFiBerry HAT, or HDMI |
+| Audio output | Validated HiFiBerry/InnoMaker I2S HAT, HiFiBerry Digi+, or HDMI/onboard fallback |
 
-For a speaker Pi (Audio Player mode): same as above plus a way to connect speakers (HAT or USB audio device).
+For a speaker Pi (Audio Player mode): same as above plus a way to connect speakers. For first installs, stay inside the [validated hardware matrix](HARDWARE.md#hardware-support-policy).
 
 ---
 
@@ -244,9 +244,11 @@ If auto-detection fails:
 
 | Option | Use when |
 |--------|----------|
-| **1 — Auto-detect** | Right for >90% of installs. The Pi probes the HAT EEPROM at first boot, scans the I2C bus for known DAC chips, falls back to USB DAC, then to built-in audio. Choose this unless auto-detect failed on a previous attempt |
-| **2 — I have an audio HAT** | Skip auto-detect and pick the exact profile from a list of 15 supported HATs (HiFiBerry, IQaudio, JustBoom, Allo, InnoMaker, Waveshare). Useful when your HAT lacks an EEPROM or the chip is shared across profiles |
+| **1 — Auto-detect** | Best first choice when you are using launch-validated HiFiBerry/InnoMaker hardware. The Pi probes the HAT EEPROM at first boot, scans the I2C bus for known DAC chips, falls back to USB DAC, then to built-in audio |
+| **2 — I have an audio HAT** | Skip auto-detect and pick a profile from the compatibility list. Useful when your HAT lacks an EEPROM or the chip is shared across profiles. Entries outside the validated matrix are experimental/manual, not a support promise |
 | **3 — No HAT — built-in audio** | Pi 3/4/5 onboard audio. You then pick between HDMI (TV/monitor) or 3.5mm jack. **Pi 5 has no analog jack** — pick HDMI or let auto-detect handle it |
+
+> For launch stability, prefer the hardware listed as **Validated** in [HARDWARE.md — Hardware support policy](HARDWARE.md#hardware-support-policy). USB DACs and many HAT profiles may work, but they are not all physically validated by the project yet.
 
 If you pick **3**, a sub-menu asks for the output:
 - **HDMI** — works on Pi 3, Pi 4, Pi 5. The real ALSA card name (`vc4-hdmi-0`, `HDMI`, depending on kernel) is resolved at first boot via `aplay -L`
