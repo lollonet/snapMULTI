@@ -764,6 +764,25 @@ WantedBy=multi-user.target
 DEOF
     fi
 
+    # Acoustic smoke cues: WAV files + helper invoked by device-smoke.sh --tone.
+    # Lets headless server installs report PASS/WARN/FAIL/SKIP audibly through
+    # the attached DAC. Resolved relative to ${BASH_SOURCE[0]} so this works
+    # whether system-tune.sh was sourced from the server (scripts/common/) or
+    # client (client/common/scripts/common/) install tree.
+    local _tune_dir audio_src
+    _tune_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    audio_src="$_tune_dir/audio"
+    if [[ -d "$audio_src" ]]; then
+        install -d -m 755 /usr/share/snapmulti/audio
+        for _wav in "$audio_src"/smoke-*.wav; do
+            [[ -f "$_wav" ]] && install -m 644 "$_wav" /usr/share/snapmulti/audio/
+        done
+        unset _wav
+    fi
+    if [[ -f "$_tune_dir/play-smoke-tone.sh" ]]; then
+        install -m 755 "$_tune_dir/play-smoke-tone.sh" /usr/local/bin/snapmulti-play-smoke-tone
+    fi
+
     systemctl daemon-reload
     systemctl enable snapmulti-boot-tune.service 2>/dev/null
     systemctl enable snapmulti-docker-driver.service 2>/dev/null || true

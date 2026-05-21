@@ -32,6 +32,7 @@ FAILURES=0
 WARNINGS=0
 JSON_OUTPUT=false
 NO_FAIL_ON_WARN=false
+TONE=false
 
 # JSON-mode buffers — populated by helpers when JSON_OUTPUT=true.
 # Each is a JSON-encoded object string ready for jq to assemble.
@@ -63,6 +64,11 @@ Output:
                     don't fail anyway), so this is mainly for callers
                     that want a guaranteed-non-zero exit ONLY on hard
                     failures (the status timer wants this).
+  --tone            Play an audible tone for the result (pass/warn/fail/skip)
+                    via /usr/share/snapmulti/audio/. Useful for headless
+                    server installs where the operator can hear but not
+                    see the result. Suppressed by TEST_TONE=false in
+                    install.conf or by an active Snapcast stream.
 EOF
 }
 
@@ -88,6 +94,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-fail-on-warn)
             NO_FAIL_ON_WARN=true
+            shift
+            ;;
+        --tone)
+            TONE=true
             shift
             ;;
         -h|--help)
@@ -1077,12 +1087,31 @@ if [[ "$JSON_OUTPUT" == "true" ]]; then
     exit 0
 fi
 
+_play_tone() {
+    if [[ "$TONE" != "true" ]]; then return 0; fi
+    local result="$1"
+    for tone_helper in /opt/snapmulti/scripts/common/play-smoke-tone.sh \
+                       /opt/snapclient/scripts/common/play-smoke-tone.sh \
+                       /usr/local/bin/snapmulti-play-smoke-tone; do
+        if [[ -x "$tone_helper" ]]; then
+            "$tone_helper" "$result" &>/dev/null &
+            return 0
+        fi
+    done
+}
+
 # Human (CLI) mode
 echo ""
 if [[ "$FAILURES" -eq 0 ]]; then
+    if (( WARNINGS > 0 )); then
+        _play_tone warn
+    else
+        _play_tone pass
+    fi
     ok "Smoke check passed"
     exit 0
 fi
 
+_play_tone fail
 error "Smoke check failed with $FAILURES issue(s)"
 exit 1

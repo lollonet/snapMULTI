@@ -135,7 +135,12 @@ function Assert-PreparedSdCard {
         'common/wait-network.sh',
         'common/mount-music.sh',
         'common/systemd-snippets.sh',
-        'common/release-manifest.sh'
+        'common/release-manifest.sh',
+        'common/play-smoke-tone.sh',
+        'common/audio/smoke-pass.wav',
+        'common/audio/smoke-warn.wav',
+        'common/audio/smoke-fail.wav',
+        'common/audio/smoke-skip.wav'
     )
     foreach ($file in $requiredBase) {
         $path = Join-Path $Dest $file
