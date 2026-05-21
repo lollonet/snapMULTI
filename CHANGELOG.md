@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Docs
+- **`docs/INSTALL.md` + `docs/INSTALL.it.md` — audible-feedback contract documented for first-time users** — three additions for novice-facing clarity ahead of the community launch. (a) New `## Before you start: turn the speakers on` callout between "What you need" and "Step 1 — Flash the SD card" — proactive prerequisite, not a reactive troubleshooting hint: power on amp/speakers, set moderate volume, confirm DAC-to-amp cables, unplug 3.5 mm jack if you want HAT output, plus the `TEST_TONE=false` opt-out as a footnote (recommended path = leave it on). (b) New `### What you'll hear` subsection inside Step 5 covering the 1 s 440 Hz post-HAT-detect confirmation tone (PR #420) — what it means, what to check if absent, how to suppress for overnight installs. (c) New `### Health-check tones (manual, optional)` subsection documenting the four `device-smoke.sh --tone` cues shipped in v0.7.8 (PR #454) — ascending major triad PASS, alternating chime WARN, descending tone FAIL, low chirp SKIP — with an explicit note that the cues are NOT auto-played at boot in v0.7.8 (a future auto-boot health check will close that gap). Italian mirror uses the established glossary: "test di salute" (reader-facing), not "smoke test"; "casse" not "speakers"; musical notes localised as DO–MI–SOL maggiore. Closes the doc gap surfaced by a novice tester who heard the install-time tone but never knew about the smoke result cues because they were only documented in the CHANGELOG.
+
 ## [0.7.8] — 2026-05-21
 
 > First release exercising the manifest gate end-to-end as a **script-only release**: `image_set` stays at `0.7.7`, `requires_image_rebuild=false`. The `build-push.yml` gate verifies the 5 production images already exist on Docker Hub at `:0.7.7` and skips the rebuild matrix (~30 s CI vs 10+ min on a normal tag).

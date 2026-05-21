@@ -38,6 +38,21 @@ For a speaker Pi (Audio Player mode): same as above plus a way to connect speake
 
 ---
 
+## Before you start: turn the speakers on
+
+snapMULTI tells you it's alive through audio. During install you'll hear a 1-second confirmation tone after the audio hardware is detected; if the amplifier or speakers are off or muted, you'll never know it worked until you try to play music 10 minutes later.
+
+Before starting the install:
+
+- Power on the amplifier or active speakers
+- Set the volume to a moderate level
+- Confirm cables are connected from the DAC output to the amplifier input
+- If headphones are plugged into the Pi's 3.5 mm jack, audio will route there instead of the HAT — unplug them if you want HAT output
+
+You can opt out of the install-time tone by setting `TEST_TONE=false` in `install.conf`, but the recommended path for a first install is: keep the speakers on, hear the tone, know your audio chain is correct from minute one.
+
+---
+
 ## Step 1 — Flash the SD card
 
 Use **[Raspberry Pi Imager](https://www.raspberrypi.com/software/)** (free download for macOS, Windows, Linux).
@@ -331,6 +346,27 @@ snapMULTI Auto-Install
 The Pi **reboots automatically** when installation is complete. After the reboot, the display goes dark (normal — no desktop on Lite OS).
 
 > If the HDMI stays blank throughout: the installation is still running in the background — `firstboot.sh` is a systemd service that does not need a display. **The green ACT LED on the Pi will flash irregularly throughout the 10–15 min — that's SD-card activity, your sign the install is making progress.** Wait the full window; to check progress without a screen, `ssh <username>@<hostname>.local` and run `sudo journalctl -u snapmulti-firstboot.service -f`.
+
+### What you'll hear
+
+Roughly 3–4 minutes into the install, after the audio hardware is detected, snapMULTI plays a single 1-second tone at 440 Hz (the "A" above middle C). This one tone confirms three things at once:
+
+- The audio HAT was detected correctly
+- The ALSA route to the speaker is configured
+- Speaker and amplifier chain are powered and connected
+
+If you don't hear it, the install still continues — but check power, volume, and cables before trying to play music later. To suppress the tone (overnight installs, speakers disconnected), set `TEST_TONE=false` in `install.conf` before first boot.
+
+### Health-check tones (manual, optional)
+
+v0.7.8 ships pre-recorded audio cues for the health-check script. Run it manually with `device-smoke.sh --tone` and the script ends with a distinctive sound:
+
+- **Ascending three-note chime (C5–E5–G5 major triad)** — all checks passed
+- **Two-note alternating chime** — passed with warnings (check the log)
+- **Descending two-note tone** — one or more checks failed
+- **Single low chirp** — boot still settling, retry in a minute
+
+These do not play automatically after every boot in v0.7.8 — you have to run the script yourself. A future release will add an auto-boot health check that plays a tone every time the Pi finishes booting.
 
 ---
 

@@ -38,6 +38,21 @@ Per un Pi speaker (modalità Audio Player): come sopra più un modo per collegar
 
 ---
 
+## Prima di iniziare: accendi le casse
+
+snapMULTI ti comunica che funziona attraverso l'audio. Durante l'installazione sentirai un tono di conferma di 1 secondo dopo il rilevamento della scheda audio; se amplificatore o casse sono spenti o in mute, non saprai che ha funzionato finché non proverai a riprodurre musica 10 minuti dopo.
+
+Prima di iniziare l'installazione:
+
+- Accendi l'amplificatore o le casse attive
+- Imposta il volume a un livello moderato
+- Verifica che i cavi siano collegati dall'uscita del DAC all'ingresso dell'amplificatore
+- Se hai cuffie nel jack 3.5 mm del Pi, l'audio uscirà da lì invece che dalla HAT — scollegale se vuoi l'uscita dalla HAT
+
+Puoi disattivare il tono di installazione impostando `TEST_TONE=false` in `install.conf`, ma il percorso consigliato per la prima installazione è: tieni le casse accese, ascolta il tono, sappi che la catena audio è corretta fin dal primo minuto.
+
+---
+
 ## Passo 1 — Flashare la scheda SD
 
 Usa **[Raspberry Pi Imager](https://www.raspberrypi.com/software/)** (download gratuito per macOS, Windows, Linux).
@@ -333,6 +348,27 @@ snapMULTI Auto-Install
 Il Pi **si riavvia automaticamente** quando l'installazione è completa. Dopo il riavvio, il display diventa scuro (normale — nessun desktop su Lite OS).
 
 > Se l'HDMI rimane nero per tutto il tempo: l'installazione continua comunque in background — `firstboot.sh` gira come servizio systemd e non ha bisogno del display. **Il LED verde ACT del Pi lampeggerà in modo irregolare per tutti i 10–15 minuti — è attività sulla scheda SD, il tuo segnale che l'install sta procedendo.** Aspetta tutta la finestra; per controllare lo stato senza schermo, fai `ssh <username>@<hostname>.local` ed esegui `sudo journalctl -u snapmulti-firstboot.service -f`.
+
+### Cosa sentirai
+
+Circa 3–4 minuti dopo l'inizio dell'installazione, dopo il rilevamento della scheda audio, snapMULTI riproduce un singolo tono di 1 secondo a 440 Hz (la nota "LA" sopra il DO centrale). Questo unico tono conferma tre cose insieme:
+
+- La scheda audio è stata rilevata correttamente
+- La catena ALSA verso il diffusore è configurata
+- Diffusore e amplificatore sono alimentati e collegati
+
+Se non lo senti, l'installazione prosegue comunque — ma controlla alimentazione, volume e cavi prima di provare a riprodurre musica più tardi. Per silenziare il tono (installazioni notturne, casse scollegate), imposta `TEST_TONE=false` in `install.conf` prima del primo boot.
+
+### Toni del test di salute (esecuzione manuale, opzionale)
+
+v0.7.8 include suoni pre-registrati per lo script del test di salute. Lo lanci manualmente con `device-smoke.sh --tone` e lo script termina con un suono distintivo:
+
+- **Triade ascendente di tre note (DO5–MI5–SOL5 maggiore)** — tutti i controlli OK
+- **Bitono alternato** — OK con avvisi (consulta il log)
+- **Bitono discendente** — uno o più controlli falliti
+- **Singolo cinguettio basso** — boot ancora in stabilizzazione, riprova fra un minuto
+
+In v0.7.8 questi suoni NON si attivano automaticamente a ogni boot — devi lanciare tu lo script. Una versione futura aggiungerà un test di salute automatico al boot che riprodurrà il tono ogni volta che il Pi termina l'avvio.
 
 ---
 
