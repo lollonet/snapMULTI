@@ -19,9 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **4K @ 60Hz HDMI on Pi 4 client displays (#461/#463)** — `docs/ADVANCED.md` (+ IT mirror) documents `hdmi_enable_4kp60=1` in `/boot/firmware/config.txt`, with live-validated procedure (no `ro-mode disable` dance — `/boot/firmware` is FAT32 outside overlayroot). Validated on snapdigi (Pi 4 2GB + LG 50" 4K TV).
 - **`docs/INSTALL.md` + `.it.md` — audible-feedback contract for first-time users (#462)** — adds `## Before you start: turn the speakers on` callout before Step 1, `### What you'll hear` (440 Hz post-HAT tone) and `### Health-check tones (manual, optional)` (the four `device-smoke.sh --tone` cues) inside Step 5. IT mirror uses glossary terms (`test di salute`, `casse`, DO–MI–SOL).
 
-### Docs
-- **`docs/INSTALL.md` + `.it.md` — audible-feedback contract for first-time users (#462)** — adds `## Before you start: turn the speakers on` callout before Step 1, `### What you'll hear` (440 Hz post-HAT tone) and `### Health-check tones (manual, optional)` (the four `device-smoke.sh --tone` cues) inside Step 5. IT mirror uses glossary terms (`test di salute`, `casse`, DO–MI–SOL).
-
 ## [0.7.8] — 2026-05-21
 
 > First release exercising the manifest gate end-to-end as a **script-only release**: `image_set` stays at `0.7.7`, `requires_image_rebuild=false`. The `build-push.yml` gate verifies the 5 production images already exist on Docker Hub at `:0.7.7` and skips the rebuild matrix (~30 s CI vs 10+ min on a normal tag).

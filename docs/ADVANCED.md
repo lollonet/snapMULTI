@@ -352,6 +352,8 @@ For congested networks or installs where the same Pi sees bulk file transfers, `
 tc qdisc add dev eth0 root cake bandwidth 100mbit
 ```
 
+You can disable or tune via `.env` (`QOS_ENABLE=false`). On a quiet home LAN the effect is undetectable; under heavy parallel transfers it's the difference between glitch-free audio and dropouts.
+
 ## 4K @ 60Hz HDMI on Pi 4 client displays
 
 Pi 4 ships with a conservative GPU clock that maxes out at 4K @ 30Hz. When the client Pi drives a 4K-capable TV/monitor, the kernel logs:
@@ -379,5 +381,3 @@ After reboot:
 - SoC temperature rises ~1-2 °C steady-state (within Pi 4 thermal envelope)
 
 Validated on snapdigi (Pi 4 2GB + LG 50" 4K TV) 2026-05-21.
-
-You can disable or tune via `.env` (`QOS_ENABLE=false`). On a quiet home LAN the effect is undetectable; under heavy parallel transfers it's the difference between glitch-free audio and dropouts.
