@@ -6,11 +6,13 @@
 # Triad scripts symlink (host-local convenience)
 scripts/triad
 
-# snapMULTI runtime data
-data/
-audio/
-artwork/
-mympd/
+# snapMULTI runtime data (project-root only — sub-trees may have
+# audio/ as a legitimate path, e.g. scripts/common/audio/ ships
+# pre-recorded smoke-result tones)
+/data/
+/audio/
+/artwork/
+/mympd/
 
 # MPD runtime data (but not config)
 mpd/data/
