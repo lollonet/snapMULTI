@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`device-smoke.sh --tone` was silent on both-mode hosts (#462)** — `play-smoke-tone.sh` now resolves the physical DAC and plays via explicit `-D plughw:CARD=<id>,DEV=0`, skipping the spectrum-analyzer `multi_out` default chain that fails when the `samplerate_best` plugin is missing. `libasound2-plugins` added to client/both apt deps so rate conversion works for all sources (smoke tones, Spotify high-res, MPD non-native rates).
+
 ### Docs
 - **`docs/INSTALL.md` + `.it.md` — audible-feedback contract for first-time users (#462)** — adds `## Before you start: turn the speakers on` callout before Step 1, `### What you'll hear` (440 Hz post-HAT tone) and `### Health-check tones (manual, optional)` (the four `device-smoke.sh --tone` cues) inside Step 5. IT mirror uses glossary terms (`test di salute`, `casse`, DO–MI–SOL).
 

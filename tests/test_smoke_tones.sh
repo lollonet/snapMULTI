@@ -60,6 +60,19 @@ assert "grep -q 'SNAPMULTI_BOOT_SMOKE_TONES' '$HELPER'" \
 assert "grep -q 'Server.GetStatus' '$HELPER'" \
     "checks Snapcast active-stream before playing (don't talk over music)"
 assert "grep -q 'exit 0' '$HELPER'" "always exits 0 (best-effort, never blocks)"
+assert "grep -q '_resolve_dac_card' '$HELPER'" \
+    "resolves physical DAC card to bypass broken default chain"
+assert "grep -qE 'Loopback|vc4hdmi' '$HELPER'" \
+    "DAC resolver skips Loopback / vc4hdmi virtual cards"
+assert "grep -q 'plughw:CARD=' '$HELPER'" \
+    "uses explicit -D plughw:CARD=<id> for resolved DAC"
+
+echo
+echo "## install-deps.sh — libasound2-plugins for both/client roles"
+
+DEPS="$ROOT/scripts/common/install-deps.sh"
+assert "grep -q 'libasound2-plugins' '$DEPS'" \
+    "libasound2-plugins in apt deps list (rate converters for non-native sample rates)"
 
 echo
 echo "## device-smoke.sh --tone wiring"

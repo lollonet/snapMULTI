@@ -65,8 +65,33 @@ if command -v curl >/dev/null 2>&1; then
     fi
 fi
 
-# Best-effort playback. Errors logged to journal only.
-if ! aplay -q "$WAV" 2>/dev/null; then
+# Resolve the physical DAC card to bypass the broken default ALSA chain
+# on both-mode hosts (spectrum-analyzer asound.conf points pcm.!default
+# at a multi_out needing samplerate_best — fails silently when the rate
+# converter plugin is missing). Skip Loopback / vc4hdmi / HDMI / pulse / null.
+_resolve_dac_card() {
+    aplay -l 2>/dev/null | awk -F'[ :,]+' '
+        /^card [0-9]+:/ {
+            id = $3
+            if (id ~ /^(Loopback|vc4hdmi[0-9]*|HDMI|Pulse|Null)$/) next
+            print id
+            exit
+        }
+    '
+}
+
+# Best-effort playback: try resolved DAC first, fall back to default.
+# Errors logged to journal only.
+_play_tone() {
+    local dac
+    dac=$(_resolve_dac_card)
+    if [[ -n "$dac" ]] && aplay -q -D "plughw:CARD=$dac,DEV=0" "$WAV" 2>/dev/null; then
+        return 0
+    fi
+    aplay -q "$WAV" 2>/dev/null
+}
+
+if ! _play_tone; then
     logger -t snapmulti-smoke-tone -p info \
         "smoke-tone playback failed (result=$RESULT, wav=$WAV)" 2>/dev/null || true
 fi

@@ -143,6 +143,11 @@ install_dependencies() {
         command -v aplay     &>/dev/null || pkgs+=(alsa-utils)
         command -v i2cdetect &>/dev/null || pkgs+=(i2c-tools)
         command -v modprobe  &>/dev/null || pkgs+=(kmod)
+        # ALSA rate converters (samplerate / speex). Without these, the
+        # multi_out asound.conf chain installed in both-mode fails silently
+        # for any source rate that doesn't match the DAC native rates
+        # (e.g. play-smoke-tone.sh WAVs at 22050 Hz → PCM5122 needs 44100+).
+        dpkg -s libasound2-plugins &>/dev/null || pkgs+=(libasound2-plugins)
     fi
 
     # Music source packages
