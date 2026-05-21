@@ -51,7 +51,9 @@ sudo bash /opt/snapmulti/scripts/device-smoke.sh --both --tone
 | Bitono discendente | Uno o più controlli falliti |
 | Singolo cinguettio basso | Boot ancora in stabilizzazione, riprova fra un minuto |
 
-I segnali sono opt-in: in v0.7.8 NON si attivano automaticamente al boot (previsto per una versione futura). Regole di silenziamento rispettate: `TEST_TONE=false` in `install.conf`, `SNAPMULTI_BOOT_SMOKE_TONES=off` in `.env`, e mai sopra uno stream Snapcast attivo.
+I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot-smoke.service`), così un Pi senza presidio segnala l'esito del riavvio in modo udibile. Tieni il volume moderato — il segnale si ripete a ogni accensione.
+
+**Opt-out multi-stanza:** sentire 5 stanze in sequenza al boot è una pessima UX. Imposta `SNAPMULTI_BOOT_SMOKE_TONES=off` in `/opt/snapmulti/.env` (server) o `/opt/snapclient/.env` (client) per silenziare il tono al boot mantenendo `--tone` manuale funzionante. `TEST_TONE=false` in `install.conf` silenzia tutto (tono di installazione + tono di boot + manuale). I segnali non si attivano mai sopra uno stream Snapcast attivo.
 
 ---
 

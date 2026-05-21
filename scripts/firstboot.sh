@@ -612,6 +612,9 @@ if is_client_install; then
         }
         cp -r "$SNAP_BOOT/client/".??* "$CLIENT_DIR/" 2>/dev/null || true
     fi
+    # Stage device-smoke.sh + smoke checks on client too — auto-boot-smoke.service needs them.
+    cp "$SNAP_BOOT/server/device-smoke.sh" "$CLIENT_DIR/scripts/" 2>/dev/null || true
+    [[ -d "$SNAP_BOOT/server/smoke" ]] && cp -r "$SNAP_BOOT/server/smoke" "$CLIENT_DIR/scripts/" 2>/dev/null || true
     local_missing=()
     [[ -f "$CLIENT_DIR/docker-compose.yml" ]] || local_missing+=("docker-compose.yml")
     [[ -f "$CLIENT_DIR/scripts/setup.sh" ]] || local_missing+=("scripts/setup.sh")

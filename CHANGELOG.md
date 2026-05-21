@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`snapmulti-auto-boot-smoke.service` — Pi speaks its post-boot health audibly (#463)** — new systemd oneshot fires `device-smoke.sh --tone` after every boot once Docker + Snapcast are healthy. INSTALL_TYPE dispatch (`--server` / `--client` / `--both`). `device-smoke.sh` + `smoke/` checks now staged on client paths too so pizero + snapdigi participate. Closes the v0.7.8 "manual `--tone` only" foundation gap — completes the acoustic-feedback contract introduced in #454.
+
 ### Fixed
 - **`device-smoke.sh --tone` was silent on both-mode hosts (#462)** — smoke WAVs regenerated at 44100 Hz mono (PCM5122 native rate). No rate conversion required, so the spectrum-analyzer `multi_out` default chain plays them even when `libasound2-plugins` is absent on the host.
+- **`50-usb-no-autosuspend.rules` udev failures every boot on Pi 4 (#458/#463)** — rule scoped via `TEST=="power/autosuspend"`, so hub interfaces that don't expose the attribute no longer emit "Failed to write … No such file" warnings. Functional behaviour unchanged (host-wide `usbcore.autosuspend=-1` was already set in boot-tune).
+- **`snapmulti-status.service` ignored `RuntimeMaxSec` warning (#459/#463)** — `RuntimeMaxSec` has no effect on `Type=oneshot` and was logged as ignored at every boot. Dropped — `TimeoutStartSec=120` (already present) provides the same runaway-kill semantics.
 
 ### Docs
+- **4K @ 60Hz HDMI on Pi 4 client displays (#461/#463)** — `docs/ADVANCED.md` (+ IT mirror) documents `hdmi_enable_4kp60=1` in `/boot/firmware/config.txt`, with live-validated procedure (no `ro-mode disable` dance — `/boot/firmware` is FAT32 outside overlayroot). Validated on snapdigi (Pi 4 2GB + LG 50" 4K TV).
 - **`docs/INSTALL.md` + `.it.md` — audible-feedback contract for first-time users (#462)** — adds `## Before you start: turn the speakers on` callout before Step 1, `### What you'll hear` (440 Hz post-HAT tone) and `### Health-check tones (manual, optional)` (the four `device-smoke.sh --tone` cues) inside Step 5. IT mirror uses glossary terms (`test di salute`, `casse`, DO–MI–SOL).
 
 ## [0.7.8] — 2026-05-21

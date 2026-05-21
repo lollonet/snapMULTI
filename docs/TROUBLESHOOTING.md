@@ -51,7 +51,9 @@ sudo bash /opt/snapmulti/scripts/device-smoke.sh --both --tone
 | Descending two-note tone | One or more checks failed |
 | Single low chirp | Boot still settling, retry in a minute |
 
-The cues are opt-in: not played automatically at boot in v0.7.8 (planned for a future release). Suppression rules honoured: `TEST_TONE=false` in `install.conf`, `SNAPMULTI_BOOT_SMOKE_TONES=off` in `.env`, and never plays over an active Snapcast stream.
+The cues also fire automatically after every boot (`snapmulti-auto-boot-smoke.service`), so an unattended Pi reports its post-reboot health audibly. Keep volume moderate — the tone repeats at every power-up.
+
+**Multi-room opt-out:** hearing 5 rooms chime in sequence at boot is bad UX. Set `SNAPMULTI_BOOT_SMOKE_TONES=off` in `/opt/snapmulti/.env` (server) or `/opt/snapclient/.env` (client) to silence the auto-boot tone while keeping the manual `--tone` invocation working. `TEST_TONE=false` in `install.conf` silences everything (install-time tone + boot tone + manual). Tones never play over an active Snapcast stream.
 
 ---
 

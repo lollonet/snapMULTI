@@ -45,7 +45,7 @@ snapMULTI ti comunica che funziona attraverso l'audio. Durante l'installazione s
 Prima di iniziare l'installazione:
 
 - Accendi l'amplificatore o le casse attive
-- Imposta il volume a un livello moderato
+- Imposta il volume a un **livello moderato** — snapMULTI riproduce anche un breve segnale audio del test di salute a ogni boot/reboot, non solo all'installazione; tieni un volume confortevole per un suono che parte senza presidio (es. dopo un blackout di notte)
 - Verifica che i cavi siano collegati dall'uscita del DAC all'ingresso dell'amplificatore
 - Se hai cuffie nel jack 3.5 mm del Pi, l'audio uscirà da lì invece che dalla HAT — scollegale se vuoi l'uscita dalla HAT
 

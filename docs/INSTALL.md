@@ -45,7 +45,7 @@ snapMULTI tells you it's alive through audio. During install you'll hear a 1-sec
 Before starting the install:
 
 - Power on the amplifier or active speakers
-- Set the volume to a moderate level
+- Set the volume to a **moderate level** — snapMULTI also plays a short health-check tone at every boot/reboot, not just at install; keep the volume comfortable for a sound that fires unattended (e.g. after a power cut at night)
 - Confirm cables are connected from the DAC output to the amplifier input
 - If headphones are plugged into the Pi's 3.5 mm jack, audio will route there instead of the HAT — unplug them if you want HAT output
 
