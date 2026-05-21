@@ -37,10 +37,10 @@ for result in pass warn fail skip; do
         wave=$(head -c 12 "$f" 2>/dev/null | tail -c 4)
         assert "[[ '$magic' == 'RIFF' ]]" "$result: RIFF header present"
         assert "[[ '$wave' == 'WAVE' ]]" "$result: WAVE format marker present"
-        # Size sanity: 4-60 KB range (~100 ms to ~1.5 s at 22050 mono 16-bit)
+        # Size sanity: 8-120 KB range (~100 ms to ~1.5 s at 44100 mono 16-bit)
         size=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null)
-        assert "[[ '$size' -ge 3000 && '$size' -le 65000 ]]" \
-            "$result: size $size bytes within expected 3-60 KB range"
+        assert "[[ '$size' -ge 6000 && '$size' -le 130000 ]]" \
+            "$result: size $size bytes within expected 6-130 KB range"
     fi
 done
 
@@ -60,19 +60,16 @@ assert "grep -q 'SNAPMULTI_BOOT_SMOKE_TONES' '$HELPER'" \
 assert "grep -q 'Server.GetStatus' '$HELPER'" \
     "checks Snapcast active-stream before playing (don't talk over music)"
 assert "grep -q 'exit 0' '$HELPER'" "always exits 0 (best-effort, never blocks)"
-assert "grep -q '_resolve_dac_card' '$HELPER'" \
-    "resolves physical DAC card to bypass broken default chain"
-assert "grep -qE 'Loopback|vc4hdmi' '$HELPER'" \
-    "DAC resolver skips Loopback / vc4hdmi virtual cards"
-assert "grep -q 'plughw:CARD=' '$HELPER'" \
-    "uses explicit -D plughw:CARD=<id> for resolved DAC"
 
 echo
-echo "## install-deps.sh — libasound2-plugins for both/client roles"
+echo "## WAVs at 44100 Hz native (no rate conversion required)"
 
-DEPS="$ROOT/scripts/common/install-deps.sh"
-assert "grep -q 'libasound2-plugins' '$DEPS'" \
-    "libasound2-plugins in apt deps list (rate converters for non-native sample rates)"
+WAV_DIR="$ROOT/scripts/common/audio"
+assert "[[ -f '$WAV_DIR/smoke-pass.wav' ]]" "smoke-pass.wav exists"
+for f in pass warn fail skip; do
+    assert "file '$WAV_DIR/smoke-$f.wav' 2>/dev/null | grep -qE '44100 Hz|44.1 kHz'" \
+        "smoke-$f.wav sampled at 44100 Hz (PCM5122 native)"
+done
 
 echo
 echo "## device-smoke.sh --tone wiring"

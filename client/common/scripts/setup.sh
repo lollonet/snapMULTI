@@ -552,7 +552,7 @@ else
     log_progress "WARNING: install-deps.sh not found, installing base packages inline"
     # apt output to log only — keeps the install TUI on /dev/tty3 unstomped
     DEBIAN_FRONTEND=noninteractive apt-get update -qq >> "${UNIFIED_LOG:-/dev/null}" 2>&1 \
-        && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates curl alsa-utils libasound2-plugins avahi-daemon avahi-utils >> "${UNIFIED_LOG:-/dev/null}" 2>&1
+        && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates curl alsa-utils avahi-daemon avahi-utils >> "${UNIFIED_LOG:-/dev/null}" 2>&1
 fi
 
 progress 2 "Installing Docker CE..."
