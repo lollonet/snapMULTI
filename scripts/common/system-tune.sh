@@ -98,7 +98,7 @@ tune_usb_autosuspend() {
 
     if echo -1 > /sys/module/usbcore/parameters/autosuspend 2>/dev/null; then
         if mkdir -p /etc/udev/rules.d 2>/dev/null; then
-            if ! echo 'ACTION=="add", SUBSYSTEM=="usb", ATTR{power/autosuspend}="-1"' \
+            if ! echo 'ACTION=="add", SUBSYSTEM=="usb", TEST=="power/autosuspend", ATTR{power/autosuspend}="-1"' \
                 > /etc/udev/rules.d/50-usb-no-autosuspend.rules 2>/dev/null; then
                 is_overlayroot && warn "USB autosuspend: udev rule skipped (overlayroot)"
             fi

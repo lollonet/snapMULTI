@@ -353,3 +353,31 @@ tc qdisc add dev eth0 root cake bandwidth 100mbit
 ```
 
 Si può disabilitare o modulare via `.env` (`QOS_ENABLE=false`). Su una LAN domestica tranquilla l'effetto non si nota; sotto trasferimenti paralleli pesanti è la differenza fra audio senza glitch e dropout.
+
+## 4K @ 60Hz HDMI su display client Pi 4
+
+Pi 4 ha di default un clock GPU conservativo che si ferma a 4K @ 30Hz. Quando il Pi client pilota una TV/monitor 4K, il kernel logga:
+
+```
+vc4-drm gpu: [drm] The core clock cannot reach frequencies high enough to support 4k @ 60Hz.
+vc4-drm gpu: [drm] Please change your config.txt file to add hdmi_enable_4kp60.
+```
+
+Il container `fb-display` di snapMULTI funziona a qualsiasi modalità HDMI — il frame rate non influisce sul contenuto renderizzato. Ma la TV 4K mostra un segnale degradato 1080p @ 60Hz o 4K @ 30Hz finché non abiliti il boost del clock GPU.
+
+### Fix (niente dance overlayroot — `/boot/firmware` è FAT32, fuori da overlayroot)
+
+```bash
+ssh <client-host>
+sudo mount -o remount,rw /boot/firmware
+sudo sh -c 'echo "hdmi_enable_4kp60=1" >> /boot/firmware/config.txt'
+sudo mount -o remount,ro /boot/firmware
+sudo reboot
+```
+
+Dopo il reboot:
+- Warning `vc4-drm` spariti da `journalctl -p warning`
+- Framebuffer riporta `3840x2160`
+- Temperatura SoC sale di ~1-2 °C a regime (dentro la finestra termica del Pi 4)
+
+Validato su snapdigi (Pi 4 2GB + TV LG 50" 4K) il 2026-05-21.

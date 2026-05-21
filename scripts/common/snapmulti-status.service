@@ -9,12 +9,8 @@ StartLimitBurst=5
 
 [Service]
 Type=oneshot
-# Concurrency guard: flock-based, so two timer firings can't write the
-# JSON file at once (Pi Zero 2W on a slow SD can have smoke runs > 60s).
-# `flock --nonblock` exits immediately if another instance holds the lock.
-# RuntimeMaxSec also kills runaway runs that would block the next timer.
-RuntimeMaxSec=120
-TimeoutStartSec=130
+# TimeoutStartSec kills runaway runs that would block the next timer (RuntimeMaxSec has no effect on Type=oneshot).
+TimeoutStartSec=120
 KillMode=mixed
 # `flock --nonblock` exits 1 when the lock is busy (concurrent run). That's
 # the intended "skip this firing" behaviour, not a failure — tell systemd so
