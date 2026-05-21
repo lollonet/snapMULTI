@@ -137,6 +137,7 @@ function Assert-PreparedSdCard {
         'common/systemd-snippets.sh',
         'common/release-manifest.sh',
         'common/play-smoke-tone.sh',
+        'common/auto-boot-smoke.sh',
         'common/audio/smoke-pass.wav',
         'common/audio/smoke-warn.wav',
         'common/audio/smoke-fail.wav',

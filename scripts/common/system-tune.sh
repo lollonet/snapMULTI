@@ -783,9 +783,31 @@ DEOF
         install -m 755 "$_tune_dir/play-smoke-tone.sh" /usr/local/bin/snapmulti-play-smoke-tone
     fi
 
+    # Auto-boot-smoke service — fires device-smoke.sh --tone after every boot so the appliance speaks its health.
+    if [[ -f "$_tune_dir/auto-boot-smoke.sh" ]]; then
+        install -m 755 "$_tune_dir/auto-boot-smoke.sh" /usr/local/bin/snapmulti-auto-boot-smoke
+        cat > /etc/systemd/system/snapmulti-auto-boot-smoke.service <<'BSEOF'
+[Unit]
+Description=snapMULTI auto boot smoke (acoustic health cue)
+After=multi-user.target docker.service snapmulti-server.service snapclient.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/snapmulti-auto-boot-smoke
+TimeoutStartSec=180
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+BSEOF
+    fi
+
     systemctl daemon-reload
     systemctl enable snapmulti-boot-tune.service 2>/dev/null
     systemctl enable snapmulti-docker-driver.service 2>/dev/null || true
+    systemctl enable snapmulti-auto-boot-smoke.service 2>/dev/null || true
 
     # NetworkManager-wait-online.service is masked at kernel cmdline level
     # (prepare-sd.sh writes systemd.mask=NetworkManager-wait-online.service
