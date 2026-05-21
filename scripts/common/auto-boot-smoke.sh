@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Wrapper invoked by snapmulti-auto-boot-smoke.service: runs device-smoke.sh --tone for the host's install role.
 
+# No -e: every branch exits 0 explicitly. Failure to fire the tone must NEVER fail boot.
 set -uo pipefail
 
 CONF=/opt/snapmulti/install.conf
@@ -30,4 +31,4 @@ fi
 
 sleep 3   # container-metric settle window
 
-exec "$SMOKE" "$MODE" --tone >/dev/null 2>&1
+exec "$SMOKE" "$MODE" --tone >/dev/null
