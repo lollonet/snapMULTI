@@ -106,6 +106,21 @@ assert "grep -qE 'GATE_IMAGE_SET.*needs.gate.outputs.image_set' '$WF'" \
 assert "grep -qE 'tag=\\\$GATE_IMAGE_SET' '$WF'" \
     "tagged-release branch uses GATE_IMAGE_SET for the published tag"
 
+# build-client also wired to gate (was missed in the original #447 refactor;
+# fixed in the follow-up — script-only releases must also skip the client
+# image rebuild, not just the server matrix). Scope to the build-client
+# section by line range (build-client at line ~286, next job 'manifest'
+# at line ~388 — see grep '^  [a-z].*:' in build-push.yml).
+client_section=$(awk '/^  build-client:/{found=1} found{print} /^  manifest:/{if (found) {found=0}}' "$WF")
+assert "printf '%s' \"\$client_section\" | grep -qE '^    needs: gate'" \
+    "build-client job has needs: gate"
+
+assert "printf '%s' \"\$client_section\" | grep -qE \"needs.gate.outputs.should_rebuild == 'true'\"" \
+    "build-client job conditioned on gate.outputs.should_rebuild=='true'"
+
+assert "printf '%s' \"\$client_section\" | grep -q 'GATE_IMAGE_SET'" \
+    "build-client derives image tag from gate.outputs.image_set (parity with server build)"
+
 echo
 echo "## Summary"
 echo "  Passed: $pass"
