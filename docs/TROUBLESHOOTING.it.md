@@ -36,6 +36,23 @@ Verifica stato mount root + overlayroot, storage driver Docker, unit systemd ric
 
 Output JSON per script / dashboard: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server --json`.
 
+### Segnali audio del risultato — `--tone` <a id="toni-test-salute"></a>
+
+Aggiungi `--tone` per riprodurre un breve segnale audio alla fine dell'esecuzione (utile per installazioni server headless senza HDMI):
+
+```bash
+sudo bash /opt/snapmulti/scripts/device-smoke.sh --both --tone
+```
+
+| Segnale | Significato |
+|---------|-------------|
+| Triade ascendente di tre note (DO5–MI5–SOL5 maggiore) | Tutti i controlli OK |
+| Bitono alternato | OK con avvisi — consulta il log |
+| Bitono discendente | Uno o più controlli falliti |
+| Singolo cinguettio basso | Boot ancora in stabilizzazione, riprova fra un minuto |
+
+I segnali sono opt-in: in v0.7.8 NON si attivano automaticamente al boot (previsto per una versione futura). Regole di silenziamento rispettate: `TEST_TONE=false` in `install.conf`, `SNAPMULTI_BOOT_SMOKE_TONES=off` in `.env`, e mai sopra uno stream Snapcast attivo.
+
 ---
 
 ## L'installazione sembra ferma

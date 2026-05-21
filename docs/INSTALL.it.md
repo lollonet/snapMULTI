@@ -49,7 +49,7 @@ Prima di iniziare l'installazione:
 - Verifica che i cavi siano collegati dall'uscita del DAC all'ingresso dell'amplificatore
 - Se hai cuffie nel jack 3.5 mm del Pi, l'audio uscirà da lì invece che dalla HAT — scollegale se vuoi l'uscita dalla HAT
 
-Puoi disattivare il tono di installazione impostando `TEST_TONE=false` in `install.conf`, ma il percorso consigliato per la prima installazione è: tieni le casse accese, ascolta il tono, sappi che la catena audio è corretta fin dal primo minuto.
+Puoi disattivare il tono di installazione impostando `TEST_TONE=false` in `install.conf` sulla partizione di boot della SD (`snapmulti/install.conf` — creato da `prepare-sd.sh`), ma il percorso consigliato per la prima installazione è: tieni le casse accese, ascolta il tono, sappi che la catena audio è corretta fin dal primo minuto.
 
 ---
 
@@ -359,16 +359,7 @@ Circa 3–4 minuti dopo l'inizio dell'installazione, dopo il rilevamento della s
 
 Se non lo senti, l'installazione prosegue comunque — ma controlla alimentazione, volume e cavi prima di provare a riprodurre musica più tardi. Per silenziare il tono (installazioni notturne, casse scollegate), imposta `TEST_TONE=false` in `install.conf` prima del primo boot.
 
-### Toni del test di salute (esecuzione manuale, opzionale)
-
-v0.7.8 include suoni pre-registrati per lo script del test di salute. Lo lanci manualmente con `device-smoke.sh --tone` e lo script termina con un suono distintivo:
-
-- **Triade ascendente di tre note (DO5–MI5–SOL5 maggiore)** — tutti i controlli OK
-- **Bitono alternato** — OK con avvisi (consulta il log)
-- **Bitono discendente** — uno o più controlli falliti
-- **Singolo cinguettio basso** — boot ancora in stabilizzazione, riprova fra un minuto
-
-In v0.7.8 questi suoni NON si attivano automaticamente a ogni boot — devi lanciare tu lo script. Una versione futura aggiungerà un test di salute automatico al boot che riprodurrà il tono ogni volta che il Pi termina l'avvio.
+> Dopo l'install, un controllo opzionale `device-smoke.sh --tone` riproduce un segnale audio distintivo per risultato (PASS / WARN / FAIL). Vedi [TROUBLESHOOTING.it.md — Segnali audio del risultato](TROUBLESHOOTING.it.md#toni-test-salute).
 
 ---
 

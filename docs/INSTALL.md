@@ -49,7 +49,7 @@ Before starting the install:
 - Confirm cables are connected from the DAC output to the amplifier input
 - If headphones are plugged into the Pi's 3.5 mm jack, audio will route there instead of the HAT — unplug them if you want HAT output
 
-You can opt out of the install-time tone by setting `TEST_TONE=false` in `install.conf`, but the recommended path for a first install is: keep the speakers on, hear the tone, know your audio chain is correct from minute one.
+You can opt out of the install-time tone by setting `TEST_TONE=false` in `install.conf` on the SD card's boot partition (`snapmulti/install.conf` — created by `prepare-sd.sh`), but the recommended path for a first install is: keep the speakers on, hear the tone, know your audio chain is correct from minute one.
 
 ---
 
@@ -357,16 +357,7 @@ Roughly 3–4 minutes into the install, after the audio hardware is detected, sn
 
 If you don't hear it, the install still continues — but check power, volume, and cables before trying to play music later. To suppress the tone (overnight installs, speakers disconnected), set `TEST_TONE=false` in `install.conf` before first boot.
 
-### Health-check tones (manual, optional)
-
-v0.7.8 ships pre-recorded audio cues for the health-check script. Run it manually with `device-smoke.sh --tone` and the script ends with a distinctive sound:
-
-- **Ascending three-note chime (C5–E5–G5 major triad)** — all checks passed
-- **Two-note alternating chime** — passed with warnings (check the log)
-- **Descending two-note tone** — one or more checks failed
-- **Single low chirp** — boot still settling, retry in a minute
-
-These do not play automatically after every boot in v0.7.8 — you have to run the script yourself. A future release will add an auto-boot health check that plays a tone every time the Pi finishes booting.
+> After install, an optional `device-smoke.sh --tone` health check plays a distinctive cue per result (PASS / WARN / FAIL). See [TROUBLESHOOTING.md — Audible result cues](TROUBLESHOOTING.md#health-check-tones).
 
 ---
 
