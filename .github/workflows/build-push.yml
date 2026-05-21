@@ -284,6 +284,8 @@ jobs:
 
   # Client images — ARM only (built on Mac runner)
   build-client:
+    needs: gate
+    if: needs.gate.outputs.should_rebuild == 'true'
     runs-on: [self-hosted, macOS, ARM64]
     permissions:
       contents: read
@@ -305,17 +307,27 @@ jobs:
         id: version
         env:
           USE_SANTCASP: ${{ inputs.use_santcasp }}
+          # Image tag for tagged releases comes from the gate's manifest
+          # read — NOT github.ref_name — so a script-only release tagged
+          # vX.Y.Z+1 with image_set=X.Y.Z keeps publishing X.Y.Z client
+          # images (parity with the server build job).
+          GATE_IMAGE_SET: ${{ needs.gate.outputs.image_set }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
-            echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
-            echo "label=latest" >> "$GITHUB_OUTPUT"
+            {
+              echo "tag=$GATE_IMAGE_SET"
+              echo "label=latest"
+            } >> "$GITHUB_OUTPUT"
           elif [[ "$USE_SANTCASP" == "true" ]]; then
-            echo "tag=" >> "$GITHUB_OUTPUT"
-            echo "label=dev" >> "$GITHUB_OUTPUT"
+            {
+              echo "tag="
+              echo "label=dev"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "tag=" >> "$GITHUB_OUTPUT"
-            echo "label=manual" >> "$GITHUB_OUTPUT"
+            {
+              echo "tag="
+              echo "label=manual"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Determine snapcast source
