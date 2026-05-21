@@ -922,9 +922,24 @@ $setupVideo = 'video=HDMI-A-1:800x600@60'
 if (Test-Path $cmdline) {
     $content = [System.IO.File]::ReadAllText($cmdline).TrimEnd()
     if ($content -notmatch 'video=HDMI-A-1:') {
-        [System.IO.File]::WriteAllText($cmdline, "$content $setupVideo`n", $Utf8NoBom)
+        $content = "$content $setupVideo"
         Write-Host '  Set temporary setup resolution (800x600) in cmdline.txt'
     }
+    # Mask units we know we never want active. Parsed by PID 1 before
+    # any unit starts; survives overlayroot upper-layer wipes (a
+    # post-firstboot systemctl mask would be lost on every reboot).
+    # Sync with scripts/prepare-sd.sh BOOT_MASK_UNITS array.
+    $bootMaskUnits = @(
+        'NetworkManager-wait-online.service'
+    )
+    foreach ($unit in $bootMaskUnits) {
+        $token = "systemd.mask=$unit"
+        if ($content -notmatch ('\b' + [regex]::Escape($token) + '\b')) {
+            $content = "$content $token"
+            Write-Host "  Added systemd.mask=$unit to cmdline.txt"
+        }
+    }
+    [System.IO.File]::WriteAllText($cmdline, "$content`n", $Utf8NoBom)
 }
 
 # ── Patch user-data (Bookworm+ cloud-init) ────────────────────────

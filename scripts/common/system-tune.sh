@@ -767,5 +767,11 @@ DEOF
     systemctl daemon-reload
     systemctl enable snapmulti-boot-tune.service 2>/dev/null
     systemctl enable snapmulti-docker-driver.service 2>/dev/null || true
+
+    # NetworkManager-wait-online.service is masked at kernel cmdline level
+    # (prepare-sd.sh writes systemd.mask=NetworkManager-wait-online.service
+    # to cmdline.txt) — survives overlayroot upper-layer wipes and is
+    # parsed before any unit starts. No systemctl mask needed here.
+
     ok "Boot tuning service installed (CPU, USB, CAKE persist across reboots)"
 }
