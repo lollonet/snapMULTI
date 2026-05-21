@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8] — 2026-05-21
+
+> First release exercising the manifest gate end-to-end as a **script-only release**: `image_set` stays at `0.7.7`, `requires_image_rebuild=false`. The `build-push.yml` gate verifies the 5 production images already exist on Docker Hub at `:0.7.7` and skips the rebuild matrix (~30 s CI vs 10+ min on a normal tag).
+
 ### Fixed
 - **`scripts/diagnostic.sh` meta.txt no longer double-prefixes release-identity keys (#451)** — `grep -m1 '^SNAPMULTI_RELEASE=' /opt/snapmulti/.env` returns the full line (`SNAPMULTI_RELEASE=v0.7.7`), and the original wrapper produced `snapmulti_release=SNAPMULTI_RELEASE=v0.7.7` in the diagnostic bundle. Tooling that parses meta.txt as key=value saw doubled prefixes. Added `| cut -d= -f2-` to strip the leading `KEY=`, mirroring the pattern already used by `scripts/smoke/check_system.sh`. Addresses the MEDIUM finding raised by claude-review on PR #447 (release-manifest decoupling) that was not addressed before merge.
 - **`scripts/deploy.sh::persist_env_kv` is sed-metacharacter safe and atomic (#451)** — the previous in-place `sed -i "s|^${key}=.*|${key}=${value}|"` would silently corrupt the `.env` line if `${value}` contained `|`, `\`, or `&`. In production these values are version strings (`v0.7.7`, `dev`) so the bug never triggered, but it was latent. Replaced with an awk rewrite that treats `k` and `v` as plain strings (no metacharacter dance) and uses temp-file + `mv` for atomicity (a kernel panic mid-write can no longer leave a truncated `.env`). Addresses the LOW finding from claude-review on PR #447.
