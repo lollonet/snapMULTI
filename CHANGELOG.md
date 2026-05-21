@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`device-smoke.sh --tone` was silent on both-mode hosts (#462)** — smoke WAVs regenerated at 44100 Hz mono (PCM5122 native rate). No rate conversion required, so the spectrum-analyzer `multi_out` default chain plays them even when `libasound2-plugins` is absent on the host.
+
+### Docs
+- **`docs/INSTALL.md` + `.it.md` — audible-feedback contract for first-time users (#462)** — adds `## Before you start: turn the speakers on` callout before Step 1, `### What you'll hear` (440 Hz post-HAT tone) and `### Health-check tones (manual, optional)` (the four `device-smoke.sh --tone` cues) inside Step 5. IT mirror uses glossary terms (`test di salute`, `casse`, DO–MI–SOL).
+
 ## [0.7.8] — 2026-05-21
 
 > First release exercising the manifest gate end-to-end as a **script-only release**: `image_set` stays at `0.7.7`, `requires_image_rebuild=false`. The `build-push.yml` gate verifies the 5 production images already exist on Docker Hub at `:0.7.7` and skips the rebuild matrix (~30 s CI vs 10+ min on a normal tag).

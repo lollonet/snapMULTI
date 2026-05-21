@@ -1,19 +1,5 @@
 #!/usr/bin/env bash
-# regenerate-smoke-tones.sh — developer tool to (re)generate the smoke
-# result audio cues shipped with snapMULTI.
-#
-# Output: 4 WAV files in scripts/common/audio/
-#   smoke-pass.wav  — ascending major triad (C5 → E5 → G5)
-#   smoke-warn.wav  — alternating A4 ↔ C5, two cycles
-#   smoke-fail.wav  — descending tritone (A4 → D♯4), two cycles
-#   smoke-skip.wav  — single low chirp (220 Hz, short)
-#
-# Format: mono, 22050 Hz, 16-bit PCM. Each WAV ≤ 60 KB.
-# Played at boot/smoke-completion by scripts/common/play-smoke-tone.sh
-# via `aplay -q` on the device.
-#
-# Run from anywhere; resolves output dir via $SCRIPT_DIR/../common/audio.
-# Requires sox. On macOS: `brew install sox`. On Debian: `apt install sox`.
+# Regenerate the 4 smoke result WAVs in scripts/common/audio/. Requires sox.
 
 set -euo pipefail
 
@@ -21,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AUDIO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)/common/audio"
 
 if ! command -v sox >/dev/null 2>&1; then
-    echo "ERROR: sox not installed. Install with 'brew install sox' (macOS) or 'apt install sox' (Debian)." >&2
+    echo "ERROR: sox not installed. Install with 'brew install sox' or 'apt install sox'." >&2
     exit 1
 fi
 
@@ -29,8 +15,8 @@ mkdir -p "$AUDIO_DIR"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-# 22050 Hz / mono / 16-bit — sufficient for tones, ~44 KB/s
-RATE=22050
+# 44100 = PCM5122 native rate, no ALSA rate conversion needed.
+RATE=44100
 CHANNELS=1
 BITS=16
 

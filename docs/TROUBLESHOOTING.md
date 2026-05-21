@@ -36,6 +36,23 @@ It validates root mount + overlayroot state, Docker storage driver, required sys
 
 JSON for scripts / dashboards: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server --json`.
 
+### Audible result cues — `--tone` <a id="health-check-tones"></a>
+
+Add `--tone` to play a short audio cue at the end of the run (headless server installs without HDMI):
+
+```bash
+sudo bash /opt/snapmulti/scripts/device-smoke.sh --both --tone
+```
+
+| Cue | Meaning |
+|-----|---------|
+| Ascending three-note chime (C5–E5–G5 major triad) | All checks passed |
+| Two-note alternating chime | Passed with warnings — check the log |
+| Descending two-note tone | One or more checks failed |
+| Single low chirp | Boot still settling, retry in a minute |
+
+The cues are opt-in: not played automatically at boot in v0.7.8 (planned for a future release). Suppression rules honoured: `TEST_TONE=false` in `install.conf`, `SNAPMULTI_BOOT_SMOKE_TONES=off` in `.env`, and never plays over an active Snapcast stream.
+
 ---
 
 ## Installation seems stuck
