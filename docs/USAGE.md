@@ -127,7 +127,7 @@ systemd owns container lifecycle after install (ADR-005). Docker `restart: unles
 
 - Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`
 - Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (HDMI clients only)
-- All: `snapmulti-boot-tune.service`
+- All: `snapmulti-boot-tune.service`, `snapmulti-auto-boot-smoke.service` (acoustic post-boot health cue — see [TROUBLESHOOTING.md](TROUBLESHOOTING.md#health-check-tones) for cue vocabulary and opt-out)
 
 Inspect with `systemctl cat <unit>`. Deployment paths and update strategy: [ADVANCED.md](ADVANCED.md#deployment-without-prepare-sd).
 

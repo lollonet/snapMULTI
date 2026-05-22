@@ -127,7 +127,7 @@ Dopo l'installazione systemd possiede il ciclo di vita dei container (ADR-005). 
 
 - Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`
 - Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (solo client HDMI)
-- Tutti: `snapmulti-boot-tune.service`
+- Tutti: `snapmulti-boot-tune.service`, `snapmulti-auto-boot-smoke.service` (segnale audio del test di salute al boot — vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md#toni-test-salute) per vocabolario e opt-out)
 
 Ispeziona con `systemctl cat <unit>`. Path di deployment e strategie di aggiornamento: [ADVANCED.it.md](ADVANCED.it.md#deploy-senza-prepare-sd).
 
