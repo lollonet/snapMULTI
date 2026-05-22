@@ -1166,7 +1166,7 @@ if is_client_install; then
             exit 1
         fi
     else
-        log_info "Starting snapclient container (fb-display deferred to post-reboot)..."
+        log_info "Launching docker compose for snapclient (fb-display deferred to post-reboot)..."
         if ! ( cd "$CLIENT_DIR" && COMPOSE_PROFILES="" docker compose up -d ); then
             log_warn "docker compose up -d snapclient failed"
         fi
