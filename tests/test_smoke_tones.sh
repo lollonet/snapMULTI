@@ -37,10 +37,10 @@ for result in pass warn fail skip; do
         wave=$(head -c 12 "$f" 2>/dev/null | tail -c 4)
         assert "[[ '$magic' == 'RIFF' ]]" "$result: RIFF header present"
         assert "[[ '$wave' == 'WAVE' ]]" "$result: WAVE format marker present"
-        # Size sanity: 8-120 KB range (~100 ms to ~1.5 s at 44100 mono 16-bit)
+        # Size sanity: 15-250 KB range (~100 ms to ~1.5 s at 44100 stereo 16-bit)
         size=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null)
-        assert "[[ '$size' -ge 6000 && '$size' -le 130000 ]]" \
-            "$result: size $size bytes within expected 6-130 KB range"
+        assert "[[ '$size' -ge 15000 && '$size' -le 250000 ]]" \
+            "$result: size $size bytes within expected 15-250 KB range"
     fi
 done
 
@@ -69,6 +69,8 @@ assert "[[ -f '$WAV_DIR/smoke-pass.wav' ]]" "smoke-pass.wav exists"
 for f in pass warn fail skip; do
     assert "file '$WAV_DIR/smoke-$f.wav' 2>/dev/null | grep -qE '44100 Hz|44.1 kHz'" \
         "smoke-$f.wav sampled at 44100 Hz (PCM5122 native)"
+    assert "file '$WAV_DIR/smoke-$f.wav' 2>/dev/null | grep -q 'stereo'" \
+        "smoke-$f.wav stereo (both DAC channels reached via multi_out ttable)"
 done
 
 echo

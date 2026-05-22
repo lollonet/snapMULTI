@@ -16,8 +16,9 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
 # 44100 = PCM5122 native rate, no ALSA rate conversion needed.
+# Stereo so both DAC channels receive the signal through the multi_out asound.conf ttable used in both-mode.
 RATE=44100
-CHANNELS=1
+CHANNELS=2
 BITS=16
 
 # 5 ms attack + 5 ms release fade on every segment to avoid click/pop.

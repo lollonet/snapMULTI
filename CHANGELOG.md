@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8.1] — 2026-05-22
+
+> Patch release completing the acoustic-feedback contract started in v0.7.8: smoke result cues now fire automatically after every boot through the attached DAC, plus 7 cleanup fixes from the snapvideo+snapdigi deep audit. Script-only release — `image_set` stays at `0.7.7`, `requires_image_rebuild=false`. Validated live on snapvideo (both-mode Pi 4 8GB) via host-level patch + verified tone audible through HiFiBerry DAC.
+
 ### Added
 - **`snapmulti-auto-boot-smoke.service` — Pi speaks its post-boot health audibly (#463)** — new systemd oneshot fires `device-smoke.sh --tone` after every boot once Docker + Snapcast are healthy. INSTALL_TYPE dispatch (`--server` / `--client` / `--both`). `device-smoke.sh` + `smoke/` checks now staged on client paths too so pizero + snapdigi participate. Closes the v0.7.8 "manual `--tone` only" foundation gap — completes the acoustic-feedback contract introduced in #454.
 
 ### Fixed
-- **`device-smoke.sh --tone` was silent on both-mode hosts (#462)** — smoke WAVs regenerated at 44100 Hz mono (PCM5122 native rate). No rate conversion required, so the spectrum-analyzer `multi_out` default chain plays them even when `libasound2-plugins` is absent on the host.
+- **`device-smoke.sh --tone` was silent on both-mode hosts (#462)** — smoke WAVs regenerated at 44100 Hz **stereo** (PCM5122 native rate, both DAC channels reached). No rate conversion required, so the spectrum-analyzer `multi_out` default chain plays them even when `libasound2-plugins` is absent on the host. Stereo because the multi_out asound.conf ttable maps WAV channel 1 to `none` — mono WAV reached only the DAC left channel at half volume.
 - **`50-usb-no-autosuspend.rules` udev failures every boot on Pi 4 (#458/#463)** — rule scoped via `TEST=="power/autosuspend"`, so hub interfaces that don't expose the attribute no longer emit "Failed to write … No such file" warnings. Functional behaviour unchanged (host-wide `usbcore.autosuspend=-1` was already set in boot-tune).
 - **`snapmulti-status.service` ignored `RuntimeMaxSec` warning (#459/#463)** — `RuntimeMaxSec` has no effect on `Type=oneshot` and was logged as ignored at every boot. Dropped — `TimeoutStartSec=120` (already present) provides the same runaway-kill semantics.
 - **`metadata-service` `EXTERNAL_HOST` now auto-detects LAN IP (#460/#464)** — the kernel routing table (`SOCK_DGRAM` connect to `8.8.8.8`, no traffic emitted) picks the host's outbound IP so split server+client topologies get a usable artwork URL without `.env` configuration. The loopback warning now fires only when auto-detection AND any explicit override both fail — for both-mode installs (vast majority) the warning is gone. New tests in `tests/test_metadata_service.py::TestResolveExternalHost` (4 cases: explicit-env, FQDN-public, LAN-IP fallback, full-loopback fallback).

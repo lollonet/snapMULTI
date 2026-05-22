@@ -52,8 +52,8 @@ assert "jq -e 'has(\"image_set\")' '$MANIFEST' >/dev/null" \
 assert "jq -e 'has(\"requires_image_rebuild\")' '$MANIFEST' >/dev/null" \
     "manifest has requires_image_rebuild key"
 
-assert "[[ \$(jq -r .snapmulti_release '$MANIFEST') =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]" \
-    "snapmulti_release matches vX.Y.Z"
+assert "[[ \$(jq -r .snapmulti_release '$MANIFEST') =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]" \
+    "snapmulti_release matches vX.Y.Z or vX.Y.Z.W (patch sub-release)"
 
 assert "[[ \$(jq -r .image_set '$MANIFEST') =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]" \
     "image_set matches X.Y.Z (no v prefix — Docker tag format)"
