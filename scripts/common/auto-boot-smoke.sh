@@ -20,15 +20,27 @@ esac
 
 [[ -x "$SMOKE" ]] || exit 0
 
-# Wait up to 90 s for Snapcast healthy — avoid false-positive FAIL during slow container startup.
-if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
-    for _ in $(seq 1 45); do
-        curl -s --max-time 2 -d '{"id":1,"jsonrpc":"2.0","method":"Server.GetStatus"}' \
-            http://localhost:1780/jsonrpc 2>/dev/null | grep -q '"streams"' && break
-        sleep 2
+# Wait up to 5 min for all HEALTH-CHECKED containers healthy. Server project picked for server/both (MPD has the longest start_period); client project for client-only.
+if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "client-native" ]]; then
+    COMPOSE_DIR=/opt/snapclient
+else
+    COMPOSE_DIR=/opt/snapmulti
+fi
+if [[ -f "$COMPOSE_DIR/docker-compose.yml" ]]; then
+    for _ in $(seq 1 60); do
+        # Only containers WITH a healthcheck count — services without one print empty string and would block the gate forever.
+        health_states=$(cd "$COMPOSE_DIR" && docker compose ps -q 2>/dev/null \
+            | xargs -r docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null \
+            | grep -E '^(healthy|starting|unhealthy)$' || true)
+        total=$(printf '%s\n' "$health_states" | grep -c . || true)
+        healthy=$(printf '%s\n' "$health_states" | grep -c '^healthy$' || true)
+        [[ "$total" -gt 0 && "$healthy" -ge "$total" ]] && break
+        sleep 5
     done
 fi
 
-sleep 3   # container-metric settle window
+sleep 10  # let snapmulti-status.timer fire its first snapshot
 
-exec "$SMOKE" "$MODE" --tone >/dev/null
+# Always exit 0 — the tone IS the signal. Failing the unit on a smoke WARN would degrade systemd state (sys is-system-running=degraded) and trigger a self-referential FAIL cascade on the next smoke run.
+"$SMOKE" "$MODE" --tone >/dev/null || true
+exit 0

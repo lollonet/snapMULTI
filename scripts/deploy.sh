@@ -963,7 +963,7 @@ start_services() {
     if systemctl list-unit-files snapmulti-server.service --no-legend 2>/dev/null | grep -q snapmulti-server.service; then
         # `up -d --force-recreate` (NOT `compose down`) so ExecStart picks up the new .env without a 30-40 s network teardown; `|| true` covers fresh installs with no compose project yet.
         docker compose up -d --force-recreate >/dev/null 2>&1 || true
-        info "Handing over to systemd (snapmulti-server.service)..."
+        info "Handing over to systemd (snapmulti-server.service) — waits for Avahi ready + mDNS race recovery, may take 60-180s..."
         if ! systemctl start snapmulti-server.service; then
             error "Failed to start snapmulti-server.service"
             exit 1
