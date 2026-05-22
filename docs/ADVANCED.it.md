@@ -48,6 +48,19 @@ Naming dei path: le share NAS con **spazi** vengono rifiutate all'installazione 
 
 > **Rescan MPD su librerie grandi.** Una prima scansione di 10 k+ brani via NFS può richiedere ore di D-state. Usa `scripts/backup-from-sd.sh` sull'SD precedente prima di riflashare — estrae `mpd.db` così MPD fa scansioni incrementali veloci tra reflash.
 
+### `MPD_START_PERIOD` — estendere la finestra healthcheck MPD all'install
+
+Il verificatore di install poll-a l'healthcheck di MPD per `max(MPD_START_PERIOD, 180s)` poi emette fail-warning se MPD sta ancora scansionando. Il default `30s` va bene per librerie locali; scansioni NFS/SMB di librerie grandi servono più tempo.
+
+Per uno scenario noto-lento (primo aggancio NAS, nessun backup `mpd.db`, 50 k+ tracce), imposta il periodo PRIMA del reflash:
+
+```ini
+# install.conf — scritto sulla SD boot da prepare-sd.sh
+MPD_START_PERIOD=3600s   # 1 ora — copre scan NFS a freddo di librerie grandi
+```
+
+Si propaga da `firstboot.sh` → `deploy.sh` → docker-compose dentro l'healthcheck di MPD. Con `mpd.db` restored da install precedente (percorso `backup-from-sd.sh`), il default `30s` basta — MPD legge il db cached in secondi e valida incrementalmente contro il mount live. L'install non si BLOCCA mai se MPD impiega più di `MPD_START_PERIOD` — registra `services not healthy` come warning e prosegue; Docker continua a riprovare l'healthcheck in background, e MPD si auto-recupera appena la scansione finisce.
+
 ## Configurazione personalizzata — file `.env`
 
 | Path | Cosa controlla |

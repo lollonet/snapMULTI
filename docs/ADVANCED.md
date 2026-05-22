@@ -48,6 +48,19 @@ Path naming: NAS shares with **spaces** are rejected at install time (Synology d
 
 > **MPD rescan on big libraries.** A first scan of a 10 k+ song library over NFS can take hours of D-state. Use `scripts/backup-from-sd.sh` on the old SD card before reflashing — it extracts `mpd.db` so MPD does fast incremental scans across reflashes.
 
+### `MPD_START_PERIOD` — extend the install-time MPD healthcheck window
+
+The install verifier polls MPD healthcheck for up to `max(MPD_START_PERIOD, 180s)` then fails-warning if MPD is still scanning. Default `30s` is fine for local libraries; NFS/SMB scans of large libraries need more.
+
+For a known-slow first-scan scenario (e.g. fresh NAS attach, no `mpd.db` backup, 50 k+ tracks), set the period BEFORE reflashing:
+
+```ini
+# install.conf — written to the SD card boot partition by prepare-sd.sh
+MPD_START_PERIOD=3600s   # 1 hour — covers cold NFS scans of large libraries
+```
+
+This propagates through `firstboot.sh` → `deploy.sh` → docker-compose into MPD's healthcheck. With `mpd.db` restored from a previous install (the `backup-from-sd.sh` path), the default `30s` is sufficient — MPD reads the cached database in seconds and incrementally validates against the live mount. The install still doesn't HANG if MPD takes longer than `MPD_START_PERIOD` — it logs `services not healthy` as a warning and proceeds; Docker keeps retrying the healthcheck in background, and MPD self-recovers once the scan completes.
+
 ## Custom config — `.env` files
 
 | Path | What it controls |

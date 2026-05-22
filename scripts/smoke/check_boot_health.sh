@@ -42,7 +42,10 @@ check_boot_health() {
     # that produces "0\n0" output (grep prints 0, fallback prints 0
     # again, both captured) and downstream `[[ -eq ]]` blows up.
     local cycle_lines deleted_units
-    cycle_lines=$(journalctl --no-pager -b 0 2>/dev/null | { grep -c 'ordering cycle' || true; })
+    # `_COMM=systemd` scopes the journal read to PID-1 systemd messages only,
+    # so our own smoke output writing "ordering cycle" into the journal does
+    # NOT loop back as a self-reference on the next run.
+    cycle_lines=$(journalctl --no-pager -b 0 _COMM=systemd 2>/dev/null | { grep -c 'ordering cycle' || true; })
 
     if [[ "${cycle_lines:-0}" -eq 0 ]]; then
         pass_check "No systemd ordering cycles in current boot"

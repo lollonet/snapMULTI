@@ -33,8 +33,8 @@ assert "grep -qE 'server\\)|client\\)|both\\)' '$WRAP'" "dispatches on install r
 assert "grep -q '/opt/snapmulti/scripts/device-smoke.sh' '$WRAP'" "calls server smoke path"
 assert "grep -q '/opt/snapclient/scripts/device-smoke.sh' '$WRAP'" "calls client smoke path"
 assert "grep -q -- '--tone' '$WRAP'"       "invokes device-smoke.sh with --tone"
-assert "grep -q 'Server.GetStatus' '$WRAP'" "waits for Snapcast healthy before firing (server/both)"
-assert "grep -q 'exit 0' '$WRAP'"          "exits 0 on no-op paths (best-effort)"
+assert "grep -q 'docker compose ps' '$WRAP'" "waits for ALL compose containers healthy before firing (not just Snapcast — avoids self-degrade FAIL cascade)"
+assert "grep -qE '\\|\\| true\\s*$|exit 0' '$WRAP'" "always exits 0 — tone is the signal, never fails the systemd unit"
 
 echo
 echo "## install_boot_tune_service installs the auto-boot-smoke unit"
