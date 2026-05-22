@@ -20,15 +20,20 @@ esac
 
 [[ -x "$SMOKE" ]] || exit 0
 
-# Wait up to 5 min for ALL containers healthy, not just Snapcast — otherwise smoke fires while mpd/librespot are still in their start_period and emits a false FAIL.
-COMPOSE_DIR=/opt/snapmulti
-[[ -f /opt/snapclient/docker-compose.yml ]] && COMPOSE_DIR=/opt/snapclient
+# Wait up to 5 min for all HEALTH-CHECKED containers healthy. Server project picked for server/both (MPD has the longest start_period); client project for client-only.
+if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "client-native" ]]; then
+    COMPOSE_DIR=/opt/snapclient
+else
+    COMPOSE_DIR=/opt/snapmulti
+fi
 if [[ -f "$COMPOSE_DIR/docker-compose.yml" ]]; then
     for _ in $(seq 1 60); do
-        total=$(cd "$COMPOSE_DIR" && docker compose ps -q 2>/dev/null | wc -l)
-        healthy=$(cd "$COMPOSE_DIR" && docker compose ps -q 2>/dev/null \
+        # Only containers WITH a healthcheck count — services without one print empty string and would block the gate forever.
+        health_states=$(cd "$COMPOSE_DIR" && docker compose ps -q 2>/dev/null \
             | xargs -r docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null \
-            | grep -c '^healthy$' || true)
+            | grep -E '^(healthy|starting|unhealthy)$' || true)
+        total=$(printf '%s\n' "$health_states" | grep -c . || true)
+        healthy=$(printf '%s\n' "$health_states" | grep -c '^healthy$' || true)
         [[ "$total" -gt 0 && "$healthy" -ge "$total" ]] && break
         sleep 5
     done
