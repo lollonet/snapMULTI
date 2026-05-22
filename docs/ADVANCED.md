@@ -381,3 +381,15 @@ After reboot:
 - SoC temperature rises ~1-2 °C steady-state (within Pi 4 thermal envelope)
 
 Validated on snapdigi (Pi 4 2GB + LG 50" 4K TV) 2026-05-21.
+
+## Split server+client topology — `EXTERNAL_HOST`
+
+When the snapMULTI server runs on one host and clients run on different hosts (e.g. server on a NAS, players in each room), `metadata-service` must advertise an externally-reachable address so clients can fetch cover artwork over HTTP `:8083`.
+
+Since v0.7.8.1 the service auto-detects the host's LAN IP via the kernel routing table — no configuration needed for the vast majority of installs. The startup log shows the resolved value:
+
+```
+INFO  External host: 192.168.1.10
+```
+
+Override only when auto-detection picks the wrong interface (multi-homed hosts, VPN routes, container weirdness). Set `EXTERNAL_HOST=<lan-ip>` in `/opt/snapmulti/.env` and restart `metadata`. A startup warning fires only if both auto-detection AND your explicit value resolve to loopback — that's the case where remote clients genuinely can't reach the artwork URLs.

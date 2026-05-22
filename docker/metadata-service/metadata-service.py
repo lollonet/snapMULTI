@@ -54,9 +54,37 @@ GO_LIBRESPOT_PORT = int(os.environ.get("GO_LIBRESPOT_PORT", "24879"))
 # External hostname for artwork URLs sent to remote clients.
 # SNAPSERVER_HOST may be 127.0.0.1 (for local socket connections),
 # but artwork URLs must use a host reachable by clients on the network.
-EXTERNAL_HOST = (
-    os.environ.get("EXTERNAL_HOST", "") or socket.getfqdn() or SNAPSERVER_HOST
-)
+def _detect_lan_ip() -> str | None:
+    """Kernel-route-based LAN IP detection — no network traffic emitted."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+        finally:
+            s.close()
+    except OSError:
+        return None
+
+
+def _resolve_external_host() -> str:
+    """Pick a usable EXTERNAL_HOST: explicit env > FQDN-if-public > kernel LAN IP > SNAPSERVER_HOST."""
+    explicit = os.environ.get("EXTERNAL_HOST", "")
+    if explicit:
+        return explicit
+    fqdn = socket.getfqdn()
+    try:
+        if fqdn and not ipaddress.ip_address(socket.gethostbyname(fqdn)).is_loopback:
+            return fqdn
+    except (socket.gaierror, ValueError):
+        pass
+    lan_ip = _detect_lan_ip()
+    if lan_ip and not ipaddress.ip_address(lan_ip).is_loopback:
+        return lan_ip
+    return SNAPSERVER_HOST
+
+
+EXTERNAL_HOST = _resolve_external_host()
 _POLL_LOOP_MAX_ERRORS = 30
 
 # MusicBrainz rate limiter (1 request per 1.1 seconds, shared across threads)
@@ -2481,8 +2509,9 @@ async def main() -> None:
     try:
         if ipaddress.ip_address(socket.gethostbyname(EXTERNAL_HOST)).is_loopback:
             logger.warning(
-                "EXTERNAL_HOST resolves to loopback — "
-                "set EXTERNAL_HOST explicitly if artwork fails on clients"
+                "EXTERNAL_HOST resolved to loopback after auto-detection failed — "
+                "remote clients won't be able to fetch artwork. "
+                "Set EXTERNAL_HOST=<lan-ip> in /opt/snapmulti/.env if you have clients on other hosts."
             )
     except (socket.gaierror, ValueError):
         pass

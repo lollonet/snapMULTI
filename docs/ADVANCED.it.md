@@ -381,3 +381,15 @@ Dopo il reboot:
 - Temperatura SoC sale di ~1-2 °C a regime (dentro la finestra termica del Pi 4)
 
 Validato su snapdigi (Pi 4 2GB + TV LG 50" 4K) il 2026-05-21.
+
+## Topologia split server+client — `EXTERNAL_HOST`
+
+Quando il server snapMULTI gira su un host e i client su host diversi (es. server su NAS, player in ogni stanza), `metadata-service` deve annunciare un indirizzo raggiungibile dall'esterno così i client possono scaricare le copertine via HTTP `:8083`.
+
+Dalla v0.7.8.1 il servizio rileva automaticamente l'IP LAN dell'host tramite la tabella di routing del kernel — nessuna configurazione necessaria per la maggior parte degli installi. Il log di startup mostra il valore risolto:
+
+```
+INFO  External host: 192.168.1.10
+```
+
+Sovrascrivi solo quando l'autodetect sceglie l'interfaccia sbagliata (host multi-homed, route VPN, configurazioni container insolite). Imposta `EXTERNAL_HOST=<lan-ip>` in `/opt/snapmulti/.env` e riavvia `metadata`. Un warning di startup parte solo se sia l'autodetect SIA il tuo valore esplicito risolvono a loopback — è il caso in cui i client remoti davvero non possono raggiungere gli URL delle copertine.
