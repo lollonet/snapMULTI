@@ -9,7 +9,7 @@ x-logging: &default-logging
 
 x-security: &default-security
   security_opt:
-    - no-new-privileges:true
+    - no-new-privileges=true
   cap_drop:
     - ALL
 
@@ -45,7 +45,7 @@ services:
       - MIXER=${MIXER:-software}
     # Audio requires specific capabilities instead of full privileged mode
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
