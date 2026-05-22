@@ -165,3 +165,56 @@ class TestEnrichTags:
         assert metadata["date"] == "2011-09-26"
         assert metadata["genre"] == "rock"
         assert "original_date" not in metadata
+
+
+class TestResolveExternalHost:
+    """`_resolve_external_host()` picks a usable EXTERNAL_HOST per #460."""
+
+    def test_explicit_env_wins(self, metadata_service_module, monkeypatch):
+        monkeypatch.setenv("EXTERNAL_HOST", "explicit.example.com")
+        assert (
+            metadata_service_module._resolve_external_host() == "explicit.example.com"
+        )
+
+    def test_fqdn_used_when_resolves_non_loopback(
+        self, metadata_service_module, monkeypatch
+    ):
+        monkeypatch.delenv("EXTERNAL_HOST", raising=False)
+        monkeypatch.setattr(
+            metadata_service_module.socket, "getfqdn", lambda: "host.lan"
+        )
+        monkeypatch.setattr(
+            metadata_service_module.socket,
+            "gethostbyname",
+            lambda h: "192.168.1.10" if h == "host.lan" else "127.0.0.1",
+        )
+        assert metadata_service_module._resolve_external_host() == "host.lan"
+
+    def test_lan_ip_fallback_when_fqdn_loopback(
+        self, metadata_service_module, monkeypatch
+    ):
+        monkeypatch.delenv("EXTERNAL_HOST", raising=False)
+        monkeypatch.setattr(
+            metadata_service_module.socket, "getfqdn", lambda: "localhost"
+        )
+        monkeypatch.setattr(
+            metadata_service_module.socket, "gethostbyname", lambda h: "127.0.0.1"
+        )
+        monkeypatch.setattr(
+            metadata_service_module, "_detect_lan_ip", lambda: "192.168.1.42"
+        )
+        assert metadata_service_module._resolve_external_host() == "192.168.1.42"
+
+    def test_falls_back_to_snapserver_host_when_everything_loopback(
+        self, metadata_service_module, monkeypatch
+    ):
+        monkeypatch.delenv("EXTERNAL_HOST", raising=False)
+        monkeypatch.setattr(
+            metadata_service_module.socket, "getfqdn", lambda: "localhost"
+        )
+        monkeypatch.setattr(
+            metadata_service_module.socket, "gethostbyname", lambda h: "127.0.0.1"
+        )
+        monkeypatch.setattr(metadata_service_module, "_detect_lan_ip", lambda: None)
+        result = metadata_service_module._resolve_external_host()
+        assert result == metadata_service_module.SNAPSERVER_HOST
