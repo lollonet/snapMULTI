@@ -172,11 +172,17 @@ class TestResolveExternalHost:
 
     def test_explicit_env_wins(self, metadata_service_module, monkeypatch):
         monkeypatch.setenv("EXTERNAL_HOST", "explicit.example.com")
-        assert metadata_service_module._resolve_external_host() == "explicit.example.com"
+        assert (
+            metadata_service_module._resolve_external_host() == "explicit.example.com"
+        )
 
-    def test_fqdn_used_when_resolves_non_loopback(self, metadata_service_module, monkeypatch):
+    def test_fqdn_used_when_resolves_non_loopback(
+        self, metadata_service_module, monkeypatch
+    ):
         monkeypatch.delenv("EXTERNAL_HOST", raising=False)
-        monkeypatch.setattr(metadata_service_module.socket, "getfqdn", lambda: "host.lan")
+        monkeypatch.setattr(
+            metadata_service_module.socket, "getfqdn", lambda: "host.lan"
+        )
         monkeypatch.setattr(
             metadata_service_module.socket,
             "gethostbyname",
@@ -184,9 +190,13 @@ class TestResolveExternalHost:
         )
         assert metadata_service_module._resolve_external_host() == "host.lan"
 
-    def test_lan_ip_fallback_when_fqdn_loopback(self, metadata_service_module, monkeypatch):
+    def test_lan_ip_fallback_when_fqdn_loopback(
+        self, metadata_service_module, monkeypatch
+    ):
         monkeypatch.delenv("EXTERNAL_HOST", raising=False)
-        monkeypatch.setattr(metadata_service_module.socket, "getfqdn", lambda: "localhost")
+        monkeypatch.setattr(
+            metadata_service_module.socket, "getfqdn", lambda: "localhost"
+        )
         monkeypatch.setattr(
             metadata_service_module.socket, "gethostbyname", lambda h: "127.0.0.1"
         )
@@ -199,7 +209,9 @@ class TestResolveExternalHost:
         self, metadata_service_module, monkeypatch
     ):
         monkeypatch.delenv("EXTERNAL_HOST", raising=False)
-        monkeypatch.setattr(metadata_service_module.socket, "getfqdn", lambda: "localhost")
+        monkeypatch.setattr(
+            metadata_service_module.socket, "getfqdn", lambda: "localhost"
+        )
         monkeypatch.setattr(
             metadata_service_module.socket, "gethostbyname", lambda h: "127.0.0.1"
         )

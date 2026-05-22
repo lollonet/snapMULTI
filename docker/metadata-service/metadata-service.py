@@ -51,6 +51,7 @@ DEFAULTS_DIR = Path(os.environ.get("DEFAULTS_DIR", "/app/defaults"))
 GO_LIBRESPOT_HOST = os.environ.get("GO_LIBRESPOT_HOST", "127.0.0.1")
 GO_LIBRESPOT_PORT = int(os.environ.get("GO_LIBRESPOT_PORT", "24879"))
 
+
 # External hostname for artwork URLs sent to remote clients.
 # SNAPSERVER_HOST may be 127.0.0.1 (for local socket connections),
 # but artwork URLs must use a host reachable by clients on the network.
@@ -68,7 +69,7 @@ def _detect_lan_ip() -> str | None:
 
 
 def _resolve_external_host() -> str:
-    """Pick a usable EXTERNAL_HOST: explicit env > FQDN-if-public > kernel LAN IP > SNAPSERVER_HOST."""
+    """Pick a usable EXTERNAL_HOST: explicit env > FQDN-if-non-loopback > kernel LAN IP > SNAPSERVER_HOST."""
     explicit = os.environ.get("EXTERNAL_HOST", "")
     if explicit:
         return explicit
