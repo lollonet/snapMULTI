@@ -959,16 +959,16 @@ start_services() {
     # triggers ExecStart=`docker compose up -d` AND the mDNS self-heal
     # ExecStartPost. Fall back to raw compose only when the unit isn't
     # registered yet (e.g. manual `deploy.sh` from a dev host or tests).
+    info "Launching docker compose (containers will start and become healthy in 30-60s)..."
     if systemctl list-unit-files snapmulti-server.service --no-legend 2>/dev/null | grep -q snapmulti-server.service; then
-        info "Starting via systemd (snapmulti-server.service)..."
         # `up -d --force-recreate` (NOT `compose down`) so ExecStart picks up the new .env without a 30-40 s network teardown; `|| true` covers fresh installs with no compose project yet.
         docker compose up -d --force-recreate >/dev/null 2>&1 || true
+        info "Handing over to systemd (snapmulti-server.service)..."
         if ! systemctl start snapmulti-server.service; then
             error "Failed to start snapmulti-server.service"
             exit 1
         fi
     else
-        info "Starting containers (force-recreate to apply .env)..."
         if ! docker compose up -d --force-recreate; then
             error "Failed to start services"
             exit 1
