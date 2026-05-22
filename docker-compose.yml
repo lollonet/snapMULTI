@@ -9,7 +9,7 @@ x-logging: &default-logging
 
 x-security: &default-security
   security_opt:
-    - no-new-privileges:true
+    - no-new-privileges=true
   cap_drop:
     - ALL
 
@@ -17,8 +17,8 @@ x-security: &default-security
 x-fifo-security: &fifo-security
   <<: *default-security
   security_opt:
-    - apparmor:unconfined  # Required for D-Bus access (Avahi zeroconf)
-    - no-new-privileges:true
+    - apparmor=unconfined  # Required for D-Bus access (Avahi zeroconf)
+    - no-new-privileges=true
   cap_add:
     - DAC_OVERRIDE
 
@@ -164,7 +164,7 @@ services:
     restart: unless-stopped
     network_mode: host
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     read_only: true
@@ -207,7 +207,7 @@ services:
     restart: unless-stopped
     network_mode: host
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     read_only: true
@@ -249,7 +249,7 @@ services:
     restart: unless-stopped
     network_mode: host
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     read_only: true
@@ -320,7 +320,7 @@ services:
     restart: unless-stopped
     read_only: true
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
