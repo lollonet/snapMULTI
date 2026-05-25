@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Docs
+- **Auto-boot health cue is silent during active playback (known limitation)** — `docs/INSTALL.md` + IT mirror now state that `multi_out`'s direct `hw:` slave makes snapclient's stream exclusive, so post-reboot smoke tone is suppressed by ALSA when audio is already playing. Tracked for v0.7.9 (dmix slave / pause-snapclient / Snapcast-stream candidates).
+
 ## [0.7.8.1] — 2026-05-22
 
 > Patch release completing the acoustic-feedback contract started in v0.7.8: smoke result cues now fire automatically after every boot through the attached DAC, plus 7 cleanup fixes from the snapvideo+snapdigi deep audit. Script-only release — `image_set` stays at `0.7.7`, `requires_image_rebuild=false`. Validated live on snapvideo (both-mode Pi 4 8GB) via host-level patch + verified tone audible through HiFiBerry DAC.
