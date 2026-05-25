@@ -2129,22 +2129,15 @@ async def handle_version(request: web.Request) -> web.Response:
     """Version check endpoint — returns current snapmulti_release, image_set, and latest from GitHub."""
     import time
 
-    # Prefer snapmulti_release from the release-manifest (the git tag deployed
-    # at the script layer); fall back to SNAPMULTI_VERSION baked into the
-    # image. Without this, a script-only release leaves `current` reading
-    # image_set and update_available=true on a device that's actually up to date.
-    image_set = os.environ.get("SNAPMULTI_VERSION", "unknown")
-    current = image_set
-    try:
-        with open("/release-manifest.json", encoding="utf-8") as f:
-            manifest = json.load(f)
-        # isinstance guard — a truncated write may leave the root as null/[]/scalar; manifest.get() on a non-dict raises AttributeError outside the (OSError, ValueError) catch. `or ""` handles `"snapmulti_release": null` (None.strip() would crash).
-        if isinstance(manifest, dict):
-            manifest_release = str(manifest.get("snapmulti_release") or "").strip()
-            if manifest_release:
-                current = manifest_release
-    except (OSError, ValueError):
-        pass
+    # SNAPMULTI_RELEASE = git tag from release-manifest.json (deploy.sh writes
+    # it to .env on every deploy); SNAPMULTI_IMAGE_SET = Docker tag (same
+    # source). SNAPMULTI_VERSION is the image-baked version (final fallback
+    # for image_set when .env hasn't been written, e.g. dev clones).
+    snapmulti_release = os.environ.get("SNAPMULTI_RELEASE", "").strip()
+    image_set = os.environ.get("SNAPMULTI_IMAGE_SET", "").strip() or os.environ.get(
+        "SNAPMULTI_VERSION", "unknown"
+    )
+    current = snapmulti_release or image_set
 
     cache_ttl = 86400  # 24 hours
     latest = _latest_version_cache.get("version", "")

@@ -270,6 +270,15 @@ services:
       # SNAPMULTI_VERSION is baked into the image at build time (see
       # Dockerfile.metadata + build-push.yml --build-arg), so /health and
       # /version always report the actually-running code's version.
+      # SNAPMULTI_RELEASE + SNAPMULTI_IMAGE_SET come from .env (written by
+      # deploy.sh from release-manifest.json on every deploy). Lets /version
+      # report the git tag as `current` (e.g. v0.7.8.5) distinct from the
+      # Docker image tag (e.g. 0.7.7) — without those, a script-only release
+      # shows update_available=true on a device that's actually up-to-date.
+      # Empty defaults so the container starts on dev clones / x86 manual
+      # deploys where deploy.sh hasn't written them yet.
+      - SNAPMULTI_RELEASE=${SNAPMULTI_RELEASE:-}
+      - SNAPMULTI_IMAGE_SET=${SNAPMULTI_IMAGE_SET:-}
     volumes:
       - ./artwork:/app/artwork
       # Bind-mount the renderer source so a fix lands without an image
@@ -284,22 +293,6 @@ services:
       # "no snapshot available" failure verdict even when the host-side
       # timer is healthy (issue surfaced after v0.6.4 ship).
       - ./audio:/audio:ro
-      # Release manifest from the FAT32 boot partition (outside overlayroot).
-      # Lets /version distinguish snapmulti_release (git tag — e.g. v0.7.8.5)
-      # from image_set (Docker tag — e.g. 0.7.7) instead of showing the
-      # image tag as `current` and triggering update_available=true on a
-      # device that's actually up-to-date at the script layer.
-      # create_host_path: false — on non-Pi hosts (x86 manual deploy) the
-      # source path doesn't exist; without this Docker would silently
-      # create a directory at /boot/firmware/snapmulti/release-manifest.json/
-      # polluting the host fs. With false: bind skipped if missing, Python
-      # falls back to image_set.
-      - type: bind
-        source: /boot/firmware/snapmulti/release-manifest.json
-        target: /release-manifest.json
-        read_only: true
-        bind:
-          create_host_path: false
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)"]
       interval: 30s
