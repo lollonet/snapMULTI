@@ -2126,18 +2126,22 @@ _latest_version_cache: dict[str, str | float] = {"version": "", "checked_at": 0.
 
 
 async def handle_version(request: web.Request) -> web.Response:
-    """Version check endpoint — returns current and latest version."""
+    """Version check endpoint — returns current snapmulti_release, image_set, and latest from GitHub."""
     import time
 
-    current = os.environ.get("SNAPMULTI_VERSION", "unknown")
-    cache_ttl = 86400  # 24 hours
+    # SNAPMULTI_RELEASE is the git tag; SNAPMULTI_IMAGE_SET is the Docker tag; falls back to SNAPMULTI_VERSION on dev clones.
+    snapmulti_release = os.environ.get("SNAPMULTI_RELEASE", "").strip()
+    image_set = os.environ.get("SNAPMULTI_IMAGE_SET", "").strip() or os.environ.get(
+        "SNAPMULTI_VERSION", "unknown"
+    )
+    current = snapmulti_release or image_set
 
-    # Check GitHub for latest release (cached)
+    cache_ttl = 86400  # 24 hours
     latest = _latest_version_cache.get("version", "")
     checked_at = float(_latest_version_cache.get("checked_at", 0))
 
     if time.time() - checked_at > cache_ttl:
-        # Claim the slot before await to prevent concurrent API calls (TOCTOU)
+        # Claim the slot before await to prevent concurrent API calls (TOCTOU).
         _latest_version_cache["checked_at"] = time.time()
         try:
             import aiohttp as _aiohttp
@@ -2155,18 +2159,23 @@ async def handle_version(request: web.Request) -> web.Response:
                         logger.debug(
                             "GitHub API returned %d for version check", resp.status
                         )
-                        _latest_version_cache["checked_at"] = 0.0
+                        _latest_version_cache["checked_at"] = (
+                            0.0  # reset so next call retries
+                        )
         except Exception as exc:
             logger.debug("Version check failed: %s", exc)
             _latest_version_cache["checked_at"] = 0.0  # reset so next call retries
 
+    # "v" stripped uniformly: current arrives from .env with prefix, latest from GitHub without.
     current_clean = current.lstrip("v")
+    latest_clean = (latest or current).lstrip("v")
     update_available = bool(latest and latest != current_clean)
 
     return web.json_response(
         {
-            "current": current,
-            "latest": latest or current,
+            "current": current_clean,
+            "image_set": image_set,
+            "latest": latest_clean,
             "update_available": update_available,
         },
         headers={"Access-Control-Allow-Origin": "*"},

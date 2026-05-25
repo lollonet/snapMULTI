@@ -270,6 +270,9 @@ services:
       # SNAPMULTI_VERSION is baked into the image at build time (see
       # Dockerfile.metadata + build-push.yml --build-arg), so /health and
       # /version always report the actually-running code's version.
+      # SNAPMULTI_RELEASE / SNAPMULTI_IMAGE_SET from .env let /version distinguish git tag from Docker tag; empty defaults so dev clones still start.
+      - SNAPMULTI_RELEASE=${SNAPMULTI_RELEASE:-}
+      - SNAPMULTI_IMAGE_SET=${SNAPMULTI_IMAGE_SET:-}
     volumes:
       - ./artwork:/app/artwork
       # Bind-mount the renderer source so a fix lands without an image
