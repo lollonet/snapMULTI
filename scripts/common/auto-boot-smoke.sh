@@ -20,31 +20,36 @@ esac
 
 [[ -x "$SMOKE" ]] || exit 0
 
-# Wait up to 5 min for systemd to exit 'starting' state — otherwise check_boot_health reports a false-positive `systemd state unexpected: 'starting'` FAIL.
-for _ in $(seq 1 60); do
+# Cap waits at 90 s each (well under TimeoutStartSec=240) — fire the tone even if MPD is still scanning a large NFS library (can take hours).
+
+# Wait up to 90 s for systemd to leave 'starting' (avoids false-positive `systemd state unexpected: 'starting'` smoke FAIL).
+for _ in $(seq 1 18); do
     state=$(systemctl is-system-running 2>/dev/null || true)
     [[ "$state" == "starting" ]] || break
     sleep 5
 done
 
-# Wait up to 5 min for all HEALTH-CHECKED containers healthy. Server project picked for server/both (MPD has the longest start_period); client project for client-only.
-if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "client-native" ]]; then
-    COMPOSE_DIR=/opt/snapclient
-else
-    COMPOSE_DIR=/opt/snapmulti
-fi
-if [[ -f "$COMPOSE_DIR/docker-compose.yml" ]]; then
-    for _ in $(seq 1 60); do
-        # Only containers WITH a healthcheck count — services without one print empty string and would block the gate forever.
-        health_states=$(cd "$COMPOSE_DIR" && docker compose ps -q 2>/dev/null \
+# Wait up to 90 s for the audio CORE — snapserver (server/both) and snapclient (client/both). MPD/metadata/etc. are best-effort: if they're slow (NFS scan), the tone still fires and signals the audio path is up.
+# Format: "<compose-dir>:<service>" — both-mode keeps snapserver in /opt/snapmulti and snapclient in /opt/snapclient (separate compose projects per CLAUDE.md).
+case "$INSTALL_TYPE" in
+    client|client-native) CORE_CHECKS="/opt/snapclient:snapclient" ;;
+    both)                 CORE_CHECKS="/opt/snapmulti:snapserver /opt/snapclient:snapclient" ;;
+    *)                    CORE_CHECKS="/opt/snapmulti:snapserver" ;;
+esac
+for _ in $(seq 1 18); do
+    all_healthy=1
+    for check in $CORE_CHECKS; do
+        compose_dir="${check%%:*}"
+        svc="${check##*:}"
+        [[ -f "$compose_dir/docker-compose.yml" ]] || continue
+        state=$(cd "$compose_dir" && docker compose ps -q "$svc" 2>/dev/null \
             | xargs -r docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null \
-            | grep -E '^(healthy|starting|unhealthy)$' || true)
-        total=$(printf '%s\n' "$health_states" | grep -c . || true)
-        healthy=$(printf '%s\n' "$health_states" | grep -c '^healthy$' || true)
-        [[ "$total" -gt 0 && "$healthy" -ge "$total" ]] && break
-        sleep 5
+            | head -1)
+        [[ "$state" == "healthy" ]] || { all_healthy=0; break; }
     done
-fi
+    [[ "$all_healthy" -eq 1 ]] && break
+    sleep 5
+done
 
 sleep 10  # let snapmulti-status.timer fire its first snapshot
 
