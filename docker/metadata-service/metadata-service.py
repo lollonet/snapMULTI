@@ -2138,7 +2138,8 @@ async def handle_version(request: web.Request) -> web.Response:
     try:
         with open("/release-manifest.json", encoding="utf-8") as f:
             manifest = json.load(f)
-        manifest_release = manifest.get("snapmulti_release", "").strip()
+        # `or ""` handles `"snapmulti_release": null` — `.get(key, "")` only falls back on missing keys, not null values, so `None.strip()` would crash.
+        manifest_release = str(manifest.get("snapmulti_release") or "").strip()
         if manifest_release:
             current = manifest_release
     except (OSError, ValueError):
@@ -2149,6 +2150,7 @@ async def handle_version(request: web.Request) -> web.Response:
     checked_at = float(_latest_version_cache.get("checked_at", 0))
 
     if time.time() - checked_at > cache_ttl:
+        # Claim the slot before await to prevent concurrent API calls (TOCTOU).
         _latest_version_cache["checked_at"] = time.time()
         try:
             import aiohttp as _aiohttp

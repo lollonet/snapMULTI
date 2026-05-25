@@ -289,7 +289,17 @@ services:
       # from image_set (Docker tag — e.g. 0.7.7) instead of showing the
       # image tag as `current` and triggering update_available=true on a
       # device that's actually up-to-date at the script layer.
-      - /boot/firmware/snapmulti/release-manifest.json:/release-manifest.json:ro
+      # create_host_path: false — on non-Pi hosts (x86 manual deploy) the
+      # source path doesn't exist; without this Docker would silently
+      # create a directory at /boot/firmware/snapmulti/release-manifest.json/
+      # polluting the host fs. With false: bind skipped if missing, Python
+      # falls back to image_set.
+      - type: bind
+        source: /boot/firmware/snapmulti/release-manifest.json
+        target: /release-manifest.json
+        read_only: true
+        bind:
+          create_host_path: false
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)"]
       interval: 30s
