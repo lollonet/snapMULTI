@@ -360,6 +360,8 @@ If you don't hear it, the install still continues — but check power, volume, a
 > After install, an optional `device-smoke.sh --tone` health check plays a distinctive cue per result (PASS / WARN / FAIL). See [TROUBLESHOOTING.md — Audible result cues](TROUBLESHOOTING.md#health-check-tones).
 >
 > **Heads up — auto-boot health cue is silent while audio plays.** snapMULTI fires a smoke check after every reboot. If any source is already streaming through Snapcast when the check runs (autoplay, MPD resume), the DAC is held exclusively by the player and the cue is suppressed by ALSA. The check itself still runs and you can read its result at `/status` or by running `device-smoke.sh --both --tone` manually when audio is paused.
+>
+> **First-boot FAIL with a large music library?** On the very first boot after a fresh install (or after a major library change), MPD scans the whole collection. On NFS/SMB libraries with many thousands of tracks this can take hours. During that window the auto-boot smoke may report FAIL because `mpd` is still in the `starting` healthcheck state. Open `http://<hostname>.local:8083/status` — if you see "MPD library scan in progress (#N)" in the Snapcast + MPD section, just let it finish. The next boot's tone will be PASS.
 
 ---
 

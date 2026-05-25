@@ -362,6 +362,8 @@ Se non lo senti, l'installazione prosegue comunque — ma controlla alimentazion
 > Dopo l'install, un controllo opzionale `device-smoke.sh --tone` riproduce un segnale audio distintivo per risultato (PASS / WARN / FAIL). Vedi [TROUBLESHOOTING.it.md — Segnali audio del risultato](TROUBLESHOOTING.it.md#toni-test-salute).
 >
 > **Attenzione — il segnale post-boot è silente se c'è già audio.** snapMULTI lancia un test di salute dopo ogni riavvio. Se una sorgente sta già trasmettendo via Snapcast quando il test parte (autoplay, MPD che riprende), il DAC è in uso esclusivo dal player e ALSA sopprime il segnale. Il test viene comunque eseguito e il risultato è leggibile su `/status` o lanciando manualmente `device-smoke.sh --both --tone` ad audio fermo.
+>
+> **FAIL al primo boot con libreria musicale ampia?** Al primissimo boot dopo l'install (o dopo cambiamenti rilevanti alla libreria), MPD scansiona l'intera collezione. Su librerie NFS/SMB con molte migliaia di brani può richiedere ore. In quella finestra il test post-boot può segnalare FAIL perché `mpd` è ancora in stato `starting`. Apri `http://<hostname>.local:8083/status` — se vedi "MPD library scan in progress (#N)" nella sezione Snapcast + MPD, basta aspettare che finisca. Al boot successivo il tono sarà PASS.
 
 ---
 
