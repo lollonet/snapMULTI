@@ -137,4 +137,11 @@ check_snapcast() {
         state=${state:-unknown}
         pass_check "MPD reachable, state: $state"
     fi
+
+    # MPD scan progress — large NFS libraries take hours on first boot. Surface as INFO so users know the FAIL on `mpd: starting` healthcheck is expected during this window (not a real problem).
+    if grep -qE "^Updating DB" <<<"$mpc_out"; then
+        local job
+        job=$(grep -oE 'Updating DB \(#[0-9]+\)' <<<"$mpc_out" | head -1)
+        info "MPD library scan in progress ($job) — large libraries can take hours; transient FAIL on 'mpd: starting' healthcheck is expected during this window"
+    fi
 }

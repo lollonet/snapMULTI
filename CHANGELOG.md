@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **MPD scan progress on `/status`** — Snapcast + MPD section now surfaces `MPD library scan in progress (#N)` when an `Updating DB` job is active. Makes the first-boot FAIL on a large NFS/SMB library self-explanatory instead of mysterious.
+
+### Docs
+- **First-boot FAIL with large library is the MPD scan** — INSTALL.md (+ IT) explains the auto-boot tone may report FAIL while MPD scans the library for the first time and points at `/status` for confirmation. Next boot's tone is PASS.
+
 ## [0.7.8.2] — 2026-05-25
 
 > Patch release fixing two end-to-end gaps in v0.7.8.1's auto-boot acoustic feedback: the unit timed out on real-world NFS libraries (large MPD scan blocked the wait) and the tone itself was silent under `Type=oneshot` (backgrounded `aplay` got SIGTERM at cgroup close). Both fixes live-validated on snapvideo (both-mode Pi 4 8GB). Script-only release — `image_set` stays at `0.7.7`, `requires_image_rebuild=false`.
