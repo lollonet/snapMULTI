@@ -54,9 +54,8 @@ for env_file in /opt/snapmulti/.env /opt/snapclient/.env; do
     fi
 done
 
-# Don't interrupt active music. Snapcast JSON-RPC tells us if any stream
-# is currently playing.
-if command -v curl >/dev/null 2>&1; then
+# Don't interrupt active music — UNLESS SNAPMULTI_FORCE_TONE=1 (auto-boot-smoke sets this so post-reboot status reaches the user even when autoplay resumed).
+if [[ "${SNAPMULTI_FORCE_TONE:-0}" != "1" ]] && command -v curl >/dev/null 2>&1; then
     streams_state=$(curl -s --max-time 2 \
         -d '{"id":1,"jsonrpc":"2.0","method":"Server.GetStatus"}' \
         http://localhost:1780/jsonrpc 2>/dev/null || true)

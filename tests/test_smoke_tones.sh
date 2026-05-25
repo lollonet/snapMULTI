@@ -59,6 +59,8 @@ assert "grep -q 'SNAPMULTI_BOOT_SMOKE_TONES' '$HELPER'" \
     "respects SNAPMULTI_BOOT_SMOKE_TONES=off opt-out"
 assert "grep -q 'Server.GetStatus' '$HELPER'" \
     "checks Snapcast active-stream before playing (don't talk over music)"
+assert "grep -q 'SNAPMULTI_FORCE_TONE' '$HELPER'" \
+    "SNAPMULTI_FORCE_TONE=1 overrides active-stream check (auto-boot path)"
 assert "grep -q 'exit 0' '$HELPER'" "always exits 0 (best-effort, never blocks)"
 
 echo

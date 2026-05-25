@@ -20,6 +20,13 @@ esac
 
 [[ -x "$SMOKE" ]] || exit 0
 
+# Wait up to 5 min for systemd to exit 'starting' state — otherwise check_boot_health reports a false-positive `systemd state unexpected: 'starting'` FAIL.
+for _ in $(seq 1 60); do
+    state=$(systemctl is-system-running 2>/dev/null || true)
+    [[ "$state" == "starting" ]] || break
+    sleep 5
+done
+
 # Wait up to 5 min for all HEALTH-CHECKED containers healthy. Server project picked for server/both (MPD has the longest start_period); client project for client-only.
 if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "client-native" ]]; then
     COMPOSE_DIR=/opt/snapclient
@@ -42,5 +49,6 @@ fi
 sleep 10  # let snapmulti-status.timer fire its first snapshot
 
 # Always exit 0 — the tone IS the signal. Failing the unit on a smoke WARN would degrade systemd state (sys is-system-running=degraded) and trigger a self-referential FAIL cascade on the next smoke run.
-"$SMOKE" "$MODE" --tone >/dev/null || true
+# SNAPMULTI_FORCE_TONE=1: auto-boot must always play (user explicitly chose option B over "don't interrupt music") so post-reboot status is audible even when MPD autoplay resumed during boot.
+SNAPMULTI_FORCE_TONE=1 "$SMOKE" "$MODE" --tone >/dev/null || true
 exit 0
