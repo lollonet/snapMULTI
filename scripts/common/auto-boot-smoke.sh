@@ -30,29 +30,26 @@ for _ in $(seq 1 18); do
 done
 
 # Wait up to 90 s for the audio CORE — snapserver (server/both) and snapclient (client/both). MPD/metadata/etc. are best-effort: if they're slow (NFS scan), the tone still fires and signals the audio path is up.
-if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "client-native" ]]; then
-    COMPOSE_DIR=/opt/snapclient
-    CORE_SERVICES="snapclient"
-elif [[ "$INSTALL_TYPE" == "both" ]]; then
-    COMPOSE_DIR=/opt/snapmulti
-    CORE_SERVICES="snapserver snapclient"
-else
-    COMPOSE_DIR=/opt/snapmulti
-    CORE_SERVICES="snapserver"
-fi
-if [[ -f "$COMPOSE_DIR/docker-compose.yml" ]]; then
-    for _ in $(seq 1 18); do
-        all_healthy=1
-        for svc in $CORE_SERVICES; do
-            state=$(cd "$COMPOSE_DIR" && docker compose ps -q "$svc" 2>/dev/null \
-                | xargs -r docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null \
-                | head -1)
-            [[ "$state" == "healthy" ]] || { all_healthy=0; break; }
-        done
-        [[ "$all_healthy" -eq 1 ]] && break
-        sleep 5
+# Format: "<compose-dir>:<service>" — both-mode keeps snapserver in /opt/snapmulti and snapclient in /opt/snapclient (separate compose projects per CLAUDE.md).
+case "$INSTALL_TYPE" in
+    client|client-native) CORE_CHECKS="/opt/snapclient:snapclient" ;;
+    both)                 CORE_CHECKS="/opt/snapmulti:snapserver /opt/snapclient:snapclient" ;;
+    *)                    CORE_CHECKS="/opt/snapmulti:snapserver" ;;
+esac
+for _ in $(seq 1 18); do
+    all_healthy=1
+    for check in $CORE_CHECKS; do
+        compose_dir="${check%%:*}"
+        svc="${check##*:}"
+        [[ -f "$compose_dir/docker-compose.yml" ]] || continue
+        state=$(cd "$compose_dir" && docker compose ps -q "$svc" 2>/dev/null \
+            | xargs -r docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null \
+            | head -1)
+        [[ "$state" == "healthy" ]] || { all_healthy=0; break; }
     done
-fi
+    [[ "$all_healthy" -eq 1 ]] && break
+    sleep 5
+done
 
 sleep 10  # let snapmulti-status.timer fire its first snapshot
 
