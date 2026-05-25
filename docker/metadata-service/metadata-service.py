@@ -2126,18 +2126,29 @@ _latest_version_cache: dict[str, str | float] = {"version": "", "checked_at": 0.
 
 
 async def handle_version(request: web.Request) -> web.Response:
-    """Version check endpoint — returns current and latest version."""
+    """Version check endpoint — returns current snapmulti_release, image_set, and latest from GitHub."""
     import time
 
-    current = os.environ.get("SNAPMULTI_VERSION", "unknown")
-    cache_ttl = 86400  # 24 hours
+    # Prefer snapmulti_release from the release-manifest (the git tag deployed
+    # at the script layer); fall back to SNAPMULTI_VERSION baked into the
+    # image. Without this, a script-only release leaves `current` reading
+    # image_set and update_available=true on a device that's actually up to date.
+    image_set = os.environ.get("SNAPMULTI_VERSION", "unknown")
+    current = image_set
+    try:
+        with open("/release-manifest.json", encoding="utf-8") as f:
+            manifest = json.load(f)
+        manifest_release = manifest.get("snapmulti_release", "").strip()
+        if manifest_release:
+            current = manifest_release
+    except (OSError, ValueError):
+        pass
 
-    # Check GitHub for latest release (cached)
+    cache_ttl = 86400  # 24 hours
     latest = _latest_version_cache.get("version", "")
     checked_at = float(_latest_version_cache.get("checked_at", 0))
 
     if time.time() - checked_at > cache_ttl:
-        # Claim the slot before await to prevent concurrent API calls (TOCTOU)
         _latest_version_cache["checked_at"] = time.time()
         try:
             import aiohttp as _aiohttp
@@ -2158,7 +2169,7 @@ async def handle_version(request: web.Request) -> web.Response:
                         _latest_version_cache["checked_at"] = 0.0
         except Exception as exc:
             logger.debug("Version check failed: %s", exc)
-            _latest_version_cache["checked_at"] = 0.0  # reset so next call retries
+            _latest_version_cache["checked_at"] = 0.0
 
     current_clean = current.lstrip("v")
     update_available = bool(latest and latest != current_clean)
@@ -2166,6 +2177,7 @@ async def handle_version(request: web.Request) -> web.Response:
     return web.json_response(
         {
             "current": current,
+            "image_set": image_set,
             "latest": latest or current,
             "update_available": update_available,
         },

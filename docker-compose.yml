@@ -284,6 +284,12 @@ services:
       # "no snapshot available" failure verdict even when the host-side
       # timer is healthy (issue surfaced after v0.6.4 ship).
       - ./audio:/audio:ro
+      # Release manifest from the FAT32 boot partition (outside overlayroot).
+      # Lets /version distinguish snapmulti_release (git tag — e.g. v0.7.8.5)
+      # from image_set (Docker tag — e.g. 0.7.7) instead of showing the
+      # image tag as `current` and triggering update_available=true on a
+      # device that's actually up-to-date at the script layer.
+      - /boot/firmware/snapmulti/release-manifest.json:/release-manifest.json:ro
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)"]
       interval: 30s
