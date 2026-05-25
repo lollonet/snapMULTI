@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8.4] — 2026-05-25
+
+> Script-only patch (image_set stays 0.7.7). Closes the client-native gap in the acoustic-feedback contract: Pi Zero 2W — the prime "headless in a closet" target — was the only profile NOT getting the post-boot tone because `setup-zero2w.sh` never sourced `system-tune.sh`. Live-validated on pizero: 16 s unit run, tone audible through InnoMaker DAC. Five consecutive script-only releases now riding the manifest gate.
+
+### Fixed
+- **`snapmulti-auto-boot-smoke.service` not installed on Pi Zero (client-native) (#481)** — `setup-zero2w.sh` never sourced `system-tune.sh`, so the smoke-tone WAVs + helper + auto-boot service were silently skipped. Pi Zero (the most-headless device, prime use case for acoustic feedback) was the only profile without it. Extracted `install_smoke_tone_service()` from `install_boot_tune_service()` so it can be called from the native path without dragging in Docker/CAKE/boot-tune machinery.
+- **Pi Zero unit no longer references `docker.service`** — `install_smoke_tone_service "client"` now writes a stripped unit (no `Wants=docker.service`, no `After=docker.service`/`snapmulti-server.service`) so the journal stays clean on Docker-less Pi Zero installs. Server/both mode unit unchanged.
+
 ## [0.7.8.3] — 2026-05-25
 
 > Script-only patch (image_set stays 0.7.7). Makes the first-boot FAIL on large NFS libraries self-explanatory: `/status` now shows the MPD scan progress and INSTALL.md tells users to check it. Closes the last UX surprise around the v0.7.8.x acoustic-feedback contract.
