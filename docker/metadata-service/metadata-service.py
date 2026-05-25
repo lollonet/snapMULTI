@@ -2138,10 +2138,11 @@ async def handle_version(request: web.Request) -> web.Response:
     try:
         with open("/release-manifest.json", encoding="utf-8") as f:
             manifest = json.load(f)
-        # `or ""` handles `"snapmulti_release": null` — `.get(key, "")` only falls back on missing keys, not null values, so `None.strip()` would crash.
-        manifest_release = str(manifest.get("snapmulti_release") or "").strip()
-        if manifest_release:
-            current = manifest_release
+        # isinstance guard — a truncated write may leave the root as null/[]/scalar; manifest.get() on a non-dict raises AttributeError outside the (OSError, ValueError) catch. `or ""` handles `"snapmulti_release": null` (None.strip() would crash).
+        if isinstance(manifest, dict):
+            manifest_release = str(manifest.get("snapmulti_release") or "").strip()
+            if manifest_release:
+                current = manifest_release
     except (OSError, ValueError):
         pass
 
