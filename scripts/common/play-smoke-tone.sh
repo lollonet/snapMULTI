@@ -13,11 +13,11 @@
 #   fail — descending tritone A4 → D♯4, 2 cycles (~1.2 s)
 #   skip — single 220 Hz chirp (~100 ms)
 #
-# Suppression rules (always honoured; never interrupt music or annoy):
-#   1. TEST_TONE=false in install.conf → silent
-#   2. SNAPMULTI_BOOT_SMOKE_TONES=off in .env → silent (multi-room opt-out)
-#   3. Snapcast has an active stream playing → silent (don't talk over music)
-#   4. aplay missing or no default ALSA device → silent
+# Suppression rules:
+#   1. TEST_TONE=false in install.conf → silent (always honoured)
+#   2. SNAPMULTI_BOOT_SMOKE_TONES=off in .env → silent (always honoured, multi-room opt-out)
+#   3. Snapcast has an active stream playing → silent (bypassed when SNAPMULTI_FORCE_TONE=1)
+#   4. aplay missing or no default ALSA device → silent (always honoured)
 #
 # Always exits 0. Never blocks the caller.
 
@@ -54,9 +54,8 @@ for env_file in /opt/snapmulti/.env /opt/snapclient/.env; do
     fi
 done
 
-# Don't interrupt active music. Snapcast JSON-RPC tells us if any stream
-# is currently playing.
-if command -v curl >/dev/null 2>&1; then
+# Don't interrupt active music — UNLESS SNAPMULTI_FORCE_TONE=1 (auto-boot-smoke sets this so post-reboot status reaches the user even when autoplay resumed).
+if [[ "${SNAPMULTI_FORCE_TONE:-0}" != "1" ]] && command -v curl >/dev/null 2>&1; then
     streams_state=$(curl -s --max-time 2 \
         -d '{"id":1,"jsonrpc":"2.0","method":"Server.GetStatus"}' \
         http://localhost:1780/jsonrpc 2>/dev/null || true)
