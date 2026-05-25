@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8.3] — 2026-05-25
+
+> Script-only patch (image_set stays 0.7.7). Makes the first-boot FAIL on large NFS libraries self-explanatory: `/status` now shows the MPD scan progress and INSTALL.md tells users to check it. Closes the last UX surprise around the v0.7.8.x acoustic-feedback contract.
+
 ### Added
-- **MPD scan progress on `/status`** — Snapcast + MPD section now surfaces `MPD library scan in progress (#N)` when an `Updating DB` job is active. Makes the first-boot FAIL on a large NFS/SMB library self-explanatory instead of mysterious.
+- **MPD scan progress on `/status` (#479)** — Snapcast + MPD section now surfaces `MPD library scan in progress (#N)` when an `Updating DB` job is active. Makes the first-boot FAIL on a large NFS/SMB library self-explanatory instead of mysterious.
 
 ### Docs
-- **First-boot FAIL with large library is the MPD scan** — INSTALL.md (+ IT) explains the auto-boot tone may report FAIL while MPD scans the library for the first time and points at `/status` for confirmation. Next boot's tone is PASS.
+- **First-boot FAIL with large library is the MPD scan (#479)** — INSTALL.md (+ IT) explains the auto-boot tone may report FAIL while MPD scans the library for the first time and points at `/status` for confirmation. Next boot's tone is PASS.
 
 ## [0.7.8.2] — 2026-05-25
 
