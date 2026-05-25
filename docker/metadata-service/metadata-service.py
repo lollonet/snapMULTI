@@ -2169,14 +2169,16 @@ async def handle_version(request: web.Request) -> web.Response:
             logger.debug("Version check failed: %s", exc)
             _latest_version_cache["checked_at"] = 0.0  # reset so next call retries
 
+    # Strip "v" prefix uniformly — `latest` comes from GitHub API already stripped, `current` from .env arrives with the prefix. Returning both un-prefixed avoids mismatched-string rendering on clients displaying both fields side-by-side.
     current_clean = current.lstrip("v")
+    latest_clean = (latest or current).lstrip("v")
     update_available = bool(latest and latest != current_clean)
 
     return web.json_response(
         {
-            "current": current,
+            "current": current_clean,
             "image_set": image_set,
-            "latest": latest or current,
+            "latest": latest_clean,
             "update_available": update_available,
         },
         headers={"Access-Control-Allow-Origin": "*"},

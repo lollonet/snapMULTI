@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **`/version` reports `snapmulti_release` as `current` (not `image_set`) (#483)** — was returning `{"current": "v0.7.7", "update_available": true}` on a freshly reflashed v0.7.8.4 device because `current` read `SNAPMULTI_VERSION` (image tag) instead of the git tag. Now bind-mounts `release-manifest.json` into the metadata container (read-only, `create_host_path: false` so non-Pi hosts don't get a spurious directory) and reads `snapmulti_release`. Adds `image_set` as separate field for transparency.
+- **`/version` reports `snapmulti_release` as `current` (not `image_set`) (#483)** — was returning `{"current": "v0.7.7", "update_available": true}` on a freshly reflashed v0.7.8.4 device because `current` read `SNAPMULTI_VERSION` (image tag) instead of the git tag. Now reads `SNAPMULTI_RELEASE` and `SNAPMULTI_IMAGE_SET` env vars (written to `.env` by `deploy.sh` on every deploy from `release-manifest.json`) instead of the image-baked `SNAPMULTI_VERSION`. On dev clones or manual x86 deploys where `deploy.sh` hasn't run, both vars are empty and the service falls back to `SNAPMULTI_VERSION` (same behaviour as before). Adds `image_set` as separate field for transparency.
 
 ## [0.7.8.4] — 2026-05-25
 
