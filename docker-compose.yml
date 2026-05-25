@@ -270,13 +270,7 @@ services:
       # SNAPMULTI_VERSION is baked into the image at build time (see
       # Dockerfile.metadata + build-push.yml --build-arg), so /health and
       # /version always report the actually-running code's version.
-      # SNAPMULTI_RELEASE + SNAPMULTI_IMAGE_SET come from .env (written by
-      # deploy.sh from release-manifest.json on every deploy). Lets /version
-      # report the git tag as `current` (e.g. v0.7.8.5) distinct from the
-      # Docker image tag (e.g. 0.7.7) — without those, a script-only release
-      # shows update_available=true on a device that's actually up-to-date.
-      # Empty defaults so the container starts on dev clones / x86 manual
-      # deploys where deploy.sh hasn't written them yet.
+      # SNAPMULTI_RELEASE / SNAPMULTI_IMAGE_SET from .env let /version distinguish git tag from Docker tag; empty defaults so dev clones still start.
       - SNAPMULTI_RELEASE=${SNAPMULTI_RELEASE:-}
       - SNAPMULTI_IMAGE_SET=${SNAPMULTI_IMAGE_SET:-}
     volumes:

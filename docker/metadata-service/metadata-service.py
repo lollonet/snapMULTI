@@ -2129,10 +2129,7 @@ async def handle_version(request: web.Request) -> web.Response:
     """Version check endpoint — returns current snapmulti_release, image_set, and latest from GitHub."""
     import time
 
-    # SNAPMULTI_RELEASE = git tag from release-manifest.json (deploy.sh writes
-    # it to .env on every deploy); SNAPMULTI_IMAGE_SET = Docker tag (same
-    # source). SNAPMULTI_VERSION is the image-baked version (final fallback
-    # for image_set when .env hasn't been written, e.g. dev clones).
+    # SNAPMULTI_RELEASE is the git tag; SNAPMULTI_IMAGE_SET is the Docker tag; falls back to SNAPMULTI_VERSION on dev clones.
     snapmulti_release = os.environ.get("SNAPMULTI_RELEASE", "").strip()
     image_set = os.environ.get("SNAPMULTI_IMAGE_SET", "").strip() or os.environ.get(
         "SNAPMULTI_VERSION", "unknown"
