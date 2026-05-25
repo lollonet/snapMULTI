@@ -2315,13 +2315,17 @@ def _status_to_html(data: dict | None, age_s: float | None) -> str:
         finished_at = (data or {}).get("finished_at", "")
         if finished_at:
             try:
-                ts = datetime.fromisoformat(finished_at.replace("Z", "+00:00")).astimezone()
+                ts = datetime.fromisoformat(
+                    finished_at.replace("Z", "+00:00")
+                ).astimezone()
                 abs_label = ts.strftime("%Y-%m-%d %H:%M %Z")
                 footer = f"Snapshot taken <strong>{abs_label}</strong> ({age_label}). Refreshes every minute."
             except (ValueError, TypeError):
                 footer = f"Snapshot taken <strong>{age_label}</strong>. Refreshes every minute."
         else:
-            footer = f"Snapshot taken <strong>{age_label}</strong>. Refreshes every minute."
+            footer = (
+                f"Snapshot taken <strong>{age_label}</strong>. Refreshes every minute."
+            )
     else:
         footer = ""
 
