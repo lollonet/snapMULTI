@@ -360,6 +360,8 @@ Circa 3–4 minuti dopo l'inizio dell'installazione, dopo il rilevamento della s
 Se non lo senti, l'installazione prosegue comunque — ma controlla alimentazione, volume e cavi prima di provare a riprodurre musica più tardi. Per silenziare il tono (installazioni notturne, casse scollegate), imposta `TEST_TONE=false` in `install.conf` prima del primo boot.
 
 > Dopo l'install, un controllo opzionale `device-smoke.sh --tone` riproduce un segnale audio distintivo per risultato (PASS / WARN / FAIL). Vedi [TROUBLESHOOTING.it.md — Segnali audio del risultato](TROUBLESHOOTING.it.md#toni-test-salute).
+>
+> **Attenzione — il segnale post-boot è silente se c'è già audio.** snapMULTI lancia un test di salute dopo ogni riavvio. Se una sorgente sta già trasmettendo via Snapcast quando il test parte (autoplay, MPD che riprende), il DAC è in uso esclusivo dal player e ALSA sopprime il segnale. Il test viene comunque eseguito e il risultato è leggibile su `/status` o lanciando manualmente `device-smoke.sh --both --tone` ad audio fermo.
 
 ---
 

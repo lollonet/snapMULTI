@@ -358,6 +358,8 @@ Roughly 3–4 minutes into the install, after the audio hardware is detected, sn
 If you don't hear it, the install still continues — but check power, volume, and cables before trying to play music later. To suppress the tone (overnight installs, speakers disconnected), set `TEST_TONE=false` in `install.conf` before first boot.
 
 > After install, an optional `device-smoke.sh --tone` health check plays a distinctive cue per result (PASS / WARN / FAIL). See [TROUBLESHOOTING.md — Audible result cues](TROUBLESHOOTING.md#health-check-tones).
+>
+> **Heads up — auto-boot health cue is silent while audio plays.** snapMULTI fires a smoke check after every reboot. If any source is already streaming through Snapcast when the check runs (autoplay, MPD resume), the DAC is held exclusively by the player and the cue is suppressed by ALSA. The check itself still runs and you can read its result at `/status` or by running `device-smoke.sh --both --tone` manually when audio is paused.
 
 ---
 
