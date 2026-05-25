@@ -795,7 +795,8 @@ Wants=docker.service
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/snapmulti-auto-boot-smoke
-TimeoutStartSec=180
+# 90s systemd-settled wait + 90s audio-core healthy wait + 10s buffer + 50s margin = 240s ceiling. NFS-grandi scan MPD non blocca (best-effort, non in CORE_SERVICES).
+TimeoutStartSec=240
 StandardOutput=journal
 StandardError=journal
 

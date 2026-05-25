@@ -33,8 +33,10 @@ assert "grep -qE 'server\\)|client\\)|both\\)' '$WRAP'" "dispatches on install r
 assert "grep -q '/opt/snapmulti/scripts/device-smoke.sh' '$WRAP'" "calls server smoke path"
 assert "grep -q '/opt/snapclient/scripts/device-smoke.sh' '$WRAP'" "calls client smoke path"
 assert "grep -q -- '--tone' '$WRAP'"       "invokes device-smoke.sh with --tone"
-assert "grep -q 'docker compose ps' '$WRAP'" "waits for ALL compose containers healthy before firing (not just Snapcast — avoids self-degrade FAIL cascade)"
+assert "grep -q 'docker compose ps' '$WRAP'" "polls docker compose for container health"
+assert "grep -q 'CORE_SERVICES=' '$WRAP'" "waits only for audio CORE (snapserver/snapclient), not MPD — large NFS scans would time out otherwise"
 assert "grep -q 'is-system-running' '$WRAP'" "waits for systemd to exit 'starting' (avoids false-positive systemd state FAIL)"
+assert "grep -qE 'seq 1 18' '$WRAP'" "caps each wait at 90 s (18 × 5 s) — well under TimeoutStartSec=240"
 assert "grep -q 'SNAPMULTI_FORCE_TONE=1' '$WRAP'" "forces tone even with active Snapcast stream (option B: user must hear post-boot status)"
 assert "grep -qE '\\|\\| true\\s*$|exit 0' '$WRAP'" "always exits 0 — tone is the signal, never fails the systemd unit"
 
