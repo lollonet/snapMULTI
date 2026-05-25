@@ -7,12 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8.2] — 2026-05-25
+
+> Patch release fixing two end-to-end gaps in v0.7.8.1's auto-boot acoustic feedback: the unit timed out on real-world NFS libraries (large MPD scan blocked the wait) and the tone itself was silent under `Type=oneshot` (backgrounded `aplay` got SIGTERM at cgroup close). Both fixes live-validated on snapvideo (both-mode Pi 4 8GB). Script-only release — `image_set` stays at `0.7.7`, `requires_image_rebuild=false`.
+
 ### Fixed
-- **`snapmulti-auto-boot-smoke.service` timeout on large NFS libraries** — wrapper now waits only on the audio CORE (snapserver/snapclient), 90 s cap each; MPD scan over NFS (potentially hours on large libraries) no longer blocks the tone. `TimeoutStartSec` lowered to 240 s. Same "always exit 0, tone is the signal" invariant.
-- **`device-smoke.sh --tone` was silent under `Type=oneshot`** — `_play_tone` backgrounded `aplay` with `&`, so when systemd closed the cgroup at ExecStart exit, the WAV got SIGTERM before finishing. Switched to foreground (tone is <1 s — no CLI latency cost). Manual CLI runs and the auto-boot service both now emit the tone reliably.
+- **`snapmulti-auto-boot-smoke.service` timeout on large NFS libraries (#476)** — wrapper now waits only on the audio CORE (snapserver/snapclient), 90 s cap each; MPD scan over NFS (potentially hours on large libraries) no longer blocks the tone. `TimeoutStartSec` lowered to 240 s. Also fixes a both-mode bug where snapclient was queried from `/opt/snapmulti` instead of `/opt/snapclient` (separate compose project) — wasted 90 s on every boot. Same "always exit 0, tone is the signal" invariant.
+- **`device-smoke.sh --tone` was silent under `Type=oneshot` (#476)** — `_play_tone` backgrounded `aplay` with `&`, so when systemd closed the cgroup at ExecStart exit, the WAV got SIGTERM before finishing. Switched to foreground (tone is <1 s — no CLI latency cost). Manual CLI runs and the auto-boot service both now emit the tone reliably.
+
+### Changed
+- **`prepare-sd.sh` / `.ps1` next-steps (#475)** — corrected install time (`~5-10 minutes` → `~10-15 minutes`) and replaced the single myMPD URL with the full endpoint list (Snapweb, myMPD, status, version) plus cast hints per source. Output parity between EN and PS1.
 
 ### Docs
-- **Auto-boot health cue is silent during active playback (known limitation)** — `docs/INSTALL.md` + IT mirror now state that `multi_out`'s direct `hw:` slave makes snapclient's stream exclusive, so post-reboot smoke tone is suppressed by ALSA when audio is already playing. Tracked for v0.7.9 (dmix slave / pause-snapclient / Snapcast-stream candidates).
+- **Auto-boot health cue is silent during active playback (known limitation) (#474)** — `docs/INSTALL.md` + IT mirror now state that `multi_out`'s direct `hw:` slave makes snapclient's stream exclusive, so post-reboot smoke tone is suppressed by ALSA when audio is already playing. Tracked for v0.7.9 (dmix slave / pause-snapclient / Snapcast-stream candidates).
 
 ## [0.7.8.1] — 2026-05-22
 
