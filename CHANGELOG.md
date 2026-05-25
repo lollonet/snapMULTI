@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **`snapmulti-auto-boot-smoke.service` timeout on large NFS libraries** — wrapper now waits only on the audio CORE (snapserver/snapclient), 90 s cap each; MPD scan over NFS (potentially hours on large libraries) no longer blocks the tone. `TimeoutStartSec` lowered to 240 s. Same "always exit 0, tone is the signal" invariant.
+- **`device-smoke.sh --tone` was silent under `Type=oneshot`** — `_play_tone` backgrounded `aplay` with `&`, so when systemd closed the cgroup at ExecStart exit, the WAV got SIGTERM before finishing. Switched to foreground (tone is <1 s — no CLI latency cost). Manual CLI runs and the auto-boot service both now emit the tone reliably.
 
 ### Docs
 - **Auto-boot health cue is silent during active playback (known limitation)** — `docs/INSTALL.md` + IT mirror now state that `multi_out`'s direct `hw:` slave makes snapclient's stream exclusive, so post-reboot smoke tone is suppressed by ALSA when audio is already playing. Tracked for v0.7.9 (dmix slave / pause-snapclient / Snapcast-stream candidates).

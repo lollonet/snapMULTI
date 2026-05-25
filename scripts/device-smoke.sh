@@ -1094,7 +1094,8 @@ _play_tone() {
                        /opt/snapclient/scripts/common/play-smoke-tone.sh \
                        /usr/local/bin/snapmulti-play-smoke-tone; do
         if [[ -x "$tone_helper" ]]; then
-            "$tone_helper" "$result" &>/dev/null &
+            # Foreground: `Type=oneshot` kills the cgroup when ExecStart exits, so a backgrounded aplay gets SIGTERM before the WAV finishes. Tone is <1 s — no CLI latency cost.
+            "$tone_helper" "$result" >/dev/null 2>&1
             return 0
         fi
     done
