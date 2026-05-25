@@ -764,11 +764,27 @@ WantedBy=multi-user.target
 DEOF
     fi
 
-    # Acoustic smoke cues: WAV files + helper invoked by device-smoke.sh --tone.
-    # Lets headless server installs report PASS/WARN/FAIL/SKIP audibly through
-    # the attached DAC. Resolved relative to ${BASH_SOURCE[0]} so this works
-    # whether system-tune.sh was sourced from the server (scripts/common/) or
-    # client (client/common/scripts/common/) install tree.
+    install_smoke_tone_service
+
+    systemctl daemon-reload
+    systemctl enable snapmulti-boot-tune.service 2>/dev/null
+    systemctl enable snapmulti-docker-driver.service 2>/dev/null || true
+
+    # NetworkManager-wait-online.service is masked at kernel cmdline level
+    # (prepare-sd.sh writes systemd.mask=NetworkManager-wait-online.service
+    # to cmdline.txt) — survives overlayroot upper-layer wipes and is
+    # parsed before any unit starts. No systemctl mask needed here.
+
+    ok "Boot tuning service installed (CPU, USB, CAKE persist across reboots)"
+}
+
+# Install acoustic smoke assets (WAVs + play-smoke-tone helper + auto-boot-smoke service).
+# Callable from server's install_boot_tune_service AND from client-native's
+# setup-zero2w.sh — Pi Zero gets the post-reboot tone without the rest of
+# the boot-tune chain (no Docker, no compose, no docker-driver-reconcile).
+install_smoke_tone_service() {
+    # Resolved relative to ${BASH_SOURCE[0]} so this works whether system-tune.sh
+    # was sourced from the server (scripts/common/) or client (client/common/scripts/common/) tree.
     local _tune_dir audio_src
     _tune_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     audio_src="$_tune_dir/audio"
@@ -783,7 +799,6 @@ DEOF
         install -m 755 "$_tune_dir/play-smoke-tone.sh" /usr/local/bin/snapmulti-play-smoke-tone
     fi
 
-    # Auto-boot-smoke service — fires device-smoke.sh --tone after every boot so the appliance speaks its health.
     if [[ -f "$_tune_dir/auto-boot-smoke.sh" ]]; then
         install -m 755 "$_tune_dir/auto-boot-smoke.sh" /usr/local/bin/snapmulti-auto-boot-smoke
         cat > /etc/systemd/system/snapmulti-auto-boot-smoke.service <<'BSEOF'
@@ -803,17 +818,7 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 BSEOF
+        systemctl daemon-reload
+        systemctl enable snapmulti-auto-boot-smoke.service 2>/dev/null || true
     fi
-
-    systemctl daemon-reload
-    systemctl enable snapmulti-boot-tune.service 2>/dev/null
-    systemctl enable snapmulti-docker-driver.service 2>/dev/null || true
-    systemctl enable snapmulti-auto-boot-smoke.service 2>/dev/null || true
-
-    # NetworkManager-wait-online.service is masked at kernel cmdline level
-    # (prepare-sd.sh writes systemd.mask=NetworkManager-wait-online.service
-    # to cmdline.txt) — survives overlayroot upper-layer wipes and is
-    # parsed before any unit starts. No systemctl mask needed here.
-
-    ok "Boot tuning service installed (CPU, USB, CAKE persist across reboots)"
 }

@@ -409,6 +409,15 @@ if ! systemctl restart snapclient.service; then
     warn "snapclient.service restart failed — diagnostics: journalctl -u snapclient -n 50"
 fi
 
+# ── Acoustic feedback — Pi Zero is the prime "headless in a closet" target ──
+# install_boot_tune_service in system-tune.sh is server-oriented (Docker driver,
+# CAKE, etc.) — for native we only need the smoke-tone assets + auto-boot-smoke
+# service so the post-reboot tone reaches the user.
+if _source_first_match "system-tune.sh"; then
+    install_smoke_tone_service
+    ok "Smoke-tone assets + auto-boot-smoke.service installed"
+fi
+
 # ── Verify ───────────────────────────────────────────────────────
 sleep 3
 if systemctl is-active --quiet snapclient.service; then
