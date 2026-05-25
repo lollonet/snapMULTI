@@ -1177,6 +1177,7 @@ if is_client_install; then
             log_error "Client verify failed — will retry on next boot"
             exit 1
         fi
+        log_info "Client verify counts 1 container at firstboot — fb-display + audio-visualizer activate post-reboot when display-detect runs (3 total after reboot)"
     fi
     checkpoint_done "setup"
   fi  # checkpoint guard

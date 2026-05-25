@@ -13,11 +13,11 @@
 #   fail — descending tritone A4 → D♯4, 2 cycles (~1.2 s)
 #   skip — single 220 Hz chirp (~100 ms)
 #
-# Suppression rules (always honoured; never interrupt music or annoy):
-#   1. TEST_TONE=false in install.conf → silent
-#   2. SNAPMULTI_BOOT_SMOKE_TONES=off in .env → silent (multi-room opt-out)
-#   3. Snapcast has an active stream playing → silent (don't talk over music)
-#   4. aplay missing or no default ALSA device → silent
+# Suppression rules:
+#   1. TEST_TONE=false in install.conf → silent (always honoured)
+#   2. SNAPMULTI_BOOT_SMOKE_TONES=off in .env → silent (always honoured, multi-room opt-out)
+#   3. Snapcast has an active stream playing → silent (bypassed when SNAPMULTI_FORCE_TONE=1)
+#   4. aplay missing or no default ALSA device → silent (always honoured)
 #
 # Always exits 0. Never blocks the caller.
 
