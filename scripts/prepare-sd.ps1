@@ -1039,9 +1039,22 @@ Write-Host ''
 Write-Host 'Next steps:'
 Write-Host '  1. Remove the SD card'
 Write-Host '  2. Insert into Raspberry Pi'
-Write-Host '  3. Power on -- installation takes ~5-10 minutes, then auto-reboots'
+Write-Host '  3. Power on -- installation takes ~10-15 minutes, then auto-reboots'
 switch ($InstallType) {
-    { $_ -in 'server', 'both' } { Write-Host '  4. Access http://<your-hostname>.local:8180' }
-    'client' { Write-Host '  4. The player will auto-discover your snapMULTI server' }
+    { $_ -in 'server', 'both' } {
+        Write-Host '  4. Open these URLs (replace <hostname> with the one you set in Imager):'
+        Write-Host '       http://<hostname>.local:1780          Snapweb (volume, rooms, source)'
+        Write-Host '       http://<hostname>.local:8180          myMPD (browse and play library)'
+        Write-Host '       http://<hostname>.local:8083/status   Status page (containers, audio, mDNS)'
+        Write-Host '       http://<hostname>.local:8083/version  Release + image set'
+        Write-Host '  5. Cast from your apps:'
+        Write-Host "       Spotify  -> select '<hostname> Spotify' in the Spotify app (Premium required)"
+        Write-Host "       AirPlay  -> AirPlay icon -> '<hostname> AirPlay'"
+        Write-Host "       Tidal    -> cast to '<hostname> Tidal' (ARM/Pi only, enabled by default)"
+    }
+    'client' {
+        Write-Host '  4. The player auto-discovers your snapMULTI server via mDNS'
+        Write-Host '  5. Check it joined on the server''s Snapweb (http://<server-hostname>.local:1780)'
+    }
 }
 Write-Host ''

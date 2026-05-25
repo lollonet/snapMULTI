@@ -1198,13 +1198,22 @@ echo ""
 echo "Next steps:"
 echo "  1. Remove the SD card"
 echo "  2. Insert into Raspberry Pi"
-echo "  3. Power on -- installation takes ~5-10 minutes, then auto-reboots"
+echo "  3. Power on -- installation takes ~10-15 minutes, then auto-reboots"
 case "$INSTALL_TYPE" in
     server|both)
-        echo "  4. Access http://<your-hostname>.local:8180"
+        echo "  4. Open these URLs (replace <hostname> with the one you set in Imager):"
+        echo "       http://<hostname>.local:1780          Snapweb (volume, rooms, source)"
+        echo "       http://<hostname>.local:8180          myMPD (browse and play library)"
+        echo "       http://<hostname>.local:8083/status   Status page (containers, audio, mDNS)"
+        echo "       http://<hostname>.local:8083/version  Release + image set"
+        echo "  5. Cast from your apps:"
+        echo "       Spotify  -> select '<hostname> Spotify' in the Spotify app (Premium required)"
+        echo "       AirPlay  -> AirPlay icon -> '<hostname> AirPlay'"
+        echo "       Tidal    -> cast to '<hostname> Tidal' (ARM/Pi only, enabled by default)"
         ;;
     client)
-        echo "  4. The player will auto-discover your snapMULTI server"
+        echo "  4. The player auto-discovers your snapMULTI server via mDNS"
+        echo "  5. Check it joined on the server's Snapweb (http://<server-hostname>.local:1780)"
         ;;
 esac
 echo ""
