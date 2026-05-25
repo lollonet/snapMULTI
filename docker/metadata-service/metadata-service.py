@@ -19,6 +19,7 @@ import hashlib
 import html
 import ipaddress
 import json
+from datetime import datetime
 import logging
 import os
 import signal
@@ -2311,7 +2312,20 @@ def _status_to_html(data: dict | None, age_s: float | None) -> str:
             age_label = f"{int(age_s / 60)}m ago"
         else:
             age_label = f"{int(age_s / 3600)}h ago"
-        footer = f"Snapshot taken <strong>{age_label}</strong>. Refreshes every minute."
+        finished_at = (data or {}).get("finished_at", "")
+        if finished_at:
+            try:
+                ts = datetime.fromisoformat(
+                    finished_at.replace("Z", "+00:00")
+                ).astimezone()
+                abs_label = ts.strftime("%Y-%m-%d %H:%M %Z")
+                footer = f"Snapshot taken <strong>{abs_label}</strong> ({age_label}). Refreshes every minute."
+            except (ValueError, TypeError):
+                footer = f"Snapshot taken <strong>{age_label}</strong>. Refreshes every minute."
+        else:
+            footer = (
+                f"Snapshot taken <strong>{age_label}</strong>. Refreshes every minute."
+            )
     else:
         footer = ""
 
