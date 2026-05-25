@@ -764,7 +764,7 @@ WantedBy=multi-user.target
 DEOF
     fi
 
-    install_smoke_tone_service
+    install_smoke_tone_service "server"
 
     systemctl daemon-reload
     systemctl enable snapmulti-boot-tune.service 2>/dev/null
@@ -782,7 +782,9 @@ DEOF
 # Callable from server's install_boot_tune_service AND from client-native's
 # setup-zero2w.sh — Pi Zero gets the post-reboot tone without the rest of
 # the boot-tune chain (no Docker, no compose, no docker-driver-reconcile).
+# Arg 1: "server" (default) or "client" — drives whether the unit Wants/After docker.service.
 install_smoke_tone_service() {
+    local _mode="${1:-server}"
     # Resolved relative to ${BASH_SOURCE[0]} so this works whether system-tune.sh
     # was sourced from the server (scripts/common/) or client (client/common/scripts/common/) tree.
     local _tune_dir audio_src
@@ -801,7 +803,25 @@ install_smoke_tone_service() {
 
     if [[ -f "$_tune_dir/auto-boot-smoke.sh" ]]; then
         install -m 755 "$_tune_dir/auto-boot-smoke.sh" /usr/local/bin/snapmulti-auto-boot-smoke
-        cat > /etc/systemd/system/snapmulti-auto-boot-smoke.service <<'BSEOF'
+        # Client-native (Pi Zero) has no Docker → omit Wants=docker.service to avoid `Unit docker.service not found` journal noise on every boot.
+        if [[ "$_mode" == "client" ]]; then
+            cat > /etc/systemd/system/snapmulti-auto-boot-smoke.service <<'BSEOF'
+[Unit]
+Description=snapMULTI auto boot smoke (acoustic health cue)
+After=multi-user.target snapclient.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/snapmulti-auto-boot-smoke
+TimeoutStartSec=240
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+BSEOF
+        else
+            cat > /etc/systemd/system/snapmulti-auto-boot-smoke.service <<'BSEOF'
 [Unit]
 Description=snapMULTI auto boot smoke (acoustic health cue)
 After=multi-user.target docker.service snapmulti-server.service snapclient.service
@@ -818,6 +838,7 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 BSEOF
+        fi
         systemctl daemon-reload
         systemctl enable snapmulti-auto-boot-smoke.service 2>/dev/null || true
     fi

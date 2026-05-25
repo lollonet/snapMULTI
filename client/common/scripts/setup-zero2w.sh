@@ -414,7 +414,7 @@ fi
 # CAKE, etc.) — for native we only need the smoke-tone assets + auto-boot-smoke
 # service so the post-reboot tone reaches the user.
 if _source_first_match "system-tune.sh"; then
-    install_smoke_tone_service
+    install_smoke_tone_service "client"
     ok "Smoke-tone assets + auto-boot-smoke.service installed"
 fi
 
