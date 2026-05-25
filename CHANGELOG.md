@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **`prepare-sd.sh` / `.ps1` next-steps (#475)** — corrected install time (`~5-10 minutes` → `~10-15 minutes`) and replaced the single myMPD URL with the full endpoint list (Snapweb, myMPD, status, version) plus cast hints per source. Output parity between EN and PS1.
+- **`/status` footer shows absolute snapshot timestamp (#478)** — was `Snapshot taken 3m ago`; now `Snapshot taken 2026-05-25 14:31 CEST (3m ago)`. Local-tz, parsed from existing `finished_at` field. Graceful fallback to relative-only if `finished_at` is missing/malformed.
 
 ### Docs
 - **Auto-boot health cue is silent during active playback (known limitation) (#474)** — `docs/INSTALL.md` + IT mirror now state that `multi_out`'s direct `hw:` slave makes snapclient's stream exclusive, so post-reboot smoke tone is suppressed by ALSA when audio is already playing. Tracked for v0.7.9 (dmix slave / pause-snapclient / Snapcast-stream candidates).
