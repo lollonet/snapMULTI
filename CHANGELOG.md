@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`/version` reports `snapmulti_release` as `current` (not `image_set`) (#483)** — was returning `{"current": "v0.7.7", "update_available": true}` on a freshly reflashed v0.7.8.4 device because `current` read `SNAPMULTI_VERSION` (image tag) instead of the git tag. Now bind-mounts `release-manifest.json` into the metadata container (read-only, `create_host_path: false` so non-Pi hosts don't get a spurious directory) and reads `snapmulti_release`. Adds `image_set` as separate field for transparency.
+
 ## [0.7.8.4] — 2026-05-25
 
 > Script-only patch (image_set stays 0.7.7). Closes the client-native gap in the acoustic-feedback contract: Pi Zero 2W — the prime "headless in a closet" target — was the only profile NOT getting the post-boot tone because `setup-zero2w.sh` never sourced `system-tune.sh`. Live-validated on pizero: 16 s unit run, tone audible through InnoMaker DAC. Five consecutive script-only releases now riding the manifest gate.

@@ -2168,10 +2168,10 @@ async def handle_version(request: web.Request) -> web.Response:
                         logger.debug(
                             "GitHub API returned %d for version check", resp.status
                         )
-                        _latest_version_cache["checked_at"] = 0.0
+                        _latest_version_cache["checked_at"] = 0.0  # reset so next call retries
         except Exception as exc:
             logger.debug("Version check failed: %s", exc)
-            _latest_version_cache["checked_at"] = 0.0
+            _latest_version_cache["checked_at"] = 0.0  # reset so next call retries
 
     current_clean = current.lstrip("v")
     update_available = bool(latest and latest != current_clean)
