@@ -764,7 +764,7 @@ WantedBy=multi-user.target
 DEOF
     fi
 
-    install_smoke_tone_service
+    install_smoke_tone_service "server"
 
     systemctl daemon-reload
     systemctl enable snapmulti-boot-tune.service 2>/dev/null
