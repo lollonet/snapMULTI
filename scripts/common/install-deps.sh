@@ -245,5 +245,13 @@ install_dependencies() {
         log_warn "apt autoremove --purge failed (non-fatal — install proceeds)"
     fi
 
+    # Purge legacy `pcp` (Performance Co-Pilot). New installs avoid it via
+    # --no-install-recommends on sysstat, but devices reflashed from a Pi OS
+    # image that ships pcp preinstalled (or upgraded from an earlier snapMULTI)
+    # keep it around. pcp's SysV init script floods journald with
+    # "lacks a native systemd unit file" on every daemon-reload — and snapMULTI
+    # doesn't use pcp at all. Best-effort: missing package returns 100, ignored.
+    apt-get purge -y pcp pcp-conf 'pcp-pmda-*' >> "${UNIFIED_LOG:-/dev/null}" 2>&1 || true
+
     log_info "System dependencies installed"
 }
