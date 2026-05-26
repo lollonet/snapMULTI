@@ -6,6 +6,8 @@ The "how it's put together" reference — services, ports, audio sources, securi
 
 ## Architecture
 
+> Architectural rationales are recorded in [`docs/adr/`](adr/ADR-INDEX.md). The most relevant for this section: [ADR-001](adr/ADR-001.host-networking.md) (host networking — why every container uses `network_mode: host`) and [ADR-002](adr/ADR-002.fifo-audio-routing.md) (named pipes in `/audio/` for source → snapserver routing).
+
 Server stack (7 containers, host networking):
 
 | Container | Role | Port |
