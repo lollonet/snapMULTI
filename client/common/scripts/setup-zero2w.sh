@@ -80,13 +80,40 @@ _source_first_match "logging.sh" || { echo "FATAL: cannot find logging.sh" >&2; 
 # --auto is the firstboot entry mode (no-op flag, kept for symmetry
 # with setup.sh; the script behaves the same with or without it).
 # --help is handled earlier (pre-source) for safe invocation.
+# First non-flag positional arg is an optional config file (matches
+# setup.sh signature) — sourced below so install.conf-derived
+# AUDIO_HAT / AUDIO_INTERNAL_OUTPUT actually take effect on Pi Zero
+# native installs. Without this the menu selection in prepare-sd is
+# silently dropped and the script always autodetects.
 ENABLE_READONLY="true"
+AUTO_CONFIG=""
 for arg in "$@"; do
     case "$arg" in
         --auto) : ;;
         --no-readonly) ENABLE_READONLY="false" ;;
+        -*) : ;;
+        *)
+            [[ -z "$AUTO_CONFIG" ]] && AUTO_CONFIG="$arg"
+            ;;
     esac
 done
+
+if [[ -n "$AUTO_CONFIG" ]]; then
+    if [[ ! "$AUTO_CONFIG" =~ ^[a-zA-Z0-9_./-]+$ ]] || [[ "$AUTO_CONFIG" == *".."* ]]; then
+        echo "Error: Invalid config path: $AUTO_CONFIG" >&2
+        exit 1
+    fi
+    AUTO_CONFIG_REAL=$(realpath -e "$AUTO_CONFIG" 2>/dev/null) || {
+        echo "Error: Config file not found: $AUTO_CONFIG" >&2
+        exit 1
+    }
+    # shellcheck source=/dev/null
+    source "$AUTO_CONFIG_REAL"
+fi
+
+# Defaults — overridable by sourced config above
+AUDIO_HAT="${AUDIO_HAT:-auto}"
+AUDIO_INTERNAL_OUTPUT="${AUDIO_INTERNAL_OUTPUT:-}"
 
 step "Pi Zero 2W native snapclient setup"
 info "Client ID: $CLIENT_ID"
@@ -103,9 +130,20 @@ info "Architecture: $ARCH"
 # Reuses the same dependency list (avahi-daemon, locales, monitoring
 # tools, etc.) used by the Docker path — keeps the device feel
 # identical except for the snapclient runtime itself.
+#
+# INSTALL_ROLE pinned to client: install-deps.sh's fallback chain is
+# ${INSTALL_ROLE:-${INSTALL_TYPE:-both}} and INSTALL_TYPE isn't set in
+# this context, so without the explicit pin Pi Zero 2W native installs
+# fall through to "both" and pick up server-only packages (sysstat
+# collector enabled at 10-min intervals — the overlay tmpfs on Zero is
+# already at 71 % on a fresh reflash, every avoidable writer hurts).
+# SKIP_UPGRADE defaults true to avoid an unbounded `apt-get upgrade -y`
+# on first boot — long, SD-wear-heavy, and outside this script's brief.
+export INSTALL_ROLE="client"
+export SKIP_UPGRADE="${SKIP_UPGRADE:-true}"
 if _source_first_match "install-deps.sh"; then
     if command -v install_dependencies &>/dev/null; then
-        step "Installing system dependencies"
+        step "Installing system dependencies (role=client, skip_upgrade=$SKIP_UPGRADE)"
         install_dependencies
     fi
 fi
@@ -234,27 +272,34 @@ _ensure_hat_detect_tools() {
 
 if _source_first_match "audio-hat-detect.sh"; then
     if command -v detect_hat &>/dev/null; then
-        step "Detecting audio HAT"
         _ensure_hat_detect_tools
-        # detect_hat prints the HAT_CONFIG name on stdout AND sets
-        # HAT_DETECTION_SOURCE as a side-effect. Command substitution
-        # `$(detect_hat)` would discard that side-effect (subshell scope),
-        # so the log line below would always read "source: none" even on
-        # a successful I2C / ALSA / EEPROM detection — observed live on
-        # pi-zero where the PCM5122 was correctly found via I2C but the
-        # log claimed the source was missing. Mirror the tempfile pattern
-        # already used by setup.sh:279-285 so the global survives.
-        _hat_tmp=$(mktemp /tmp/snapclient-hat-XXXXX)
-        # shellcheck disable=SC2064  # we want $_hat_tmp expanded now
-        trap "rm -f '$_hat_tmp'" RETURN EXIT
-        if ! detect_hat 2>/dev/null > "$_hat_tmp"; then
-            echo "internal-audio" > "$_hat_tmp"
+        if [[ "$AUDIO_HAT" != "auto" ]]; then
+            # Explicit operator choice from prepare-sd menu — honour it.
+            step "Using configured audio HAT (skipping autodetect)"
+            _hat_config=$(resolve_hat_config_name "$AUDIO_HAT" 2>/dev/null || echo "$AUDIO_HAT")
+            info "Configured HAT: ${_hat_config} (source: install.conf)"
+        else
+            step "Detecting audio HAT"
+            # detect_hat prints the HAT_CONFIG name on stdout AND sets
+            # HAT_DETECTION_SOURCE as a side-effect. Command substitution
+            # `$(detect_hat)` would discard that side-effect (subshell scope),
+            # so the log line below would always read "source: none" even on
+            # a successful I2C / ALSA / EEPROM detection — observed live on
+            # pi-zero where the PCM5122 was correctly found via I2C but the
+            # log claimed the source was missing. Mirror the tempfile pattern
+            # already used by setup.sh:279-285 so the global survives.
+            _hat_tmp=$(mktemp /tmp/snapclient-hat-XXXXX)
+            # shellcheck disable=SC2064  # we want $_hat_tmp expanded now
+            trap "rm -f '$_hat_tmp'" RETURN EXIT
+            if ! detect_hat 2>/dev/null > "$_hat_tmp"; then
+                echo "internal-audio" > "$_hat_tmp"
+            fi
+            _hat_config=$(cat "$_hat_tmp")
+            rm -f "$_hat_tmp"
+            trap - RETURN EXIT
+            _hat_config=$(resolve_hat_config_name "$_hat_config" 2>/dev/null || echo "$_hat_config")
+            info "Detected HAT config: ${_hat_config} (source: ${HAT_DETECTION_SOURCE:-unknown})"
         fi
-        _hat_config=$(cat "$_hat_tmp")
-        rm -f "$_hat_tmp"
-        trap - RETURN EXIT
-        _hat_config=$(resolve_hat_config_name "$_hat_config" 2>/dev/null || echo "$_hat_config")
-        info "Detected HAT config: ${_hat_config} (source: ${HAT_DETECTION_SOURCE:-unknown})"
 
         # Load the per-HAT config file (HAT_NAME, HAT_OVERLAY, HAT_CARD_NAME,
         # HAT_MIXER, HAT_TYPE, HAT_FORMAT, HAT_RATE).

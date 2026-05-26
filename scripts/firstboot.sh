@@ -947,24 +947,39 @@ if is_client_install; then
         SNAPSERVER_HOST="127.0.0.1"
     fi
 
+    # AUDIO_HAT / AUDIO_INTERNAL_OUTPUT come from prepare-sd's install menu:
+    # operators who pick a specific HAT (or "no HAT → onboard HDMI/jack") expect
+    # setup.sh to honour that choice instead of falling back to autodetect.
+    # Without this promotion the install.conf values are inert — setup.sh sources
+    # snapclient.conf and reads AUDIO_HAT from it, so we mirror the same pattern
+    # used for DISPLAY_MODE / SNAPSERVER_HOST above.
+    AUDIO_HAT=""
+    AUDIO_INTERNAL_OUTPUT=""
+    if [[ -f "$SNAP_BOOT/install.conf" ]]; then
+        AUDIO_HAT=$(grep -m1 '^AUDIO_HAT=' "$SNAP_BOOT/install.conf" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true)
+        AUDIO_INTERNAL_OUTPUT=$(grep -m1 '^AUDIO_INTERNAL_OUTPUT=' "$SNAP_BOOT/install.conf" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true)
+    fi
+
     CONFIG_FILE=""
     if [[ -f "$CLIENT_DIR/snapclient.conf" ]]; then
         CONFIG_FILE="$CLIENT_DIR/snapclient.conf"
     fi
 
-    if [[ -n "$CONFIG_FILE" ]]; then
-        if grep -q '^DISPLAY_MODE=' "$CONFIG_FILE"; then
-            sed -i "s|^DISPLAY_MODE=.*|DISPLAY_MODE=${DISPLAY_MODE}|" "$CONFIG_FILE"
+    _promote_to_conf() {
+        local key="$1" value="$2" conf="$3"
+        [[ -z "$value" ]] && return 0
+        if grep -q "^${key}=" "$conf"; then
+            sed -i "s|^${key}=.*|${key}=${value}|" "$conf"
         else
-            echo "DISPLAY_MODE=$DISPLAY_MODE" >> "$CONFIG_FILE"
+            echo "${key}=${value}" >> "$conf"
         fi
-        if [[ -n "$SNAPSERVER_HOST" ]]; then
-            if grep -q '^SNAPSERVER_HOST=' "$CONFIG_FILE"; then
-                sed -i "s|^SNAPSERVER_HOST=.*|SNAPSERVER_HOST=${SNAPSERVER_HOST}|" "$CONFIG_FILE"
-            else
-                echo "SNAPSERVER_HOST=$SNAPSERVER_HOST" >> "$CONFIG_FILE"
-            fi
-        fi
+    }
+
+    if [[ -n "$CONFIG_FILE" ]]; then
+        _promote_to_conf "DISPLAY_MODE"          "$DISPLAY_MODE"          "$CONFIG_FILE"
+        _promote_to_conf "SNAPSERVER_HOST"       "$SNAPSERVER_HOST"       "$CONFIG_FILE"
+        _promote_to_conf "AUDIO_HAT"             "$AUDIO_HAT"             "$CONFIG_FILE"
+        _promote_to_conf "AUDIO_INTERNAL_OUTPUT" "$AUDIO_INTERNAL_OUTPUT" "$CONFIG_FILE"
     fi
 
     next_step "Setting up audio player..."

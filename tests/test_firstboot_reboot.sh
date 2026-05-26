@@ -67,10 +67,13 @@ fi
 assert '! grep -qE "^reboot$" "$FIRSTBOOT"' \
        'no bare `reboot` line remains (would deadlock under cloud-final.service)'
 
-assert 'grep -qF "Snapweb:   http://\${LOCAL_HOSTNAME}.local:1780" "$FIRSTBOOT"' \
+# Spacing in the banner is cosmetic and changes when new lines are added
+# (PR #488 added a "Start here" landing-page line that shifted the column).
+# Assert URLs are present, not exact whitespace.
+assert 'grep -qE "Snapweb:[[:space:]]+http://\\\$\\{LOCAL_HOSTNAME\\}\\.local:1780" "$FIRSTBOOT"' \
        'completion banner names Snapweb URL explicitly'
 
-assert '! grep -qF "Speakers:  http://" "$FIRSTBOOT"' \
+assert '! grep -qE "Speakers:[[:space:]]+http://" "$FIRSTBOOT"' \
        'completion banner no longer labels Snapweb as Speakers'
 
 # Every user-facing URL the project publishes must appear in the banner.
@@ -78,13 +81,13 @@ assert '! grep -qF "Speakers:  http://" "$FIRSTBOOT"' \
 # (documented in config/snapserver.conf:69 and docs/USAGE.md) are all
 # end-user endpoints. The Snapcast streaming/RPC ports (1704/1705) and
 # the metadata WS (8082) are intentionally omitted — internal protocol.
-assert 'grep -qF "Library:   http://\${LOCAL_HOSTNAME}.local:8180" "$FIRSTBOOT"' \
+assert 'grep -qE "Library:[[:space:]]+http://\\\$\\{LOCAL_HOSTNAME\\}\\.local:8180" "$FIRSTBOOT"' \
        'completion banner names myMPD library URL'
 
-assert 'grep -qF "Status:    http://\${LOCAL_HOSTNAME}.local:8083" "$FIRSTBOOT"' \
+assert 'grep -qE "Status:[[:space:]]+http://\\\$\\{LOCAL_HOSTNAME\\}\\.local:8083" "$FIRSTBOOT"' \
        'completion banner names Status page URL'
 
-assert 'grep -qF "Stream in: tcp://\${LOCAL_HOSTNAME}.local:4953" "$FIRSTBOOT"' \
+assert 'grep -qE "Stream in:[[:space:]]+tcp://\\\$\\{LOCAL_HOSTNAME\\}\\.local:4953" "$FIRSTBOOT"' \
        'completion banner names TCP audio input URL (Android/Termux/ffmpeg)'
 
 echo

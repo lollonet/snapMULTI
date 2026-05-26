@@ -731,7 +731,13 @@ WEOF
     cat > /etc/systemd/system/snapmulti-boot-tune.service <<'SEOF'
 [Unit]
 Description=snapMULTI boot-time system tuning
+# Boot-tune may restart containerd (Leases plugin self-heal) and MPD
+# (post-mount race). Both actions disrupt the audio stack if the
+# server/client units are already active, so order it to complete
+# BEFORE they start. After=docker.service stays — boot-tune needs
+# Docker to enumerate containers and run docker compose restart.
 After=docker.service
+Before=snapmulti-server.service snapclient.service
 
 [Service]
 Type=oneshot
