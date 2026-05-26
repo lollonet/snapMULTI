@@ -16,16 +16,17 @@
 #
 # Precedence chains — the SINGLE source of truth for every consumer:
 #
-#   (A) IMAGE_TAG     = install.conf IMAGE_TAG
-#                     > install.conf SNAPMULTI_IMAGE_SET
+#   (A) IMAGE_TAG     = install.conf IMAGE_TAG (operator override)
 #                     > manifest image_set
 #                     > "latest"
-#   (B) SNAPMULTI_RELEASE   = install.conf SNAPMULTI_RELEASE
-#                           > manifest snapmulti_release
+#   (B) SNAPMULTI_RELEASE   = manifest snapmulti_release
 #                           > ""
-#   (C) SNAPMULTI_IMAGE_SET = install.conf SNAPMULTI_IMAGE_SET
-#                           > manifest image_set
+#   (C) SNAPMULTI_IMAGE_SET = manifest image_set
 #                           > ""
+#
+# Chains B/C have no install.conf step (since fix/release-identity-ssot):
+# release-manifest.json on the SD is the single SSOT. Only IMAGE_TAG keeps
+# an install.conf override channel for pinning to :dev / arbitrary tags.
 #
 # Every consumer (prepare-sd, firstboot, deploy, setup) implements
 # precedence (A) via derive_image_tag().

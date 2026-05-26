@@ -1,28 +1,10 @@
 # snapMULTI Installation Configuration
 # Written by prepare-sd.sh on first use.
 #
-# Release identity — three machine-readable fields consumed by
-# firstboot, deploy, setup, and the smoke check (precedence chains
-# documented in scripts/common/release-manifest.sh):
-#
-#   SNAPMULTI_RELEASE   — git tag of the release this SD was prepared
-#                          from (e.g. v0.7.7). Surfaced by smoke and
-#                          diagnostic for traceability.
-#   SNAPMULTI_IMAGE_SET — Docker image tag this release pins to (e.g.
-#                          0.7.7). Decoupled from SNAPMULTI_RELEASE so
-#                          a script-only release (CHANGELOG, docs,
-#                          installer scripts) does not require a fresh
-#                          image rebuild — it ships the previously
-#                          published image set.
-#   IMAGE_TAG           — operator override. Takes precedence over
-#                          SNAPMULTI_IMAGE_SET. Set to 'dev' for
-#                          development builds, leave blank to use
-#                          SNAPMULTI_IMAGE_SET, or pin to an arbitrary
-#                          Docker tag.
-#
-# Leave empty for prepare-sd.sh to populate from release-manifest.json.
-SNAPMULTI_RELEASE=
-SNAPMULTI_IMAGE_SET=
+# Release identity lives in release-manifest.json on the SD card (single
+# SSOT). Setting SNAPMULTI_RELEASE / SNAPMULTI_IMAGE_SET here has no
+# effect — they were removed from this template to avoid silent no-ops.
+# IMAGE_TAG below is the one legitimate operator override.
 #
 # INSTALL_TYPE controls what gets installed on first boot:
 #   client  -- Audio Player (snapclient, optional display)

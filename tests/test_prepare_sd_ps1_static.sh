@@ -62,12 +62,12 @@ assert_contains "$content" "ConvertFrom-Json" \
 if grep -qE '^\s*SNAPMULTI_RELEASE=\$ManifestRelease' <<<"$content"; then
     fail=$((fail+1)); echo "FAIL: install.conf must NOT emit SNAPMULTI_RELEASE (SSOT is release-manifest.json)"
 else
-    echo "PASS: install.conf does NOT emit SNAPMULTI_RELEASE (SSOT is release-manifest.json)"
+    pass=$((pass+1)); echo "PASS: install.conf does NOT emit SNAPMULTI_RELEASE (SSOT is release-manifest.json)"
 fi
 if grep -qE '^\s*SNAPMULTI_IMAGE_SET=\$ManifestImageSet' <<<"$content"; then
     fail=$((fail+1)); echo "FAIL: install.conf must NOT emit SNAPMULTI_IMAGE_SET (SSOT is release-manifest.json)"
 else
-    echo "PASS: install.conf does NOT emit SNAPMULTI_IMAGE_SET (SSOT is release-manifest.json)"
+    pass=$((pass+1)); echo "PASS: install.conf does NOT emit SNAPMULTI_IMAGE_SET (SSOT is release-manifest.json)"
 fi
 assert_contains "$content" "Copy-Item \$ManifestPath -Destination \$Dest" \
     "release-manifest.json staged to SD destination"
