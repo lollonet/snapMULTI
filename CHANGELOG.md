@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8.7] — 2026-05-26
+
+> Script-only patch (image_set stays 0.7.7). Eighth consecutive script-only release. Cosmetic rebrand of the fb-display bottom bar from `SnapForge` to `snapMULTI`.
+
+### Changed
+- **fb-display bottom bar now shows snapMULTI branding (#486)** — PNG regenerated with `snap` / `MULTI` stacked on two lines, Arial Rounded Bold + drop shadow matching the original yellow palette (`rgb(255,162,24)`). Filename kept as `snapforge-text.png` for backward-compat with existing bind-mounts.
+
 ## [0.7.8.6] — 2026-05-26
 
 > Script-only patch (image_set stays 0.7.7). Seventh consecutive script-only release. Fixes a both-mode display bug: fb-display fell back to mDNS discovery → connected to LAN IP instead of loopback, creating a permanent reconnect loop visible in logs. Now pinned to localhost in both-mode (same design choice as snapclient).
