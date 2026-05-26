@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **CAKE QoS hook moved to NetworkManager dispatcher (latent since PR #144)** — Pi OS runs NetworkManager, not systemd-networkd, so `/etc/networkd-dispatcher/routable.d/50-cake-qos` never fired. Default qdisc stayed `fq_codel` on every boot — Snapcast worked but lost DSCP-aware prioritization (Voice tin). Hook moved to `/etc/NetworkManager/dispatcher.d/50-cake-qos` with NM signature (`$1=iface, $2=action`); deploy.sh removes the legacy file. `check_qos.sh` updated to verify the new path and warn if the old one lingers. DSCP iptables marking was always effective (separate path).
+
 ## [0.7.8.10] — 2026-05-26
 
 > Script-only patch (image_set stays 0.7.7). Release identity SSOT consolidation (#491).
