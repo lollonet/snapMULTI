@@ -966,7 +966,7 @@ def render_base_frame() -> Image.Image:
         fill=(10, 10, 15),
     )
 
-    # Bottom bar: logo (left) + SnapForge brand image
+    # Bottom bar: logo (left) + snapMULTI brand image
     if _logo_img is not None:
         logo_resized = _logo_img.resize((L["logo_size"], L["logo_size"]), Image.LANCZOS)
         bg.paste(logo_resized, (L["logo_x"], L["logo_y"]), logo_resized)
@@ -1626,7 +1626,7 @@ async def main() -> None:
         except Exception as e:
             logger.warning(f"Failed to load logo: {e}")
 
-    # Load brand text image (SnapForge)
+    # Load brand text image (snapMULTI). Filename kept as snapforge-text.png for backward-compat with existing installs/bind-mounts.
     brand_path = "/app/snapforge-text.png"
     if os.path.exists(brand_path):
         try:
