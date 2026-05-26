@@ -206,7 +206,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push snapserver
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           file: Dockerfile.snapserver
@@ -224,7 +224,7 @@ jobs:
           cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=snapserver-{0}', matrix.suffix) || '' }}
 
       - name: Build and push shairport-sync
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           file: Dockerfile.shairport-sync
@@ -239,7 +239,7 @@ jobs:
       # Spotify Connect: uses official ghcr.io/devgianlu/go-librespot image (no build needed)
 
       - name: Build and push mpd
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           file: Dockerfile.mpd
@@ -252,7 +252,7 @@ jobs:
           cache-to: ${{ runner.os == 'Linux' && format('type=gha,mode=max,scope=mpd-{0}', matrix.suffix) || '' }}
 
       - name: Build and push metadata
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           file: Dockerfile.metadata
@@ -270,7 +270,7 @@ jobs:
       # Base image edgecrush3r/tidal-connect only provides ARM binaries
       - name: Build and push tidal
         if: matrix.platform == 'linux/arm64'
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           file: Dockerfile.tidal
@@ -352,7 +352,7 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       - name: Build and push snapclient
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: client/common/docker/snapclient
           platforms: linux/arm64
@@ -366,7 +366,7 @@ jobs:
             ${{ steps.version.outputs.tag && format('lollonet/snapclient-pi:{0}', steps.version.outputs.tag) || '' }}
 
       - name: Build and push audio-visualizer
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: client/common/docker/audio-visualizer
           platforms: linux/arm64
@@ -376,7 +376,7 @@ jobs:
             ${{ steps.version.outputs.tag && format('lollonet/snapclient-pi-visualizer:{0}', steps.version.outputs.tag) || '' }}
 
       - name: Build and push fb-display
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: client/common/docker/fb-display
           platforms: linux/arm64
