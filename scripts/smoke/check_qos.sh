@@ -92,6 +92,6 @@ check_qos() {
         warn "CAKE persistence hook missing — qdisc will be lost on next iface restart"
     fi
     if [[ -e /etc/networkd-dispatcher/routable.d/50-cake-qos ]]; then
-        warn "Legacy CAKE hook still present in networkd-dispatcher (never fires on NM hosts) — reflash to remove"
+        warn "Legacy CAKE hook still present in networkd-dispatcher (never fires on NM hosts) — re-run deploy.sh or reflash to remove"
     fi
 }
