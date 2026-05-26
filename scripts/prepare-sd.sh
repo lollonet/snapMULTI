@@ -752,17 +752,16 @@ SMB_SHARE=$SMB_SHARE
 #   jack → bind to "Headphones" card (Pi 3/4 only — Pi 5 falls back to HDMI)
 AUDIO_HAT=$AUDIO_HAT
 AUDIO_INTERNAL_OUTPUT=$AUDIO_INTERNAL_OUTPUT
-# Release identity (machine-readable, consumed by firstboot + deploy + smoke)
-#   SNAPMULTI_RELEASE  — git tag of the release this SD was prepared from
-#   SNAPMULTI_IMAGE_SET — Docker image tag (image_set in release-manifest.json)
-#   IMAGE_TAG          — operator override, takes precedence over the
-#                         manifest image_set (see precedence chain (A) in
-#                         scripts/common/release-manifest.sh)
-SNAPMULTI_RELEASE=$MANIFEST_RELEASE
-SNAPMULTI_IMAGE_SET=$MANIFEST_IMAGE_SET
+# Release identity comes from release-manifest.json on the SD (single SSOT,
+# staged below). SNAPMULTI_RELEASE / SNAPMULTI_IMAGE_SET are deliberately NOT
+# written here — duplicating them in install.conf shadows the manifest and
+# diverges if prepare-sd.sh runs twice across a tag bump.
 # Advanced options
 ENABLE_READONLY=$ADV_READONLY
 SKIP_UPGRADE=$ADV_SKIP_UPGRADE
+# IMAGE_TAG is a legitimate operator override (pin to :dev or a specific tag
+# while keeping the manifest pinned to a different version). When unset, the
+# precedence chain falls back to manifest image_set automatically.
 IMAGE_TAG=$ADV_IMAGE_TAG
 VERBOSE_INSTALL=$ADV_VERBOSE_INSTALL
 TEST_TONE=true
@@ -1070,8 +1069,8 @@ esac
 
 echo "  install.conf -> INSTALL_TYPE=$(grep '^INSTALL_TYPE=' "$DEST/install.conf" | cut -d= -f2)"
 echo "  install.conf -> MUSIC_SOURCE=$(grep '^MUSIC_SOURCE=' "$DEST/install.conf" | cut -d= -f2)"
-echo "  install.conf -> SNAPMULTI_RELEASE=$(grep '^SNAPMULTI_RELEASE=' "$DEST/install.conf" | cut -d= -f2)"
-echo "  install.conf -> SNAPMULTI_IMAGE_SET=$(grep '^SNAPMULTI_IMAGE_SET=' "$DEST/install.conf" | cut -d= -f2)"
+echo "  release-manifest -> SNAPMULTI_RELEASE=$MANIFEST_RELEASE (SSOT on SD)"
+echo "  release-manifest -> SNAPMULTI_IMAGE_SET=$MANIFEST_IMAGE_SET (SSOT on SD)"
 echo "  install.conf -> ENABLE_READONLY=$(grep '^ENABLE_READONLY=' "$DEST/install.conf" | cut -d= -f2)"
 echo "  install.conf -> SKIP_UPGRADE=$(grep '^SKIP_UPGRADE=' "$DEST/install.conf" | cut -d= -f2)"
 echo "  install.conf -> IMAGE_TAG=$(grep '^IMAGE_TAG=' "$DEST/install.conf" | cut -d= -f2)"

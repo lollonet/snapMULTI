@@ -860,9 +860,8 @@ SMB_SHARE=$SmbShare
 # Audio output (client/both only — server installs ignore these)
 AUDIO_HAT=$AudioHat
 AUDIO_INTERNAL_OUTPUT=$AudioInternalOutput
-# Release identity (machine-readable, consumed by firstboot + deploy + smoke)
-SNAPMULTI_RELEASE=$ManifestRelease
-SNAPMULTI_IMAGE_SET=$ManifestImageSet
+# Release identity comes from release-manifest.json on the SD (single SSOT,
+# staged below). Do not duplicate SNAPMULTI_RELEASE / SNAPMULTI_IMAGE_SET here.
 # Advanced options
 # (PowerShell prep currently uses defaults — the bash side has an
 # interactive Advanced menu that lets the user toggle these. Parity

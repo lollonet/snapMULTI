@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Release identity SSOT consolidated to `release-manifest.json`** — `install.conf` no longer carries `SNAPMULTI_RELEASE` / `SNAPMULTI_IMAGE_SET`. They were duplicating the manifest and could shadow it if `prepare-sd.sh` ran twice across a tag bump (observed: snapvideo stuck on v0.7.8.8 install.conf while SD release-manifest.json said v0.7.8.9). `IMAGE_TAG` remains the legitimate operator override channel (pin to `:dev` etc.). `prepare-sd.sh`, `prepare-sd.ps1` and `firstboot.sh` updated.
+
 ## [0.7.8.9] — 2026-05-26
 
 > Script-only patch (image_set stays 0.7.7). Pre-launch audit sweep — 5 findings (#489).
