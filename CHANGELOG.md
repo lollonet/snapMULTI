@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Metadata service `EXTERNAL_HOST` lazy-evaluated** — `metadata-service.py` ran `_resolve_external_host()` at module-import time, doing `socket.getfqdn()` + `socket.gethostbyname()` synchronously. On macOS dev hosts with slow reverse-DNS (observed: 30 s hang on `jupiter.fritz.box`) every `pytest tests/test_metadata_service.py` import blocked for 30 s, making the pre-push hook unusable. Now `get_external_host()` caches lazily on first call; runtime Pi hosts still resolve sub-millisecond.
 - **CAKE QoS hook moved to NetworkManager dispatcher (latent since PR #144)** — Pi OS runs NetworkManager, not systemd-networkd, so `/etc/networkd-dispatcher/routable.d/50-cake-qos` never fired. Default qdisc stayed `fq_codel` on every boot — Snapcast worked but lost DSCP-aware prioritization (Voice tin). Hook moved to `/etc/NetworkManager/dispatcher.d/50-cake-qos` with NM signature (`$1=iface, $2=action`); deploy.sh removes the legacy file. `check_qos.sh` updated to verify the new path and warn if the old one lingers. DSCP iptables marking was always effective (separate path).
 
 ## [0.7.8.10] — 2026-05-26

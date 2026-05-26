@@ -86,7 +86,20 @@ def _resolve_external_host() -> str:
     return SNAPSERVER_HOST
 
 
-EXTERNAL_HOST = _resolve_external_host()
+# Lazy-evaluated to avoid blocking module import on slow DNS / reverse lookup
+# (observed: macOS dev hosts where socket.getfqdn() hangs ~30 s on stale
+# resolvers, blocking every pytest import). Resolution happens once on first
+# access; runtime Pi hosts hit LAN DNS so cost is sub-millisecond.
+_EXTERNAL_HOST: str | None = None
+
+
+def get_external_host() -> str:
+    global _EXTERNAL_HOST
+    if _EXTERNAL_HOST is None:
+        _EXTERNAL_HOST = _resolve_external_host()
+    return _EXTERNAL_HOST
+
+
 _POLL_LOOP_MAX_ERRORS = 30
 
 # MusicBrainz rate limiter (1 request per 1.1 seconds, shared across threads)
@@ -1527,7 +1540,7 @@ class MetadataService:
         """Build full HTTP URL for an artwork filename."""
         if not filename:
             return ""
-        return f"http://{EXTERNAL_HOST}:{HTTP_PORT}/artwork/{filename}"
+        return f"http://{get_external_host()}:{HTTP_PORT}/artwork/{filename}"
 
     def enrich_artwork(self, metadata: dict[str, Any]) -> None:
         """Fetch/download artwork for a metadata dict. Mutates in place.
@@ -1598,7 +1611,7 @@ class MetadataService:
         # Final radio fallback
         if not metadata.get("artwork") and is_radio:
             metadata["artwork"] = (
-                f"http://{EXTERNAL_HOST}:{HTTP_PORT}/defaults/default-radio.png"
+                f"http://{get_external_host()}:{HTTP_PORT}/defaults/default-radio.png"
             )
             artwork_source = "default"
 
@@ -1609,7 +1622,7 @@ class MetadataService:
                 cached = self.download_artwork(artist_image_url)
                 if cached:
                     artist_image_served = (
-                        f"http://{EXTERNAL_HOST}:{HTTP_PORT}/artwork/{cached}"
+                        f"http://{get_external_host()}:{HTTP_PORT}/artwork/{cached}"
                     )
                     metadata["artist_image"] = artist_image_served
                     # Last resort: use artist_image as artwork if nothing else found
@@ -2624,9 +2637,9 @@ async def main() -> None:
 
     logger.info("Starting snapMULTI Metadata Service")
     logger.info(f"  Snapserver: {SNAPSERVER_HOST}:{SNAPSERVER_RPC_PORT}")
-    logger.info(f"  External host: {EXTERNAL_HOST}")
+    logger.info(f"  External host: {get_external_host()}")
     try:
-        if ipaddress.ip_address(socket.gethostbyname(EXTERNAL_HOST)).is_loopback:
+        if ipaddress.ip_address(socket.gethostbyname(get_external_host())).is_loopback:
             logger.warning(
                 "EXTERNAL_HOST resolved to loopback after auto-detection failed — "
                 "remote clients won't be able to fetch artwork. "
