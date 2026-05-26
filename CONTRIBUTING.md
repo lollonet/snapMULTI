@@ -71,7 +71,7 @@ The project is intentionally appliance-shaped — see the `## Non-goals` section
 
 ### Path to co-maintainership
 
-Open to consideration after a contributor demonstrates sustained engagement: several substantive PRs landed, active participation in issue triage, and a working understanding of the reflash-first update model (DEC-003) + smoke gate (ADR-005). Not an automatism — the principal maintainer decides. If you're interested, start by tackling open issues labelled `help wanted`.
+Open to consideration after a contributor demonstrates sustained engagement: several substantive PRs landed, active participation in issue triage, and a working understanding of the reflash-first update model ([DEC-003](docs/decisions/DEC-003-reflash-only-updates.md)) + smoke gate (ADR-005). Not an automatism — the principal maintainer decides. If you're interested, start by tackling open issues labelled `help wanted`.
 
 ### Exit strategy
 
