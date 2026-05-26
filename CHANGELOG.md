@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.7.8.8] — 2026-05-26
+### Fixed
+- **AUDIO_HAT / AUDIO_INTERNAL_OUTPUT propagation** — The prepare-sd menu wrote `AUDIO_HAT` (e.g. `hifiberry-dac`, `internal-audio`) and `AUDIO_INTERNAL_OUTPUT` (`hdmi` / `jack`) to `install.conf`, but `firstboot.sh` never promoted them into `snapclient.conf`. Result: a user's explicit menu choice was silently dropped and `setup.sh` always fell back to autodetect. Now mirrored to `snapclient.conf` alongside `DISPLAY_MODE` / `SNAPSERVER_HOST` via a shared `_promote_to_conf` helper.
+- **`setup-zero2w.sh` honours operator HAT choice** — The script's `--help` advertised `[config_file]` as a positional arg but the parser dropped it on the floor; the script also always called `detect_hat` and ignored any explicit `AUDIO_HAT`. Now parses the positional arg with the same validation as `setup.sh` (no path traversal, charset whitelist), sources it, and skips autodetect when `AUDIO_HAT != auto`. Pi Zero 2W native installs now respect the prepare-sd menu the same way Docker-based clients do.
 
 > Script-only patch (image_set stays 0.7.7). Ninth consecutive script-only release. UX polish from pre-launch endpoint review on snapvideo.
 
