@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8.6] — 2026-05-26
+
+> Script-only patch (image_set stays 0.7.7). Seventh consecutive script-only release. Fixes a both-mode display bug: fb-display fell back to mDNS discovery → connected to LAN IP instead of loopback, creating a permanent reconnect loop visible in logs. Now pinned to localhost in both-mode (same design choice as snapclient).
+
+### Fixed
+- **fb-display now pins to 127.0.0.1 in both-mode (no mDNS discovery fallback)** — at startup fb-display attempted `ws://127.0.0.1:8082`, failed 3× during the metadata-service startup race, then fell back to mDNS discovery and switched to the LAN IP permanently. Result: continuous discover/reconnect loop in logs + ugly LAN-loopback round-trip for what should be pure localhost. `INSTALL_TYPE=both` env var (written by `client/common/scripts/setup.sh` from `install.conf`) now triggers a both-mode shortcut that keeps retrying loopback indefinitely without discovery — matches `discover-server.sh`'s existing both-mode shortcut for snapclient.
+
 ## [0.7.8.5] — 2026-05-26
 
 > Script-only patch (image_set stays 0.7.7). Sixth consecutive script-only release in five days. Fixes a fresh-install UX bug: `/version` reported `update_available: true` on a freshly-reflashed device because `current` read the Docker image tag instead of the git tag.

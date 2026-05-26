@@ -37,6 +37,9 @@ METADATA_WS_PORT = int(os.environ.get("METADATA_WS_PORT", "8082"))
 METADATA_HTTP_PORT = int(os.environ.get("METADATA_HTTP_PORT", "8083"))
 CLIENT_ID = os.environ.get("CLIENT_ID", "")
 APP_VERSION = os.environ.get("APP_VERSION", "")
+# Both-mode pin: metadata-service is local to this Pi; never run mDNS discovery fallback (matches snapclient's discover-server.sh both-mode shortcut).
+INSTALL_TYPE = os.environ.get("INSTALL_TYPE", "").strip()
+LOCAL_METADATA_PIN = INSTALL_TYPE == "both"
 SPECTRUM_WS_PORT = int(os.environ.get("VISUALIZER_WS_PORT", "8081"))
 FB_DEVICE = "/dev/fb0"
 TARGET_FPS = 20
@@ -91,9 +94,7 @@ async def discover_snapservers(timeout: float = DISCOVERY_TIMEOUT) -> list[str]:
                 None,
             )
             if ipv4_bytes is None:
-                logger.debug(
-                    f"mDNS: skipping {name} (no IPv4 address in addresses)"
-                )
+                logger.debug(f"mDNS: skipping {name} (no IPv4 address in addresses)")
                 return
             ip = socket.inet_ntoa(ipv4_bytes)
             if ip not in servers:
@@ -1445,6 +1446,10 @@ async def metadata_ws_reader() -> None:
 
     On connection failure, retries the current server up to 3 times,
     then discovers alternative servers via mDNS and switches.
+
+    Both-mode exception: metadata-service is local to this Pi (loopback),
+    skip mDNS discovery — keep retrying loopback. Mirrors snapclient's
+    discover-server.sh both-mode shortcut so the topology stays loopback.
     """
     global metadata_host, snapserver_display, metadata_version
     consecutive_failures = 0
@@ -1463,6 +1468,11 @@ async def metadata_ws_reader() -> None:
         except Exception as e:
             consecutive_failures += 1
             logger.debug(f"Metadata WS error (attempt {consecutive_failures}): {e}")
+
+            if LOCAL_METADATA_PIN:
+                # Both-mode: never discover, just keep retrying loopback.
+                await asyncio.sleep(2)
+                continue
 
             if consecutive_failures >= MAX_RECONNECT_BEFORE_DISCOVERY:
                 logger.info("Discovering snapcast servers via mDNS...")
