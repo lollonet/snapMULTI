@@ -165,34 +165,34 @@ After every reflash or in-place update, run the smoke test on the device to conf
 
 ## Release strategy & image-set pinning
 
+> Architectural rationale: [ADR-006](adr/ADR-006.release-identity-script-only-patches.md).
+
 snapMULTI separates two version concepts so a script-only release (CHANGELOG, docs, installer fixes) does not force a Docker image rebuild + repush:
 
-- **`SNAPMULTI_RELEASE`** — the git tag of the release (e.g. `v0.7.7`). What `gh release view` shows.
+- **`SNAPMULTI_RELEASE`** — the git tag of the release (e.g. `v0.7.8.12`). What `gh release view` shows.
 - **`SNAPMULTI_IMAGE_SET`** — the Docker image tag the release pins to (e.g. `0.7.7`). What `docker compose pull` fetches.
 
-Most releases bump both. A script-only release bumps `SNAPMULTI_RELEASE` and keeps `SNAPMULTI_IMAGE_SET` at the last published value. The source of truth is `release-manifest.json` at the repo root.
+Most releases bump both. A script-only release bumps `SNAPMULTI_RELEASE` and keeps `SNAPMULTI_IMAGE_SET` at the last published value. The source of truth is `release-manifest.json` at the repo root, staged onto the SD by `prepare-sd.sh`.
 
-### Precedence chain — `IMAGE_TAG`
+### Precedence chain
 
-The Docker tag actually used is computed in this order (first non-empty wins):
+Since v0.7.8.10 (SSOT consolidation), `install.conf` no longer carries release identity — release-manifest.json on the SD is the only source. `IMAGE_TAG` stays in `install.conf` as the one legitimate operator override.
 
-1. `install.conf` `IMAGE_TAG=` (operator override — `dev`, `0.7.6`, etc.)
-2. `install.conf` `SNAPMULTI_IMAGE_SET=` (set by prepare-sd from the manifest)
-3. `release-manifest.json` `image_set` (manifest fallback)
-4. `latest` (final fallback)
+- **`SNAPMULTI_RELEASE`** = `manifest snapmulti_release` > `""`
+- **`SNAPMULTI_IMAGE_SET`** = `manifest image_set` > `""`
+- **`IMAGE_TAG`** (Docker tag actually pulled) = `install.conf IMAGE_TAG` (operator override — `dev`, a specific tag) > `manifest image_set` > `latest`
 
-This is implemented once in `scripts/common/release-manifest.sh::derive_image_tag()` and consumed by `firstboot.sh`, `deploy.sh`, and the client's `setup.sh`. Every consumer uses the same chain — no drift.
+Implemented once in `scripts/common/release-manifest.sh::derive_image_tag()` and consumed by `firstboot.sh`, `deploy.sh`, and the client's `setup.sh`.
 
-### Backward-compat matrix
+### Compatibility matrix
 
 | install.conf | manifest | Resulting `IMAGE_TAG` |
 |--------------|----------|-----------------------|
 | `IMAGE_TAG=0.7.4` only | — | `0.7.4` (legacy SD card from v0.7.4) |
 | `IMAGE_TAG=latest` only | — | `latest` (legacy default) |
-| `SNAPMULTI_IMAGE_SET=0.7.5`, no IMAGE_TAG | — | `0.7.5` |
-| `SNAPMULTI_IMAGE_SET=0.7.5`, `IMAGE_TAG=dev` | — | `dev` (override wins) |
 | empty | absent | `latest` |
 | empty | `image_set=0.7.7` | `0.7.7` |
+| `IMAGE_TAG=dev` | `image_set=0.7.7` | `dev` (operator override wins) |
 
 Reproduced in `tests/test_firstboot_image_tag_derivation.sh`.
 
@@ -230,7 +230,7 @@ The gate bypasses both `requires_image_rebuild=false` and the Docker Hub existen
 
 After a deploy / reflash:
 
-- Smoke test info line: `device-smoke.sh` → `System` section → `Release v0.7.7 (images 0.7.7)`
+- Smoke test info line: `device-smoke.sh` → `System` section → `Release v0.7.8.12 (images 0.7.7)`
 - Diagnostic bundle: `scripts/diagnostic.sh` produces `meta.txt` with `snapmulti_release=...` and `snapmulti_image_set=...`; the bundle also includes the scrubbed `release-manifest.json` from the boot partition.
 - Server `.env`: `grep ^SNAPMULTI_ /opt/snapmulti/.env`
 - Client `.env`: `grep ^SNAPMULTI_ /opt/snapclient/.env`
