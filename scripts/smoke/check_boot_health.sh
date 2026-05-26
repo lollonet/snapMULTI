@@ -99,6 +99,14 @@ check_boot_health() {
 
     local sys_state
     sys_state=$(systemctl is-system-running 2>/dev/null || true)
+    # Self-referential paradox: when smoke runs from snapmulti-auto-boot-smoke.service,
+    # system state cannot be 'running' yet — it's pending on the auto-boot-smoke
+    # service itself. Treat 'starting' as info in that context. SNAPMULTI_AUTO_BOOT
+    # is set by the auto-boot wrapper (scripts/common/auto-boot-smoke.sh).
+    if [[ "$sys_state" == "starting" && "${SNAPMULTI_AUTO_BOOT:-}" == "1" ]]; then
+        info "systemd still 'starting' (expected — smoke is itself a pending boot unit)"
+        return 0
+    fi
     case "$sys_state" in
         running)
             pass_check "systemd is-system-running: running"
