@@ -83,6 +83,8 @@ def get_lan_ip() -> str:
     if cached_ip == "?.?.?.?" or now - cached_at > _LAN_IP_TTL:
         _LAN_IP_CACHE = (_get_lan_ip(), now)
     return _LAN_IP_CACHE[0]
+
+
 server_info: dict = {}
 
 SNAPCAST_MDNS_TYPE = "_snapcast._tcp.local."
