@@ -1345,16 +1345,18 @@ _tty "  +--------------------------------------------+"
 _tty ""
 case "$INSTALL_TYPE" in
     server|both)
-        _tty "  Snapweb:   http://${LOCAL_HOSTNAME}.local:1780"
+        _tty "  Start here:  http://${LOCAL_HOSTNAME}.local:8083/   <-- lists every endpoint"
         if [[ -n "${IP_ADDR:-}" ]]; then
-            _tty "             http://${IP_ADDR}:1780"
+            _tty "               http://${IP_ADDR}:8083/"
         fi
-        _tty "  Library:   http://${LOCAL_HOSTNAME}.local:8180"
-        _tty "  Status:    http://${LOCAL_HOSTNAME}.local:8083  (system health page)"
-        _tty "  Stream in: tcp://${LOCAL_HOSTNAME}.local:4953  (push audio from Android/Termux/ffmpeg)"
+        _tty "  Snapweb:     http://${LOCAL_HOSTNAME}.local:1780"
+        _tty "  Library:     http://${LOCAL_HOSTNAME}.local:8180"
+        _tty "  Status:      http://${LOCAL_HOSTNAME}.local:8083/status"
+        _tty "  Stream in:   tcp://${LOCAL_HOSTNAME}.local:4953  (push audio from Android/Termux/ffmpeg)"
         ;;
     client)
-        _tty "  Player will auto-discover your server"
+        _tty "  Player auto-discovers your server. Browse the server's landing page:"
+        _tty "    http://<server-hostname>.local:8083/"
         ;;
 esac
 _tty ""

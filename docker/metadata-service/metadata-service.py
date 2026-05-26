@@ -2495,9 +2495,15 @@ async def handle_status(request: web.Request) -> web.Response:
 
 async def handle_root_redirect(request: web.Request) -> web.Response:
     """`GET /` → landing page listing every snapMULTI server endpoint."""
-    # request.host = "pi-server.local:8083" or "192.168.63.81:8083" — strip the port.
+    # IPv6 Host headers are bracketed (`[::1]:8083` or bare `[::1]`); rsplit on a bare `[::1]` would yield `"[:"`. Handle that first.
     host_hdr = request.host or "localhost"
-    bare_host = host_hdr.rsplit(":", 1)[0] if ":" in host_hdr else host_hdr
+    if host_hdr.startswith("["):
+        close = host_hdr.find("]")
+        bare_host = host_hdr[: close + 1] if close > 0 else host_hdr
+    elif ":" in host_hdr:
+        bare_host = host_hdr.rsplit(":", 1)[0]
+    else:
+        bare_host = host_hdr
 
     # Browser-clickable (HTTP GET, returns HTML or JSON the user can read).
     web_services = [
