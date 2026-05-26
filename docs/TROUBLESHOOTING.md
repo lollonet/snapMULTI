@@ -95,7 +95,7 @@ The cues also fire automatically after every boot (`snapmulti-auto-boot-smoke.se
 2. From there: `sudo ro-mode disable && sudo reboot` if you need persistent changes (see [ADVANCED.md — Read-only filesystem](ADVANCED.md#read-only-filesystem)).
 3. If the Pi never gets to a login prompt: pull the SD, open the **boot partition** on your laptop, edit `user-data` to reset credentials, re-insert and boot.
 
-**If still broken.** Reflash with Imager — snapMULTI is reflash-first by design (DEC-003), and the install only takes 10–15 min. Back up `/opt/snapmulti/mpd.db` first with `scripts/backup-from-sd.sh` if you want to preserve the music library index.
+**If still broken.** Reflash with Imager — snapMULTI is reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)), and the install only takes 10–15 min. Back up `/opt/snapmulti/mpd.db` first with `scripts/backup-from-sd.sh` if you want to preserve the music library index.
 
 ## No audio
 
@@ -164,7 +164,7 @@ The cues also fire automatically after every boot (`snapmulti-auto-boot-smoke.se
 3. Check the path has **no spaces** on the NAS side. Rename `Music Share` → `Music_Share`.
 4. For SMB, the persistent credentials live in `/etc/snapmulti-smb-credentials` (root-only, on ext4). They are also written into `install.conf` on the FAT32 boot partition during `prepare-sd.sh` and `firstboot.sh`, then scrubbed once `mount-music` has copied them to `/etc/snapmulti-smb-credentials`.
 
-**If still broken.** Reflash the SD with the corrected NAS path — snapMULTI is reflash-first by design (DEC-003) and a fresh install only takes 10–15 min. Manual recovery without reflash is possible but not officially supported; it requires editing `/etc/snapmulti-smb-credentials` and the systemd `.mount`/`.automount` units by hand. MPD library scan over NFS is slow on the first run — see [ADVANCED.md — Music library](ADVANCED.md#music-library-on-the-network) for the `mpd.db` backup trick.
+**If still broken.** Reflash the SD with the corrected NAS path — snapMULTI is reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)) and a fresh install only takes 10–15 min. Manual recovery without reflash is possible but not officially supported; it requires editing `/etc/snapmulti-smb-credentials` and the systemd `.mount`/`.automount` units by hand. MPD library scan over NFS is slow on the first run — see [ADVANCED.md — Music library](ADVANCED.md#music-library-on-the-network) for the `mpd.db` backup trick.
 
 ## Docker / "no space left on device"
 

@@ -71,7 +71,7 @@ Il progetto ha forma intenzionalmente da appliance — vedi la sezione `## Non-g
 
 ### Path verso co-maintainership
 
-Aperto alla considerazione dopo che un contributor dimostra coinvolgimento sostenuto: diverse PR significative mergate, partecipazione attiva nella triage delle issue, comprensione del modello di update reflash-first (DEC-003) + smoke gate (ADR-005). Non è un automatismo — il maintainer principale decide. Se sei interessato, parti dalle issue aperte con label `help wanted`.
+Aperto alla considerazione dopo che un contributor dimostra coinvolgimento sostenuto: diverse PR significative mergate, partecipazione attiva nella triage delle issue, comprensione del modello di update reflash-first ([DEC-003](docs/decisions/DEC-003-reflash-only-updates.md)) + smoke gate (ADR-005). Non è un automatismo — il maintainer principale decide. Se sei interessato, parti dalle issue aperte con label `help wanted`.
 
 ### Exit strategy
 
