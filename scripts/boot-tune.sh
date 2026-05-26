@@ -143,6 +143,19 @@ fi
 # ── Restart MPD if music directory wasn't ready at container start ──
 # Docker bind-mounts capture directory state at start time. If NFS mounted
 # after Docker, MPD sees empty /music. Wait for NFS, then restart.
+#
+# Scope guard: the race only affects NFS/SMB libraries declared in /etc/fstab
+# (mount may finish after Docker starts). Streaming-only installs have no
+# mount and an "empty" /music is the intended state — restarting MPD on
+# every boot for them is pointless thrash. Local USB libraries also don't
+# race (block device is ready well before docker.service).
+#
+# Format list mirrors scripts/mpd-entrypoint.sh:10 — using a narrower set
+# (mp3+flac only) made libraries that are exclusively ogg / m4a / opus /
+# wav / aac / wma look empty and triggered spurious MPD restarts at every
+# boot for users with non-mp3 libraries.
+_music_formats='-name *.mp3 -o -name *.flac -o -name *.m4a -o -name *.ogg -o -name *.wav -o -name *.aac -o -name *.opus -o -name *.wma'
+# shellcheck disable=SC2086  # _music_formats is a deliberate find-arg list
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^mpd$'; then
     music_path=$(grep '^MUSIC_PATH=' /opt/snapmulti/.env 2>/dev/null | cut -d= -f2) || true
     if [ -n "$music_path" ] && grep -q "$music_path" /etc/fstab 2>/dev/null; then
@@ -152,19 +165,20 @@ if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^mpd$'; then
             sleep 5
             wait=$((wait + 5))
         done
-    fi
-    if ! docker exec mpd find /music -maxdepth 3 -type f \( -name '*.mp3' -o -name '*.flac' \) 2>/dev/null | head -1 | grep -q .; then
-        cd /opt/snapmulti && docker compose restart mpd 2>/dev/null || true
-        # After restart give MPD ~10s to re-bind the mount, then check again.
-        # If /music is STILL empty, surface a loud warning so the user sees
-        # something is wrong without having to journalctl-spelunk.
-        sleep 10
-        if ! docker exec mpd find /music -maxdepth 3 -type f \( -name '*.mp3' -o -name '*.flac' \) 2>/dev/null | head -1 | grep -q .; then
-            logger -t boot-tune -p warning "music library appears EMPTY after mount + MPD restart (path=$music_path) — check NFS/SMB/USB mount status"
-            # Also write to install log if present (firstboot leaves it)
-            [[ -w /var/log/snapmulti-install.log ]] && \
-                echo "[$(date -u +%FT%TZ)] WARN: music library empty after boot (path=$music_path)" \
-                    >> /var/log/snapmulti-install.log
+        # Only network-mounted libraries are restart-on-empty: streaming-only
+        # and local USB never race the docker start sequence.
+        if ! docker exec mpd find /music -maxdepth 3 -type f \( $_music_formats \) 2>/dev/null | head -1 | grep -q .; then
+            cd /opt/snapmulti && docker compose restart mpd 2>/dev/null || true
+            # After restart give MPD ~10s to re-bind the mount, then check again.
+            # If /music is STILL empty, surface a loud warning so the user sees
+            # something is wrong without having to journalctl-spelunk.
+            sleep 10
+            if ! docker exec mpd find /music -maxdepth 3 -type f \( $_music_formats \) 2>/dev/null | head -1 | grep -q .; then
+                logger -t boot-tune -p warning "music library appears EMPTY after mount + MPD restart (path=$music_path) — check NFS/SMB mount status"
+                [[ -w /var/log/snapmulti-install.log ]] && \
+                    echo "[$(date -u +%FT%TZ)] WARN: music library empty after boot (path=$music_path)" \
+                        >> /var/log/snapmulti-install.log
+            fi
         fi
     fi
 fi
