@@ -55,5 +55,8 @@ sleep 10  # let snapmulti-status.timer fire its first snapshot
 
 # Always exit 0 — the tone IS the signal. Failing the unit on a smoke WARN would degrade systemd state (sys is-system-running=degraded) and trigger a self-referential FAIL cascade on the next smoke run.
 # SNAPMULTI_FORCE_TONE=1: auto-boot must always play (user explicitly chose option B over "don't interrupt music") so post-reboot status is audible even when MPD autoplay resumed during boot.
-SNAPMULTI_FORCE_TONE=1 "$SMOKE" "$MODE" --tone >/dev/null || true
+# SNAPMULTI_AUTO_BOOT=1: signals check_boot_health.sh to tolerate
+# 'starting' as info instead of FAIL (self-referential paradox — system
+# state is starting *because* this very service is pending).
+SNAPMULTI_AUTO_BOOT=1 SNAPMULTI_FORCE_TONE=1 "$SMOKE" "$MODE" --tone >/dev/null || true
 exit 0
