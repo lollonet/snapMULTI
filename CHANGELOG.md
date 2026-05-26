@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **auto-boot smoke false-positive on `starting` systemd state (#507)** — `snapmulti-auto-boot-smoke.service` is itself the last pending boot unit, so `systemctl is-system-running` can never return `running` while the smoke is executing. The check always saw `starting`, marked it FAIL, and the post-boot acoustic cue played a warning tone even when every container was healthy. `check_boot_health.sh` now treats `starting` as informational (not a failure) when invoked from the auto-boot wrapper (`SNAPMULTI_AUTO_BOOT=1`). Manual smoke runs still fail on `starting` as expected (real anomaly).
+
 ## [0.7.8.12] — 2026-05-26
 
 > Script-only patch (image_set stays 0.7.7). fb-display lazy LAN_IP — same bug pattern of v0.7.8.11 EXTERNAL_HOST fix, found while investigating the apparent "transient network outage" after a reflash (#501).
