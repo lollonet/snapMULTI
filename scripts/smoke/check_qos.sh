@@ -85,7 +85,7 @@ check_qos() {
     # dispatcher.d/. Without it CAKE vanishes on every NM up/dhcp event.
     # We also check that the legacy networkd-dispatcher path is NOT present
     # (it was the original install location pre-v0.7.8.11 and never fired
-    # on Pi OS — flag it so operators reflash to clean it up).
+    # on Pi OS — flag it so operators re-run deploy.sh or reflash to remove it).
     if [[ -x /etc/NetworkManager/dispatcher.d/50-cake-qos ]]; then
         pass_check "CAKE persistence hook installed (/etc/NetworkManager/dispatcher.d/50-cake-qos)"
     else
