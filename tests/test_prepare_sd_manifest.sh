@@ -3,14 +3,15 @@
 #
 # We deliberately do NOT run prepare-sd.sh end-to-end (it needs root,
 # a real boot partition, cloud-init patching, etc.). Instead we grep
-# the script for the wiring contracts the iter-2 plan locks in:
+# the script for the wiring contracts:
 #   - manifest helper sourced BEFORE ADV_IMAGE_TAG init
 #   - parse_release_manifest invoked with the canonical path
 #   - ADV_IMAGE_TAG default = $MANIFEST_IMAGE_SET (with 'latest' fallback)
-#   - install.conf heredoc emits SNAPMULTI_RELEASE + SNAPMULTI_IMAGE_SET
+#   - install.conf heredoc does NOT emit SNAPMULTI_RELEASE / SNAPMULTI_IMAGE_SET
+#     (SSOT is release-manifest.json on the SD — see fix/release-identity-ssot)
 #   - release-manifest.json staged onto SD (guarded copy)
 #   - verify-list includes release-manifest.json + common/release-manifest.sh
-#   - summary print includes the 2 new keys
+#   - summary print sources release identity from manifest, not install.conf
 
 set -euo pipefail
 
@@ -51,16 +52,22 @@ assert "(( ${src_line:-0} < ${init_line:-0} ))" \
 assert "grep -qE 'ADV_IMAGE_TAG=\"\\\$\\{MANIFEST_IMAGE_SET:-latest\\}\"' '$PREPARE'" \
     "ADV_IMAGE_TAG default = manifest image_set (fallback 'latest')"
 
-assert "grep -q 'SNAPMULTI_RELEASE=\$MANIFEST_RELEASE' '$PREPARE'" \
-    "install.conf heredoc emits SNAPMULTI_RELEASE=\$MANIFEST_RELEASE"
+# SSOT contract — install.conf heredoc MUST NOT carry the manifest values.
+# Duplicating them would let a stale install.conf shadow a fresh manifest
+# the next time prepare-sd.sh runs against the same SD (the bug fix/release-
+# identity-ssot closes). The heredoc lives between the install.conf opener
+# and its `EOF` terminator; we scope the search to that block.
+heredoc_block=$(awk '/cat > "\$DEST\/install\.conf" <<EOF/,/^EOF$/' "$PREPARE")
+assert "! grep -q '^SNAPMULTI_RELEASE=' <<<\"\$heredoc_block\"" \
+    "install.conf heredoc does NOT emit SNAPMULTI_RELEASE (SSOT is release-manifest.json)"
 
-assert "grep -q 'SNAPMULTI_IMAGE_SET=\$MANIFEST_IMAGE_SET' '$PREPARE'" \
-    "install.conf heredoc emits SNAPMULTI_IMAGE_SET=\$MANIFEST_IMAGE_SET"
+assert "! grep -q '^SNAPMULTI_IMAGE_SET=' <<<\"\$heredoc_block\"" \
+    "install.conf heredoc does NOT emit SNAPMULTI_IMAGE_SET (SSOT is release-manifest.json)"
 
 assert "grep -qE 'cp .*release-manifest\.json.*DEST' '$PREPARE'" \
     "release-manifest.json staged onto SD"
 
-# Guarded copy — the iter-2 codex major: set -e tolerance when manifest absent
+# Guarded copy — set -e tolerance when manifest absent
 assert "grep -B1 'cp .*release-manifest\.json.*DEST' '$PREPARE' | grep -qE '\\[\\[ -f .*release-manifest\.json' " \
     "release-manifest.json copy guarded by [[ -f ... ]]"
 
@@ -70,15 +77,11 @@ assert "grep -q 'release-manifest.json' '$PREPARE'" \
 assert "grep -q 'common/release-manifest.sh' '$PREPARE'" \
     "verify-list mentions common/release-manifest.sh"
 
-assert "grep -q '^SNAPMULTI_RELEASE=' '$PREPARE'" \
-    "summary print covers SNAPMULTI_RELEASE (grep on install.conf inside echo)" \
-    || true   # weak — the regex above already validates the heredoc
+assert "grep -qE 'release-manifest -> SNAPMULTI_RELEASE=' '$PREPARE'" \
+    "summary print sources SNAPMULTI_RELEASE from manifest (not install.conf)"
 
-assert "grep -qE 'install.conf -> SNAPMULTI_RELEASE=' '$PREPARE'" \
-    "summary print includes SNAPMULTI_RELEASE line"
-
-assert "grep -qE 'install.conf -> SNAPMULTI_IMAGE_SET=' '$PREPARE'" \
-    "summary print includes SNAPMULTI_IMAGE_SET line"
+assert "grep -qE 'release-manifest -> SNAPMULTI_IMAGE_SET=' '$PREPARE'" \
+    "summary print sources SNAPMULTI_IMAGE_SET from manifest (not install.conf)"
 
 echo
 echo "## Summary"

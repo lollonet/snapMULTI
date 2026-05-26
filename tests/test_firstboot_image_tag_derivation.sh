@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Regression test for firstboot.sh's release-identity precedence chains.
-# 6 scenarios from the iter-2 plan that protect the BLOCKER fix
-# (install.conf SNAPMULTI_IMAGE_SET in the IMAGE_TAG chain) and the
-# critical backward-compat invariant (legacy IMAGE_TAG-only installs
-# continue to work unchanged).
+# Regression test for firstboot.sh's release-identity precedence.
+#
+# As of fix/release-identity-ssot, release-manifest.json on the SD is the
+# only source for SNAPMULTI_RELEASE + SNAPMULTI_IMAGE_SET. install.conf no
+# longer carries those keys. IMAGE_TAG keeps install.conf as its operator-
+# override channel (e.g. pin to :dev while the manifest stays on a release
+# tag); when unset, it falls back to manifest image_set, then 'latest'.
 #
 # This test exercises the parser library directly with synthetic
 # install.conf + release-manifest.json combinations, then asserts the
@@ -37,16 +39,16 @@ assert() {
 }
 
 # Reproduce firstboot.sh's chain logic in a single function so test
-# cases stay one-liner / readable. Mirrors firstboot.sh:s7 exactly.
+# cases stay one-liner / readable. Mirrors firstboot.sh post fix/release-
+# identity-ssot: release identity from manifest only; install.conf carries
+# only the IMAGE_TAG operator override.
 derive_for_test() {
     local boot="$1"
     parse_release_manifest "$boot/release-manifest.json"
-    local _explicit_release _explicit_image_set _explicit_image_tag
-    _explicit_release=$(read_install_conf_key "$boot/install.conf" SNAPMULTI_RELEASE)
-    _explicit_image_set=$(read_install_conf_key "$boot/install.conf" SNAPMULTI_IMAGE_SET)
+    local _explicit_image_tag
     _explicit_image_tag=$(read_install_conf_key "$boot/install.conf" IMAGE_TAG)
-    SNAPMULTI_RELEASE="${_explicit_release:-$MANIFEST_RELEASE}"
-    SNAPMULTI_IMAGE_SET="${_explicit_image_set:-$MANIFEST_IMAGE_SET}"
+    SNAPMULTI_RELEASE="$MANIFEST_RELEASE"
+    SNAPMULTI_IMAGE_SET="$MANIFEST_IMAGE_SET"
     IMAGE_TAG=$(derive_image_tag "$_explicit_image_tag" "$SNAPMULTI_IMAGE_SET")
 }
 
@@ -72,28 +74,28 @@ EOF
 derive_for_test "$TMP/b"
 assert "[[ '$IMAGE_TAG' == 'latest' ]]" "(b) legacy IMAGE_TAG=latest only → IMAGE_TAG=latest"
 
-# Case (c) — BLOCKER FIX: install.conf SNAPMULTI_IMAGE_SET=0.7.5,
-# no IMAGE_TAG, no manifest → IMAGE_TAG=0.7.5 (the new chain (A) step)
+# Case (c) — install.conf SNAPMULTI_IMAGE_SET is now IGNORED (key dropped
+# from install.conf SSOT cleanup). With no manifest, IMAGE_TAG falls back
+# to 'latest'.
 mkdir -p "$TMP/c"
 cat > "$TMP/c/install.conf" <<'EOF'
 INSTALL_TYPE=server
 SNAPMULTI_IMAGE_SET=0.7.5
 EOF
 derive_for_test "$TMP/c"
-assert "[[ '$IMAGE_TAG' == '0.7.5' ]]" "(c) BLOCKER: install.conf SNAPMULTI_IMAGE_SET=0.7.5 → IMAGE_TAG=0.7.5"
-assert "[[ '$SNAPMULTI_IMAGE_SET' == '0.7.5' ]]" "(c) install.conf SNAPMULTI_IMAGE_SET propagated"
+assert "[[ '$IMAGE_TAG' == 'latest' ]]" "(c) install.conf SNAPMULTI_IMAGE_SET ignored → IMAGE_TAG=latest (no manifest)"
+assert "[[ -z '$SNAPMULTI_IMAGE_SET' ]]" "(c) install.conf SNAPMULTI_IMAGE_SET ignored → empty (manifest is SSOT)"
 
-# Case (d): install.conf SNAPMULTI_IMAGE_SET=0.7.5 + IMAGE_TAG=dev
-# → IMAGE_TAG=dev (operator override wins over image_set)
+# Case (d): install.conf IMAGE_TAG=dev — operator override wins. SNAPMULTI_
+# IMAGE_SET still from manifest (here absent → empty).
 mkdir -p "$TMP/d"
 cat > "$TMP/d/install.conf" <<'EOF'
 INSTALL_TYPE=server
-SNAPMULTI_IMAGE_SET=0.7.5
 IMAGE_TAG=dev
 EOF
 derive_for_test "$TMP/d"
-assert "[[ '$IMAGE_TAG' == 'dev' ]]" "(d) IMAGE_TAG=dev wins over SNAPMULTI_IMAGE_SET=0.7.5"
-assert "[[ '$SNAPMULTI_IMAGE_SET' == '0.7.5' ]]" "(d) SNAPMULTI_IMAGE_SET=0.7.5 still surfaced separately"
+assert "[[ '$IMAGE_TAG' == 'dev' ]]" "(d) IMAGE_TAG=dev (operator override) preserved"
+assert "[[ -z '$SNAPMULTI_IMAGE_SET' ]]" "(d) no manifest → SNAPMULTI_IMAGE_SET empty"
 
 # Case (e): install.conf absent, manifest absent → IMAGE_TAG=latest
 mkdir -p "$TMP/e"
@@ -111,11 +113,12 @@ cat > "$TMP/f/release-manifest.json" <<'EOF'
 }
 EOF
 derive_for_test "$TMP/f"
-assert "[[ '$IMAGE_TAG' == '0.7.7' ]]" "(f) manifest only → IMAGE_TAG=0.7.7 (chain A fallback)"
+assert "[[ '$IMAGE_TAG' == '0.7.7' ]]" "(f) manifest only → IMAGE_TAG=0.7.7"
 assert "[[ '$SNAPMULTI_RELEASE' == 'v0.7.7' ]]" "(f) manifest only → SNAPMULTI_RELEASE=v0.7.7"
 assert "[[ '$SNAPMULTI_IMAGE_SET' == '0.7.7' ]]" "(f) manifest only → SNAPMULTI_IMAGE_SET=0.7.7"
 
-# Bonus: install.conf SNAPMULTI_RELEASE override beats manifest
+# Case (g) — manifest is the SSOT; install.conf SNAPMULTI_RELEASE is NO
+# LONGER a shadow override. Manifest always wins.
 mkdir -p "$TMP/g"
 cat > "$TMP/g/install.conf" <<'EOF'
 INSTALL_TYPE=server
@@ -129,8 +132,27 @@ cat > "$TMP/g/release-manifest.json" <<'EOF'
 }
 EOF
 derive_for_test "$TMP/g"
-assert "[[ '$SNAPMULTI_RELEASE' == 'v0.8.0-pre' ]]" "(g) install.conf SNAPMULTI_RELEASE overrides manifest (chain B)"
-assert "[[ '$SNAPMULTI_IMAGE_SET' == '0.7.7' ]]" "(g) but SNAPMULTI_IMAGE_SET still from manifest (chain C separate)"
+assert "[[ '$SNAPMULTI_RELEASE' == 'v0.7.7' ]]" "(g) manifest wins — install.conf SNAPMULTI_RELEASE ignored (SSOT)"
+assert "[[ '$SNAPMULTI_IMAGE_SET' == '0.7.7' ]]" "(g) manifest wins for SNAPMULTI_IMAGE_SET too"
+
+# Case (h): IMAGE_TAG override on top of manifest — operator pins to :dev
+# while server keeps the manifest release identity. Common workflow.
+mkdir -p "$TMP/h"
+cat > "$TMP/h/install.conf" <<'EOF'
+INSTALL_TYPE=server
+IMAGE_TAG=dev
+EOF
+cat > "$TMP/h/release-manifest.json" <<'EOF'
+{
+  "snapmulti_release": "v0.7.9",
+  "image_set": "0.7.9",
+  "requires_image_rebuild": false
+}
+EOF
+derive_for_test "$TMP/h"
+assert "[[ '$IMAGE_TAG' == 'dev' ]]" "(h) IMAGE_TAG=dev override preserved with manifest present"
+assert "[[ '$SNAPMULTI_RELEASE' == 'v0.7.9' ]]" "(h) SNAPMULTI_RELEASE still from manifest"
+assert "[[ '$SNAPMULTI_IMAGE_SET' == '0.7.9' ]]" "(h) SNAPMULTI_IMAGE_SET still from manifest"
 
 echo
 echo "## Summary"

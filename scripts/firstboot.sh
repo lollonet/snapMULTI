@@ -117,34 +117,28 @@ if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     unset local_val
 fi
 
-# ── Release identity (manifest + install.conf precedence chains) ───
-# Precedence — see scripts/common/release-manifest.sh header for the
-# formal chain definition:
-#   (A) IMAGE_TAG           = install.conf IMAGE_TAG
-#                           > install.conf SNAPMULTI_IMAGE_SET
-#                           > manifest image_set > 'latest'
-#   (B) SNAPMULTI_RELEASE   = install.conf SNAPMULTI_RELEASE
-#                           > manifest snapmulti_release > ''
-#   (C) SNAPMULTI_IMAGE_SET = install.conf SNAPMULTI_IMAGE_SET
-#                           > manifest image_set > ''
+# ── Release identity (release-manifest.json on SD is the single SSOT) ──
+# release-manifest.json is the only source of SNAPMULTI_RELEASE and
+# SNAPMULTI_IMAGE_SET — install.conf no longer carries them (operator
+# choices live there; release identity follows the staged manifest).
+# IMAGE_TAG is the one legitimate operator override (pin to :dev or a
+# specific tag); when unset, derive_image_tag falls back to manifest
+# image_set automatically.
 #
 # Guarded source: a custom-built SD without the helper falls through to
-# the legacy IMAGE_TAG path (install.conf > 'latest'), exactly today's
-# behaviour. The inline fallback covers test rigs that stage firstboot
-# without the common/ tree.
+# the legacy IMAGE_TAG path (install.conf > 'latest'). The inline fallback
+# covers test rigs that stage firstboot without the common/ tree.
 SNAPMULTI_RELEASE=""
 SNAPMULTI_IMAGE_SET=""
 if [[ -f "$SNAP_BOOT/common/release-manifest.sh" ]]; then
     # shellcheck source=common/release-manifest.sh
     source "$SNAP_BOOT/common/release-manifest.sh"
     parse_release_manifest "$SNAP_BOOT/release-manifest.json"
-    _explicit_release=$(read_install_conf_key "$SNAP_BOOT/install.conf" SNAPMULTI_RELEASE)
-    _explicit_image_set=$(read_install_conf_key "$SNAP_BOOT/install.conf" SNAPMULTI_IMAGE_SET)
     _explicit_image_tag=$(read_install_conf_key "$SNAP_BOOT/install.conf" IMAGE_TAG)
-    SNAPMULTI_RELEASE="${_explicit_release:-$MANIFEST_RELEASE}"
-    SNAPMULTI_IMAGE_SET="${_explicit_image_set:-$MANIFEST_IMAGE_SET}"
+    SNAPMULTI_RELEASE="$MANIFEST_RELEASE"
+    SNAPMULTI_IMAGE_SET="$MANIFEST_IMAGE_SET"
     IMAGE_TAG=$(derive_image_tag "$_explicit_image_tag" "$SNAPMULTI_IMAGE_SET")
-    unset _explicit_release _explicit_image_set _explicit_image_tag
+    unset _explicit_image_tag
 else
     # Inline fallback — legacy IMAGE_TAG path only.
     if [[ -f "$SNAP_BOOT/install.conf" ]]; then
