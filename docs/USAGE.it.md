@@ -6,6 +6,8 @@ Il riferimento "come è fatto" — servizi, porte, sorgenti audio, modello di si
 
 ## Architettura
 
+> I razionali architetturali sono registrati in [`docs/adr/`](adr/ADR-INDEX.md). Più rilevanti per questa sezione: [ADR-001](adr/ADR-001.host-networking.md) (host networking — perché ogni container usa `network_mode: host`) e [ADR-002](adr/ADR-002.fifo-audio-routing.md) (named pipe in `/audio/` per il routing source → snapserver).
+
 Stack server (7 container, host networking):
 
 | Container | Ruolo | Porta |
