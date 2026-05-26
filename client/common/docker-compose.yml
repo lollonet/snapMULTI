@@ -166,6 +166,8 @@ services:
       - METADATA_HTTP_PORT=8083
       - CLIENT_ID=${CLIENT_ID:?CLIENT_ID not set in .env}
       - APP_VERSION=${APP_VERSION:-}
+      # Both-mode: pin to 127.0.0.1 and never run mDNS discovery fallback (same design as snapclient).
+      - INSTALL_TYPE=${INSTALL_TYPE:-}
     logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "pidof python3 || exit 1"]

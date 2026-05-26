@@ -1193,6 +1193,16 @@ update_env_var() {
 # discover-server.sh updates this at boot via mDNS.
 update_env_var "SNAPSERVER_HOST" "${snapserver_ip:-}"
 
+# Pass install-time profile to client containers (fb-display reads INSTALL_TYPE to pin localhost in both-mode and skip the mDNS discovery fallback). Read from install.conf since setup.sh is invoked via `bash` and doesn't inherit caller's env.
+_install_type=""
+for _conf in /boot/firmware/snapmulti/install.conf /boot/snapmulti/install.conf "$INSTALL_DIR/install.conf"; do
+    if [[ -f "$_conf" ]]; then
+        _install_type=$(grep -m1 '^INSTALL_TYPE=' "$_conf" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true)
+        [[ -n "$_install_type" ]] && break
+    fi
+done
+update_env_var "INSTALL_TYPE" "$_install_type"
+
 # Update all environment variables
 declare -A env_vars=(
     ["CLIENT_ID"]="$CLIENT_ID"
