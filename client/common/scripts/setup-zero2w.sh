@@ -130,9 +130,20 @@ info "Architecture: $ARCH"
 # Reuses the same dependency list (avahi-daemon, locales, monitoring
 # tools, etc.) used by the Docker path — keeps the device feel
 # identical except for the snapclient runtime itself.
+#
+# INSTALL_ROLE pinned to client: install-deps.sh's fallback chain is
+# ${INSTALL_ROLE:-${INSTALL_TYPE:-both}} and INSTALL_TYPE isn't set in
+# this context, so without the explicit pin Pi Zero 2W native installs
+# fall through to "both" and pick up server-only packages (sysstat
+# collector enabled at 10-min intervals — the overlay tmpfs on Zero is
+# already at 71 % on a fresh reflash, every avoidable writer hurts).
+# SKIP_UPGRADE defaults true to avoid an unbounded `apt-get upgrade -y`
+# on first boot — long, SD-wear-heavy, and outside this script's brief.
+export INSTALL_ROLE="client"
+export SKIP_UPGRADE="${SKIP_UPGRADE:-true}"
 if _source_first_match "install-deps.sh"; then
     if command -v install_dependencies &>/dev/null; then
-        step "Installing system dependencies"
+        step "Installing system dependencies (role=client, skip_upgrade=$SKIP_UPGRADE)"
         install_dependencies
     fi
 fi
