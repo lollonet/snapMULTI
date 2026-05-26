@@ -16,9 +16,10 @@
 #   issues operators can fix BEFORE the throttle event.
 #
 # Thresholds (Pi 4 / 3B+ / Zero 2W all share the same ARM throttle point):
-#   < 70 °C  → pass
-#   70-79 °C → warn ("hot but OK")
+#   < 75 °C  → pass
+#   75-79 °C → warn ("hot, headroom shrinking")
 #   ≥ 80 °C  → fail ("throttling imminent — check enclosure/airflow")
+# Was 70 °C warn floor; raised because Pi 4 under sustained Snapcast+display load routinely sits at 65-75 °C with no thermal issue. Warn within 5 °C of the ARM soft-throttle is the meaningful signal.
 #
 # Source preference:
 #   1. `vcgencmd measure_temp` — VideoCore firmware path, reports the SoC
@@ -82,9 +83,9 @@ check_thermal() {
 
     if (( temp_milli >= 80000 )); then
         fail_check "SoC ${temp_c}.${temp_dec}°C via ${source} — at/over 80°C throttle threshold (check enclosure / airflow / ambient)"
-    elif (( temp_milli >= 70000 )); then
-        warn "SoC ${temp_c}.${temp_dec}°C via ${source} — hot but below throttle (consider better cooling under sustained load)"
+    elif (( temp_milli >= 75000 )); then
+        warn "SoC ${temp_c}.${temp_dec}°C via ${source} — within 5°C of the 80°C throttle (consider better cooling under sustained load)"
     else
-        pass_check "SoC ${temp_c}.${temp_dec}°C via ${source} (below 70°C warn floor)"
+        pass_check "SoC ${temp_c}.${temp_dec}°C via ${source} (below 75°C warn floor)"
     fi
 }

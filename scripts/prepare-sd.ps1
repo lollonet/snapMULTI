@@ -1042,11 +1042,13 @@ Write-Host '  2. Insert into Raspberry Pi'
 Write-Host '  3. Power on -- installation takes ~10-15 minutes, then auto-reboots'
 switch ($InstallType) {
     { $_ -in 'server', 'both' } {
-        Write-Host '  4. Open these URLs (replace <hostname> with the one you set in Imager):'
+        Write-Host '  4. Open this URL in a browser (replace <hostname> with the one you set in Imager):'
+        Write-Host '       http://<hostname>.local:8083/         <-- start here: lists every server endpoint'
+        Write-Host ''
+        Write-Host '     Direct links if you prefer:'
         Write-Host '       http://<hostname>.local:1780          Snapweb (volume, rooms, source)'
         Write-Host '       http://<hostname>.local:8180          myMPD (browse and play library)'
         Write-Host '       http://<hostname>.local:8083/status   Status page (containers, audio, mDNS)'
-        Write-Host '       http://<hostname>.local:8083/version  Release + image set'
         Write-Host '  5. Cast from your apps:'
         Write-Host "       Spotify  -> select '<hostname> Spotify' in the Spotify app (Premium required)"
         Write-Host "       AirPlay  -> AirPlay icon -> '<hostname> AirPlay'"
@@ -1054,7 +1056,8 @@ switch ($InstallType) {
     }
     'client' {
         Write-Host '  4. The player auto-discovers your snapMULTI server via mDNS'
-        Write-Host '  5. Check it joined on the server''s Snapweb (http://<server-hostname>.local:1780)'
+        Write-Host '  5. Check it joined on the server''s landing page:'
+        Write-Host '       http://<server-hostname>.local:8083/  (lists Snapweb, myMPD, status, ...)'
     }
 }
 Write-Host ''

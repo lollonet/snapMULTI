@@ -2328,13 +2328,11 @@ def _status_to_html(data: dict | None, age_s: float | None) -> str:
                     finished_at.replace("Z", "+00:00")
                 ).astimezone()
                 abs_label = ts.strftime("%Y-%m-%d %H:%M %Z")
-                footer = f"Snapshot taken <strong>{abs_label}</strong> ({age_label}). Refreshes every minute."
+                footer = f"Snapshot taken <strong>{abs_label}</strong> ({age_label}). Snapshot updates every 5 min; this page auto-refreshes every minute."
             except (ValueError, TypeError):
-                footer = f"Snapshot taken <strong>{age_label}</strong>. Refreshes every minute."
+                footer = f"Snapshot taken <strong>{age_label}</strong>. Snapshot updates every 5 min; this page auto-refreshes every minute."
         else:
-            footer = (
-                f"Snapshot taken <strong>{age_label}</strong>. Refreshes every minute."
-            )
+            footer = f"Snapshot taken <strong>{age_label}</strong>. Snapshot updates every 5 min; this page auto-refreshes every minute."
     else:
         footer = ""
 
@@ -2496,12 +2494,109 @@ async def handle_status(request: web.Request) -> web.Response:
 
 
 async def handle_root_redirect(request: web.Request) -> web.Response:
-    """`GET /` → 302 to `/status`. Lets beginners just type host:port.
+    """`GET /` → landing page listing every snapMULTI server endpoint."""
+    # IPv6 Host headers are bracketed (`[::1]:8083` or bare `[::1]`); rsplit on a bare `[::1]` would yield `"[:"`. Handle that first.
+    host_hdr = request.host or "localhost"
+    if host_hdr.startswith("["):
+        close = host_hdr.find("]")
+        bare_host = host_hdr[: close + 1] if close > 0 else host_hdr
+    elif ":" in host_hdr:
+        bare_host = host_hdr.rsplit(":", 1)[0]
+    else:
+        bare_host = host_hdr
 
-    Why a redirect and not the page directly: keeps `/status` as the
-    canonical URL (deep-linkable, predictable) while making `/` Just Work.
-    """
-    raise web.HTTPFound("/status")
+    # Browser-clickable (HTTP GET, returns HTML or JSON the user can read).
+    web_services = [
+        (
+            "Snapweb",
+            f"http://{bare_host}:1780",
+            "Per-room volume, group speakers, switch source",
+        ),
+        ("myMPD", f"http://{bare_host}:8180", "Browse and play your music library"),
+        (
+            "Status page",
+            f"http://{bare_host}:8083/status",
+            "Containers, audio chain, network, mDNS",
+        ),
+        (
+            "Version",
+            f"http://{bare_host}:8083/version",
+            "Release tag + image set (JSON)",
+        ),
+        (
+            "Metadata (JSON)",
+            f"http://{bare_host}:8083/metadata.json",
+            "Current track info (JSON)",
+        ),
+        ("Health probe", f"http://{bare_host}:8083/health", "Liveness check (JSON)"),
+    ]
+    # Programmatic only (POST or WebSocket — not browser-navigable).
+    api_endpoints = [
+        (
+            "Snapcast JSON-RPC",
+            f"http://{bare_host}:1780/jsonrpc",
+            "Programmatic Snapcast control (POST)",
+        ),
+        (
+            "Metadata WebSocket",
+            f"ws://{bare_host}:8082",
+            "Live track + cover-art stream",
+        ),
+    ]
+
+    items = "\n".join(
+        f'    <li><a href="{html.escape(url)}"><strong>{html.escape(name)}</strong></a>'
+        f' <span class="desc">{html.escape(desc)}</span></li>'
+        for name, url, desc in web_services
+    )
+    api_items = "\n".join(
+        f"    <li><code>{html.escape(url)}</code>"
+        f' <span class="desc"><strong>{html.escape(name)}</strong> — {html.escape(desc)}</span></li>'
+        for name, url, desc in api_endpoints
+    )
+
+    body = f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>snapMULTI — {html.escape(bare_host)}</title>
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif;
+         max-width: 720px; margin: 0 auto; padding: 1.5rem;
+         color: #e6e8eb; background: #15181c; line-height: 1.5; }}
+  h1 {{ font-size: 1.45rem; margin: 0 0 .3rem; color: #ffa218; }}
+  p.sub {{ color: #97a0ad; margin: 0 0 1.5rem; font-size: .9rem; }}
+  ul {{ list-style: none; padding: 0; margin: 0; }}
+  li {{ background: #1f242b; border: 1px solid #2c333d; border-radius: .5rem;
+        padding: .9rem 1.1rem; margin-bottom: .6rem; }}
+  a {{ color: #60a5fa; text-decoration: none; font-size: 1.05rem; }}
+  a:hover {{ text-decoration: underline; }}
+  strong {{ color: #e6e8eb; }}
+  .desc {{ display: block; color: #97a0ad; font-size: .88rem; margin-top: .15rem; }}
+  code {{ font-family: "SF Mono", Menlo, Consolas, monospace; font-size: .92em;
+          background: rgba(255,255,255,.06); padding: .1rem .4rem; border-radius: .25rem; }}
+  h2 {{ font-size: .82rem; margin: 1.4rem 0 .55rem; color: #97a0ad;
+        text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }}
+  footer {{ margin-top: 2rem; color: #5a6271; font-size: .82rem; text-align: center; }}
+  footer a {{ color: #5a6271; }}
+</style>
+</head><body>
+<h1>snapMULTI</h1>
+<p class="sub">Server endpoints on <code>{html.escape(bare_host)}</code></p>
+<h2>Web interfaces</h2>
+<ul>
+{items}
+</ul>
+<h2>APIs (programmatic)</h2>
+<ul>
+{api_items}
+</ul>
+<footer>
+  <a href="https://github.com/lollonet/snapMULTI">github.com/lollonet/snapMULTI</a>
+</footer>
+</body></html>
+"""
+    return web.Response(text=body, content_type="text/html", charset="utf-8")
 
 
 # Track service start time for the boot-grace overlay logic

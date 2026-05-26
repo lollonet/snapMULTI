@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8.8] — 2026-05-26
+
+> Script-only patch (image_set stays 0.7.7). Ninth consecutive script-only release. UX polish from pre-launch endpoint review on snapvideo.
+
+### Added
+- **Landing page at `http://<host>:8083/` (#488)** — was a 302 redirect to `/status`. Now serves an HTML index listing every server endpoint (Snapweb, myMPD, /status, /version, /metadata.json, /health) as browser-clickable links, plus an APIs section for JSON-RPC and WebSocket URLs shown as code (not clickable because they 404 on GET / aren't browser-navigable). All endpoints probed for correct response before inclusion. IPv6 Host-header parsing handled (`[::1]:port` bracketed form). `prepare-sd.sh`, `prepare-sd.ps1`, `firstboot.sh` and `deploy.sh` now surface `http://<hostname>.local:8083/` as the primary entry point in their post-install output.
+
+### Changed
+- **`check_thermal.sh` warn floor raised 70°C → 75°C (#488)** — Pi 4 under sustained Snapcast+display load routinely sits at 65-75°C with no thermal issue; ARM soft-throttle is anchored at 80°C. The old 70°C floor produced false-positive WARN smoke tones on healthy systems. New: pass <75°C, warn 75-79°C, fail ≥80°C (fail threshold unchanged — hardware-anchored).
+- **`/status` footer text clarified (#488)** — was "Refreshes every minute" which misled users when the snapshot was 2-5 min old. Now "Snapshot updates every 5 min; this page auto-refreshes every minute" — both layers (backend timer + HTML meta-refresh) honestly stated.
+
 ## [0.7.8.7] — 2026-05-26
 
 > Script-only patch (image_set stays 0.7.7). Eighth consecutive script-only release. Cosmetic rebrand of the fb-display bottom bar from `SnapForge` to `snapMULTI`.
