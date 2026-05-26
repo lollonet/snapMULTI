@@ -66,7 +66,25 @@ def _get_lan_ip() -> str:
     return "?.?.?.?"
 
 
-LAN_IP = _get_lan_ip()
+# Lazy + auto-refresh: container can start before DHCP completes (observed:
+# fb-display showed "?.?.?.?" for 27 min after a reflash boot because the
+# old module-level eager evaluation cached the empty-network state forever).
+# TTL also picks up IP changes on DHCP renewal or network swap.
+_LAN_IP_CACHE: tuple[str, float] = ("?.?.?.?", 0.0)
+_LAN_IP_TTL = 30.0
+
+
+def get_lan_ip() -> str:
+    global _LAN_IP_CACHE
+    now = time.time()
+    cached_ip, cached_at = _LAN_IP_CACHE
+    # Refresh if TTL expired, OR if we still have the placeholder (keep retrying
+    # cheaply until DHCP gives us something real).
+    if cached_ip == "?.?.?.?" or now - cached_at > _LAN_IP_TTL:
+        _LAN_IP_CACHE = (_get_lan_ip(), now)
+    return _LAN_IP_CACHE[0]
+
+
 server_info: dict = {}
 
 SNAPCAST_MDNS_TYPE = "_snapcast._tcp.local."
@@ -991,7 +1009,7 @@ def render_base_frame() -> Image.Image:
     if srv_ver and srv_ver != "unknown":
         ver_parts.append(f"srv {srv_ver}")
     ver_suffix = "  •  " + "  /  ".join(ver_parts) if ver_parts else ""
-    status_text = f"{LAN_IP}  →  {snapserver_display}{ver_suffix}"
+    status_text = f"{get_lan_ip()}  →  {snapserver_display}{ver_suffix}"
     status_font_size = max(10, L["clock_h"] // 3)
     status_font = _get_font(status_font_size)
     bbox = draw.textbbox((0, 0), status_text, font=status_font)

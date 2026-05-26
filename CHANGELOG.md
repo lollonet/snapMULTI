@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **fb-display IP cached as `?.?.?.?` after early-boot start** — `LAN_IP = _get_lan_ip()` ran at module-import time, so when the fb-display container started before DHCP completed (observed: 16 s window post-reflash on snapvideo) the placeholder `"?.?.?.?"` was cached for the lifetime of the process. The screen kept showing `?.?.?.?` until a healthcheck-driven container restart picked up the real IP — 27 min on snapvideo, easily mistaken for a network outage. Now `get_lan_ip()` is lazy with a 30 s TTL plus aggressive retry while the placeholder is cached: the first frame after DHCP completion already shows the real IP. Same bug pattern as `metadata-service.py:EXTERNAL_HOST` fixed in v0.7.8.11.
+
 ## [0.7.8.11] — 2026-05-26
 
 > Script-only patch (image_set stays 0.7.7). CAKE QoS NM dispatcher fix + pcp purge + metadata lazy-init (#493).
