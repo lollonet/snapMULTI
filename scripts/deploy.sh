@@ -417,16 +417,28 @@ setup_server_host() {
             tc qdisc replace dev "$net_iface" root cake diffserv4 2>/dev/null \
                 && ok "Network QoS: CAKE + DSCP EF on $net_iface (Snapcast prioritized)" \
                 || warn "Network QoS: CAKE setup failed on $net_iface"
-            # Persist CAKE via networkd-dispatcher (re-detect interface at boot)
-            mkdir -p /etc/networkd-dispatcher/routable.d
-            cat > /etc/networkd-dispatcher/routable.d/50-cake-qos <<'QEOF'
+            # Persist CAKE via NetworkManager dispatcher. Pi OS uses
+            # NetworkManager (not systemd-networkd) so the previous
+            # /etc/networkd-dispatcher/routable.d/ hook never fired and
+            # cake reverted to the kernel default (fq_codel) on every
+            # boot. Drop the legacy hook if present so /status no longer
+            # claims a phantom CAKE install.
+            rm -f /etc/networkd-dispatcher/routable.d/50-cake-qos
+            mkdir -p /etc/NetworkManager/dispatcher.d
+            cat > /etc/NetworkManager/dispatcher.d/50-cake-qos <<'QEOF'
 #!/bin/sh
+# NetworkManager dispatcher: $1=interface, $2=action
+IFACE=$1
+ACTION=$2
+case "$ACTION" in
+    up|dhcp4-change|dhcp6-change) ;;
+    *) exit 0 ;;
+esac
 PATH=/usr/sbin:/sbin:$PATH
-iface=$(ip route show default 2>/dev/null | awk '{print $5; exit}')
-[ -n "$iface" ] || exit 0
+default_iface=$(ip route show default 2>/dev/null | awk '{print $5; exit}')
+[ "$IFACE" = "$default_iface" ] || exit 0
 modprobe sch_cake 2>/dev/null
-tc qdisc replace dev "$iface" root cake diffserv4 2>/dev/null
-# DSCP EF marking for Snapcast (streaming + control)
+tc qdisc replace dev "$IFACE" root cake diffserv4 2>/dev/null
 if command -v iptables >/dev/null 2>&1; then
     iptables -t mangle -C OUTPUT -p tcp --sport 1704 -j DSCP --set-dscp-class EF 2>/dev/null \
         || iptables -t mangle -A OUTPUT -p tcp --sport 1704 -j DSCP --set-dscp-class EF
@@ -434,7 +446,7 @@ if command -v iptables >/dev/null 2>&1; then
         || iptables -t mangle -A OUTPUT -p tcp --sport 1705 -j DSCP --set-dscp-class EF
 fi
 QEOF
-            chmod +x /etc/networkd-dispatcher/routable.d/50-cake-qos
+            chmod +x /etc/NetworkManager/dispatcher.d/50-cake-qos
         else
             warn "Network QoS: CAKE kernel module not available, skipped"
         fi

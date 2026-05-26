@@ -7,7 +7,9 @@
 # `deploy.sh:setup_server_host` configures CAKE on the egress interface
 # (root qdisc replace) and tags Snapcast streaming + RPC ports (1704/1705)
 # with DSCP EF (0x2e) via iptables OUTPUT mangle. Persistence is via a
-# networkd-dispatcher hook in /etc/networkd-dispatcher/routable.d/.
+# NetworkManager dispatcher hook at /etc/NetworkManager/dispatcher.d/
+# (Pi OS uses NM, not systemd-networkd; the pre-v0.7.8.11 hook lived in
+# /etc/networkd-dispatcher/routable.d/ and silently never fired).
 # If any of these are missing the audio stream still works in steady
 # state, but under bufferbloat (someone else uploading large files on
 # the LAN) audio synchronisation between rooms will drift. The user
@@ -78,12 +80,18 @@ check_qos() {
         warn "iptables not installed — DSCP marking check skipped"
     fi
 
-    # 3. Persistence hook in networkd-dispatcher. Without this, CAKE
-    # vanishes on every interface restart (NM disconnect/reconnect, DHCP
-    # lease renewal). The hook re-applies on every routable transition.
-    if [[ -x /etc/networkd-dispatcher/routable.d/50-cake-qos ]]; then
-        pass_check "CAKE persistence hook installed (/etc/networkd-dispatcher/routable.d/50-cake-qos)"
+    # 3. Persistence hook in NetworkManager dispatcher. Pi OS uses NM, not
+    # systemd-networkd, so the hook lives under /etc/NetworkManager/
+    # dispatcher.d/. Without it CAKE vanishes on every NM up/dhcp event.
+    # We also check that the legacy networkd-dispatcher path is NOT present
+    # (it was the original install location pre-v0.7.8.11 and never fired
+    # on Pi OS — flag it so operators re-run deploy.sh or reflash to remove it).
+    if [[ -x /etc/NetworkManager/dispatcher.d/50-cake-qos ]]; then
+        pass_check "CAKE persistence hook installed (/etc/NetworkManager/dispatcher.d/50-cake-qos)"
     else
         warn "CAKE persistence hook missing — qdisc will be lost on next iface restart"
+    fi
+    if [[ -e /etc/networkd-dispatcher/routable.d/50-cake-qos ]]; then
+        warn "Legacy CAKE hook still present in networkd-dispatcher (never fires on NM hosts) — re-run deploy.sh or reflash to remove"
     fi
 }
