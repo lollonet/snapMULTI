@@ -196,7 +196,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${MYMPD_MEM_LIMIT:-64M}
+          memory: ${MYMPD_MEM_LIMIT:-128M}
           cpus: '${MYMPD_CPU_LIMIT:-0.5}'
         reservations:
           memory: ${MYMPD_MEM_RESERVE:-32M}
