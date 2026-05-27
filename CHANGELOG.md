@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8.14] — 2026-05-27
+
+> Script-only patch (image_set stays 0.7.7). Smoke output hygiene + new Recovery section visible on `/status` (#510, #511, #512).
+
+### Added
+- **`/status` Recovery section (#512)** — surfaces whether `scripts/diagnostic.sh` has dropped a `snapmulti-diag-*.tar.gz` bundle on the FAT32 boot partition (the offline recovery path). PASS when a bundle exists, INFO when none yet (clean install), WARN when 5+ piled up (FAT32 budget). Operator now knows at a glance whether the recovery path is live.
+
+### Changed
+- **Smoke output messaging guidelines (#510, #511)** — `scripts/smoke/MESSAGING.md` documents the style rule (sentence shape, status semantics, banned phrasing, mandatory reason clause on every `skipped` info). Five high-density check files rewritten: `_snapcast._tcp` → "Snapcast mDNS announcement"; "CAKE qdisc" → "Network egress queue (CAKE smart queueing)"; "DSCP EF marking" → "priority tag (DSCP EF)"; "Snapcast RPC" → "Snapcast control API"; "healthcheck reporting healthy" → "healthy". Internal PR/issue numbers removed from user-facing strings; `/etc/systemd/system/...` paths no longer leaked in pass_check messages.
+
 ## [0.7.8.13] — 2026-05-27
 
 > Script-only patch (image_set stays 0.7.7). Auto-boot smoke false-positive on systemd `starting` state (#507).
