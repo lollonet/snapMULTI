@@ -100,7 +100,7 @@ Lo script ti guida con poche domande: il ruolo (**Audio Player** / **Music Serve
 
 Espelli l'SD, inseriscila nel Pi, accendi. Aspetta circa 10-15 minuti — l'installer al primo boot gira da solo (niente SSH), mostra l'avanzamento su HDMI se hai uno schermo collegato, poi si riavvia una volta.
 
-**Ha funzionato quando**: con uno schermo collegato, il display HDMI mostra la schermata "in riproduzione" di snapMULTI (copertina / spettro). In ogni caso, da un altro dispositivo apri `http://<hostname>.local:8083/status` — tutti i controlli devono essere verdi. Poi fai cast di qualcosa (vedi **Dopo l'installazione** più sotto).
+**Ha funzionato quando**: con uno schermo collegato, il display HDMI mostra la schermata "in riproduzione" di snapMULTI (copertina / spettro). In ogni caso, da un altro dispositivo apri `http://<hostname>.local:8083/`, poi apri **Status** — tutti i controlli devono essere verdi. Poi fai cast di qualcosa (vedi **Dopo l'installazione** più sotto).
 
 > **Procedura dettagliata** con troubleshooting e percorso di recupero diagnostico: [docs/INSTALL.it.md](docs/INSTALL.it.md).
 > **Policy hardware** (combinazioni Pi/audio validate vs sperimentali): [docs/HARDWARE.it.md](docs/HARDWARE.it.md).
@@ -111,6 +111,7 @@ Sostituisci `hostname` con quello che hai impostato allo Step 1.
 
 | URL | Cosa fa |
 |-----|---------|
+| `http://hostname.local:8083/` | **Punto di partenza** — link a tutte le pagine web e API snapMULTI |
 | `http://hostname.local:1780` | **Snapweb** — volume per stanza, raggruppa altoparlanti, cambia sorgente |
 | `http://hostname.local:8180` | **myMPD** — sfoglia e riproduce la libreria musicale |
 | `http://hostname.local:8083/status` | **Pagina di stato** — stato container + audio + NFS |
@@ -138,7 +139,7 @@ Prima di riflashare, esegui `./scripts/backup-from-sd.sh` per conservare l'indic
 
 ## Se qualcosa fallisce
 
-**Installato ma non lo raggiungi?** Se il Pi ha finito ma `http://<hostname>.local:1780` non si apre: cerca l'indirizzo IP del Pi nella lista dispositivi del router e usa quello. La risoluzione `.local` (mDNS) non funziona su alcune configurazioni Windows e su WiFi ospiti / mesh / VLAN che isolano i client — tieni il Pi e il telefono/laptop sulla stessa rete normale. Altro aiuto mDNS: [docs/TROUBLESHOOTING.it.md](docs/TROUBLESHOOTING.it.md).
+**Installato ma non lo raggiungi?** Se il Pi ha finito ma `http://<hostname>.local:8083/` non si apre: cerca l'indirizzo IP del Pi nella lista dispositivi del router e usa quello. La risoluzione `.local` (mDNS) non funziona su alcune configurazioni Windows e su WiFi ospiti / mesh / VLAN che isolano i client — tieni il Pi e il telefono/laptop sulla stessa rete normale. Altro aiuto mDNS: [docs/TROUBLESHOOTING.it.md](docs/TROUBLESHOOTING.it.md).
 
 Se è il primo boot a interrompersi: snapMULTI esegue l'installazione come servizio systemd e cattura tutto strada facendo. La trap di cleanup scrive un pacchetto diagnostico anonimizzato sulla **partizione boot** dell'SD (FAT32, leggibile da qualsiasi computer — niente SSH necessario):
 

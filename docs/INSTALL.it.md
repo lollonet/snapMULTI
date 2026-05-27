@@ -17,7 +17,7 @@ Hai già dimestichezza con Raspberry Pi Imager e terminale? Questa è tutta l'in
 5. Dalla cartella snapMULTI, esegui `./scripts/prepare-sd.sh` su macOS/Linux oppure `.\scripts\prepare-sd.ps1` su Windows.
 6. Scegli cosa deve fare questo Pi: **Audio Player**, **Music Server** o **Server + Player**.
 7. Espelli la SD, avvia il Pi e attendi circa 10-15 minuti. Installa, verifica e poi riavvia una volta.
-8. Apri `http://<hostname>.local:1780` per Snapweb oppure `http://<hostname>.local:8180` per myMPD.
+8. Apri `http://<hostname>.local:8083/` — la pagina iniziale contiene i link a Snapweb, myMPD, status e API.
 
 Se un passaggio non è chiaro, continua con la procedura dettagliata qui sotto. Se il primo boot fallisce, recupera il pacchetto diagnostico dalla SD come descritto in [TROUBLESHOOTING.it.md — In caso di dubbio](TROUBLESHOOTING.it.md#in-caso-di-dubbio--prendi-il-pacchetto-diagnostico).
 
@@ -371,15 +371,15 @@ Se non lo senti, l'installazione prosegue comunque — ma controlla alimentazion
 
 > **Placeholder hostname.** Da qui in avanti, `<hostname>.local` significa l'hostname che hai impostato in Imager al Passo 1c. Se hai impostato `myradio`, usa `myradio.local` ovunque appaia `<hostname>.local` qui sotto.
 
-### Controllo per principianti — aprire la pagina di stato
+### Controllo per principianti — aprire la pagina iniziale
 
 Da un altro computer o telefono sulla stessa rete, apri:
 
 ```
-http://<hostname>.local:8083/status
+http://<hostname>.local:8083/
 ```
 
-Se la pagina si apre e tutti i controlli sono verdi, la piattaforma è sana. Se non si apre, prova lo stesso URL usando l'indirizzo IP del Pi al posto di `<hostname>.local`.
+Da quella pagina apri **Status**. Se tutti i controlli sono verdi, la piattaforma è sana. Se la pagina iniziale non si apre, prova lo stesso URL usando l'indirizzo IP del Pi al posto di `<hostname>.local`.
 
 ### Trovare il Pi sulla tua rete
 
@@ -426,9 +426,17 @@ fb-display         Up X minutes (healthy)
 ```
 `audio-visualizer` e `fb-display` appaiono solo se un display HDMI era collegato al primo avvio.
 
-### Aprire l'interfaccia web (solo server)
+### Aprire le interfacce web (solo server)
 
-Apri il tuo browser e vai a:
+Il punto di ingresso principale è:
+
+```
+http://<hostname>.local:8083/
+```
+
+Contiene i link a tutte le pagine snapMULTI apribili da browser.
+
+Per la libreria musicale, apri:
 
 ```
 http://<hostname>.local:8180
@@ -441,6 +449,8 @@ L'**interfaccia web Snapcast** (controlla quale speaker riproduce cosa) è a:
 ```
 http://<hostname>.local:1780
 ```
+
+Se **Status** è verde e le interfacce web si aprono, il server è pronto. Prova a riprodurre un brano da Snapweb (`http://<hostname>.local:1780`) oppure fai cast da Spotify/AirPlay per confermare che l'audio funzioni.
 
 ---
 
