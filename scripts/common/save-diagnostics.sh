@@ -15,7 +15,11 @@ else
 fi
 
 DIAG_DIR="$BOOT/diagnostics"
-MAX_SNAPSHOTS=3
+# 12 × 15 min = 3 h of context. Snapshots ~50 KB each → ~600 KB worst
+# case on a multi-GB FAT32 boot partition. Trade-off against FAT32 wear
+# is negligible compared to the debug value of having recent history
+# when a user opens a bug report.
+MAX_SNAPSHOTS=12
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 SNAPSHOT="$DIAG_DIR/$TIMESTAMP"
 
@@ -127,7 +131,51 @@ cat /proc/asound/cards > "$SNAPSHOT/asound-cards.log" 2>/dev/null || true
     ip -brief addr 2>/dev/null
     echo "=== route ==="
     ip route show default 2>/dev/null
+    echo "=== NetworkManager connections ==="
+    nmcli -t -f NAME,DEVICE,STATE connection show 2>/dev/null
 } > "$SNAPSHOT/network.log" 2>/dev/null || true
+
+# 11. Smoke output snapshot — single-source view of system health.
+# Run the smoke without --tone (silent) and capture; cap at 200 lines so
+# a stuck check can't bloat the snapshot.
+SMOKE=""
+for _s in /opt/snapmulti/scripts/device-smoke.sh /opt/snapclient/scripts/device-smoke.sh; do
+    [[ -x "$_s" ]] && { SMOKE="$_s"; break; }
+done
+if [[ -n "$SMOKE" ]]; then
+    # Detect mode from install.conf — same precedence the smoke uses.
+    _mode=""
+    for _c in /boot/firmware/snapmulti/install.conf /boot/snapmulti/install.conf; do
+        if [[ -f "$_c" ]]; then
+            _it=$(grep -m1 '^INSTALL_TYPE=' "$_c" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
+            case "$_it" in
+                server) _mode=--server ;;
+                client|client-native) _mode=--client ;;
+                both) _mode=--both ;;
+            esac
+            break
+        fi
+    done
+    [[ -z "$_mode" ]] && _mode=--both
+    SNAPMULTI_AUTO_BOOT=1 "$SMOKE" "$_mode" 2>&1 | head -200 \
+        > "$SNAPSHOT/smoke.log" 2>/dev/null || true
+fi
+
+# 12. Failed systemd units (any unit, not just snapMULTI).
+systemctl --failed --no-pager 2>/dev/null > "$SNAPSHOT/systemd-failed.log" || true
+
+# 13. Recent errors from current boot (journal severity err+).
+# Cap at 100 lines so a flapping unit can't bloat the snapshot.
+journalctl -b 0 -p err --no-pager 2>/dev/null | tail -100 \
+    > "$SNAPSHOT/journal-errors.log" || true
+
+# 14. Release identity + redacted .env (mask SMB_PASS and any *_PASS / *_TOKEN).
+for _env in /opt/snapmulti/.env /opt/snapclient/.env; do
+    [[ -f "$_env" ]] || continue
+    _name=$(basename "$(dirname "$_env")")-env.log
+    sed -E 's/^(.*_(PASS|TOKEN|SECRET|KEY))=.*/\1=***REDACTED***/' "$_env" \
+        > "$SNAPSHOT/$_name" 2>/dev/null || true
+done
 
 # remount_ro handled by EXIT trap
 

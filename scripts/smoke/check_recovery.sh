@@ -4,22 +4,19 @@
 # Sourced by device-smoke.sh. Relies on helpers from the main script.
 #
 # What this catches:
-#   scripts/diagnostic.sh drops a `snapmulti-diag-<reason>-<ts>.tar.gz`
-#   bundle into /boot/firmware/ by default. The FAT32 boot partition
-#   survives rootfs failure, overlayroot wedge, or no-WiFi states — it is
-#   the project's offline recovery path (see pattern_boot_partition_rescue
-#   in the maintainer notes). Without a bundle there, a broken Pi can
-#   only be diagnosed by pulling the SD and reading the rootfs from a
-#   second machine — much slower than reading a tarball off the FAT32.
+#   Two diagnostic artefacts can land on the FAT32 boot partition (the
+#   offline recovery path — see pattern_boot_partition_rescue):
 #
-# Status semantics:
-#   pass  — at least one bundle present (recovery path is live, the user
-#           knows where to look)
-#   info  — no bundle yet (normal on a clean install; the file appears
-#           after the first install failure or a manual diagnostic.sh run)
-#   warn  — many bundles piled up (FAT32 has a few-hundred-MB budget on
-#           a typical Pi OS image — clean old ones before they squeeze
-#           cmdline.txt / config.txt rewrites)
+#     - /boot/firmware/snapmulti-diag-<reason>-<ts>.tar.gz
+#       on-demand bundle from scripts/diagnostic.sh (install failure
+#       trap or manual run by the operator for a bug report)
+#
+#     - /boot/firmware/diagnostics/<TIMESTAMP>/
+#       periodic snapshot (every 15 min) from snapmulti-diagnostics.timer
+#       → save-diagnostics — keeps the last 12 (3 h of context)
+#
+#   This module surfaces both: it tells the operator at a glance whether
+#   the recovery path has anything to read when something later breaks.
 #
 # Reference messaging guidelines in scripts/smoke/MESSAGING.md.
 
@@ -31,56 +28,73 @@ check_recovery() {
     section "Recovery"
 
     if [[ ! -d "$_BOOT_FW" ]]; then
-        info "Diagnostic bundle check skipped (N/A on this host — $_BOOT_FW not present)"
+        info "Recovery artefacts check skipped (N/A on this host — $_BOOT_FW not present)"
         return 0
     fi
 
-    # Glob match — bash leaves the pattern literal if nothing matches,
-    # so test the first element for existence before counting.
+    # On-demand bundles from scripts/diagnostic.sh.
+    # Glob: bash leaves pattern literal if nothing matches.
     local bundles=( "$_BOOT_FW"/snapmulti-diag-*.tar.gz )
-    local count=0
+    local bundle_count=0
     if [[ -e "${bundles[0]}" ]]; then
-        count=${#bundles[@]}
+        bundle_count=${#bundles[@]}
     fi
 
-    if (( count == 0 )); then
-        info "Diagnostic bundle on $_BOOT_FW: none yet (created automatically on install failure, or manually via 'sudo scripts/diagnostic.sh')"
+    # Periodic snapshots from snapmulti-diagnostics.timer.
+    # Directories named like YYYYMMDD-HHMMSS under /boot/firmware/diagnostics/.
+    local snap_dir="$_BOOT_FW/diagnostics"
+    local snap_count=0
+    local newest_snap_mtime=0
+    if [[ -d "$snap_dir" ]]; then
+        local d m
+        while IFS= read -r d; do
+            [[ -z "$d" ]] && continue
+            snap_count=$(( snap_count + 1 ))
+            m=$(stat -c %Y "$d" 2>/dev/null || echo 0)
+            (( m > newest_snap_mtime )) && newest_snap_mtime=$m
+        done < <(find "$snap_dir" -mindepth 1 -maxdepth 1 -type d -name '[0-9]*' 2>/dev/null)
+    fi
+
+    # No artefacts at all → info (timer hasn't fired yet, no install failure).
+    if (( bundle_count == 0 && snap_count == 0 )); then
+        info "Recovery artefacts on $_BOOT_FW: none yet (periodic snapshot timer fires every 15 min; on-demand bundle from 'sudo scripts/diagnostic.sh')"
         return 0
     fi
 
-    # Newest bundle: its mtime tells us how fresh the recovery path is.
-    # Smallest stat dependency — no `find -printf`, no awk.
-    local newest_mtime=0 m
-    local total_bytes=0 sz
-    for b in "${bundles[@]}"; do
-        m=$(stat -c %Y "$b" 2>/dev/null || echo 0)
-        sz=$(stat -c %s "$b" 2>/dev/null || echo 0)
-        total_bytes=$(( total_bytes + sz ))
-        if (( m > newest_mtime )); then
-            newest_mtime=$m
+    # On-demand bundle report.
+    if (( bundle_count > 0 )); then
+        local newest_b_mtime=0 m sz total_bytes=0
+        for b in "${bundles[@]}"; do
+            m=$(stat -c %Y "$b" 2>/dev/null || echo 0)
+            sz=$(stat -c %s "$b" 2>/dev/null || echo 0)
+            total_bytes=$(( total_bytes + sz ))
+            (( m > newest_b_mtime )) && newest_b_mtime=$m
+        done
+        local b_age_min=0
+        (( newest_b_mtime > 0 )) && b_age_min=$(( ( $(date +%s) - newest_b_mtime ) / 60 ))
+        local b_human
+        if (( total_bytes > 1024 * 1024 )); then
+            b_human="$(( total_bytes / 1024 / 1024 )) MB"
+        elif (( total_bytes > 1024 )); then
+            b_human="$(( total_bytes / 1024 )) KB"
+        else
+            b_human="${total_bytes} B"
         fi
-    done
-
-    local newest_age_min=0
-    if (( newest_mtime > 0 )); then
-        newest_age_min=$(( ( $(date +%s) - newest_mtime ) / 60 ))
+        if (( bundle_count >= 5 )); then
+            warn "On-demand recovery bundles on $_BOOT_FW: $bundle_count (${b_human} total) — consider clearing older ones to free FAT32 space"
+        else
+            pass_check "On-demand recovery bundles on $_BOOT_FW: $bundle_count (${b_human}, newest ${b_age_min} min old)"
+        fi
     fi
 
-    # Human-friendly size — bytes → KB/MB. Avoid `numfmt` for portability.
-    local total_human
-    if (( total_bytes > 1024 * 1024 )); then
-        total_human="$(( total_bytes / 1024 / 1024 )) MB"
-    elif (( total_bytes > 1024 )); then
-        total_human="$(( total_bytes / 1024 )) KB"
-    else
-        total_human="${total_bytes} B"
-    fi
-
-    if (( count >= 5 )); then
-        warn "Diagnostic bundles on $_BOOT_FW: $count (${total_human} total) — consider clearing older ones to free FAT32 space (newest is ${newest_age_min} min old)"
-    elif (( count == 1 )); then
-        pass_check "Diagnostic bundle on $_BOOT_FW: 1 present (${total_human}, ${newest_age_min} min old) — recovery path live"
-    else
-        pass_check "Diagnostic bundles on $_BOOT_FW: $count present (${total_human} total, newest ${newest_age_min} min old)"
+    # Periodic snapshot report.
+    if (( snap_count > 0 )); then
+        local snap_age_min=0
+        (( newest_snap_mtime > 0 )) && snap_age_min=$(( ( $(date +%s) - newest_snap_mtime ) / 60 ))
+        if (( snap_age_min > 30 )); then
+            warn "Periodic diagnostic snapshots on $_BOOT_FW: $snap_count present, newest ${snap_age_min} min old — timer may have stopped (expected interval is 15 min)"
+        else
+            pass_check "Periodic diagnostic snapshots on $_BOOT_FW: $snap_count present, newest ${snap_age_min} min old"
+        fi
     fi
 }

@@ -2,9 +2,10 @@
 Description=Periodic snapMULTI diagnostic log capture
 
 [Timer]
-# Save diagnostics every 30 minutes and on boot
+# Save diagnostics every 15 minutes and on boot.
+# Retention capped at 12 snapshots (3 h of context) inside save-diagnostics.
 OnBootSec=2min
-OnUnitActiveSec=30min
+OnUnitActiveSec=15min
 Persistent=true
 
 [Install]
