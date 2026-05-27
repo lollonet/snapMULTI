@@ -35,17 +35,17 @@ check_qos() {
         qdisc_root=$(tc qdisc show dev "$egress_iface" 2>/dev/null | awk '/^qdisc / && /root/ {print $2; exit}')
         case "$qdisc_root" in
             cake)
-                pass_check "CAKE qdisc active on $egress_iface (root)"
+                pass_check "Network egress queue (CAKE smart queueing): active on $egress_iface"
                 ;;
             "")
-                fail_check "No qdisc readable on $egress_iface — tc command output empty"
+                fail_check "Network egress queue: unreadable on $egress_iface (tc command produced no output)"
                 ;;
             *)
-                warn "Default qdisc on $egress_iface is '$qdisc_root', expected 'cake' (kernel may lack sch_cake module)"
+                warn "Network egress queue on $egress_iface is '$qdisc_root', expected 'cake' (kernel may lack the sch_cake module — Snapcast still works but bufferbloat can desync rooms)"
                 ;;
         esac
     else
-        warn "tc not installed — CAKE qdisc check skipped"
+        warn "Network egress queue check skipped (missing dep: iproute2 — install for traffic shaping inspection)"
     fi
 
     # 2. DSCP EF (0x2e) marking on Snapcast streaming + RPC. The actual
@@ -67,17 +67,17 @@ check_qos() {
         dscp_rpc=$(echo "$mangle_dump" | { grep -cE "tcp +spt:${rpc_port} +DSCP +set 0x2e" || true; })
 
         if [[ "$dscp_streaming" -ge 1 ]]; then
-            pass_check "DSCP EF marking on Snapcast streaming port 1704"
+            pass_check "Snapcast streaming priority tag (DSCP EF): set on port 1704"
         else
-            fail_check "No DSCP EF mangle rule on tcp sport 1704 — bufferbloat will desync rooms"
+            fail_check "Snapcast streaming priority tag: missing on port 1704 — bufferbloat will desync rooms when LAN is busy"
         fi
         if [[ "$dscp_rpc" -ge 1 ]]; then
-            pass_check "DSCP EF marking on Snapcast RPC port $rpc_port"
+            pass_check "Snapcast RPC priority tag (DSCP EF): set on port $rpc_port"
         else
-            fail_check "No DSCP EF mangle rule on tcp sport $rpc_port"
+            fail_check "Snapcast RPC priority tag: missing on port $rpc_port"
         fi
     else
-        warn "iptables not installed — DSCP marking check skipped"
+        warn "Priority tag (DSCP) check skipped (missing dep: iptables — install for QoS inspection)"
     fi
 
     # 3. Persistence hook in NetworkManager dispatcher. Pi OS uses NM, not
@@ -87,11 +87,11 @@ check_qos() {
     # (it was the original install location pre-v0.7.8.11 and never fired
     # on Pi OS — flag it so operators re-run deploy.sh or reflash to remove it).
     if [[ -x /etc/NetworkManager/dispatcher.d/50-cake-qos ]]; then
-        pass_check "CAKE persistence hook installed (/etc/NetworkManager/dispatcher.d/50-cake-qos)"
+        pass_check "Network egress queue persistence hook: installed (will re-apply on every NetworkManager event)"
     else
-        warn "CAKE persistence hook missing — qdisc will be lost on next iface restart"
+        warn "Network egress queue persistence hook: missing — CAKE will be lost on next network restart"
     fi
     if [[ -e /etc/networkd-dispatcher/routable.d/50-cake-qos ]]; then
-        warn "Legacy CAKE hook still present in networkd-dispatcher (never fires on NM hosts) — re-run deploy.sh or reflash to remove"
+        warn "Legacy egress-queue hook from older snapMULTI still present (no effect on Pi OS) — re-run deploy.sh or reflash to remove"
     fi
 }

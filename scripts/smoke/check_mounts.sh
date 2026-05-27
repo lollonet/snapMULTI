@@ -31,7 +31,7 @@ check_mounts() {
     local server_env music_source music_path
     server_env="${SERVER_DIR:-/opt/snapmulti}/.env"
     if [[ ! -f "$server_env" ]]; then
-        info "Server .env not found — mount unit checks skipped"
+        info "Music mount checks: skipped (server .env not found — N/A on client-only install)"
         return 0
     fi
     # Strip surrounding quotes — `.env` may store values as
@@ -48,7 +48,7 @@ check_mounts() {
             : # check below
             ;;
         *)
-            info "MUSIC_SOURCE='${music_source:-unset}' — not network-backed, mount unit check skipped"
+            info "Music mount checks: skipped (MUSIC_SOURCE='${music_source:-unset}' is not a network share)"
             return 0
             ;;
     esac
@@ -70,12 +70,12 @@ check_mounts() {
 
     # 1. Unit files exist on disk.
     if [[ -f "/etc/systemd/system/$automount_name" ]]; then
-        pass_check "$automount_name unit file present in /etc/systemd/system/"
+        pass_check "Music automount unit ($automount_name): installed"
     else
         fail_check "$automount_name unit file missing — mount-music.sh did not run or failed"
     fi
     if [[ -f "/etc/systemd/system/$mount_name" ]]; then
-        pass_check "$mount_name unit file present in /etc/systemd/system/"
+        pass_check "Music mount unit ($mount_name): installed"
     else
         fail_check "$mount_name unit file missing"
     fi
