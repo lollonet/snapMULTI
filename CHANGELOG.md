@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8.15] — 2026-05-27
+
+> Script-only patch (image_set stays 0.7.7). Periodic diagnostic snapshots on /boot/firmware enriched + visible in /status (#514).
+
+### Added
+- **Periodic diagnostic snapshots — 4 new captures (#514)** — every 15 min `save-diagnostics` now also writes: `smoke.log` (full device-smoke output, capped at 200 lines, = single source of truth for system health); `systemd-failed.log` (any failed unit, not just snapMULTI); `journal-errors.log` (last 100 err+ entries from current boot); `snapmulti-env.log` + `snapclient-env.log` (`.env` with PASS/TOKEN/SECRET/KEY values redacted); `nmcli connection show` added to existing `network.log`. Snapshot now contains 16 files (was 9).
+
+### Changed
+- **Snapshot timer 30 → 15 min, retention 3 → 12 (#514)** — 3 h of context instead of 1.5 h. ~50 KB/snapshot on a multi-GB FAT32 → wear negligible vs the debug value.
+- **`check_recovery.sh` detects periodic snapshots too (#514)** — previously only looked for on-demand `snapmulti-diag-*.tar.gz` bundles; now also surfaces `/boot/firmware/diagnostics/<TS>/` directories from the timer, and WARNs if the newest is more than 30 min old (timer broken).
+
+### Fixed
+- **`firstboot.sh` installs `diagnostic.sh` on server path too (#514)** — was only copied to `/opt/snapclient/scripts/`, so `sudo /opt/snapmulti/scripts/diagnostic.sh` on a server/both install hit "no such file". Latent since the script was introduced.
+
 ## [0.7.8.14] — 2026-05-27
 
 > Script-only patch (image_set stays 0.7.7). Smoke output hygiene + new Recovery section visible on `/status` (#510, #511, #512).
