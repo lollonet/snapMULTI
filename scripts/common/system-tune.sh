@@ -98,7 +98,13 @@ tune_usb_autosuspend() {
 
     if echo -1 > /sys/module/usbcore/parameters/autosuspend 2>/dev/null; then
         if mkdir -p /etc/udev/rules.d 2>/dev/null; then
-            if ! echo 'ACTION=="add", SUBSYSTEM=="usb", DEVTYPE=="usb_device", TEST=="power/autosuspend", ATTR{power/autosuspend}="-1"' \
+            # DEVTYPE intentionally omitted: it's evaluated against USB
+            # interface events too, where it's not "usb_device", and
+            # systemd-udevd then logs "Invalid key 'DEVTYPE'" on every
+            # rule reload (cosmetic but noisy in journals). The combo
+            # SUBSYSTEM=="usb" + TEST=="power/autosuspend" already
+            # filters to whole-device events that carry the attribute.
+            if ! echo 'ACTION=="add", SUBSYSTEM=="usb", TEST=="power/autosuspend", ATTR{power/autosuspend}="-1"' \
                 > /etc/udev/rules.d/50-usb-no-autosuspend.rules 2>/dev/null; then
                 is_overlayroot && warn "USB autosuspend: udev rule skipped (overlayroot)"
             fi
