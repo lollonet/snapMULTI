@@ -181,10 +181,10 @@ check_containers() {
         if [[ -n "$health" ]]; then
             case "$health" in
                 healthy)
-                    pass_check "$name: healthcheck reporting healthy"
+                    pass_check "$name: healthy"
                     ;;
                 unhealthy)
-                    fail_check "$name: healthcheck reporting unhealthy — service is failing its probe"
+                    fail_check "$name: unhealthy — service is failing its healthcheck probe"
                     ;;
                 starting)
                     # If container has been up more than 5 min and still
@@ -196,13 +196,13 @@ check_containers() {
                         uptime_s=$(( $(date +%s) - $(date -d "$started_at" +%s 2>/dev/null || echo 0) ))
                     fi
                     if (( uptime_s > 300 )); then
-                        warn "$name: healthcheck still 'starting' after $((uptime_s/60)) min — probe may be stuck"
+                        warn "$name: healthcheck stuck on 'starting' after $((uptime_s/60)) min — probe never settled"
                     else
-                        info "$name: healthcheck 'starting' (uptime ${uptime_s}s — within start_period)"
+                        info "$name: healthcheck warming up (${uptime_s}s, still within the grace period)"
                     fi
                     ;;
                 *)
-                    warn "$name: healthcheck status '$health' (unexpected)"
+                    warn "$name: unexpected healthcheck status '$health'"
                     ;;
             esac
         fi
@@ -224,7 +224,7 @@ check_containers() {
         if (( ${#restart_history[@]} > 0 )); then
             local joined
             printf -v joined "%s, " "${restart_history[@]}"; joined="${joined%, }"
-            info "Past container restart(s) observed, current state not failing: $joined"
+            info "Container(s) restarted in the past but stable now: $joined"
         fi
     fi
 
@@ -232,7 +232,7 @@ check_containers() {
     if (( ${#no_limit[@]} > 0 )); then
         local joined
         printf -v joined "%s, " "${no_limit[@]}"; joined="${joined%, }"
-        fail_check "Container(s) with HostConfig.Memory=0 (limit drift — deploy.sh must --force-recreate): $joined"
+        fail_check "Container(s) without memory limit applied (re-run deploy.sh to restore): $joined"
     else
         pass_check "All $checked snapMULTI container(s) have memory limit applied"
     fi
@@ -264,11 +264,11 @@ check_containers() {
             plugin_count=$("${docker_cmd[@]}" exec snapserver pgrep -f 'meta_' 2>/dev/null | wc -l | tr -d ' ' || echo 0)
             plugin_count=${plugin_count:-0}
             if (( plugin_count == 0 )); then
-                fail_check "No meta_*.py plugins running in snapserver — cover art + 'now playing' will be empty for all sources"
+                fail_check "Metadata plugins inside snapserver: none — cover art + 'now playing' will be empty for every source"
             elif (( plugin_count == 1 )); then
-                warn "Only 1 meta_*.py plugin running in snapserver — most snapMULTI installs run 4 (mpd, librespot, tidal, shairport)"
+                warn "Metadata plugins inside snapserver: only 1 (typical full install runs 4: mpd, librespot, tidal, shairport)"
             else
-                pass_check "$plugin_count meta_*.py plugin(s) running in snapserver"
+                pass_check "Metadata plugins inside snapserver: $plugin_count active"
             fi
         fi
     fi

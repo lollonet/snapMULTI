@@ -66,20 +66,20 @@ check_snapcast() {
 
     case "$MODE" in
         client)
-            info "Client mode — snapserver/MPD checks skipped (no local server)"
+            info "Snapserver / MPD checks: skipped (N/A on client-only install)"
             return
             ;;
     esac
 
     if ! command -v curl >/dev/null 2>&1; then
-        warn "curl not installed — Snapcast RPC check skipped"
+        warn "Snapcast control API check skipped (missing dep: curl)"
     else
         local rpc_json
         rpc_json=$(_snapcast_get_status)
         if [[ -z "$rpc_json" ]]; then
-            fail_check "Snapcast RPC at $_SNAPSERVER_RPC_URL did not respond — server down or RPC port closed"
+            fail_check "Snapcast control API ($_SNAPSERVER_RPC_URL): no response — server down or port closed"
         elif ! command -v jq >/dev/null 2>&1; then
-            info "jq not installed — RPC reachable but contents not inspected"
+            info "Snapcast control API: reachable, but client roster not parsed (missing dep: jq)"
         else
             # Extract client count and disconnected client list. Snapserver
             # keeps paired clients in its state even when they are offline;
@@ -99,12 +99,12 @@ check_snapcast() {
                 ' <<<"$rpc_json" 2>/dev/null || true
             )
             if (( client_count == 0 )); then
-                warn "Snapcast: 0 clients in any group — multiroom has no listeners (intentional if no players paired yet)"
+                warn "Snapcast clients: none paired yet — multiroom has no listeners (normal on a fresh install)"
             elif (( disconnected > 0 )); then
-                pass_check "Snapcast: $connected/$client_count clients connected"
-                info "Disconnected Snapcast client(s): ${disconnected_clients:-unknown} — paired but offline"
+                pass_check "Snapcast clients: $connected of $client_count connected"
+                info "Snapcast clients offline: ${disconnected_clients:-unknown} (paired but not reachable now)"
             else
-                pass_check "Snapcast: $connected/$client_count clients connected"
+                pass_check "Snapcast clients: $connected of $client_count connected"
             fi
         fi
     fi
@@ -115,7 +115,7 @@ check_snapcast() {
     local mpc_out
     mpc_out=$(_mpc_status)
     if [[ -z "$mpc_out" ]]; then
-        info "mpc unavailable on host and in container — MPD state not inspected (install mpc-cli to enable)"
+        info "MPD state check skipped (missing dep: mpc-cli on both host and container)"
         return
     fi
 
@@ -142,6 +142,6 @@ check_snapcast() {
     if grep -qE "^Updating DB" <<<"$mpc_out"; then
         local job
         job=$(grep -oE 'Updating DB \(#[0-9]+\)' <<<"$mpc_out" | head -1)
-        info "MPD library scan in progress ($job) — large libraries can take hours; transient FAIL on 'mpd: starting' healthcheck is expected during this window"
+        info "MPD library scan in progress ($job) — large libraries can take hours; a transient FAIL on mpd healthcheck during this window is expected"
     fi
 }

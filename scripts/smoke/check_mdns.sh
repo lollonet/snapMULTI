@@ -49,7 +49,7 @@ check_mdns() {
     # nothing. Reserve the actual browse call for the second step.
     if ! command -v avahi-browse >/dev/null 2>&1 \
         && ! command -v dns-sd >/dev/null 2>&1; then
-        warn "Neither avahi-browse nor dns-sd installed — mDNS check skipped"
+        warn "Snapcast mDNS announcement check skipped (missing dep: avahi-utils — install to inspect the LAN service announcement)"
         return
     fi
 
@@ -82,17 +82,17 @@ check_mdns() {
     case "$MODE" in
         server|both)
             if (( resolved == 0 )); then
-                fail_check "_snapcast._tcp NOT advertised on mDNS — clients will not find this server (avahi socket race? port collision?)"
+                fail_check "Snapcast mDNS announcement: not visible on LAN — clients won't find this server (check Avahi daemon status and Snapcast logs)"
             elif [[ "$advertised_hosts" == *"$our_hostname"* ]] \
                 || [[ "$advertised_hosts" == *"${our_hostname}.local"* ]]; then
-                pass_check "_snapcast._tcp advertised by self ($our_hostname) — visible on LAN"
+                pass_check "Snapcast mDNS announcement: published by self ($our_hostname) — visible on LAN"
             else
-                warn "_snapcast._tcp advertised (hosts: ${advertised_hosts:-unknown}) but not by self ($our_hostname) — name mismatch or self-resolve race"
+                warn "Snapcast mDNS announcement: published by ${advertised_hosts:-unknown} but not by self ($our_hostname) — hostname mismatch on the LAN"
             fi
             ;;
         client)
             if (( resolved == 0 )); then
-                fail_check "_snapcast._tcp: no servers seen on LAN (no peer publishing, or multicast blocked)"
+                fail_check "Snapcast mDNS announcement: no servers visible on LAN (no peer publishing, or multicast blocked by router/AP)"
             else
                 # Show how many servers we can see and which.
                 local server_count
@@ -100,11 +100,11 @@ check_mdns() {
                     | awk -F';' '{print $7}' \
                     | sort -u | wc -l | tr -cd '0-9')
                 server_count=${server_count:-0}
-                pass_check "_snapcast._tcp visible: $server_count server(s) on LAN (${advertised_hosts:-unknown})"
+                pass_check "Snapcast mDNS announcement: $server_count server(s) visible on LAN (${advertised_hosts:-unknown})"
             fi
             ;;
         *)
-            info "_snapcast._tcp resolved-rows count: $resolved (MODE=$MODE)"
+            info "Snapcast mDNS announcement: $resolved entries visible (mode=$MODE)"
             ;;
     esac
 }
