@@ -560,6 +560,11 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         cp "$SNAP_BOOT/server/boot-tune.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/status.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/device-smoke.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
+        # diagnostic.sh — on-demand recovery bundle (tarball into /boot/firmware/).
+        # The client path installs it; the server path was forgetting it
+        # since v0.7.x, so `sudo /opt/snapmulti/scripts/diagnostic.sh` on
+        # a server/both install hit "command not found".
+        cp "$SNAP_BOOT/server/diagnostic.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         # Modular smoke checks dir — device-smoke.sh sources
         # $SCRIPT_DIR/smoke/check_*.sh at runtime; without -r the
         # subdirectory never reaches /opt/snapmulti/scripts/ and the
