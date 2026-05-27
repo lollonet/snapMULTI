@@ -72,6 +72,6 @@ check_timers() {
     if [[ "${INSTALL_TYPE_NATIVE_CLIENT:-false}" == "true" ]]; then
         info "Timer snapclient-discover.timer skipped on native client (libavahi-client used instead)"
     else
-        _check_timer "snapclient-discover.timer"    "mDNS server discovery (PR #285 multi-server failover)" client
+        _check_timer "snapclient-discover.timer"    "mDNS server rediscovery (multi-server failover)" client
     fi
 }

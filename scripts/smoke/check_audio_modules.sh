@@ -64,7 +64,7 @@ check_audio_modules() {
     done
 
     if [[ -z "$hat_config" ]]; then
-        info "HAT_CONFIG not set in .env — kernel module check skipped"
+        info "Per-HAT kernel module check skipped (HAT_CONFIG not in .env) — ALSA card consistency already verified above is the authoritative check"
         return 0
     fi
 
@@ -73,7 +73,7 @@ check_audio_modules() {
     # Look up the expected modules for this HAT.
     local expected="${_HAT_MODULES[$hat_config]:-}"
     if [[ -z "$expected" ]]; then
-        info "HAT '$hat_config' has no expected-modules list (add to scripts/smoke/check_audio_modules.sh _HAT_MODULES) — skipped"
+        info "Per-HAT kernel module check skipped (no expected-modules list for '$hat_config') — ALSA card consistency above is the authoritative check"
         return 0
     fi
 
