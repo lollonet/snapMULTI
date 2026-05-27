@@ -99,7 +99,7 @@ check_mounts() {
         local automount_active_lines
         automount_active_lines=$(grep -v '^[[:space:]]*#' "/etc/systemd/system/$automount_name" 2>/dev/null || true)
         if echo "$automount_active_lines" | grep -qE '^[[:space:]]*(After|Wants|Requires|BindsTo)=.*network-online\.target'; then
-            fail_check "$automount_name carries network-online.target ordering (PR #334 regression — boot-time ordering cycle)"
+            fail_check "$automount_name carries network-online.target ordering — boot-time ordering cycle"
         else
             pass_check "$automount_name has no network-online ordering (no boot-time cycle)"
         fi
@@ -129,7 +129,7 @@ check_mounts() {
             pass_check "$mount_name is '$mount_state' (NOT eager-enabled — correct)"
             ;;
         enabled|enabled-runtime)
-            fail_check "$mount_name is eager-enabled — slow NAS will block snapmulti-server.service startup (PR #334 regression)"
+            fail_check "$mount_name is eager-enabled — slow NAS will block snapmulti-server.service startup (should be lazy via .automount)"
             ;;
     esac
 
