@@ -83,6 +83,12 @@ assert 'grep -q "Network-backed library" "$DEPLOY_SH"' \
 assert 'grep -qE "nfs\\|smb\\|network" "$DEPLOY_SH"' \
        "case branches cover nfs|smb|network"
 
+assert 'grep -q "health_grace_seconds=120" "$DEPLOY_SH"' \
+       "server verify includes healthcheck/stability grace after MPD_START_PERIOD"
+
+assert 'grep -q "MPD start_period=.*grace" "$DEPLOY_SH"' \
+       "server verify log exposes MPD start period and grace budget"
+
 echo
 echo "=== Wave-4: A3 USB probe in manual select path ==="
 

@@ -998,15 +998,24 @@ verify_services() {
     # listener bind beyond 120s (observed on pi4-test Pi 4 2GB --both:
     # 130-150s needed). Floor at 180s for local mounts; honor extended
     # MPD_START_PERIOD for network mounts (NFS/SMB).
+    #
+    # Docker does not necessarily mark the container healthy the instant MPD
+    # binds: healthchecks run every 30s and verify_compose_stack also needs a
+    # second sample to prove RestartCount stability. Large NFS libraries have
+    # been observed to bind just after the 300s start_period, so add an explicit
+    # healthcheck/stability grace window instead of failing seconds before the
+    # next successful health probe.
     local start_period
     start_period=$(grep '^MPD_START_PERIOD=' "$ENV_FILE" 2>/dev/null | cut -d= -f2 | tr -d 's')
     start_period=${start_period:-30}
     local wait_seconds=15
     local floor_seconds=180
+    local health_grace_seconds=120
     local effective=$(( start_period > floor_seconds ? start_period : floor_seconds ))
-    local max_attempts=$(( (effective / wait_seconds) + 2 ))
+    local verify_budget=$((effective + health_grace_seconds))
+    local max_attempts=$(( (verify_budget / wait_seconds) + 2 ))
 
-    info "Checking services (up to ${effective}s, ${wait_seconds}s interval)..."
+    info "Checking services (up to ${verify_budget}s, ${wait_seconds}s interval; MPD start_period=${start_period}s + ${health_grace_seconds}s grace)..."
 
     # shellcheck source=common/verify-compose.sh
     source "$SCRIPT_DIR/common/verify-compose.sh"
