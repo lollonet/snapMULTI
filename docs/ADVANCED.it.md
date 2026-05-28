@@ -94,6 +94,8 @@ sudo /opt/snapmulti/scripts/ro-mode.sh disable   # poi reboot
 sudo /opt/snapmulti/scripts/ro-mode.sh enable    # poi reboot
 ```
 
+> **Eccezioni — stato che sopravvive alla pulizia overlayroot:** `snapmulti-data-persistence.service` fa bind-mount di `/opt/snapmulti/data` (stato gruppi snapserver) e `/opt/snapmulti/mympd/workdir` (smart playlist / script custom / tema myMPD) su `/media/root-rw/snapmulti-persist/`, fuori dall'albero overlay. Queste directory persistono al reboot senza bisogno del toggle di maintenance. Lo stato database MPD ha invece un backup giornaliero sulla partizione di boot via `snapmulti-backup.timer`.
+
 `/boot/firmware/cmdline.txt` è di proprietà di `scripts/common/cmdline-manager.sh` — non modificarlo a mano. Vedi ADR-003 per il razionale.
 
 ## Deploy senza `prepare-sd`

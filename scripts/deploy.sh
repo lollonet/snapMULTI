@@ -1098,10 +1098,13 @@ install_systemd_service() {
 [Unit]
 Description=snapMULTI Docker Compose Server
 Requires=docker.service
-After=docker.service network-online.target avahi-daemon.service
-Wants=network-online.target avahi-daemon.service
+After=docker.service network-online.target avahi-daemon.service snapmulti-data-persistence.service
+Wants=network-online.target avahi-daemon.service snapmulti-data-persistence.service
 # Block startup until project root + /audio (FIFO dir) are mounted; avoids
-# a Docker race where compose starts before NFS/USB attaches /music or /audio
+# a Docker race where compose starts before NFS/USB attaches /music or /audio.
+# The After=/Wants= clauses above gate on snapmulti-data-persistence.service
+# completion so the /opt/snapmulti/data bind-mount is in place before
+# snapserver's container bind-mount evaluates.
 RequiresMountsFor=${PROJECT_ROOT} ${PROJECT_ROOT}/audio${music_mount_clause}
 # NOTE on snapcast 0.35 mDNS reconnect bug: when avahi-daemon restarts,
 # snapserver's libavahi-client connection drops and the daemon never
@@ -1192,6 +1195,95 @@ EOF
         ok "snapmulti-server.service enabled"
     else
         warn "snapmulti-server.service could not be enabled"
+    fi
+}
+
+#######################################
+# Persistent snapserver data dir (overlayroot bypass)
+#
+# snapserver writes runtime state (groups, group names, client
+# positions) to /opt/snapmulti/data/server.json. Under overlayroot
+# the path lives on the volatile upper tmpfs — every reboot wipes
+# the upper layer and snapserver reverts to the post-firstboot
+# state on the ext4 lower layer.
+#
+# Fix: bind-mount /media/root-rw/snapmulti-data over
+# /opt/snapmulti/data. /media/root-rw is the writable backing fs
+# (it holds the overlay upperdir itself); a sibling directory
+# there is OUTSIDE the overlay tree and truly persistent. The
+# bind is established early at boot by snapmulti-data-persistence
+# .service, before snapmulti-server.service starts the snapserver
+# container.
+#
+# No-op on non-overlayroot installs — the setup script exits
+# silently when /media/root-rw is missing.
+#######################################
+install_snapmulti_data_persistence() {
+    step "Installing snapmulti-data-persistence.service"
+
+    local script_src="" script_dst="/usr/local/sbin/snapmulti-data-setup"
+    local cand
+    for cand in \
+        "${SCRIPT_DIR:-$(dirname "${BASH_SOURCE[0]}")}/common/snapmulti-data-setup.sh" \
+        "$PROJECT_ROOT/scripts/common/snapmulti-data-setup.sh" \
+        "/boot/firmware/snapmulti/common/snapmulti-data-setup.sh"; do
+        if [[ -f "$cand" ]]; then
+            script_src="$cand"
+            break
+        fi
+    done
+    if [[ -z "$script_src" ]]; then
+        warn "snapmulti-data-setup.sh not staged — snapserver state will NOT persist across reboot under overlayroot"
+        return 0
+    fi
+    install -m 0755 "$script_src" "$script_dst"
+    ok "Installed $script_dst"
+
+    # Unquoted heredoc so ${PROJECT_ROOT} expands at unit-generation
+    # time. EnvironmentFile=- (with leading dash) is non-fatal when
+    # .env is absent (non-overlayroot / test environments). This
+    # propagates PUID/PGID from the operator's .env into the persist
+    # setup script — otherwise the persistent dirs are always created
+    # as 1000:1000 and a container running as a non-default uid (e.g.
+    # PUID=1001) cannot write into the bind-mounted location, silently
+    # losing state on every flush despite the smoke gate reporting OK.
+    cat > /etc/systemd/system/snapmulti-data-persistence.service <<EOF
+[Unit]
+Description=snapMULTI persistent snapserver data dir (overlayroot bypass)
+DefaultDependencies=no
+After=local-fs.target
+Before=docker.service basic.target
+ConditionPathExists=/media/root-rw
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-${PROJECT_ROOT}/.env
+ExecStart=/usr/local/sbin/snapmulti-data-setup
+# Best-effort umount on stop. Each line is independent (\`-\`) so a
+# missing mount (e.g. mympd workdir bind was never established on
+# a fresh server-only install where the dir didn't exist) doesn't
+# fail the stop. Add new paths here as STAGED_PATHS in the setup
+# script grows.
+ExecStop=-/bin/umount /opt/snapmulti/data
+ExecStop=-/bin/umount /opt/snapmulti/mympd/workdir
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    if systemctl enable snapmulti-data-persistence.service >/dev/null 2>&1; then
+        ok "snapmulti-data-persistence.service enabled"
+    else
+        warn "snapmulti-data-persistence.service could not be enabled"
+    fi
+    # Start immediately so the bind-mount is active before start_services
+    # runs `docker compose up` for the first time on this boot.
+    if systemctl start snapmulti-data-persistence.service 2>/dev/null; then
+        ok "snapmulti-data-persistence.service active"
+    else
+        warn "snapmulti-data-persistence.service could not be started — snapserver state may not persist this boot"
     fi
 }
 
@@ -1302,6 +1394,12 @@ main() {
     # directly. This way the unit's ExecStartPost mDNS self-heal takes
     # effect on first boot — not just on restarts after install
     # completes.
+    # Install the persistence bind-mount unit BEFORE the server unit
+    # so its Wants=/After= clauses on snapmulti-data-persistence.service
+    # resolve to an existing unit. The function also starts the unit
+    # immediately so the bind is active for the upcoming start_services
+    # call (snapserver writes server.json on first compose up).
+    install_snapmulti_data_persistence
     install_systemd_service
     start_services
     verify_services

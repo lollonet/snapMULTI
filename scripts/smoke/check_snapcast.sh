@@ -106,6 +106,34 @@ check_snapcast() {
             else
                 pass_check "Snapcast clients: $connected of $client_count connected"
             fi
+
+            # Active stream + now-playing surface. Each group has a
+            # stream_id assignment — the stream that group's clients
+            # actually hear. Show the first group that has at least
+            # one connected client plus that stream's metadata if any.
+            local now_playing
+            now_playing=$(
+                jq -r '
+                    .result.server.groups[]
+                    | select((.clients[]?.connected // false) == true)
+                    | "\(.name // "default")|\(.stream_id)"
+                ' <<<"$rpc_json" 2>/dev/null | head -1
+            )
+            if [[ -n "$now_playing" ]]; then
+                local grp_name="${now_playing%%|*}"
+                local stream_id="${now_playing#*|}"
+                local track
+                track=$(jq -r --arg sid "$stream_id" '
+                    (.result.server.streams[]? | select(.id == $sid)) as $s
+                    | if $s.properties.metadata then
+                        (($s.properties.metadata.artist[0]? // "Unknown artist") + " — "
+                         + ($s.properties.metadata.title // "Unknown title"))
+                      else
+                        ("(no metadata, status=" + ($s.status // "?") + ")")
+                      end
+                ' <<<"$rpc_json" 2>/dev/null || true)
+                info "Now playing: group \"$grp_name\" → stream \"$stream_id\" ($track)"
+            fi
         fi
     fi
 

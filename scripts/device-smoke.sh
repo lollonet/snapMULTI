@@ -336,6 +336,7 @@ if [[ -d "$SMOKE_MODULES_DIR" ]]; then
         check_mdns.sh \
         check_snapcast.sh \
         check_recovery.sh \
+        check_persistence.sh \
     ; do
         if [[ -f "$SMOKE_MODULES_DIR/$_smoke_mod" ]]; then
             # shellcheck source=/dev/null
@@ -1014,6 +1015,7 @@ if [[ "${SMOKE_SKIP_NETWORK:-0}" != "1" ]]; then
     declare -F check_mdns           >/dev/null && check_mdns
     declare -F check_snapcast       >/dev/null && check_snapcast
     declare -F check_recovery       >/dev/null && check_recovery
+    declare -F check_persistence    >/dev/null && check_persistence
 else
     info "SMOKE_SKIP_NETWORK=1 — modular Linux-only checks (boot health, mounts, QoS, timers, system, thermal, audio, env, mDNS, snapcast) skipped"
 fi

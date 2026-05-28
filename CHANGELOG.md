@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **snapserver + myMPD state persistence (`snapmulti-data-persistence.service`)** — overlayroot's tmpfs upper layer used to wipe `/opt/snapmulti/data/server.json` (snapcast group names, client positions, group memberships) and `/opt/snapmulti/mympd/workdir/` (myMPD smart playlists, custom scripts, theme prefs) on every reboot. New systemd oneshot service binds those paths to `/media/root-rw/snapmulti-persist/` (a directory outside the overlay tree, on the writable backing fs) so all container-written state survives reboot. Adding a new staged path is a small fan-out edit (`STAGED_PATHS_DEFAULT` in the setup script, `ExecStop` umount line in the embedded unit, `_STAGED_PATHS` in `check_persistence.sh`). First-run migration copies any existing content from the staged path (live upper layer OR lower-layer post-firstboot) into the persistent location before activating the bind, so no state is lost on upgrade. No-op on non-overlayroot installs.
+- **Status page coverage expanded** — 6 new checks surface previously-invisible state:
+  - `/boot/firmware` FAT32 free space (fixed 512 MB partition — full = no diagnostic bundles, no MPD backup, no kernel upgrade)
+  - `/media/root-rw` backing fs free space (full = overlay cannot grow, OOM imminent)
+  - Memory headroom + `MemAvailable` (would have caught the mympd OOM in v0.7.8.16 hours earlier — surfaces 80 %+ pressure)
+  - Swap pressure (heavy swapping degrades audio path latency)
+  - Pending update (queries `/version` endpoint — operator sees at a glance if a reflash brings a newer release)
+  - Now-playing stream + track (which stream the connected clients actually hear, plus track metadata)
+  - Previous boot end state (info-level — flags kernel panic / power loss vs clean reboot)
+
 ## [0.7.9] — 2026-05-28
 
 > Script-only patch (image_set stays 0.7.7). Network-stack simplification: IPv6 disabled at kernel cmdline by default, with documented opt-out. Resolves a recurring class of dual-stack mDNS / Snapcast discovery failures on consumer LANs.

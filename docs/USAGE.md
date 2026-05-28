@@ -127,7 +127,7 @@ When discovery fails, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — the relev
 
 systemd owns container lifecycle after install (ADR-005). Docker `restart: unless-stopped` handles crashes, systemd handles boot.
 
-- Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`
+- Server: `snapmulti-server.service`, `snapmulti-data-persistence.service` (overlayroot bind-mount for snapserver + myMPD state — see [ADVANCED.md](ADVANCED.md#read-only-filesystem)), `snapmulti-status.timer`, `snapmulti-backup.timer`
 - Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (HDMI clients only)
 - All: `snapmulti-boot-tune.service`, `snapmulti-auto-boot-smoke.service` (acoustic post-boot health cue — see [TROUBLESHOOTING.md](TROUBLESHOOTING.md#health-check-tones) for cue vocabulary and opt-out)
 

@@ -153,4 +153,35 @@ check_boot_health() {
             fail_check "systemd state unexpected: '${sys_state:-unknown}'"
             ;;
     esac
+
+    # Last reboot reason. journalctl --list-boots emits one line per
+    # known boot (negative offset = older). A "clean" previous boot
+    # has a complete end timestamp; a kernel panic / power loss leaves
+    # the previous boot truncated — systemd emits "-" as end time.
+    # Useful when debugging "why did the device reboot last night?".
+    if command -v journalctl >/dev/null 2>&1; then
+        local _prev_boot_line _prev_end _curr_start
+        # Last line whose IDX is the current boot (offset 0); previous
+        # boot is offset -1. journalctl 252+ outputs JSON; 247 outputs
+        # legacy table. Parse legacy table since it's the lowest common
+        # denominator on Bookworm. Format:
+        #   IDX BOOT ID                          FIRST ENTRY       LAST ENTRY
+        #    -1 abc...                           ts-start          ts-end
+        #     0 def...                           ts-start          -- current --
+        _prev_boot_line=$(journalctl --list-boots --no-pager 2>/dev/null \
+            | awk 'NR>1 && $1 == "-1"' | head -1)
+        if [[ -n "$_prev_boot_line" ]]; then
+            # journalctl --list-boots fields:
+            #   $1=IDX $2=BOOT-ID  $3..$6=FIRST-ENTRY (Day Date Time TZ)  $7..$10=LAST-ENTRY (Day Date Time TZ)
+            # We want only the LAST-ENTRY column → start at i=7.
+            _prev_end=$(awk '{for (i=7; i<=NF; i++) printf "%s%s", $i, (i<NF?" ":""); print ""}' <<<"$_prev_boot_line" | sed 's/[[:space:]]*$//')
+            if [[ "$_prev_end" == *"--"* ]]; then
+                warn "Previous boot ended unexpectedly (no clean shutdown marker — kernel panic, power loss, or hard reset)"
+            elif [[ -n "$_prev_end" ]]; then
+                info "Previous boot ended cleanly at: $_prev_end"
+            fi
+        else
+            info "No previous boot recorded in journal (fresh reflash or rotated logs)"
+        fi
+    fi
 }
