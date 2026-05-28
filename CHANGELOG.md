@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.9.1] — 2026-05-28
 
 > Script-only patch (image_set stays 0.7.7). Resolves the v0.7.9 persistence regression. Field-validated on snapvideo: overlay active + `server.json` + `server.json.prev` + 4 groups all survived reboot under `overlayroot="tmpfs"`.
+>
+> **Known limitation:** large NFS/SMB libraries (>10 k tracks) can exceed the install healthcheck window. When that happens, `firstboot.sh` writes `.install-failed`, the `[finalize]` step never runs, and the device boots on plain ext4 (no overlay protection) — even though containers are healthy and the LAN-side appears fine. Pre-set `MPD_START_PERIOD=3600s` in `install.conf` BEFORE flashing the SD card. See [docs/ADVANCED.md — MPD_START_PERIOD](docs/ADVANCED.md#mpd_start_period) and [docs/TROUBLESHOOTING.md — Install marked failed but containers run](docs/TROUBLESHOOTING.md#install-marked-failed-but-containers-run). A dedicated healthcheck-stability grace is queued for a follow-up patch.
 
 ### Fixed
 - **v0.7.9 persistence regression cascade (#527)** — multiple compounding bugs from the v0.7.9 persistence work, all corrected here. The original `snapmulti-data-persistence.service` bind-mounted `/opt/snapmulti/data` over `/media/root-rw/snapmulti-persist/`, but `/media/root-rw/` is itself tmpfs on `overlayroot="tmpfs"` — the bind worked at runtime but the persistent location was wiped at reboot, and the smoke check `[OK] Persistent bind active` actively masked the failure. Replaced with the proven `/boot/firmware/`-backup pattern (FAT32, the only userland-writable path that survives reboot on tmpfs overlayroot):

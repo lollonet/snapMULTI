@@ -46,20 +46,28 @@ Se la tua libreria è su un NAS (Synology, QNAP, server Linux generico, condivis
 
 Naming dei path: le share NAS con **spazi** vengono rifiutate all'installazione (Synology di default `Music Share` → rinomina sul NAS in `Music_Share`). Vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md) se il mount fallisce silenziosamente dopo l'installazione.
 
-> **Rescan MPD su librerie grandi.** Una prima scansione di 10 k+ brani via NFS può richiedere ore di D-state. Usa `scripts/backup-from-sd.sh` sull'SD precedente prima di riflashare — estrae `mpd.db` così MPD fa scansioni incrementali veloci tra reflash.
+> **Librerie grandi (>10 k tracce) — alza `MPD_START_PERIOD` PRIMA di riflashare.**
+> Il budget healthcheck dell'install di default (`max(MPD_START_PERIOD, 180s)`) NON copre una prima scansione a freddo di una libreria NFS/SMB grande. Se MPD non aggancia la porta 6600 in tempo, il verificatore dell'install ritorna non-zero, `firstboot.sh` scrive `/var/lib/snapmulti-installer/.install-failed`, e lo step `[finalize]` (che attiverebbe `overlayroot=tmpfs`) **non viene mai eseguito**. Il dispositivo riparte su ext4 normale — i container alla fine salgono comunque (systemd `Restart=on-failure` li recupera), ma manca la protezione read-only del root. Imposta sempre `MPD_START_PERIOD=3600s` in `install.conf` PRIMA di flashare la SD quando la sorgente musica è NFS/SMB con più di ~10 k tracce. Vedi [TROUBLESHOOTING.it.md — Install marcato fallito ma i container girano](TROUBLESHOOTING.it.md#install-marcato-fallito-ma-i-container-girano) per sintomi + recovery.
 
-### `MPD_START_PERIOD` — estendere la finestra healthcheck MPD all'install
+> **Rescan MPD su librerie grandi.** Una prima scansione di 10 k+ brani via NFS può richiedere ore di D-state. Usa `scripts/backup-from-sd.sh` sull'SD precedente prima di riflashare — estrae `mpd.db` così MPD fa scansioni incrementali veloci tra reflash. Salta il bump di `MPD_START_PERIOD` qui sopra solo se hai un backup `mpd.db` da un'installazione precedente (il db cached si carica in secondi).
 
-Il verificatore di install poll-a l'healthcheck di MPD per `max(MPD_START_PERIOD, 180s)` poi emette fail-warning se MPD sta ancora scansionando. Il default `30s` va bene per librerie locali; scansioni NFS/SMB di librerie grandi servono più tempo.
+### `MPD_START_PERIOD` — estendere la finestra healthcheck MPD all'install <a id="mpd_start_period"></a>
 
-Per uno scenario noto-lento (primo aggancio NAS, nessun backup `mpd.db`, 50 k+ tracce), imposta il periodo PRIMA del reflash:
+Il verificatore di install poll-a l'healthcheck di MPD per `max(MPD_START_PERIOD, 180s)` (una grace esplicita di stabilità healthcheck è in programma per una patch successiva). Se MPD non aggancia la porta 6600 in quella finestra l'install viene marcato fallito.
+
+Default:
+
+| Impostazione | Default | Origine |
+|--------------|---------|---------|
+| `MPD_START_PERIOD` | `30s` | Dimensionato per librerie locali USB / `/audio` — copre una scansione a freddo Pi 4 di ~5 k tracce |
+| floor verificatore install | `180s` | Hardcoded in `verify_services` |
 
 ```ini
 # install.conf — scritto sulla SD boot da prepare-sd.sh
 MPD_START_PERIOD=3600s   # 1 ora — copre scan NFS a freddo di librerie grandi
 ```
 
-Si propaga da `firstboot.sh` → `deploy.sh` → docker-compose dentro l'healthcheck di MPD. Con `mpd.db` restored da install precedente (percorso `backup-from-sd.sh`), il default `30s` basta — MPD legge il db cached in secondi e valida incrementalmente contro il mount live. L'install non si BLOCCA mai se MPD impiega più di `MPD_START_PERIOD` — registra `services not healthy` come warning e prosegue; Docker continua a riprovare l'healthcheck in background, e MPD si auto-recupera appena la scansione finisce.
+Si propaga da `firstboot.sh` → `deploy.sh` → docker-compose dentro lo `start_period` dell'healthcheck di MPD. **Modalità di fallimento se salti il bump**: `verify_services` esce non-zero → marker `.install-failed` → `setup_readonly_fs` non viene mai eseguito → overlay non si attiva al boot 2. Il `Restart=on-failure` di systemd porta comunque su i container autonomamente dopo che l'install si è arreso, quindi il dispositivo SEMBRA sano dalla rete — ma l'install è incompleto. Recovery: riflasha con la variabile ambiente impostata, OPPURE segui il percorso di completamento manuale in [TROUBLESHOOTING.it.md — Install marcato fallito ma i container girano](TROUBLESHOOTING.it.md#install-marcato-fallito-ma-i-container-girano).
 
 ## Configurazione personalizzata — file `.env`
 
