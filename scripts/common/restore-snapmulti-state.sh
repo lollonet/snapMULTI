@@ -41,6 +41,20 @@ load_owner_from_env() {
 
 load_owner_from_env
 
+# Skip restore when overlayroot is inactive (RO mode disabled via
+# ro-mode.sh). In that mode /opt/snapmulti/data/server.json lives
+# directly on ext4 and is already persistent across reboot; the
+# backup mechanism keeps the boot partition copy in sync via the
+# .path unit, but copying it back over the authoritative ext4 file
+# at every boot would (a) waste a write and (b) risk overwriting a
+# fresher live state with a stale backup if the .path unit ever
+# stopped firing during a maintenance window. The natural ext4
+# persistence is the truth in that mode — defer to it.
+if ! mount 2>/dev/null | grep -q ' on / type overlay'; then
+    _log "overlayroot inactive — ext4 is already persistent, skipping restore"
+    exit 0
+fi
+
 # Detect boot partition (same logic as backup-snapmulti-state.sh).
 if [[ -d /boot/firmware ]]; then
     BOOT=/boot/firmware
