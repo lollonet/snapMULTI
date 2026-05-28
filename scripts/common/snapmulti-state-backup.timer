@@ -1,0 +1,18 @@
+[Unit]
+Description=Periodic safety-net snapshot of snapmulti state (catches nested writes)
+Documentation=man:systemd.timer(5)
+
+[Timer]
+# OnBootSec gives the .path unit time to fire from the first snapserver
+# write at boot. After that, every 10 min as a safety net for writes
+# that don't trigger the .path unit (systemd path units are not
+# recursive — writes inside watched subdirectories may not fire).
+# backup-snapmulti-state.sh is idempotent + cheap (small files, atomic
+# mv), so a no-op tick has negligible cost.
+OnBootSec=10min
+OnUnitActiveSec=10min
+Unit=snapmulti-state-backup.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

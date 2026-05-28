@@ -1273,13 +1273,22 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         install -m 755 "$STATE_BACKUP_SCRIPT" /usr/local/bin/backup-snapmulti-state
         state_bk_dir="$(dirname "$STATE_BACKUP_SCRIPT")"
         if [[ -f "$state_bk_dir/snapmulti-state-backup.service" && \
-              -f "$state_bk_dir/snapmulti-state-backup.path" ]]; then
+              -f "$state_bk_dir/snapmulti-state-backup.path" && \
+              -f "$state_bk_dir/snapmulti-state-backup.timer" ]]; then
             install -m 0644 "$state_bk_dir/snapmulti-state-backup.service" /etc/systemd/system/
             install -m 0644 "$state_bk_dir/snapmulti-state-backup.path" /etc/systemd/system/
+            install -m 0644 "$state_bk_dir/snapmulti-state-backup.timer" /etc/systemd/system/
             systemctl daemon-reload
+            # .path = event-driven (low-latency on direct watched-path writes)
+            # .timer = safety net every 10 min for nested writes that .path misses
             systemctl enable --now snapmulti-state-backup.path
+            systemctl enable --now snapmulti-state-backup.timer
+            # Seed: arm watcher catches FUTURE writes only. On a re-run firstboot
+            # where state already exists, run the backup service once to capture
+            # current state (no-op on a truly fresh install).
+            systemctl start snapmulti-state-backup.service 2>/dev/null || true
         fi
-        log_info "snapserver/myMPD state backup path installed"
+        log_info "snapserver/myMPD state backup path + timer installed"
     fi
 fi
 

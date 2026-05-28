@@ -63,9 +63,24 @@ if [[ -z "$MPD_DB" ]]; then
     exit 0
 fi
 
-# Remount boot partition read-write
+# Preserve prior boot partition mount state. Defensive consistency
+# with backup-snapmulti-state.sh: this script's trigger is the
+# snapmulti-backup.timer which doesn't fire during firstboot, but
+# match the safe pattern so a future trigger-on-install path can't
+# leave /boot/firmware ro mid-install.
+boot_was_ro=false
+if findmnt -n -o OPTIONS "$BOOT" 2>/dev/null | tr ',' '\n' | grep -qx ro; then
+    boot_was_ro=true
+fi
+
 mount -o remount,rw "$BOOT" 2>/dev/null || true
-trap '[[ "${MPD_DB:-}" == /tmp/* ]] && rm -f "$MPD_DB"; mount -o remount,ro "$BOOT" 2>/dev/null || true' EXIT
+cleanup_boot_and_temp() {
+    [[ "${MPD_DB:-}" == /tmp/* ]] && rm -f "$MPD_DB"
+    if [[ "$boot_was_ro" == "true" ]]; then
+        mount -o remount,ro "$BOOT" 2>/dev/null || true
+    fi
+}
+trap cleanup_boot_and_temp EXIT
 
 mkdir -p "$BACKUP_DIR/mpd/data"
 

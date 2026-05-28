@@ -142,6 +142,7 @@ function Assert-PreparedSdCard {
         'common/backup-snapmulti-state.sh',
         'common/snapmulti-state-backup.service',
         'common/snapmulti-state-backup.path',
+        'common/snapmulti-state-backup.timer',
         'common/audio/smoke-pass.wav',
         'common/audio/smoke-warn.wav',
         'common/audio/smoke-fail.wav',
