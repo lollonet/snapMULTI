@@ -41,7 +41,7 @@ load_owner_from_env() {
 
 load_owner_from_env
 
-# Detect boot partition (same logic as backup-mpd.sh).
+# Detect boot partition (same logic as backup-snapmulti-state.sh).
 if [[ -d /boot/firmware ]]; then
     BOOT=/boot/firmware
 else
@@ -57,7 +57,7 @@ fi
 restored_any=0
 
 # 1. snapserver group state. The backup file is small and atomic-mv'd
-# by backup-mpd.sh, so a partial read here would only happen if the
+# by backup-snapmulti-state.sh, so a partial read here would only happen if the
 # FAT32 partition is corrupt — let the cp fail loudly in that case.
 if [[ -s "$BACKUP_DIR/data/server.json" ]]; then
     mkdir -p "$INSTALL_DIR/data"
