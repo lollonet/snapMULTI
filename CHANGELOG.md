@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Pi Zero 2W — snapclient IPv6 link-local latch (#521 → #522)** — snapclient's built-in libavahi-client browse occasionally latched onto an IPv6 link-local SRV target that did not route on the local LAN, leaving audio silent with a healthy server visible to every other client. #521 shipped a surgical workaround (`ExecStartPre` pin `--host <IPv4>` into `/etc/default/snapclient`). #522 supersedes it by killing IPv6 at the kernel level — the workaround is removed, snapclient's built-in mDNS auto-rediscovery is restored for free, and the same class of bug stops affecting other consumers (fb-display, future zeroconf code).
+- **mympd crash-loop after ADR-007** — `ghcr.io/jcorporation/mympd` upstream default is `MYMPD_HTTP_HOST=[::]:8180` (dual-stack listen). With IPv6 disabled at kernel level the bind returns `EAFNOSUPPORT` (errno 97) and the container exits, re-spawning every few seconds. Pin `MYMPD_HTTP_HOST=0.0.0.0` in `docker-compose.yml`. Caught immediately after rolling ADR-007 to snapvideo. snapserver / MPD / metadata-service already bind IPv4 explicitly — mympd was the only consumer of the upstream IPv6 default.
 
 ### Removed
 - **PR #521 workaround retired (#522)** — `discover-server-native.sh` + the `ExecStartPre=+/usr/local/sbin/snapmulti-discover-snapserver` line on the Pi Zero 2W drop-in. Native auto-rediscovery restored.
