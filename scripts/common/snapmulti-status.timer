@@ -3,8 +3,12 @@ Description=Periodic snapMULTI system-status snapshot for /status web page
 
 [Timer]
 # Wait for containers to come up before the FIRST snapshot — otherwise
-# the page shows red on every fresh boot, alarming beginners.
-OnBootSec=2min
+# the page shows red on every fresh boot, alarming beginners. 4 min
+# covers MPD startup on Pi 4 8GB + NFS library (observed 3m14s post-
+# boot for the container healthcheck to flip; small margin on top).
+# Slower configs are handled by the adaptive ExecStartPre wait in
+# snapmulti-status.service that polls `docker inspect mpd` for healthy.
+OnBootSec=4min
 # 5-min interval: the page is for beginner self-diagnosis, not real-time
 # incident response. 5min × 4 hours = 48 SD writes (atomic .tmp + mv) —
 # negligible churn vs the boot of the smoke check itself (~2-3 s of
