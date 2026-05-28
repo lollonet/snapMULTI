@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **snapserver + myMPD state persistence (`snapmulti-data-persistence.service`)** — overlayroot's tmpfs upper layer used to wipe `/opt/snapmulti/data/server.json` (snapcast group names, client positions, group memberships) and `/opt/snapmulti/mympd/workdir/` (myMPD smart playlists, custom scripts, theme prefs) on every reboot. New systemd oneshot service binds those paths to `/media/root-rw/snapmulti-persist/` (a directory outside the overlay tree, on the writable backing fs) so all container-written state survives reboot. Generic implementation accepts a list of staged paths; future state additions are 1 LOC. First-run migration copies any existing content from the staged path (live upper layer OR lower-layer post-firstboot) into the persistent location before activating the bind, so no state is lost on upgrade. No-op on non-overlayroot installs.
+
 ## [0.7.9] — 2026-05-28
 
 > Script-only patch (image_set stays 0.7.7). Network-stack simplification: IPv6 disabled at kernel cmdline by default, with documented opt-out. Resolves a recurring class of dual-stack mDNS / Snapcast discovery failures on consumer LANs.

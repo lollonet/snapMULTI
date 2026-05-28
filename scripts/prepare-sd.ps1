@@ -138,6 +138,7 @@ function Assert-PreparedSdCard {
         'common/release-manifest.sh',
         'common/play-smoke-tone.sh',
         'common/auto-boot-smoke.sh',
+        'common/snapmulti-data-setup.sh',
         'common/audio/smoke-pass.wav',
         'common/audio/smoke-warn.wav',
         'common/audio/smoke-fail.wav',
