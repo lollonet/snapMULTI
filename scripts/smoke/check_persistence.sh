@@ -69,7 +69,12 @@ check_persistence() {
         fi
     done
     if [[ "$_mount_ok" != "true" ]]; then
-        warn "Persistent binds missing for: ${_missing[*]} — those paths will reset on reboot"
+        # Unit is active (the setup script exits 0 even when mount --bind
+        # fails — it logs and continues). A missing bind under an active
+        # unit is a real persistence failure: state from this boot will
+        # reset on reboot. fail_check (not warn) is the right gate so
+        # ADR-005 smoke-as-release-gate catches it.
+        fail_check "Persistence unit active but bind-mounts missing: ${_missing[*]} — state will reset on reboot"
     fi
 
     # Sanity: server.json present in the persistent location?
