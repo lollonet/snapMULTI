@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.9.2] — 2026-05-29
+
+> Script-only patch (image_set stays 0.7.7). Bundles the `/status` first-snapshot timing fix (no more misleading red on first boot) and two upstream dep bumps (go-librespot v0.7.3 — likely fix for iPhone-zeroconf loadContext crash; myMPD pinned to v25.0.2 for reproducibility).
+
 ### Changed
 - **go-librespot `v0.7.1` → `v0.7.3`** — upstream release hardens the dealer + accesspoint connection lifecycles ("do not leak previous dealer connection", "harden accesspoint/dealer connection lifecycle", "unify client shutdown around access point and dealer lifecycles", "unblock chunked reader close during chunk prefetch"). Strong candidate fix for the iPhone-zeroconf `loadContext` nil-deref crash observed in v0.7.0/v0.7.1 (`compose rm + up` was the workaround). v0.7.3 also adds zeroconf name update API. Closes #471.
 - **myMPD `:latest` → `:v25.0.2`** — explicit pin replaces drift-tracking `:latest` so a reflash with the same release tag always pulls the same myMPD image. Currently `:latest` and `:v25.0.2` resolve to the same digest, so no behaviour change. Closes #470.
