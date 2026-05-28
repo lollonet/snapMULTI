@@ -22,6 +22,7 @@ import json
 from datetime import datetime
 import logging
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -2235,6 +2236,77 @@ def _read_status_snapshot() -> tuple[dict | None, float | None]:
     return data, age
 
 
+_SYSTEMD_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    # Pre-formatted check_timers.sh / check_systemd output. Group 1: unit,
+    # group 2: literal state phrase, group 3: optional description.
+    (re.compile(r"^(?:Timer|Path unit) (\S+) enabled and active(?: — (.+))?$"), "active"),
+    (re.compile(r"^systemd: (\S+) enabled and active$"), "active"),
+    (re.compile(r"^(?:Timer|Path unit) (\S+) enabled but state is '([^']+)'(?: — (.+))?$"), "broken"),
+    (re.compile(r"^(?:Timer|Path unit) (\S+) NOT installed(?: — (.+))?$"), "missing"),
+    (re.compile(r"^(?:Timer|Path unit) (\S+) is '([^']+)'(?: — (.+))?$"), "disabled"),
+)
+
+_CONTAINER_PATTERN = re.compile(r"^([a-z0-9][a-z0-9_-]+): (healthy|unhealthy|starting|restarting|exited|created|paused|removing|dead)$")
+
+_COMPOSE_NESTED_PATTERN = re.compile(r"^\s+(\w+)/(\S+) -> (\w+)$")
+
+
+def _structured_systemd_row(section: str, msg: str) -> tuple[str, str, str, str] | None:
+    """Parse a smoke record into (unit, state_label, state_class, desc) for
+    tabular rendering. Returns None when the row should fall through to the
+    default flat <li>NAME message</li> form.
+
+    state_class is the CSS modifier ("" / "fail" / "warn") applied to the
+    badge span — keep distinct from the row-level r-pass/r-fail/r-warn so a
+    PASS row about a HEALTHY service can still get a green badge while a
+    WARN row about a STARTING container gets an amber one.
+    """
+    if section in {"Timers", "Systemd"}:
+        for pattern, kind in _SYSTEMD_PATTERNS:
+            m = pattern.match(msg)
+            if not m:
+                continue
+            unit = m.group(1)
+            if kind == "active":
+                # match form: "(Timer|Path unit|systemd:) NAME enabled and active[ — DESC]"
+                desc = (m.group(2) if m.lastindex and m.lastindex >= 2 else "") or ""
+                return unit, "enabled · active", "", desc
+            if kind == "broken":
+                state = m.group(2)
+                desc = (m.group(3) or "") if m.lastindex and m.lastindex >= 3 else ""
+                return unit, f"enabled · {state}", "fail", desc
+            if kind == "missing":
+                desc = (m.group(2) or "") if m.lastindex and m.lastindex >= 2 else ""
+                return unit, "not installed", "fail", desc
+            if kind == "disabled":
+                state = m.group(2)
+                desc = (m.group(3) or "") if m.lastindex and m.lastindex >= 3 else ""
+                return unit, state, "warn", desc
+        return None
+    if section == "Containers":
+        m = _CONTAINER_PATTERN.match(msg)
+        if m:
+            unit, state = m.group(1), m.group(2)
+            state_class = {
+                "healthy": "",
+                "starting": "warn",
+                "restarting": "warn",
+                "paused": "warn",
+                "removing": "warn",
+                "created": "warn",
+            }.get(state, "fail")
+            return unit, state, state_class, ""
+        return None
+    if section == "Compose":
+        m = _COMPOSE_NESTED_PATTERN.match(msg)
+        if m:
+            group, unit, state = m.group(1), m.group(2), m.group(3)
+            state_class = "" if state == "healthy" else ("warn" if state in {"starting", "restarting"} else "fail")
+            return f"{group}/{unit}", state, state_class, ""
+        return None
+    return None
+
+
 def _status_to_html(data: dict | None, age_s: float | None) -> str:
     """Render the snapshot to a beginner-friendly HTML page.
 
@@ -2318,11 +2390,26 @@ def _status_to_html(data: dict | None, age_s: float | None) -> str:
         rows = []
         for r in recs:
             status = r.get("status", "info")
-            msg = html.escape(r.get("msg", ""))
+            raw_msg = r.get("msg", "")
             icon = {"pass": "✓", "fail": "✗", "warn": "⚠", "info": "ℹ"}.get(status, "•")
-            rows.append(
-                f'<li class="r-{status}"><span class="icon">{icon}</span>{msg}</li>'
-            )
+            structured = _structured_systemd_row(sec_name, raw_msg)
+            if structured is not None:
+                unit, state_label, state_class, desc = structured
+                badge_class = f"state-badge {state_class}".strip()
+                desc_html = f'<span class="desc">{html.escape(desc)}</span>' if desc else ""
+                rows.append(
+                    f'<li class="r-{status} row-systemd">'
+                    f'<span class="icon">{icon}</span>'
+                    f'<span class="unit">{html.escape(unit)}</span>'
+                    f'<span class="{badge_class}">{html.escape(state_label)}</span>'
+                    f'{desc_html}'
+                    f"</li>"
+                )
+            else:
+                msg = html.escape(raw_msg)
+                rows.append(
+                    f'<li class="r-{status}"><span class="icon">{icon}</span>{msg}</li>'
+                )
         sec_html_parts.append(
             f"<section><h2>{html.escape(sec_name)}</h2><ul>{''.join(rows)}</ul></section>"
         )
@@ -2444,6 +2531,39 @@ def _render_html_shell(
   .r-warn        {{ color: var(--text); }}
   .r-info .icon {{ color: var(--accent-info); }}
   .r-info        {{ color: var(--text-dim); }}
+  /* Tabular rendering for systemd unit / container rows. Three-column
+     grid: name (monospace) | state badge | description. Falls back to
+     a stacked layout on narrow viewports. */
+  li.row-systemd {{
+    display: grid;
+    grid-template-columns: 1.6em minmax(0, 17em) min-content 1fr;
+    gap: .55rem;
+    align-items: baseline;
+  }}
+  li.row-systemd .unit {{
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: .88em; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }}
+  li.row-systemd .state-badge {{
+    font-size: .68rem; text-transform: uppercase; letter-spacing: .05em;
+    padding: .12rem .5rem; border-radius: .3rem; white-space: nowrap;
+    background: rgba(74,222,128,.18); color: var(--accent-ok);
+    font-weight: 600;
+  }}
+  li.row-systemd .state-badge.fail {{ background: rgba(248,113,113,.18); color: var(--accent-fail); }}
+  li.row-systemd .state-badge.warn {{ background: rgba(251,191,36,.18); color: var(--accent-warn); }}
+  li.row-systemd .desc {{ color: var(--text-dim); font-size: .9em; }}
+  @media (max-width: 600px) {{
+    li.row-systemd {{
+      grid-template-columns: 1.6em 1fr min-content;
+      grid-template-areas: "icon unit badge" ".    desc desc";
+    }}
+    li.row-systemd .icon  {{ grid-area: icon; }}
+    li.row-systemd .unit  {{ grid-area: unit; }}
+    li.row-systemd .state-badge {{ grid-area: badge; }}
+    li.row-systemd .desc  {{ grid-area: desc; }}
+  }}
   code {{
     background: rgba(255,255,255,.06); color: var(--text);
     padding: .12rem .4rem; border-radius: .25rem;
