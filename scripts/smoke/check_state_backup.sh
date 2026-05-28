@@ -69,11 +69,11 @@ check_state_backup() {
         _reported=true
     fi
 
-    # 3. MPD database backup (mpd.db) — the existing cross-reflash backup
-    # we extended for v0.7.9.1 state persistence. Not strictly required
-    # for restore-on-reboot (MPD rebuilds the db on start), but useful to
-    # surface — its absence means snapmulti-backup.timer hasn't produced
-    # an MPD db snapshot yet.
+    # 3. MPD database backup (mpd.db) — cross-reflash continuity
+    # artefact. Not strictly required for restore-on-reboot (MPD
+    # rebuilds the db on start), but useful to surface — its absence
+    # means snapmulti-backup.timer hasn't produced an MPD db snapshot
+    # yet.
     if [[ -f "$_BACKUP_DIR/mpd/data/mpd.db" ]]; then
         local _sz_mb _mt _age_h
         _sz_mb=$(( $(stat -c %s "$_BACKUP_DIR/mpd/data/mpd.db" 2>/dev/null || echo 0) / 1024 / 1024 ))
