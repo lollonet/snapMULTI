@@ -169,7 +169,7 @@ Dopo ogni reflash o aggiornamento in-place, esegui il test di salute sul device 
 
 snapMULTI separa due concetti di versione, così una release di soli script (CHANGELOG, docs, fix nell'installer) non costringe a ricostruire e ripubblicare le immagini Docker:
 
-- **`SNAPMULTI_RELEASE`** — il tag git della release (es. `v0.7.8.12`). Quello che `gh release view` mostra.
+- **`SNAPMULTI_RELEASE`** — il tag git della release (es. `v0.7.8.16`). Quello che `gh release view` mostra.
 - **`SNAPMULTI_IMAGE_SET`** — il tag Docker delle immagini a cui la release si aggancia (es. `0.7.7`). Quello che `docker compose pull` scarica.
 
 La maggior parte delle release incrementa entrambi. Una release di soli script incrementa `SNAPMULTI_RELEASE` e mantiene `SNAPMULTI_IMAGE_SET` all'ultimo valore pubblicato. La fonte di verità è `release-manifest.json` alla radice del repo, copiato sulla SD da `prepare-sd.sh`.
@@ -230,7 +230,7 @@ Il gate bypassa sia `requires_image_rebuild=false` sia il check di esistenza su 
 
 Dopo deploy / reflash:
 
-- Riga info del test di salute: `device-smoke.sh` → sezione `System` → `Release v0.7.8.12 (images 0.7.7)`
+- Riga info del test di salute: `device-smoke.sh` → sezione `System` → `Release v0.7.8.16 (images 0.7.7)`
 - Pacchetto diagnostico: `scripts/diagnostic.sh` produce `meta.txt` con `snapmulti_release=...` e `snapmulti_image_set=...`; il pacchetto include anche il `release-manifest.json` (scrubbato) dalla partizione di boot.
 - `.env` del server: `grep ^SNAPMULTI_ /opt/snapmulti/.env`
 - `.env` del client: `grep ^SNAPMULTI_ /opt/snapclient/.env`
