@@ -139,6 +139,58 @@ assert "grep -q 'OnUnitActiveSec=5min' '$TIMER_UNIT'" \
        'timer fires every 5 min (was 10 min — tighter cadence now timer is primary for server.json)'
 
 echo
+echo "## set -euo pipefail safety on corrupt JSON"
+# Regression: under `set -euo pipefail` a `jq` parse failure in the
+# canonical-hash pipeline used to abort the entire script before
+# reaching the .prev rotation / preservation path. The exact recovery
+# scenario (corrupt $dst) would have killed the backup script,
+# leaving the device unable to self-heal future timer/path backups.
+# Replicate the production guard pattern and assert it survives.
+SBX="$(mktemp -d)"
+trap 'rm -rf "$SBX"' EXIT
+
+cat > "$SBX/src" <<'EOF'
+{"Server":{"Groups":[],"streams":[]}}
+EOF
+echo "GARBAGE NOT JSON" > "$SBX/dst"
+
+guarded_canonical_run() {
+    set -euo pipefail
+    local _canon_src="" _canon_dst=""
+    _canon_src=$(jq -S 'walk(if type == "object" then del(.lastSeen) else . end)' "$SBX/src" 2>/dev/null | sha256sum | cut -d' ' -f1) || _canon_src=""
+    _canon_dst=$(jq -S 'walk(if type == "object" then del(.lastSeen) else . end)' "$SBX/dst" 2>/dev/null | sha256sum | cut -d' ' -f1) || _canon_dst=""
+    if [[ -n "$_canon_src" && -n "$_canon_dst" && "$_canon_src" == "$_canon_dst" ]]; then
+        echo "MATCH"
+    else
+        echo "FALL_THROUGH"
+    fi
+    echo "REACHED_END"
+}
+
+result=$(guarded_canonical_run 2>&1)
+assert '[[ "$result" == *"FALL_THROUGH"* ]]' \
+       'corrupt $dst falls through to rotation path (does not match-skip)'
+assert '[[ "$result" == *"REACHED_END"* ]]' \
+       'guarded pattern survives corrupt JSON under set -euo pipefail (does not abort)'
+
+# Cross-check: same pipeline WITHOUT the `|| _var=""` guard DOES abort.
+# This pins the regression — if someone removes the guard, this test
+# starts failing and reminds them why it's there.
+#
+# Run in a `bash -c` subshell so set -e is not suppressed by the
+# enclosing `$(... || true)` context (bash suspends set -e inside
+# functions called in OR/AND/if contexts; a separate bash invocation
+# resets that suppression so the assignment really does abort).
+unguarded_result=$(bash -c '
+    set -euo pipefail
+    SBX="'"$SBX"'"
+    _canon_src=$(jq -S "walk(if type == \"object\" then del(.lastSeen) else . end)" "$SBX/dst" 2>/dev/null | sha256sum | cut -d" " -f1)
+    echo "UNGUARDED_REACHED canon=$_canon_src"
+' 2>&1 || true)
+assert '[[ "$unguarded_result" != *"UNGUARDED_REACHED"* ]]' \
+       'baseline: unguarded variant DOES abort on corrupt JSON (proves guard is load-bearing)'
+
+echo
 echo "## Summary"
 echo "  Passed: $pass"
 echo "  Failed: $fail"

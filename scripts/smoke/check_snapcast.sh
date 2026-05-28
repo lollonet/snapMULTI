@@ -155,15 +155,23 @@ check_snapcast() {
         err_line=$(grep -E "^error:" <<<"$mpc_out" | head -1)
         fail_check "MPD reports an error: $err_line"
     else
+        # mpc status output shapes (most common first):
+        #   1. Playlist loaded + playing/paused → 3 lines, second is "[state] #N/M time"
+        #   2. Playlist loaded but stopped → 2 lines, second is "[stopped]"
+        #   3. NO playlist loaded → 1 line "volume: ..." only — no [state] bracket
+        # Case 3 was previously reported as "state: unknown" which reads
+        # like a failure. It's actually the most common idle case on
+        # fresh installs (snapserver up, mympd reachable, but no one
+        # has queued anything yet). Make the message say so.
         local state
-        # grep -o exits 1 if no match. MPD in `stopped` state (no
-        # playlist) doesn't emit a bracket-state line at all, so grep
-        # finds nothing — a normal operational case. `|| true` keeps
-        # the pipeline from triggering pipefail; the :-unknown fallback
-        # handles the resulting empty $state.
         state=$(grep -oE "^\[(playing|paused|stopped)\]" <<<"$mpc_out" | tr -d '[]' | head -1 || true)
-        state=${state:-unknown}
-        pass_check "MPD reachable, state: $state"
+        if [[ -n "$state" ]]; then
+            pass_check "MPD reachable, state: $state"
+        elif grep -q "^volume:" <<<"$mpc_out"; then
+            pass_check "MPD reachable, idle (no playlist loaded)"
+        else
+            pass_check "MPD reachable, state: unrecognized (mpc returned no [state] or volume line)"
+        fi
     fi
 
     # MPD scan progress — large NFS libraries take hours on first boot. Surface as INFO so users know the FAIL on `mpd: starting` healthcheck is expected during this window (not a real problem).

@@ -64,11 +64,19 @@ backup_server_json() {
     # heartbeat-only churn, preventing a backup loop on FAT32. Requires
     # jq; without jq we fall through to the unconditional publish path
     # (early in firstboot, before install_dependencies).
+    #
+    # Critical: under `set -euo pipefail`, a `jq` parse failure in the
+    # pipeline below would abort the entire script before reaching the
+    # `.prev` rotation / preservation path — the exact moment we must
+    # NOT abort, because a corrupt $dst is precisely the recovery case
+    # that rotation handles. Guard each $() with `|| _var=""` so a parse
+    # error leaves the hash empty (forcing the canonical-equal check to
+    # be false) and execution continues into the rotation path.
     if [[ -s "$dst" ]] && command -v jq >/dev/null 2>&1 && command -v sha256sum >/dev/null 2>&1; then
-        local _canon_src _canon_dst
-        _canon_src=$(jq -S 'walk(if type == "object" then del(.lastSeen) else . end)' "$src" 2>/dev/null | sha256sum | cut -d' ' -f1)
-        _canon_dst=$(jq -S 'walk(if type == "object" then del(.lastSeen) else . end)' "$dst" 2>/dev/null | sha256sum | cut -d' ' -f1)
-        if [[ -n "$_canon_src" && "$_canon_src" == "$_canon_dst" ]]; then
+        local _canon_src="" _canon_dst=""
+        _canon_src=$(jq -S 'walk(if type == "object" then del(.lastSeen) else . end)' "$src" 2>/dev/null | sha256sum | cut -d' ' -f1) || _canon_src=""
+        _canon_dst=$(jq -S 'walk(if type == "object" then del(.lastSeen) else . end)' "$dst" 2>/dev/null | sha256sum | cut -d' ' -f1) || _canon_dst=""
+        if [[ -n "$_canon_src" && -n "$_canon_dst" && "$_canon_src" == "$_canon_dst" ]]; then
             return 0
         fi
     fi
