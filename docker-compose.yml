@@ -178,6 +178,10 @@ services:
       - ./mpd/playlists:/playlists:ro
     environment:
       - TZ=${TZ:-Europe/Berlin}
+      # Force IPv4-only bind. myMPD default is [::]:8180 (dual-stack v6+v4
+      # mapped) which fails with EAFNOSUPPORT when the host kernel has
+      # IPv6 disabled — see ADR-007.
+      - MYMPD_HTTP_HOST=0.0.0.0
       - MYMPD_HTTP_PORT=8180
       - MYMPD_SSL=false
     # service_started (not service_healthy): myMPD retries MPD connection
