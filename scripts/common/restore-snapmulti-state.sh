@@ -82,12 +82,10 @@ if [[ -s "$BACKUP_DIR/data/server.json" ]]; then
 fi
 
 # 2. myMPD WHOLE workdir (state + config + smartpls + scripts + pics).
-# Narrowing this to state/ alone would silently lose user-customised
-# smart playlists, scripts, theme settings, uploaded cover art on the
-# first reboot — discovered by review on PR #528. The PR #525 bind-
-# mount covered the whole workdir; this restore matches that scope.
-# Skip silently when absent — first-boot devices never had a chance
-# to back up.
+# Narrowing this to state/ alone silently loses user-customised smart
+# playlists, scripts, theme, uploaded cover art on reboot. Skip
+# silently when absent — first-boot devices never had a chance to
+# back up.
 if [[ -d "$BACKUP_DIR/mympd/workdir" ]]; then
     mkdir -p "$INSTALL_DIR/mympd"
     # Replace existing workdir atomically: stage as workdir.restore,

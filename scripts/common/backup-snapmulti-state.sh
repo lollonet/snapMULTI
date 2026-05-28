@@ -4,12 +4,10 @@
 # myMPD user config/playlists/scripts/theme must persist even when
 # MPD is absent, restarting, or still scanning.
 #
-# Scope: matches the PR #525 bind-mount which covered the full
-# /opt/snapmulti/mympd/workdir/ (state + config + smartpls + scripts
-# + pics). Narrowing to state/ alone would silently lose
-# user-customised smart playlists, scripts, theme, uploaded cover
-# art on the first reboot after the user makes those changes —
-# discovered by review on PR #528.
+# Scope: whole /opt/snapmulti/mympd/workdir/ (state + config +
+# smartpls + scripts + pics). Narrowing to state/ alone silently
+# loses user-customised smart playlists, scripts, theme, and
+# uploaded cover art on reboot.
 set -euo pipefail
 
 if [[ -d /opt/snapmulti ]]; then

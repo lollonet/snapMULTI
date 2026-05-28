@@ -51,9 +51,8 @@ check_state_backup() {
     fi
 
     # 2. myMPD WHOLE workdir — state + config + smartpls + scripts + pics.
-    # Scope matches the PR #525 bind-mount: narrowing to state/ alone
-    # silently lost user-customised smart playlists/scripts/theme on
-    # reboot (review on PR #528).
+    # Narrowing to state/ alone silently loses user-customised smart
+    # playlists / scripts / theme on reboot.
     if [[ -d "$_BACKUP_DIR/mympd/workdir" ]]; then
         local _files _mt _age_min _src_mt=0
         _files=$(find "$_BACKUP_DIR/mympd/workdir" -type f 2>/dev/null | wc -l)
