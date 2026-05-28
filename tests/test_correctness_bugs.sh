@@ -141,17 +141,23 @@ assert 'echo "$strip_body" | grep -qF "s/~@~\\\\//g"' \
 echo
 echo "=== Bug C — metadata-service.py fuzzy match removed ==="
 
-# Static: the fuzzy-match path is gone. No `re` import, no `\b` regex,
-# no `re.escape` — the resolver is now exact-match + snapclient- prefix.
+# Static: the fuzzy-match path is gone from client resolution. The
+# resolver is exact-match + snapclient- prefix. We scope to the
+# resolver function: the module may legitimately use `re` elsewhere
+# (e.g. status-page row parser, _structured_systemd_row) — the
+# protected invariant is that CLIENT RESOLUTION stays exact-match,
+# not that the whole module is regex-free.
 # Behavioural coverage lives in tests/test_metadata_hardening.sh.
-assert '! grep -qE "^import re$" "$METADATA"' \
-       '`import re` is gone (fuzzy regex removed)'
+resolve_block=$(grep -A 35 "def _resolve_client_stream" "$METADATA")
 
-assert '! grep -qF "re.escape" "$METADATA"' \
-       'no re.escape() calls remain in metadata-service.py'
+assert '! echo "$resolve_block" | grep -qF "re.escape"' \
+       'no re.escape() calls inside _resolve_client_stream'
+
+assert '! echo "$resolve_block" | grep -qE "re\\.(search|match|fullmatch)"' \
+       'no fuzzy re.search / re.match / re.fullmatch in _resolve_client_stream'
 
 assert '! grep -qF "r\"\\b\"" "$METADATA"' \
-       'no \\b word-boundary regex remains'
+       'no \\b word-boundary regex remains anywhere in the module'
 
 echo
 echo "=== Python syntax ==="

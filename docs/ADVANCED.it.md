@@ -47,13 +47,13 @@ Se la tua libreria è su un NAS (Synology, QNAP, server Linux generico, condivis
 Naming dei path: le share NAS con **spazi** vengono rifiutate all'installazione (Synology di default `Music Share` → rinomina sul NAS in `Music_Share`). Vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md) se il mount fallisce silenziosamente dopo l'installazione.
 
 > **Librerie grandi (>10 k tracce) — alza `MPD_START_PERIOD` PRIMA di riflashare.**
-> Il budget healthcheck dell'install di default (`max(MPD_START_PERIOD, 180s)`) NON copre una prima scansione a freddo di una libreria NFS/SMB grande. Se MPD non aggancia la porta 6600 in tempo, il verificatore dell'install ritorna non-zero, `firstboot.sh` scrive `/var/lib/snapmulti-installer/.install-failed`, e lo step `[finalize]` (che attiverebbe `overlayroot=tmpfs`) **non viene mai eseguito**. Il dispositivo riparte su ext4 normale — i container alla fine salgono comunque (systemd `Restart=on-failure` li recupera), ma manca la protezione read-only del root. Imposta sempre `MPD_START_PERIOD=3600s` in `install.conf` PRIMA di flashare la SD quando la sorgente musica è NFS/SMB con più di ~10 k tracce. Vedi [TROUBLESHOOTING.it.md — Install marcato fallito ma i container girano](TROUBLESHOOTING.it.md#install-marcato-fallito-ma-i-container-girano) per sintomi + recovery.
+> Il budget healthcheck dell'install di default (`max(MPD_START_PERIOD, 180s) + 120s grace`) NON copre una prima scansione a freddo di una libreria NFS/SMB grande. Se MPD non aggancia la porta 6600 in tempo, il verificatore dell'install ritorna non-zero, `firstboot.sh` scrive `/var/lib/snapmulti-installer/.install-failed`, e lo step `[finalize]` (che attiverebbe `overlayroot=tmpfs`) **non viene mai eseguito**. Il dispositivo riparte su ext4 normale — i container alla fine salgono comunque (systemd `Restart=on-failure` li recupera), ma manca la protezione read-only del root. Imposta sempre `MPD_START_PERIOD=3600s` in `install.conf` PRIMA di flashare la SD quando la sorgente musica è NFS/SMB con più di ~10 k tracce. Vedi [TROUBLESHOOTING.it.md — Install marcato fallito ma i container girano](TROUBLESHOOTING.it.md#install-marcato-fallito-ma-i-container-girano) per sintomi + recovery.
 
 > **Rescan MPD su librerie grandi.** Una prima scansione di 10 k+ brani via NFS può richiedere ore di D-state. Usa `scripts/backup-from-sd.sh` sull'SD precedente prima di riflashare — estrae `mpd.db` così MPD fa scansioni incrementali veloci tra reflash. Salta il bump di `MPD_START_PERIOD` qui sopra solo se hai un backup `mpd.db` da un'installazione precedente (il db cached si carica in secondi).
 
 ### `MPD_START_PERIOD` — estendere la finestra healthcheck MPD all'install <a id="mpd_start_period"></a>
 
-Il verificatore di install poll-a l'healthcheck di MPD per `max(MPD_START_PERIOD, 180s)` (una grace esplicita di stabilità healthcheck è in programma per una patch successiva). Se MPD non aggancia la porta 6600 in quella finestra l'install viene marcato fallito.
+Il verificatore di install poll-a l'healthcheck di MPD per `max(MPD_START_PERIOD, 180s) + 120s` grace di stabilità healthcheck. Se MPD non aggancia la porta 6600 in quella finestra l'install viene marcato fallito.
 
 Default:
 
@@ -61,6 +61,7 @@ Default:
 |--------------|---------|---------|
 | `MPD_START_PERIOD` | `30s` | Dimensionato per librerie locali USB / `/audio` — copre una scansione a freddo Pi 4 di ~5 k tracce |
 | floor verificatore install | `180s` | Hardcoded in `verify_services` |
+| grace stabilità healthcheck | `120s` | Hardcoded in `verify_services` (copre l'intervallo di 30 s di Docker fra health-probe + il second-sample check di `verify_compose_stack`) |
 
 ```ini
 # install.conf — scritto sulla SD boot da prepare-sd.sh

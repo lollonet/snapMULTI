@@ -30,10 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > Script-only patch (image_set stays 0.7.7). Network-stack simplification (IPv6 off at kernel level) + expanded status-page coverage. Resolves a class of dual-stack mDNS / Snapcast discovery failures.
 >
-> **Known issue (fixed in [Unreleased]):** `snapmulti-data-persistence.service` shipped in this version does NOT actually persist on the standard `overlayroot="tmpfs"` setup. The smoke check `[OK] Persistent bind active` is misleading. See #527 + the [Unreleased] entry above for the proper fix.
+> **Known issue (fixed in [0.7.9.1]):** `snapmulti-data-persistence.service` shipped in this version does NOT actually persist on the standard `overlayroot="tmpfs"` setup. The smoke check `[OK] Persistent bind active` is misleading. See #527 + the [0.7.9.1] entry above for the proper fix.
 
 ### Added (FAILED — see Known issue)
-- ~~**snapserver + myMPD state persistence (`snapmulti-data-persistence.service`, #525)**~~ — architecturally broken on tmpfs-mode overlayroot. The bind-mount source `/media/root-rw/snapmulti-persist/` was itself tmpfs, wiped at reboot. Replaced in [Unreleased] with `/boot/firmware/` backup pattern.
+- ~~**snapserver + myMPD state persistence (`snapmulti-data-persistence.service`, #525)**~~ — architecturally broken on tmpfs-mode overlayroot. The bind-mount source `/media/root-rw/snapmulti-persist/` was itself tmpfs, wiped at reboot. Replaced in [0.7.9.1] with `/boot/firmware/` backup pattern.
 - **Status page coverage expanded (#525)** — 6 new checks surface previously-invisible state:
   - `/boot/firmware` FAT32 free space (fixed 512 MB partition — full = no diagnostic bundles, no MPD backup, no kernel upgrade)
   - `/media/root-rw` backing fs free space (full = overlay cannot grow, OOM imminent)
