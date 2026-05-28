@@ -460,8 +460,13 @@ unset _cand _discover_src
 step "Installing systemd drop-in override"
 DROPIN_DIR=/etc/systemd/system/snapclient.service.d
 mkdir -p "$DROPIN_DIR"
-{
-    cat <<'EOF'
+# Two-phase write: the awk extractor in .github/workflows/validate.yml
+# lifts the static heredoc (between the marker line and the next EOF)
+# and feeds it to systemd-analyze verify. Embedding an unexpanded
+# ${DISCOVER_SCRIPT:+...} placeholder in the heredoc would survive the
+# extraction verbatim and choke verify, so the optional ExecStartPre
+# line is appended in a separate statement.
+cat > "$DROPIN_DIR/snapmulti-override.conf" <<'EOF'
 # Drop-in override installed by snapMULTI setup-zero2w.sh.
 # Layered on top of the upstream snapclient.service shipped by the
 # badaix snapcast .deb. Survives .deb upgrades.
@@ -478,12 +483,9 @@ RestartSec=5
 LimitRTPRIO=10
 LimitMEMLOCK=infinity
 EOF
-    if [[ -n "$DISCOVER_SCRIPT" ]]; then
-        cat <<EOF
-ExecStartPre=+${DISCOVER_SCRIPT}
-EOF
-    fi
-} > "$DROPIN_DIR/snapmulti-override.conf"
+if [[ -n "$DISCOVER_SCRIPT" ]]; then
+    printf 'ExecStartPre=+%s\n' "$DISCOVER_SCRIPT" >> "$DROPIN_DIR/snapmulti-override.conf"
+fi
 ok "systemd drop-in installed at $DROPIN_DIR/snapmulti-override.conf"
 
 # ── Enable + start ───────────────────────────────────────────────
