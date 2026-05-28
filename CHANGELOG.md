@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8.16] — 2026-05-28
+
+> Script-only patch (image_set stays 0.7.7). mympd OOM fix + udev rule cleanup found during snapvideo log review.
+
+### Fixed
+- **`MYMPD_MEM_LIMIT` default 64M → 128M (#516)** — snapvideo journal caught mympd OOM-killed by the cgroup memcg constraint while serving a 76k-song library (webserver thread peaks above 64M under concurrent cover-art / playlist queries). 128M empirically safe: snapvideo had been bumped manually post-OOM and sits at ~27M idle. New default applies on next reflash; existing `.env` overrides honoured.
+- **USB autosuspend udev rule (#517)** — dropped the `DEVTYPE=="usb_device"` match clause. udev evaluated it against USB *interface* events too (where DEVTYPE != usb_device), logging "Invalid key 'DEVTYPE'" on every rule reload. The remaining `SUBSYSTEM=="usb"` + `TEST=="power/autosuspend"` filter is sufficient; behaviour unchanged, journal noise gone.
+
 ## [0.7.8.15] — 2026-05-27
 
 > Script-only patch (image_set stays 0.7.7). Periodic diagnostic snapshots on /boot/firmware enriched + visible in /status (#514).
