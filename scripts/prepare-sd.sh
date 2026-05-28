@@ -598,7 +598,6 @@ copy_client_files() {
     [[ -f "$CLIENT_DIR/common/scripts/audio-hat-detect.sh" ]] && cp "$CLIENT_DIR/common/scripts/audio-hat-detect.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/discover-server.sh" ]] && cp "$CLIENT_DIR/common/scripts/discover-server.sh" "$dest/scripts/"
-    [[ -f "$CLIENT_DIR/common/scripts/discover-server-native.sh" ]] && cp "$CLIENT_DIR/common/scripts/discover-server-native.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/display.sh" ]] && cp "$CLIENT_DIR/common/scripts/display.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/display-detect.sh" ]] && cp "$CLIENT_DIR/common/scripts/display-detect.sh" "$dest/scripts/"
 
@@ -902,6 +901,28 @@ if [[ -f "$CMDLINE" ]]; then
         fi
     done
     unset _boot_mask_unit BOOT_MASK_UNITS
+
+    # ── Disable IPv6 at kernel level (ADR-007) ────────────────────
+    # snapMULTI is a LAN-only audio appliance. Dual-stack mDNS on
+    # consumer LANs causes Snapcast discovery to occasionally latch
+    # onto IPv6 link-local SRV targets that don't route, leaving the
+    # device silent with a healthy server (see PR #521 for the
+    # surgical workaround that this kernel-level fix supersedes).
+    # Earliest possible disable point: kernel cmdline. Beats sysctl /
+    # NM tweaks because it pre-empts every userland subsystem before
+    # PID 1 starts. Lives on FAT32 /boot/firmware — survives
+    # overlayroot upper-layer wipes. Opt out with DISABLE_IPV6=false
+    # in the prepare-sd environment.
+    if [[ "${DISABLE_IPV6:-true}" == "true" ]]; then
+        if ! ( cmdline_path() { printf '%s\n' "$CMDLINE"; }
+               cmdline_add_token "ipv6.disable=1" ); then
+            echo "  WARNING: Failed to add ipv6.disable=1 to cmdline.txt"
+        else
+            echo "  IPv6 disabled at kernel cmdline (set DISABLE_IPV6=false to keep)"
+        fi
+    else
+        echo "  IPv6 kernel disable skipped (DISABLE_IPV6=false)"
+    fi
 fi
 
 # ── Patch boot scripts ────────────────────────────────────────────

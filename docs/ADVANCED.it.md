@@ -356,6 +356,22 @@ sudo ufw allow 5353/udp   # mDNS (Avahi / Bonjour)
 
 Tabella completa delle porte (con direzione e scopo): [USAGE.it.md](USAGE.it.md).
 
+## IPv6 disattivato per default
+
+snapMULTI disabilita IPv6 per default per evitare fallimenti di discovery mDNS / Snapcast in dual-stack su LAN domestiche. IPv4 è il percorso supportato. Il disable viene aggiunto a `/boot/firmware/cmdline.txt` come `ipv6.disable=1` da `prepare-sd.sh` / `prepare-sd.ps1` ed entra in vigore nel momento più precoce possibile della sequenza di boot (il kernel legge cmdline.txt prima che parta qualsiasi unit).
+
+Utenti avanzati possono ri-abilitare IPv6 impostando `DISABLE_IPV6=false` prima di preparare la SD:
+
+```bash
+DISABLE_IPV6=false ./scripts/prepare-sd.sh /Volumes/bootfs
+```
+
+```powershell
+$env:DISABLE_IPV6='false'; .\scripts\prepare-sd.ps1 -Boot E:\
+```
+
+Per ri-abilitare IPv6 su un device già installato senza reflash: monta la partizione di boot, rimuovi `ipv6.disable=1` da `cmdline.txt`, riavvia. `/boot/firmware/` è FAT32 e scrivibile da qualunque host. Vedi ADR-007 per la motivazione completa.
+
 ## Network QoS
 
 Per reti congestionate o installazioni dove lo stesso Pi vede trasferimenti di file pesanti, `deploy.sh` configura il qdisc `cake` con marcatura DSCP EF sulle porte snapcast (1704/1705) così i pacchetti audio mantengono la priorità a bassa latenza durante la contesa:

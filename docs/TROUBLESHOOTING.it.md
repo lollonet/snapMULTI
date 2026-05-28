@@ -216,6 +216,25 @@ Il problema del rilevamento HAT di solito è `otg_mode=1` o `dr_mode=host` in `c
 
 ---
 
+## IPv6 disattivato — è un problema?
+
+Per default snapMULTI disabilita IPv6 a livello kernel (`ipv6.disable=1` in `cmdline.txt`). Scelta voluta: snapMULTI è un'appliance audio solo-LAN e il dual-stack mDNS / Snapcast causa fallimenti silenti intermittenti su LAN domestiche (vedi ADR-007). `ip -6 addr` che ritorna vuoto su un device snapMULTI è lo stato **atteso**.
+
+Sintomi che **non** dipendono da questa scelta:
+- snapclient non trova il server → verifica che `avahi-browse -rpt _snapcast._tcp` ritorni l'advertiser IPv4
+- App di casting AirPlay / Tidal / Spotify non vede il device → verifica la pubblicazione mDNS su IPv4 con `avahi-browse -rpt _airplay._tcp` ecc.
+- `apt-get update` lento → assicurati che `/etc/apt/apt.conf.d/99force-ipv4` esista (installato in automatico da snapMULTI al primo boot, contiene `Acquire::ForceIPv4 "true";`)
+
+Per ri-abilitare IPv6 su un device:
+
+```bash
+# Monta la partizione di boot da un altro host (FAT32, fuori da overlayroot)
+# Modifica cmdline.txt — rimuovi il token `ipv6.disable=1`
+# Riavvia il Pi
+```
+
+Per un'installazione fresca, imposta `DISABLE_IPV6=false` prima di lanciare `prepare-sd.sh` / `prepare-sd.ps1` (vedi [ADVANCED.it.md](ADVANCED.it.md#ipv6-disattivato-per-default)).
+
 ## Log che servono
 
 ```bash
