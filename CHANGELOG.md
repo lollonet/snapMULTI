@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Pi Zero 2W native — IPv4 pin for snapserver discovery** — snapclient's built-in libavahi-client browse occasionally latched onto an IPv6 link-local SRV target that did not route on the local LAN, leaving audio silent with a healthy server visible to every other client. New `discover-server-native.sh` runs as `ExecStartPre` on `snapclient.service`: scans `_snapcast._tcp` via `avahi-browse`, picks the first IPv4 advertiser, pins `--host <ip>` into `/etc/default/snapclient`. Best-effort: missing tool or no IPv4 result leaves snapclient's own mDNS as fallback (current behaviour).
+
 ## [0.7.8.16] — 2026-05-28
 
 > Script-only patch (image_set stays 0.7.7). mympd OOM fix + udev rule cleanup found during snapvideo log review.
