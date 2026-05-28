@@ -132,7 +132,16 @@ check_snapcast() {
                         ("(no metadata, status=" + ($s.status // "?") + ")")
                       end
                 ' <<<"$rpc_json" 2>/dev/null || true)
-                info "Now playing: group \"$grp_name\" → stream \"$stream_id\" ($track)"
+                # Snapcast groups have a name field that may be the empty
+                # string for the implicit/default group (snapserver doesn't
+                # write a name when the user hasn't grouped clients yet).
+                # jq's `// "default"` doesn't help — empty string is truthy
+                # in jq's null-coalescing. Handle the empty case in shell.
+                if [[ -z "$grp_name" || "$grp_name" == "default" ]]; then
+                    info "Now playing on stream $stream_id: $track"
+                else
+                    info "Now playing on group $grp_name (stream $stream_id): $track"
+                fi
             fi
         fi
     fi

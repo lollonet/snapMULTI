@@ -2261,6 +2261,39 @@ _CONTAINER_PATTERN = re.compile(
 _COMPOSE_NESTED_PATTERN = re.compile(r"^\s+(\w+)/(\S+) -> (\w+)$")
 
 
+_NOISE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^\s*Per-HAT kernel module check skipped\b"),
+    re.compile(r"^\s*Music mount checks: skipped\b"),
+    re.compile(r"^\s*MPD state check skipped\b"),
+    re.compile(r"^\s*No errors in systemd logs\b"),
+    re.compile(r"^\s*No previous boot recorded in journal\b"),
+    re.compile(r"^\s*No audio currently playing\b"),
+)
+
+
+def _is_noise_only_section(records: list[dict]) -> bool:
+    """A section is "noise-only" if it contains only info/pass rows that
+    match one of the known empty-confirmation patterns. Hiding these on
+    a green page reduces scroll length without dropping signal — any
+    real fail/warn or non-matching row keeps the section visible.
+
+    Examples that ARE noise-only (hidden on green):
+      Audio Modules: [info] Per-HAT kernel module check skipped (...)
+      Recent Errors: [pass] No errors in systemd logs (last 10 min)
+      Boot Health:   [info] No previous boot recorded in journal (...)
+    """
+    if not records:
+        return True
+    for r in records:
+        status = r.get("status", "info")
+        if status not in {"info", "pass"}:
+            return False
+        msg = r.get("msg", "")
+        if not any(pat.match(msg) for pat in _NOISE_PATTERNS):
+            return False
+    return True
+
+
 def _structured_systemd_row(section: str, msg: str) -> tuple[str, str, str, str] | None:
     """Parse a smoke record into (unit, state_label, state_class, desc) for
     tabular rendering. Returns None when the row should fall through to the
@@ -2401,10 +2434,29 @@ def _status_to_html(data: dict | None, age_s: float | None) -> str:
 
     sec_html_parts = []
     for sec_name, recs in sections.items():
+        # Skip noise-only sections: when a section has nothing but
+        # known "skipped" / "No errors found" confirmation rows, hide
+        # it entirely. The check itself still ran and would have
+        # surfaced any real fail/warn — those rows don't match the
+        # noise patterns so the section stays visible. Net effect:
+        # the reader doesn't scroll past silent positive confirmations.
+        if _is_noise_only_section(recs):
+            continue
         rows = []
         for r in recs:
             status = r.get("status", "info")
             raw_msg = r.get("msg", "")
+            # Decode systemd-escape `\xNN` sequences so unit names like
+            # `media-nfs\x2dmusic.automount` render as
+            # `media-nfs-music.automount`. The bytes come from
+            # systemd-escape on a mount path containing `-` and are
+            # opaque without decoding. Restricted to `\xNN` (2 hex
+            # digits) to avoid touching legitimate backslash content.
+            raw_msg = re.sub(
+                r"\\x([0-9a-fA-F]{2})",
+                lambda m: chr(int(m.group(1), 16)),
+                raw_msg,
+            )
             icon = {"pass": "✓", "fail": "✗", "warn": "⚠", "info": "ℹ"}.get(status, "•")
             structured = _structured_systemd_row(sec_name, raw_msg)
             if structured is not None:
