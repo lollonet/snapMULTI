@@ -7,11 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.9] — 2026-05-28
+
+> Script-only patch (image_set stays 0.7.7). Network-stack simplification: IPv6 disabled at kernel cmdline by default, with documented opt-out. Resolves a recurring class of dual-stack mDNS / Snapcast discovery failures on consumer LANs.
+
 ### Changed
-- **IPv6 disabled by default on every install (ADR-007)** — `prepare-sd.sh` / `prepare-sd.ps1` now write `ipv6.disable=1` to `/boot/firmware/cmdline.txt` by default. snapMULTI is a LAN-only audio appliance and dual-stack mDNS / Snapcast discovery causes intermittent silent failures on consumer LANs (see PR #521 + the broader Avahi dual-publish race in issue #425). Kernel-level disable pre-empts every userland subsystem, lives outside the overlayroot upper layer, and is reversible by removing the token from `cmdline.txt`. Opt out with `DISABLE_IPV6=false ./scripts/prepare-sd.sh ...` for the rare operator with a hard IPv6 requirement. Documented in [ADVANCED](docs/ADVANCED.md#ipv6-disabled-by-default) + [TROUBLESHOOTING](docs/TROUBLESHOOTING.md#ipv6-disabled--is-this-a-problem). `install-deps.sh` installs `Acquire::ForceIPv4 "true"` apt config so first-boot package fetches don't stall on AAAA timeouts.
+- **IPv6 disabled by default on every install (ADR-007, #522)** — `prepare-sd.sh` / `prepare-sd.ps1` now write `ipv6.disable=1` to `/boot/firmware/cmdline.txt` by default. snapMULTI is a LAN-only audio appliance and dual-stack mDNS / Snapcast discovery causes intermittent silent failures on consumer LANs (see #521 + the broader Avahi dual-publish race in #425). Kernel-level disable pre-empts every userland subsystem, lives outside the overlayroot upper layer, and is reversible by removing the token from `cmdline.txt`. Opt out with `DISABLE_IPV6=false ./scripts/prepare-sd.sh ...` for the rare operator with a hard IPv6 requirement. Documented in [ADVANCED](docs/ADVANCED.md#ipv6-disabled-by-default) + [TROUBLESHOOTING](docs/TROUBLESHOOTING.md#ipv6-disabled--is-this-a-problem). `install-deps.sh` installs `Acquire::ForceIPv4 "true"` apt config so first-boot package fetches don't stall on AAAA timeouts.
+
+### Fixed
+- **Pi Zero 2W — snapclient IPv6 link-local latch (#521 → #522)** — snapclient's built-in libavahi-client browse occasionally latched onto an IPv6 link-local SRV target that did not route on the local LAN, leaving audio silent with a healthy server visible to every other client. #521 shipped a surgical workaround (`ExecStartPre` pin `--host <IPv4>` into `/etc/default/snapclient`). #522 supersedes it by killing IPv6 at the kernel level — the workaround is removed, snapclient's built-in mDNS auto-rediscovery is restored for free, and the same class of bug stops affecting other consumers (fb-display, future zeroconf code).
 
 ### Removed
-- **PR #521 workaround retired** — `discover-server-native.sh` + the `ExecStartPre=+/usr/local/sbin/snapmulti-discover-snapserver` line on the Pi Zero 2W drop-in. With IPv6 killed at kernel level snapclient's built-in mDNS browse only sees IPv4 records, so the `--host` pinning is redundant. Its removal also restores snapclient's auto-rediscovery on server-IP change — a benefit the surgical workaround had cost.
+- **PR #521 workaround retired (#522)** — `discover-server-native.sh` + the `ExecStartPre=+/usr/local/sbin/snapmulti-discover-snapserver` line on the Pi Zero 2W drop-in. Native auto-rediscovery restored.
 
 ## [0.7.8.16] — 2026-05-28
 
