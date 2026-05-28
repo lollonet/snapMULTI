@@ -1217,8 +1217,9 @@ EOF
 # prior snapshot with.
 #######################################
 install_snapmulti_state_restore() {
-    step "Installing /usr/local/sbin/restore-snapmulti-state"
+    step "Installing snapmulti state restore + event-driven backup"
 
+    # 1) Restore script (consumed by snapmulti-server.service ExecStartPre).
     local script_src="" script_dst="/usr/local/sbin/restore-snapmulti-state"
     local cand
     for cand in \
@@ -1236,6 +1237,44 @@ install_snapmulti_state_restore() {
     fi
     install -m 0755 "$script_src" "$script_dst"
     ok "Installed $script_dst"
+
+    # 2) Backup mechanism (path-watched, event-driven). Symmetric with
+    # firstboot.sh installation — without these units, deploy.sh-only
+    # paths (manual install on existing Linux host, bypassing firstboot)
+    # would wire restore as ExecStartPre but never populate the boot-
+    # partition backup, leaving restore a perpetual no-op.
+    local backup_src="" backup_dst="/usr/local/bin/backup-snapmulti-state"
+    for cand in \
+        "${SCRIPT_DIR:-$(dirname "${BASH_SOURCE[0]}")}/common/backup-snapmulti-state.sh" \
+        "$PROJECT_ROOT/scripts/common/backup-snapmulti-state.sh" \
+        "/boot/firmware/snapmulti/common/backup-snapmulti-state.sh"; do
+        if [[ -f "$cand" ]]; then
+            backup_src="$cand"
+            break
+        fi
+    done
+    if [[ -z "$backup_src" ]]; then
+        warn "backup-snapmulti-state.sh not staged — state changes will NOT be backed up to boot partition"
+        return 0
+    fi
+    install -m 0755 "$backup_src" "$backup_dst"
+    ok "Installed $backup_dst"
+
+    local bk_dir
+    bk_dir="$(dirname "$backup_src")"
+    if [[ -f "$bk_dir/snapmulti-state-backup.service" && \
+          -f "$bk_dir/snapmulti-state-backup.path" ]]; then
+        install -m 0644 "$bk_dir/snapmulti-state-backup.service" /etc/systemd/system/
+        install -m 0644 "$bk_dir/snapmulti-state-backup.path"    /etc/systemd/system/
+        systemctl daemon-reload
+        if systemctl enable --now snapmulti-state-backup.path >/dev/null 2>&1; then
+            ok "snapmulti-state-backup.path enabled and active"
+        else
+            warn "snapmulti-state-backup.path could not be enabled — state changes will NOT be backed up"
+        fi
+    else
+        warn "snapmulti-state-backup.{service,path} not staged alongside backup-snapmulti-state.sh — backup units skipped"
+    fi
 }
 
 #######################################
