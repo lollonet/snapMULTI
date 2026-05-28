@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.9.1] — 2026-05-28
+
+> Script-only patch (image_set stays 0.7.7). Resolves the v0.7.9 persistence regression. Field-validated on snapvideo: overlay active + `server.json` + `server.json.prev` + 4 groups all survived reboot under `overlayroot="tmpfs"`.
+
 ### Fixed
 - **v0.7.9 persistence regression cascade (#527)** — multiple compounding bugs from the v0.7.9 persistence work, all corrected here. The original `snapmulti-data-persistence.service` bind-mounted `/opt/snapmulti/data` over `/media/root-rw/snapmulti-persist/`, but `/media/root-rw/` is itself tmpfs on `overlayroot="tmpfs"` — the bind worked at runtime but the persistent location was wiped at reboot, and the smoke check `[OK] Persistent bind active` actively masked the failure. Replaced with the proven `/boot/firmware/`-backup pattern (FAT32, the only userland-writable path that survives reboot on tmpfs overlayroot):
   - **Backup trigger** is event-driven via `snapmulti-state-backup.path` (systemd path unit watching `server.json` + myMPD workdir) — low-latency (~1 sec). Plus `snapmulti-state-backup.timer` every 10 min as a safety net for nested writes that path units don't fire on (systemd `.path` is not recursive into subdirectories).
