@@ -53,7 +53,7 @@ Path naming: NAS shares with **spaces** are rejected at install time (Synology d
 
 ### `MPD_START_PERIOD` — extend the install-time MPD healthcheck window <a id="mpd_start_period"></a>
 
-The install verifier polls MPD healthcheck for up to `max(MPD_START_PERIOD, 180s)` (an explicit healthcheck-stability grace on top is planned for a follow-up patch). If MPD has not bound port 6600 in that window the install is marked failed.
+The install verifier polls MPD healthcheck for up to `max(MPD_START_PERIOD, 180s) + 120s` healthcheck-stability grace. If MPD has not bound port 6600 in that window the install is marked failed.
 
 Defaults:
 
@@ -61,6 +61,7 @@ Defaults:
 |---------|---------|--------|
 | `MPD_START_PERIOD` | `30s` | Sized for local USB / `/audio` libraries — covers a Pi 4 cold scan of ~5 k tracks |
 | install verifier floor | `180s` | Hardcoded in `verify_services` |
+| healthcheck stability grace | `120s` | Hardcoded in `verify_services` (covers Docker's 30 s health-probe interval + `verify_compose_stack` second-sample check) |
 
 ```ini
 # install.conf — written to the SD card boot partition by prepare-sd.sh
@@ -102,7 +103,7 @@ sudo /opt/snapmulti/scripts/ro-mode.sh disable   # then reboot
 sudo /opt/snapmulti/scripts/ro-mode.sh enable    # then reboot
 ```
 
-> **Exceptions — state that survives overlayroot wipes:** `snapmulti-state-backup.path` snapshots snapserver `server.json` (group state) + myMPD `state/` subdir to `/boot/firmware/snapmulti-backup/` when those paths change. `snapmulti-backup.timer` separately backs up MPD `mpd.db` on boot/daily cadence. On every boot, `restore-snapmulti-state` (wired as `ExecStartPre` on `snapmulti-server.service`) copies the state backup back into `/opt/snapmulti/` before containers start. v0.7.9's `snapmulti-data-persistence.service` bind-mount approach was removed in v0.7.9.1 (see #527) — it was a no-op on tmpfs-mode overlayroot.
+> **Exceptions — state that survives overlayroot wipes:** `snapmulti-state-backup.path` snapshots myMPD `state/` subdir to `/boot/firmware/snapmulti-backup/` on change (event-driven). `snapmulti-state-backup.timer` runs every 5 min for snapserver `server.json` — it cannot be event-driven because snapserver rewrites that file every ~3 s to refresh client `lastSeen` heartbeats. `backup-snapmulti-state.sh` short-circuits on canonical equality (sort keys + strip `lastSeen` + sha256) so no-op ticks cost zero FAT32 writes. `snapmulti-backup.timer` separately backs up MPD `mpd.db` on boot/daily cadence. On every boot, `restore-snapmulti-state` (wired as `ExecStartPre` on `snapmulti-server.service`) copies the state backup back into `/opt/snapmulti/` before containers start. v0.7.9's `snapmulti-data-persistence.service` bind-mount approach was removed in v0.7.9.1 (see #527) — it was a no-op on tmpfs-mode overlayroot.
 
 `/boot/firmware/cmdline.txt` is owned by `scripts/common/cmdline-manager.sh` — don't hand-edit it. See ADR-003 for the rationale.
 
@@ -153,7 +154,7 @@ Full schema: [Snapcast JSON-RPC v2.0.0](https://github.com/badaix/snapcast/blob/
 
 After install, systemd owns container lifecycle (ADR-005). Docker `restart: unless-stopped` handles crashes, systemd handles boot.
 
-- Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`, `snapmulti-state-backup.path`
+- Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`, `snapmulti-state-backup.path` (myMPD), `snapmulti-state-backup.timer` (server.json + safety net)
 - Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (HDMI clients only)
 - All: `snapmulti-boot-tune.service` (CPU governor, USB autosuspend, WiFi powersave)
 

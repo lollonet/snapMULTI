@@ -8,8 +8,8 @@
 #   - snapmulti-status.timer       : 5-min status snapshot (issue #177)
 #   - snapmulti-diagnostics.timer  : 30-min diagnostic dump (rotation)
 #   - snapmulti-backup.timer       : daily 4am MPD db backup
-#   - snapmulti-state-backup.path  : event-driven snapserver/myMPD state backup
-#   - snapmulti-state-backup.timer : safety net every 10 min (catches nested writes .path doesn't fire on)
+#   - snapmulti-state-backup.path  : event-driven myMPD state backup (server.json excluded — lastSeen heartbeat loop)
+#   - snapmulti-state-backup.timer : 5-min server.json backup + safety net for myMPD nested writes
 #   - snapclient-discover.timer    : mDNS rediscovery for client failover
 # A timer that is enabled-but-not-active means firstboot installed it
 # but something later disabled it (e.g. a partial reflash). A timer
@@ -97,8 +97,8 @@ check_timers() {
     _check_timer "snapmulti-status.timer"       "5-min status snapshot for /status web" server
     _check_timer "snapmulti-diagnostics.timer"  "30-min diagnostic snapshots for /var/lib/snapmulti-diagnostics" server
     _check_timer "snapmulti-backup.timer"       "daily MPD database backup to boot partition (cross-reflash continuity)" server
-    _check_path  "snapmulti-state-backup.path"  "snapserver/myMPD state backup to boot partition on change (event-driven)" server
-    _check_timer "snapmulti-state-backup.timer" "10-min safety-net backup for nested myMPD writes the .path unit doesn't fire on" server
+    _check_path  "snapmulti-state-backup.path"  "myMPD state backup on change — server.json excluded (lastSeen heartbeat loop)" server
+    _check_timer "snapmulti-state-backup.timer" "5-min server.json backup + safety net for myMPD writes (canonical-equal short-circuit skips no-op publishes)" server
 
     # Client-side scheduled features. snapclient-discover.timer drives
     # the multi-server failover mechanism (PR #285); without it, a

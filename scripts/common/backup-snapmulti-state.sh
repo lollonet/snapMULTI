@@ -56,6 +56,23 @@ backup_server_json() {
 
     mkdir -p "$dst_dir"
 
+    # Canonical-equal short-circuit. snapserver rewrites server.json every
+    # ~3 s to refresh client `lastSeen` heartbeats. Those rewrites do not
+    # change any state worth persisting — comparing the canonicalized
+    # (sorted keys, lastSeen stripped) source against the same projection
+    # of the existing backup lets us skip the publish entirely on
+    # heartbeat-only churn, preventing a backup loop on FAT32. Requires
+    # jq; without jq we fall through to the unconditional publish path
+    # (early in firstboot, before install_dependencies).
+    if [[ -s "$dst" ]] && command -v jq >/dev/null 2>&1 && command -v sha256sum >/dev/null 2>&1; then
+        local _canon_src _canon_dst
+        _canon_src=$(jq -S 'walk(if type == "object" then del(.lastSeen) else . end)' "$src" 2>/dev/null | sha256sum | cut -d' ' -f1)
+        _canon_dst=$(jq -S 'walk(if type == "object" then del(.lastSeen) else . end)' "$dst" 2>/dev/null | sha256sum | cut -d' ' -f1)
+        if [[ -n "$_canon_src" && "$_canon_src" == "$_canon_dst" ]]; then
+            return 0
+        fi
+    fi
+
     # Stage to temp first. cp can fail mid-write on disk-full or FAT32
     # fragmentation; checking exit code lets us preserve any prior good
     # backup instead of publishing a partial file.
