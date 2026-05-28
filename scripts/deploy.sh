@@ -1410,6 +1410,20 @@ main() {
     install_systemd_service
     start_services
     verify_services
+    # Seed the state backup AFTER verify_services: snapserver has now
+    # written initial server.json so the seed captures real state. The
+    # seed at install_snapmulti_state_restore time was a no-op on fresh
+    # installs (file didn't exist yet); this catches that. Best-effort
+    # — if the seed fails the .path watcher + .timer safety net still
+    # cover subsequent state changes.
+    if systemctl list-unit-files snapmulti-state-backup.service --no-legend 2>/dev/null \
+            | grep -q snapmulti-state-backup.service; then
+        if systemctl start snapmulti-state-backup.service >/dev/null 2>&1; then
+            ok "snapmulti-state-backup seeded (post-services) with current server.json"
+        else
+            warn "post-services seed failed — boot-partition backup will catch up at next state change or .timer tick (10 min)"
+        fi
+    fi
     write_version
 
     show_status

@@ -70,15 +70,37 @@ fi
 
 restored_any=0
 
-# 1. snapserver group state. The backup file is small and atomic-mv'd
-# by backup-snapmulti-state.sh, so a partial read here would only happen if the
-# FAT32 partition is corrupt — let the cp fail loudly in that case.
-if [[ -s "$BACKUP_DIR/data/server.json" ]]; then
+# 1. snapserver group state. Validate before restoring — backup file
+# could be a partial cp (rare FAT32 corruption or interrupted backup).
+# Pattern: try current → fall back to .prev → fail loud if both rotten.
+# This script runs as ExecStartPre on snapmulti-server.service with
+# no `-` prefix, so a clean fail blocks the unit (intentional —
+# silently booting with empty state would be worse data loss).
+_restore_server_json_candidate() {
+    local _candidate="$1"
+    [[ -s "$_candidate" ]] || return 1
+    (( $(wc -c < "$_candidate") >= 64 )) || return 1
+    if command -v jq >/dev/null 2>&1; then
+        jq -e . "$_candidate" >/dev/null 2>&1 || return 1
+    fi
     mkdir -p "$INSTALL_DIR/data"
-    cp "$BACKUP_DIR/data/server.json" "$INSTALL_DIR/data/server.json"
+    cp "$_candidate" "$INSTALL_DIR/data/server.json" || return 1
     chown "$PUID:$PGID" "$INSTALL_DIR/data/server.json" 2>/dev/null || true
-    _log "restored snapserver state: $INSTALL_DIR/data/server.json ($(wc -c < "$INSTALL_DIR/data/server.json") bytes)"
-    restored_any=1
+    return 0
+}
+
+if [[ -s "$BACKUP_DIR/data/server.json" || -s "$BACKUP_DIR/data/server.json.prev" ]]; then
+    if _restore_server_json_candidate "$BACKUP_DIR/data/server.json"; then
+        _log "restored snapserver state: $INSTALL_DIR/data/server.json ($(wc -c < "$INSTALL_DIR/data/server.json") bytes)"
+        restored_any=1
+    elif _restore_server_json_candidate "$BACKUP_DIR/data/server.json.prev"; then
+        _log "WARN: $BACKUP_DIR/data/server.json was corrupt/invalid; restored from .prev fallback"
+        restored_any=1
+    else
+        _log "FATAL: both server.json and server.json.prev are corrupt/invalid; refusing to restart snapserver with empty state"
+        _log "       inspect $BACKUP_DIR/data/ on the boot partition and remove the bad file(s) to clear this state"
+        exit 1
+    fi
 fi
 
 # 2. myMPD WHOLE workdir (state + config + smartpls + scripts + pics).
