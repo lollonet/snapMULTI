@@ -104,7 +104,7 @@ services:
   # Open Spotify app → Connect to a device → Select "<hostname> Spotify"
   # Metadata + playback control via meta_go-librespot.py (Snapcast plugin)
   librespot:
-    image: ghcr.io/devgianlu/go-librespot:v0.7.1
+    image: ghcr.io/devgianlu/go-librespot:v0.7.3
     container_name: librespot
     restart: unless-stopped
     network_mode: host
@@ -159,7 +159,7 @@ services:
           memory: ${SPOTIFY_MEM_RESERVE:-128M}
 
   mympd:
-    image: ghcr.io/jcorporation/mympd/mympd:latest
+    image: ghcr.io/jcorporation/mympd/mympd:v25.0.2
     container_name: mympd
     restart: unless-stopped
     network_mode: host
