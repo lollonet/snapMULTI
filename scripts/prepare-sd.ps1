@@ -180,7 +180,6 @@ function Assert-PreparedSdCard {
             'client/scripts/diagnostic.sh',
             'client/scripts/audio-hat-detect.sh',
             'client/scripts/discover-server.sh',
-            'client/scripts/discover-server-native.sh',
             'client/scripts/display.sh',
             'client/scripts/display-detect.sh',
             'client/scripts/common/install-deps.sh',
@@ -945,6 +944,22 @@ if (Test-Path $cmdline) {
             Write-Host "  Added systemd.mask=$unit to cmdline.txt"
         }
     }
+
+    # Disable IPv6 at kernel level (ADR-007). LAN-only audio appliance
+    # — dual-stack mDNS causes Snapcast discovery to occasionally latch
+    # IPv6 link-local. Earliest disable point. Opt out via env var.
+    $disableIpv6 = $env:DISABLE_IPV6
+    if (-not $disableIpv6) { $disableIpv6 = 'true' }
+    if ($disableIpv6 -eq 'true') {
+        $ipv6Flag = 'ipv6.disable=1'
+        if ($content -notmatch ('\b' + [regex]::Escape($ipv6Flag) + '\b')) {
+            $content = "$content $ipv6Flag"
+            Write-Host '  IPv6 disabled at kernel cmdline (set DISABLE_IPV6=false to keep)'
+        }
+    } else {
+        Write-Host '  IPv6 kernel disable skipped (DISABLE_IPV6=false)'
+    }
+
     [System.IO.File]::WriteAllText($cmdline, "$content`n", $Utf8NoBom)
 }
 

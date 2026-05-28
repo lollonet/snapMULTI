@@ -71,6 +71,19 @@ install_dependencies() {
     log_info "Waiting for apt lock..."
     _wait_for_apt_lock
 
+    # ADR-007: snapMULTI disables IPv6 at kernel cmdline level. apt
+    # may still try AAAA lookups against debian.org/Docker mirrors and
+    # time out (1-5 s per fetch) before falling back to IPv4. Force
+    # IPv4 explicitly so first-boot installs aren't slowed by retries
+    # against a deliberately-dead stack. Skipped silently when the
+    # operator opted to keep IPv6 enabled.
+    if [[ "$(cat /proc/cmdline 2>/dev/null)" == *ipv6.disable=1* ]]; then
+        if [[ ! -f /etc/apt/apt.conf.d/99force-ipv4 ]]; then
+            echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4 || \
+                log_warn "Could not write /etc/apt/apt.conf.d/99force-ipv4 (apt may stall on AAAA lookups)"
+        fi
+    fi
+
     log_info "Refreshing package index..."
     if ! apt-get update >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
         log_warn "apt-get update failed — upgrade may be incomplete"

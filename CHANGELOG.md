@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- **Pi Zero 2W native — IPv4 pin for snapserver discovery** — snapclient's built-in libavahi-client browse occasionally latched onto an IPv6 link-local SRV target that did not route on the local LAN, leaving audio silent with a healthy server visible to every other client. New `discover-server-native.sh` runs as `ExecStartPre` on `snapclient.service`: scans `_snapcast._tcp` via `avahi-browse`, picks the first IPv4 advertiser, pins `--host <ip>` into `/etc/default/snapclient`. Best-effort: missing tool or no IPv4 result leaves snapclient's own mDNS as fallback (current behaviour).
+### Changed
+- **IPv6 disabled by default on every install (ADR-007)** — `prepare-sd.sh` / `prepare-sd.ps1` now write `ipv6.disable=1` to `/boot/firmware/cmdline.txt` by default. snapMULTI is a LAN-only audio appliance and dual-stack mDNS / Snapcast discovery causes intermittent silent failures on consumer LANs (see PR #521 + the broader Avahi dual-publish race in issue #425). Kernel-level disable pre-empts every userland subsystem, lives outside the overlayroot upper layer, and is reversible by removing the token from `cmdline.txt`. Opt out with `DISABLE_IPV6=false ./scripts/prepare-sd.sh ...` for the rare operator with a hard IPv6 requirement. Documented in [ADVANCED](docs/ADVANCED.md#ipv6-disabled-by-default) + [TROUBLESHOOTING](docs/TROUBLESHOOTING.md#ipv6-disabled--is-this-a-problem). `install-deps.sh` installs `Acquire::ForceIPv4 "true"` apt config so first-boot package fetches don't stall on AAAA timeouts.
+
+### Removed
+- **PR #521 workaround retired** — `discover-server-native.sh` + the `ExecStartPre=+/usr/local/sbin/snapmulti-discover-snapserver` line on the Pi Zero 2W drop-in. With IPv6 killed at kernel level snapclient's built-in mDNS browse only sees IPv4 records, so the `--host` pinning is redundant. Its removal also restores snapclient's auto-rediscovery on server-IP change — a benefit the surgical workaround had cost.
 
 ## [0.7.8.16] — 2026-05-28
 

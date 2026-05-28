@@ -7,10 +7,17 @@
 useDefault = true
 
 [allowlist]
-description = "Synthetic fixtures in tests/ are not real credentials"
+description = "Synthetic fixtures + public kernel flags are not real credentials"
 paths = [
     # Test fixtures may include token-shaped placeholders to exercise
     # anonymisation/redaction code. These are NOT real credentials.
     '''tests/.*\.sh$''',
     '''tests/.*\.py$''',
+]
+regexes = [
+    # Public kernel cmdline flag (ADR-007). Assigned to a variable in
+    # prepare-sd.sh / .ps1 — generic-api-key fires on the value's
+    # entropy. It is a publicly-documented kernel parameter, never a
+    # secret.
+    '''ipv6\.disable=1''',
 ]
