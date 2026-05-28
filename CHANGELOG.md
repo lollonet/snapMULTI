@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`snapmulti-status`: delay first snapshot until MPD healthy (#533)** — `OnBootSec` bumped 2 min → 4 min (covers observed 3m14s MPD startup time on Pi 4 + NFS library); adaptive `ExecStartPre` polls `docker inspect mpd` for healthy state up to 5 min so slow configs (Pi Zero, large libraries, cold NFS scans) no longer surface a misleading red `/status` on first boot. Steady-state cost ~0.1 s (loop exits on first iteration). If MPD stays unhealthy past the wait the snapshot still publishes — page shows the real FAIL rather than silently skipping.
+
 ## [0.7.9.1] — 2026-05-28
 
 > Script-only patch (image_set stays 0.7.7). Resolves the v0.7.9 persistence regression. Field-validated on snapvideo: overlay active + `server.json` + `server.json.prev` + 4 groups all survived reboot under `overlayroot="tmpfs"`.
