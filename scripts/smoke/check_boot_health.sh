@@ -171,8 +171,10 @@ check_boot_health() {
         _prev_boot_line=$(journalctl --list-boots --no-pager 2>/dev/null \
             | awk 'NR>1 && $1 == "-1"' | head -1)
         if [[ -n "$_prev_boot_line" ]]; then
-            # Field 5+ is the LAST ENTRY timestamp (FRI YYYY-MM-DD HH:MM:SS TZ)
-            _prev_end=$(awk '{for (i=5; i<=NF; i++) printf "%s%s", $i, (i<NF?" ":""); print ""}' <<<"$_prev_boot_line" | sed 's/[[:space:]]*$//')
+            # journalctl --list-boots fields:
+            #   $1=IDX $2=BOOT-ID  $3..$6=FIRST-ENTRY (Day Date Time TZ)  $7..$10=LAST-ENTRY (Day Date Time TZ)
+            # We want only the LAST-ENTRY column → start at i=7.
+            _prev_end=$(awk '{for (i=7; i<=NF; i++) printf "%s%s", $i, (i<NF?" ":""); print ""}' <<<"$_prev_boot_line" | sed 's/[[:space:]]*$//')
             if [[ "$_prev_end" == *"--"* ]]; then
                 warn "Previous boot ended unexpectedly (no clean shutdown marker — kernel panic, power loss, or hard reset)"
             elif [[ -n "$_prev_end" ]]; then
