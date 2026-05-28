@@ -1100,12 +1100,12 @@ Description=snapMULTI Docker Compose Server
 Requires=docker.service
 After=docker.service network-online.target avahi-daemon.service snapmulti-data-persistence.service
 Wants=network-online.target avahi-daemon.service snapmulti-data-persistence.service
-# Block startup until project root + /audio (FIFO dir) + /data (the
-# bind-mount established by snapmulti-data-persistence.service) are
-# mounted. RequiresMountsFor on /data ensures the persistence unit
-# completed and the bind is active before compose starts the
-# snapserver container that bind-mounts ./data into itself.
-RequiresMountsFor=${PROJECT_ROOT} ${PROJECT_ROOT}/audio ${PROJECT_ROOT}/data${music_mount_clause}
+# Block startup until project root + /audio (FIFO dir) are mounted; avoids
+# a Docker race where compose starts before NFS/USB attaches /music or /audio.
+# The After=/Wants= clauses above gate on snapmulti-data-persistence.service
+# completion so the /opt/snapmulti/data bind-mount is in place before
+# snapserver's container bind-mount evaluates.
+RequiresMountsFor=${PROJECT_ROOT} ${PROJECT_ROOT}/audio${music_mount_clause}
 # NOTE on snapcast 0.35 mDNS reconnect bug: when avahi-daemon restarts,
 # snapserver's libavahi-client connection drops and the daemon never
 # re-publishes \`_snapcast._tcp\`. We previously used
