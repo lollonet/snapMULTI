@@ -2239,14 +2239,24 @@ def _read_status_snapshot() -> tuple[dict | None, float | None]:
 _SYSTEMD_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     # Pre-formatted check_timers.sh / check_systemd output. Group 1: unit,
     # group 2: literal state phrase, group 3: optional description.
-    (re.compile(r"^(?:Timer|Path unit) (\S+) enabled and active(?: — (.+))?$"), "active"),
+    (
+        re.compile(r"^(?:Timer|Path unit) (\S+) enabled and active(?: — (.+))?$"),
+        "active",
+    ),
     (re.compile(r"^systemd: (\S+) enabled and active$"), "active"),
-    (re.compile(r"^(?:Timer|Path unit) (\S+) enabled but state is '([^']+)'(?: — (.+))?$"), "broken"),
+    (
+        re.compile(
+            r"^(?:Timer|Path unit) (\S+) enabled but state is '([^']+)'(?: — (.+))?$"
+        ),
+        "broken",
+    ),
     (re.compile(r"^(?:Timer|Path unit) (\S+) NOT installed(?: — (.+))?$"), "missing"),
     (re.compile(r"^(?:Timer|Path unit) (\S+) is '([^']+)'(?: — (.+))?$"), "disabled"),
 )
 
-_CONTAINER_PATTERN = re.compile(r"^([a-z0-9][a-z0-9_-]+): (healthy|unhealthy|starting|restarting|exited|created|paused|removing|dead)$")
+_CONTAINER_PATTERN = re.compile(
+    r"^([a-z0-9][a-z0-9_-]+): (healthy|unhealthy|starting|restarting|exited|created|paused|removing|dead)$"
+)
 
 _COMPOSE_NESTED_PATTERN = re.compile(r"^\s+(\w+)/(\S+) -> (\w+)$")
 
@@ -2301,7 +2311,11 @@ def _structured_systemd_row(section: str, msg: str) -> tuple[str, str, str, str]
         m = _COMPOSE_NESTED_PATTERN.match(msg)
         if m:
             group, unit, state = m.group(1), m.group(2), m.group(3)
-            state_class = "" if state == "healthy" else ("warn" if state in {"starting", "restarting"} else "fail")
+            state_class = (
+                ""
+                if state == "healthy"
+                else ("warn" if state in {"starting", "restarting"} else "fail")
+            )
             return f"{group}/{unit}", state, state_class, ""
         return None
     return None
@@ -2396,13 +2410,15 @@ def _status_to_html(data: dict | None, age_s: float | None) -> str:
             if structured is not None:
                 unit, state_label, state_class, desc = structured
                 badge_class = f"state-badge {state_class}".strip()
-                desc_html = f'<span class="desc">{html.escape(desc)}</span>' if desc else ""
+                desc_html = (
+                    f'<span class="desc">{html.escape(desc)}</span>' if desc else ""
+                )
                 rows.append(
                     f'<li class="r-{status} row-systemd">'
                     f'<span class="icon">{icon}</span>'
                     f'<span class="unit">{html.escape(unit)}</span>'
                     f'<span class="{badge_class}">{html.escape(state_label)}</span>'
-                    f'{desc_html}'
+                    f"{desc_html}"
                     f"</li>"
                 )
             else:
