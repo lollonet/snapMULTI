@@ -1239,7 +1239,15 @@ install_snapmulti_data_persistence() {
     install -m 0755 "$script_src" "$script_dst"
     ok "Installed $script_dst"
 
-    cat > /etc/systemd/system/snapmulti-data-persistence.service <<'EOF'
+    # Unquoted heredoc so ${PROJECT_ROOT} expands at unit-generation
+    # time. EnvironmentFile=- (with leading dash) is non-fatal when
+    # .env is absent (non-overlayroot / test environments). This
+    # propagates PUID/PGID from the operator's .env into the persist
+    # setup script — otherwise the persistent dirs are always created
+    # as 1000:1000 and a container running as a non-default uid (e.g.
+    # PUID=1001) cannot write into the bind-mounted location, silently
+    # losing state on every flush despite the smoke gate reporting OK.
+    cat > /etc/systemd/system/snapmulti-data-persistence.service <<EOF
 [Unit]
 Description=snapMULTI persistent snapserver data dir (overlayroot bypass)
 DefaultDependencies=no
@@ -1250,8 +1258,9 @@ ConditionPathExists=/media/root-rw
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+EnvironmentFile=-${PROJECT_ROOT}/.env
 ExecStart=/usr/local/sbin/snapmulti-data-setup
-# Best-effort umount on stop. Each line is independent (`-`) so a
+# Best-effort umount on stop. Each line is independent (\`-\`) so a
 # missing mount (e.g. mympd workdir bind was never established on
 # a fresh server-only install where the dir didn't exist) doesn't
 # fail the stop. Add new paths here as STAGED_PATHS in the setup
