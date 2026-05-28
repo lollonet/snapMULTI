@@ -48,13 +48,63 @@ backup_server_json() {
     local src="$INSTALL_DIR/data/server.json"
     local dst_dir="$BACKUP_DIR/data"
     local tmp="$dst_dir/server.json.tmp.$$"
+    local dst="$dst_dir/server.json"
+    local prev="$dst_dir/server.json.prev"
 
     [[ -s "$src" ]] || return 0
     (( $(wc -c < "$src") >= 64 )) || return 0
 
     mkdir -p "$dst_dir"
-    cp "$src" "$tmp"
-    mv "$tmp" "$dst_dir/server.json"
+
+    # Stage to temp first. cp can fail mid-write on disk-full or FAT32
+    # fragmentation; checking exit code lets us preserve any prior good
+    # backup instead of publishing a partial file.
+    if ! cp "$src" "$tmp"; then
+        rm -f "$tmp"
+        logger -t backup-snapmulti-state "server.json: cp to temp failed, preserving prior backup"
+        return 0
+    fi
+
+    # Size sanity — published file must be at least as big as the
+    # minimum we would have accepted from source.
+    if (( $(wc -c < "$tmp") < 64 )); then
+        rm -f "$tmp"
+        logger -t backup-snapmulti-state "server.json: temp is smaller than minimum threshold, preserving prior backup"
+        return 0
+    fi
+
+    # JSON validity (jq is in our install-deps.sh). If jq is missing
+    # (e.g. early in firstboot before install_dependencies completes),
+    # skip the validation rather than blocking the backup.
+    if command -v jq >/dev/null 2>&1; then
+        if ! jq -e . "$tmp" >/dev/null 2>&1; then
+            rm -f "$tmp"
+            logger -t backup-snapmulti-state "server.json: temp is not valid JSON, preserving prior backup"
+            return 0
+        fi
+    fi
+
+    # Rotate: current → .prev, then publish temp. Validate the
+    # existing current before promoting it: after a restore-from-
+    # .prev cycle, the current file on the boot partition is still
+    # the corrupt copy that triggered the fallback. Blindly rotating
+    # it to .prev would clobber the known-good fallback. Discard the
+    # invalid current instead, keeping the existing .prev as our
+    # grace generation. Same gates as the source validation above.
+    if [[ -s "$dst" ]]; then
+        local _dst_valid=true
+        (( $(wc -c < "$dst") >= 64 )) || _dst_valid=false
+        if [[ "$_dst_valid" == "true" ]] && command -v jq >/dev/null 2>&1; then
+            jq -e . "$dst" >/dev/null 2>&1 || _dst_valid=false
+        fi
+        if [[ "$_dst_valid" == "true" ]]; then
+            mv "$dst" "$prev"
+        else
+            rm -f "$dst"
+            logger -t backup-snapmulti-state "server.json: existing current is corrupt; discarded without rotation to preserve .prev"
+        fi
+    fi
+    mv "$tmp" "$dst"
     backed_up=1
 }
 
