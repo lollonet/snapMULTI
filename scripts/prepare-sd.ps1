@@ -951,9 +951,9 @@ if (Test-Path $cmdline) {
     $disableIpv6 = $env:DISABLE_IPV6
     if (-not $disableIpv6) { $disableIpv6 = 'true' }
     if ($disableIpv6 -eq 'true') {
-        $ipv6Token = 'ipv6.disable=1'
-        if ($content -notmatch ('\b' + [regex]::Escape($ipv6Token) + '\b')) {
-            $content = "$content $ipv6Token"
+        $ipv6Flag = 'ipv6.disable=1'
+        if ($content -notmatch ('\b' + [regex]::Escape($ipv6Flag) + '\b')) {
+            $content = "$content $ipv6Flag"
             Write-Host '  IPv6 disabled at kernel cmdline (set DISABLE_IPV6=false to keep)'
         }
     } else {
