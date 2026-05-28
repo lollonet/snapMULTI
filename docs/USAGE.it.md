@@ -127,7 +127,7 @@ Quando la discovery non funziona, vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.i
 
 Dopo l'installazione systemd possiede il ciclo di vita dei container (ADR-005). `restart: unless-stopped` di Docker gestisce i crash, systemd gestisce il boot.
 
-- Server: `snapmulti-server.service` (con `ExecStartPre=restore-snapmulti-state` per ripristinare gruppi snapcast + stato myMPD da `/boot/firmware/snapmulti-backup/` — vedi [ADVANCED.it.md](ADVANCED.it.md#filesystem-read-only)), `snapmulti-status.timer`, `snapmulti-backup.timer` (backup database MPD), `snapmulti-state-backup.path` (backup event-driven dello stato snapserver/myMPD)
+- Server: `snapmulti-server.service` (con `ExecStartPre=restore-snapmulti-state` per ripristinare gruppi snapcast + stato myMPD da `/boot/firmware/snapmulti-backup/` — vedi [ADVANCED.it.md](ADVANCED.it.md#filesystem-read-only)), `snapmulti-status.timer`, `snapmulti-backup.timer` (backup database MPD), `snapmulti-state-backup.path` (backup event-driven dello stato myMPD), `snapmulti-state-backup.timer` (intervallo 5 min per `server.json` di snapserver — gli heartbeat `lastSeen` ogni ~3 s escludono un trigger event-driven)
 - Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (solo client HDMI)
 - Tutti: `snapmulti-boot-tune.service`, `snapmulti-auto-boot-smoke.service` (segnale audio del test di salute al boot — vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md#toni-test-salute) per vocabolario e opt-out)
 

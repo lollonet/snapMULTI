@@ -176,6 +176,11 @@ assert 'grep -qE "using systemd \\.automount" "$DEPLOY_SH"' \
 assert 'grep -qE "RequiresMountsFor=\\\${PROJECT_ROOT} \\\${PROJECT_ROOT}/audio\\\${music_mount_clause}" "$DEPLOY_SH"' \
        'RequiresMountsFor template still includes only project_root + audio (clause stays empty for network)'
 
+SMOKE_MOUNTS_SH="$SCRIPT_DIR/../scripts/smoke/check_mounts.sh"
+
+assert 'grep -q "is already active (share mounted; automount enabled for next boot)" "$SMOKE_MOUNTS_SH"' \
+       'mount smoke accepts active .mount as valid even when .automount is inactive'
+
 echo
 echo "=== system-tune.sh — defensive overlayroot setup ==="
 

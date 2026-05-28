@@ -34,18 +34,44 @@ check_state_backup() {
     _now=$(date +%s)
 
     # 1. snapserver server.json — the small atomic file with group state.
+    # Freshness can't use plain mtime because snapserver rewrites this
+    # file every ~3 s to refresh client lastSeen heartbeats. Compare the
+    # canonical projection (sorted keys, lastSeen stripped) — if equal,
+    # the backup IS up-to-date with the user-meaningful state. Falls
+    # back to a generous mtime tolerance when jq is unavailable.
     if [[ -f "$_BACKUP_DIR/data/server.json" ]]; then
-        local _sz _mt _age_min _src_mt=0
+        local _sz _mt _age_min
         _sz=$(stat -c %s "$_BACKUP_DIR/data/server.json" 2>/dev/null || echo 0)
         _mt=$(stat -c %Y "$_BACKUP_DIR/data/server.json" 2>/dev/null || echo 0)
         _age_min=$(( (_now - _mt) / 60 ))
-        if [[ -f /opt/snapmulti/data/server.json ]]; then
-            _src_mt=$(stat -c %Y /opt/snapmulti/data/server.json 2>/dev/null || echo 0)
-        fi
-        if (( _src_mt > _mt + 60 )); then
-            warn "snapserver state backup behind live server.json — restore would load stale state on next reboot. Check snapmulti-state-backup.path."
+        if [[ -f /opt/snapmulti/data/server.json ]] && command -v jq >/dev/null 2>&1 && command -v sha256sum >/dev/null 2>&1; then
+            # Guard each $() with `|| _var=""` so a `jq` parse error on
+            # truncated/corrupt server.json doesn't propagate through
+            # `set -euo pipefail` and abort the whole smoke run. Hash
+            # failure → empty string → falls through to the mtime
+            # fallback below, where corruption surfaces as a stale-
+            # backup WARN instead of a silent /status outage.
+            local _canon_src="" _canon_dst=""
+            _canon_src=$(jq -S 'walk(if type == "object" then del(.lastSeen) else . end)' /opt/snapmulti/data/server.json 2>/dev/null | sha256sum | cut -d' ' -f1) || _canon_src=""
+            _canon_dst=$(jq -S 'walk(if type == "object" then del(.lastSeen) else . end)' "$_BACKUP_DIR/data/server.json" 2>/dev/null | sha256sum | cut -d' ' -f1) || _canon_dst=""
+            if [[ -n "$_canon_src" && -n "$_canon_dst" && "$_canon_src" == "$_canon_dst" ]]; then
+                pass_check "snapserver state backup up-to-date: server.json (${_sz} B, ${_age_min} min old, canonical-equal)"
+            elif [[ -z "$_canon_src" || -z "$_canon_dst" ]]; then
+                # At least one file failed to parse — surface as warn
+                # so the operator notices, instead of silently passing
+                # via mtime fallback when the content itself is bad.
+                warn "snapserver state backup canonical hash failed (live or backup server.json may be corrupt) — see /opt/snapmulti/data/server.json and $_BACKUP_DIR/data/server.json"
+            else
+                warn "snapserver state backup behind live server.json (canonical diff present) — next snapmulti-state-backup.timer tick will reconcile (5 min max)"
+            fi
         else
-            pass_check "snapserver state backup fresh: server.json (${_sz} B, ${_age_min} min old)"
+            local _src_mt=0
+            [[ -f /opt/snapmulti/data/server.json ]] && _src_mt=$(stat -c %Y /opt/snapmulti/data/server.json 2>/dev/null || echo 0)
+            if (( _src_mt > _mt + 600 )); then
+                warn "snapserver state backup mtime behind live server.json by >10 min — restore would load stale state on next reboot"
+            else
+                pass_check "snapserver state backup fresh: server.json (${_sz} B, ${_age_min} min old, mtime fallback)"
+            fi
         fi
         _reported=true
     fi

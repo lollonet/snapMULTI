@@ -8,15 +8,18 @@
 # unit for NFS/SMB music shares. The pattern is:
 #   - `.automount` is enabled (WantedBy=multi-user.target)
 #   - `.mount` is NOT enabled directly — it is fired on first access
-# Whether the actual mount has happened depends on whether MPD has
-# already scanned the library; in steady state both should be active.
+# Whether the actual mount has happened depends on whether MPD has already
+# scanned the library. On some systemd versions the .automount unit no longer
+# reports active once the companion .mount is already mounted; that is valid
+# because the share is reachable and the .automount remains enabled for the
+# next boot.
 # The previous form (eager `.mount` enable) made `snapmulti-server.service`
 # hard-depend on the share — a slow NAS killed startup of every service
 # in the stack, including those that don't touch music at all.
 #
-# This module asserts the post-PR-#334 state holds: the automount unit
-# exists, is enabled, and is active. It also surfaces whether the mount
-# fired (informational — not a fail when MPD has not scanned yet).
+# This module asserts the post-PR-#334 state holds: the automount unit exists
+# and is enabled, the .mount is not eager-enabled, and either the automount is
+# active or the mount has already fired.
 
 # shellcheck disable=SC2154
 
@@ -133,11 +136,13 @@ check_mounts() {
             ;;
     esac
 
-    # 3. The .automount must be active (running). Without this the
-    # watch on the mount point is not in place and MPD's first
-    # readdir() will get an empty directory instead of triggering NFS.
+    # 3. Either the .automount is active (watching) OR the .mount has already
+    # fired. The latter is valid after MPD has scanned the library or firstboot
+    # did an immediate mount probe.
     if systemctl is-active --quiet "$automount_name" 2>/dev/null; then
         pass_check "$automount_name is active (watching $music_path)"
+    elif systemctl is-active --quiet "$mount_name" 2>/dev/null; then
+        pass_check "$mount_name is already active (share mounted; automount enabled for next boot)"
     else
         fail_check "$automount_name is NOT active — first access to $music_path will not trigger the mount"
     fi

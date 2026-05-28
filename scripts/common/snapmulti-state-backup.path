@@ -1,9 +1,13 @@
 [Unit]
-Description=Watch snapMULTI runtime state for boot-partition backup
+Description=Watch snapMULTI myMPD runtime state for boot-partition backup
 
 [Path]
-PathChanged=/opt/snapmulti/data/server.json
-PathModified=/opt/snapmulti/data/server.json
+# server.json is intentionally NOT watched here: snapserver rewrites it
+# every ~3 s with refreshed `lastSeen` heartbeats per client, which would
+# trigger backup-snapmulti-state.service in a tight loop and churn the
+# FAT32 boot partition. server.json is captured by snapmulti-state-backup.timer
+# (5 min interval) + the canonical-equal short-circuit in backup-snapmulti-state.sh
+# (skips publish when only lastSeen changed).
 PathChanged=/opt/snapmulti/mympd/workdir/state
 PathModified=/opt/snapmulti/mympd/workdir/state
 Unit=snapmulti-state-backup.service

@@ -72,9 +72,12 @@ assert 'echo "$resolve_block" | grep -qF "snapclient-"' \
 assert 'echo "$resolve_block" | grep -qF "client_id in self._client_stream_map"' \
        '_resolve_client_stream tries exact match first'
 
-# `re` import should be gone since no other place uses it.
-assert '! grep -qE "^import re$" "$SVC"' \
-       'unused `import re` removed (fuzzy regex deleted)'
+# The original belt-and-suspenders check banned `import re` outright
+# under the rationale "no other place uses it". The status-page row
+# parser (_structured_systemd_row) now legitimately uses pre-compiled
+# patterns to tabularise systemd / container rows. The protected
+# invariant remains: _resolve_client_stream itself must not use re.
+# That's already covered by the re.search assertion above (line 66+).
 
 # Functional: replicate the resolver and prove "Sala" no longer collides.
 python3 - <<'PY'

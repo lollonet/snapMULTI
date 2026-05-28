@@ -46,20 +46,29 @@ If your library lives on a NAS (Synology, QNAP, generic Linux server, Windows sh
 
 Path naming: NAS shares with **spaces** are rejected at install time (Synology defaults `Music Share` → rename on the NAS to `Music_Share`). See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if the mount silently fails post-install.
 
-> **MPD rescan on big libraries.** A first scan of a 10 k+ song library over NFS can take hours of D-state. Use `scripts/backup-from-sd.sh` on the old SD card before reflashing — it extracts `mpd.db` so MPD does fast incremental scans across reflashes.
+> **Large libraries (>10 k tracks) — bump `MPD_START_PERIOD` BEFORE reflashing.**
+> The default install healthcheck budget (`max(MPD_START_PERIOD, 180s) + 120s grace`) does NOT cover a first cold scan of a large NFS/SMB library. When MPD doesn't bind port 6600 in time the install verifier returns non-zero, `firstboot.sh` writes `/var/lib/snapmulti-installer/.install-failed`, and the `[finalize]` step (which would enable `overlayroot=tmpfs`) **never runs**. The device then boots on plain ext4 — containers eventually come up (systemd `Restart=on-failure` recovers them), but the read-only root protection is missing. Always set `MPD_START_PERIOD=3600s` in `install.conf` BEFORE flashing the SD card when the music source is NFS/SMB with more than ~10 k tracks. See [TROUBLESHOOTING.md — Install marked failed but containers run](TROUBLESHOOTING.md#install-marked-failed-but-containers-run) for the symptoms + recovery.
 
-### `MPD_START_PERIOD` — extend the install-time MPD healthcheck window
+> **MPD rescan on big libraries.** A first scan of a 10 k+ song library over NFS can take hours of D-state. Use `scripts/backup-from-sd.sh` on the old SD card before reflashing — it extracts `mpd.db` so MPD does fast incremental scans across reflashes. Skip the `MPD_START_PERIOD` bump above only if you have a `mpd.db` backup from a previous install (the cached db loads in seconds).
 
-The install verifier polls MPD healthcheck for up to `max(MPD_START_PERIOD, 180s)` then fails-warning if MPD is still scanning. Default `30s` is fine for local libraries; NFS/SMB scans of large libraries need more.
+### `MPD_START_PERIOD` — extend the install-time MPD healthcheck window <a id="mpd_start_period"></a>
 
-For a known-slow first-scan scenario (e.g. fresh NAS attach, no `mpd.db` backup, 50 k+ tracks), set the period BEFORE reflashing:
+The install verifier polls MPD healthcheck for up to `max(MPD_START_PERIOD, 180s) + 120s` healthcheck-stability grace. If MPD has not bound port 6600 in that window the install is marked failed.
+
+Defaults:
+
+| Setting | Default | Source |
+|---------|---------|--------|
+| `MPD_START_PERIOD` | `30s` | Sized for local USB / `/audio` libraries — covers a Pi 4 cold scan of ~5 k tracks |
+| install verifier floor | `180s` | Hardcoded in `verify_services` |
+| healthcheck stability grace | `120s` | Hardcoded in `verify_services` (covers Docker's 30 s health-probe interval + `verify_compose_stack` second-sample check) |
 
 ```ini
 # install.conf — written to the SD card boot partition by prepare-sd.sh
 MPD_START_PERIOD=3600s   # 1 hour — covers cold NFS scans of large libraries
 ```
 
-This propagates through `firstboot.sh` → `deploy.sh` → docker-compose into MPD's healthcheck. With `mpd.db` restored from a previous install (the `backup-from-sd.sh` path), the default `30s` is sufficient — MPD reads the cached database in seconds and incrementally validates against the live mount. The install still doesn't HANG if MPD takes longer than `MPD_START_PERIOD` — it logs `services not healthy` as a warning and proceeds; Docker keeps retrying the healthcheck in background, and MPD self-recovers once the scan completes.
+This propagates through `firstboot.sh` → `deploy.sh` → docker-compose into MPD's healthcheck `start_period`. **Failure mode if you skip this**: `verify_services` exits non-zero → `.install-failed` marker → `setup_readonly_fs` never runs → overlay never activates at boot 2. systemd's `Restart=on-failure` still brings the containers up autonomously after the install gives up, so the device LOOKS healthy from the network — but the install is incomplete. Recovery: re-reflash with the env var set, OR follow the manual completion path in [TROUBLESHOOTING.md — Install marked failed but containers run](TROUBLESHOOTING.md#install-marked-failed-but-containers-run).
 
 ## Custom config — `.env` files
 
@@ -94,7 +103,7 @@ sudo /opt/snapmulti/scripts/ro-mode.sh disable   # then reboot
 sudo /opt/snapmulti/scripts/ro-mode.sh enable    # then reboot
 ```
 
-> **Exceptions — state that survives overlayroot wipes:** `snapmulti-state-backup.path` snapshots snapserver `server.json` (group state) + myMPD `state/` subdir to `/boot/firmware/snapmulti-backup/` when those paths change. `snapmulti-backup.timer` separately backs up MPD `mpd.db` on boot/daily cadence. On every boot, `restore-snapmulti-state` (wired as `ExecStartPre` on `snapmulti-server.service`) copies the state backup back into `/opt/snapmulti/` before containers start. v0.7.9's `snapmulti-data-persistence.service` bind-mount approach was removed in v0.7.9.1 (see #527) — it was a no-op on tmpfs-mode overlayroot.
+> **Exceptions — state that survives overlayroot wipes:** `snapmulti-state-backup.path` snapshots myMPD `state/` subdir to `/boot/firmware/snapmulti-backup/` on change (event-driven). `snapmulti-state-backup.timer` runs every 5 min for snapserver `server.json` — it cannot be event-driven because snapserver rewrites that file every ~3 s to refresh client `lastSeen` heartbeats. `backup-snapmulti-state.sh` short-circuits on canonical equality (sort keys + strip `lastSeen` + sha256) so no-op ticks cost zero FAT32 writes. `snapmulti-backup.timer` separately backs up MPD `mpd.db` on boot/daily cadence. On every boot, `restore-snapmulti-state` (wired as `ExecStartPre` on `snapmulti-server.service`) copies the state backup back into `/opt/snapmulti/` before containers start. v0.7.9's `snapmulti-data-persistence.service` bind-mount approach was removed in v0.7.9.1 (see #527) — it was a no-op on tmpfs-mode overlayroot.
 
 `/boot/firmware/cmdline.txt` is owned by `scripts/common/cmdline-manager.sh` — don't hand-edit it. See ADR-003 for the rationale.
 
@@ -145,7 +154,7 @@ Full schema: [Snapcast JSON-RPC v2.0.0](https://github.com/badaix/snapcast/blob/
 
 After install, systemd owns container lifecycle (ADR-005). Docker `restart: unless-stopped` handles crashes, systemd handles boot.
 
-- Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`, `snapmulti-state-backup.path`
+- Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`, `snapmulti-state-backup.path` (myMPD), `snapmulti-state-backup.timer` (server.json + safety net)
 - Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (HDMI clients only)
 - All: `snapmulti-boot-tune.service` (CPU governor, USB autosuspend, WiFi powersave)
 

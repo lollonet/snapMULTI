@@ -166,6 +166,46 @@ The cues also fire automatically after every boot (`snapmulti-auto-boot-smoke.se
 
 **If still broken.** Reflash the SD with the corrected NAS path — snapMULTI is reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)) and a fresh install only takes 10–15 min. Manual recovery without reflash is possible but not officially supported; it requires editing `/etc/snapmulti-smb-credentials` and the systemd `.mount`/`.automount` units by hand. MPD library scan over NFS is slow on the first run — see [ADVANCED.md — Music library](ADVANCED.md#music-library-on-the-network) for the `mpd.db` backup trick.
 
+## Install marked failed but containers run <a id="install-marked-failed-but-containers-run"></a>
+
+**Symptoms.** SSH into the device works, `docker ps` shows snapserver / myMPD / metadata-service `Up (healthy)`, snapweb answers on port 1780 — but `/boot/firmware/snapmulti-diag-install-failed-*.tar.gz` exists, the `/status` page reports `[FAIL] writable root but Docker driver is fuse-overlayfs`, and `mount | grep ' on / type'` shows `ext4` instead of `overlay`.
+
+**Likely cause.** First-boot install reached the deploy step but `verify_services` returned non-zero (most commonly: MPD on a large NFS/SMB library exceeded the install healthcheck window — see [ADVANCED.md — MPD_START_PERIOD](ADVANCED.md#mpd_start_period)). `firstboot.sh` then wrote `/var/lib/snapmulti-installer/.install-failed` and aborted **before** the `[finalize]` step that would have written `overlayroot=tmpfs` to `cmdline.txt`. systemd's `Restart=on-failure` on `snapmulti-server.service` brought the containers up autonomously after the install gave up, masking the missing finalize step.
+
+**Confirm this is the state.**
+
+```bash
+[[ -f /var/lib/snapmulti-installer/.install-failed ]] && echo "INSTALL DID NOT COMPLETE"
+mount | grep -q ' on / type overlay' || echo "OVERLAY NOT ACTIVE"
+[[ -s /etc/overlayroot.local.conf ]] || echo "overlayroot config missing — finalize never ran"
+ls /boot/firmware/snapmulti-diag-install-failed-*.tar.gz 2>/dev/null
+```
+
+If all four signal "not done", the install genuinely did not complete.
+
+**Try this.** Re-reflash is the supported path. Before flashing, bump the MPD healthcheck window so the install survives the first cold scan:
+
+```ini
+# install.conf on the SD card boot partition (prepare-sd.sh writes this file)
+MPD_START_PERIOD=3600s
+```
+
+The 1-hour budget is empirically enough for cold NFS scans up to ~100 k tracks on Pi 4. Pull the diagnostic bundle off the failed SD first (`/boot/firmware/snapmulti-diag-install-failed-*.tar.gz`) for the GitHub issue.
+
+**Manual retry without reflash** (not officially supported — re-reflash is the supported path). The installer skips work once `.install-failed` exists; clear it and rerun the script directly (`firstboot.sh` is idempotent — it skips steps already done and resumes from the failure point):
+
+```bash
+# Bump the MPD healthcheck window first if a slow NFS scan was the cause
+sudo sed -i 's/^MPD_START_PERIOD=.*/MPD_START_PERIOD=3600s/' /opt/snapmulti/.env
+# Clear the failure marker
+sudo rm /var/lib/snapmulti-installer/.install-failed
+# Rerun firstboot from the copy on the boot partition (where prepare-sd put it)
+sudo bash /boot/firmware/snapmulti/firstboot.sh
+sudo reboot
+```
+
+After the reboot, re-run the smoke check (`sudo bash /opt/snapmulti/scripts/device-smoke.sh --server`) and verify `mount | grep ' on / type overlay'` reports the overlay is active.
+
 ## Docker / "no space left on device"
 
 **Symptoms.** Containers fail to start with `no space left on device` in `docker compose logs`. `df -h` shows the rootfs nearly full or shows the overlay tmpfs full.

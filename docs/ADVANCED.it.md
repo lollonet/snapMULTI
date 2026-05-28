@@ -46,20 +46,29 @@ Se la tua libreria è su un NAS (Synology, QNAP, server Linux generico, condivis
 
 Naming dei path: le share NAS con **spazi** vengono rifiutate all'installazione (Synology di default `Music Share` → rinomina sul NAS in `Music_Share`). Vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md) se il mount fallisce silenziosamente dopo l'installazione.
 
-> **Rescan MPD su librerie grandi.** Una prima scansione di 10 k+ brani via NFS può richiedere ore di D-state. Usa `scripts/backup-from-sd.sh` sull'SD precedente prima di riflashare — estrae `mpd.db` così MPD fa scansioni incrementali veloci tra reflash.
+> **Librerie grandi (>10 k tracce) — alza `MPD_START_PERIOD` PRIMA di riflashare.**
+> Il budget healthcheck dell'install di default (`max(MPD_START_PERIOD, 180s) + 120s grace`) NON copre una prima scansione a freddo di una libreria NFS/SMB grande. Se MPD non aggancia la porta 6600 in tempo, il verificatore dell'install ritorna non-zero, `firstboot.sh` scrive `/var/lib/snapmulti-installer/.install-failed`, e lo step `[finalize]` (che attiverebbe `overlayroot=tmpfs`) **non viene mai eseguito**. Il dispositivo riparte su ext4 normale — i container alla fine salgono comunque (systemd `Restart=on-failure` li recupera), ma manca la protezione read-only del root. Imposta sempre `MPD_START_PERIOD=3600s` in `install.conf` PRIMA di flashare la SD quando la sorgente musica è NFS/SMB con più di ~10 k tracce. Vedi [TROUBLESHOOTING.it.md — Install marcato fallito ma i container girano](TROUBLESHOOTING.it.md#install-marcato-fallito-ma-i-container-girano) per sintomi + recovery.
 
-### `MPD_START_PERIOD` — estendere la finestra healthcheck MPD all'install
+> **Rescan MPD su librerie grandi.** Una prima scansione di 10 k+ brani via NFS può richiedere ore di D-state. Usa `scripts/backup-from-sd.sh` sull'SD precedente prima di riflashare — estrae `mpd.db` così MPD fa scansioni incrementali veloci tra reflash. Salta il bump di `MPD_START_PERIOD` qui sopra solo se hai un backup `mpd.db` da un'installazione precedente (il db cached si carica in secondi).
 
-Il verificatore di install poll-a l'healthcheck di MPD per `max(MPD_START_PERIOD, 180s)` poi emette fail-warning se MPD sta ancora scansionando. Il default `30s` va bene per librerie locali; scansioni NFS/SMB di librerie grandi servono più tempo.
+### `MPD_START_PERIOD` — estendere la finestra healthcheck MPD all'install <a id="mpd_start_period"></a>
 
-Per uno scenario noto-lento (primo aggancio NAS, nessun backup `mpd.db`, 50 k+ tracce), imposta il periodo PRIMA del reflash:
+Il verificatore di install poll-a l'healthcheck di MPD per `max(MPD_START_PERIOD, 180s) + 120s` grace di stabilità healthcheck. Se MPD non aggancia la porta 6600 in quella finestra l'install viene marcato fallito.
+
+Default:
+
+| Impostazione | Default | Origine |
+|--------------|---------|---------|
+| `MPD_START_PERIOD` | `30s` | Dimensionato per librerie locali USB / `/audio` — copre una scansione a freddo Pi 4 di ~5 k tracce |
+| floor verificatore install | `180s` | Hardcoded in `verify_services` |
+| grace stabilità healthcheck | `120s` | Hardcoded in `verify_services` (copre l'intervallo di 30 s di Docker fra health-probe + il second-sample check di `verify_compose_stack`) |
 
 ```ini
 # install.conf — scritto sulla SD boot da prepare-sd.sh
 MPD_START_PERIOD=3600s   # 1 ora — copre scan NFS a freddo di librerie grandi
 ```
 
-Si propaga da `firstboot.sh` → `deploy.sh` → docker-compose dentro l'healthcheck di MPD. Con `mpd.db` restored da install precedente (percorso `backup-from-sd.sh`), il default `30s` basta — MPD legge il db cached in secondi e valida incrementalmente contro il mount live. L'install non si BLOCCA mai se MPD impiega più di `MPD_START_PERIOD` — registra `services not healthy` come warning e prosegue; Docker continua a riprovare l'healthcheck in background, e MPD si auto-recupera appena la scansione finisce.
+Si propaga da `firstboot.sh` → `deploy.sh` → docker-compose dentro lo `start_period` dell'healthcheck di MPD. **Modalità di fallimento se salti il bump**: `verify_services` esce non-zero → marker `.install-failed` → `setup_readonly_fs` non viene mai eseguito → overlay non si attiva al boot 2. Il `Restart=on-failure` di systemd porta comunque su i container autonomamente dopo che l'install si è arreso, quindi il dispositivo SEMBRA sano dalla rete — ma l'install è incompleto. Recovery: riflasha con la variabile ambiente impostata, OPPURE segui il percorso di completamento manuale in [TROUBLESHOOTING.it.md — Install marcato fallito ma i container girano](TROUBLESHOOTING.it.md#install-marcato-fallito-ma-i-container-girano).
 
 ## Configurazione personalizzata — file `.env`
 
@@ -94,7 +103,7 @@ sudo /opt/snapmulti/scripts/ro-mode.sh disable   # poi reboot
 sudo /opt/snapmulti/scripts/ro-mode.sh enable    # poi reboot
 ```
 
-> **Eccezioni — stato che sopravvive alla pulizia overlayroot:** `snapmulti-state-backup.path` fa snapshot di snapserver `server.json` (stato gruppi) + sottodirectory `state/` di myMPD su `/boot/firmware/snapmulti-backup/` quando quei path cambiano. `snapmulti-backup.timer` salva separatamente MPD `mpd.db` al boot e su cadenza giornaliera. Ad ogni boot, `restore-snapmulti-state` (wired come `ExecStartPre` su `snapmulti-server.service`) ricopia il backup in `/opt/snapmulti/` prima che i container partano. L'approccio bind-mount di `snapmulti-data-persistence.service` di v0.7.9 è stato rimosso in v0.7.9.1 (vedi #527) — era un no-op su overlayroot in modalità tmpfs.
+> **Eccezioni — stato che sopravvive alla pulizia overlayroot:** `snapmulti-state-backup.path` fa snapshot della sottodirectory `state/` di myMPD su `/boot/firmware/snapmulti-backup/` quando cambia (event-driven). `snapmulti-state-backup.timer` gira ogni 5 min per `server.json` di snapserver — non può essere event-driven perché snapserver riscrive quel file ogni ~3 s per rinfrescare gli heartbeat `lastSeen` dei client. `backup-snapmulti-state.sh` si interrompe su uguaglianza canonica (ordinamento chiavi + strip `lastSeen` + sha256) così i tick no-op costano zero scritture FAT32. `snapmulti-backup.timer` salva separatamente MPD `mpd.db` al boot e su cadenza giornaliera. Ad ogni boot, `restore-snapmulti-state` (wired come `ExecStartPre` su `snapmulti-server.service`) ricopia il backup in `/opt/snapmulti/` prima che i container partano. L'approccio bind-mount di `snapmulti-data-persistence.service` di v0.7.9 è stato rimosso in v0.7.9.1 (vedi #527) — era un no-op su overlayroot in modalità tmpfs.
 
 `/boot/firmware/cmdline.txt` è di proprietà di `scripts/common/cmdline-manager.sh` — non modificarlo a mano. Vedi ADR-003 per il razionale.
 
@@ -145,7 +154,7 @@ Schema completo: [Snapcast JSON-RPC v2.0.0](https://github.com/badaix/snapcast/b
 
 Dopo l'installazione, systemd controlla il ciclo di vita dei container (ADR-005). Docker `restart: unless-stopped` gestisce i crash, systemd gestisce il boot.
 
-- Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`, `snapmulti-state-backup.path`
+- Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`, `snapmulti-state-backup.path` (myMPD), `snapmulti-state-backup.timer` (server.json + safety net)
 - Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (solo client HDMI)
 - Tutti: `snapmulti-boot-tune.service` (CPU governor, autosuspend USB, WiFi powersave)
 

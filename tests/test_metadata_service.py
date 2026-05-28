@@ -218,3 +218,127 @@ class TestResolveExternalHost:
         monkeypatch.setattr(metadata_service_module, "_detect_lan_ip", lambda: None)
         result = metadata_service_module._resolve_external_host()
         assert result == metadata_service_module.SNAPSERVER_HOST
+
+
+class TestStructuredSystemdRow:
+    """Regression coverage for the /status page row parser. The parser
+    decides whether a smoke record gets tabular rendering (unit + state
+    badge + description) or falls through to the flat <li> form."""
+
+    def test_timer_active_with_desc(self, metadata_service_module):
+        result = metadata_service_module._structured_systemd_row(
+            "Timers",
+            "Timer snapmulti-status.timer enabled and active — 5-min status snapshot for /status web",
+        )
+        assert result == (
+            "snapmulti-status.timer",
+            "enabled · active",
+            "",
+            "5-min status snapshot for /status web",
+        )
+
+    def test_path_unit_active_with_desc(self, metadata_service_module):
+        result = metadata_service_module._structured_systemd_row(
+            "Timers",
+            "Path unit snapmulti-state-backup.path enabled and active — myMPD state backup on change",
+        )
+        assert result == (
+            "snapmulti-state-backup.path",
+            "enabled · active",
+            "",
+            "myMPD state backup on change",
+        )
+
+    def test_systemd_service_active(self, metadata_service_module):
+        result = metadata_service_module._structured_systemd_row(
+            "Systemd", "systemd: snapmulti-server.service enabled and active"
+        )
+        assert result == (
+            "snapmulti-server.service",
+            "enabled · active",
+            "",
+            "",
+        )
+
+    def test_timer_enabled_but_broken(self, metadata_service_module):
+        result = metadata_service_module._structured_systemd_row(
+            "Timers",
+            "Timer foo.timer enabled but state is 'inactive' — daily backup",
+        )
+        assert result == (
+            "foo.timer",
+            "enabled · inactive",
+            "fail",
+            "daily backup",
+        )
+
+    def test_timer_missing(self, metadata_service_module):
+        result = metadata_service_module._structured_systemd_row(
+            "Timers", "Timer foo.timer NOT installed — finalize incomplete?"
+        )
+        assert result == (
+            "foo.timer",
+            "not installed",
+            "fail",
+            "finalize incomplete?",
+        )
+
+    def test_timer_masked_is_warn(self, metadata_service_module):
+        result = metadata_service_module._structured_systemd_row(
+            "Timers", "Path unit bar.path is 'masked' — was it disabled by accident?"
+        )
+        assert result == (
+            "bar.path",
+            "masked",
+            "warn",
+            "was it disabled by accident?",
+        )
+
+    def test_container_healthy(self, metadata_service_module):
+        result = metadata_service_module._structured_systemd_row(
+            "Containers", "snapserver: healthy"
+        )
+        assert result == ("snapserver", "healthy", "", "")
+
+    def test_container_unhealthy_is_fail(self, metadata_service_module):
+        result = metadata_service_module._structured_systemd_row(
+            "Containers", "mympd: unhealthy"
+        )
+        assert result == ("mympd", "unhealthy", "fail", "")
+
+    def test_container_starting_is_warn(self, metadata_service_module):
+        result = metadata_service_module._structured_systemd_row(
+            "Containers", "fb-display: starting"
+        )
+        assert result == ("fb-display", "starting", "warn", "")
+
+    def test_container_summary_row_falls_through(self, metadata_service_module):
+        """Rows like 'All 10 containers have memory limit applied' don't
+        match the NAME: STATE pattern and must return None so the renderer
+        falls back to the flat <li> form."""
+        result = metadata_service_module._structured_systemd_row(
+            "Containers", "All 10 snapMULTI container(s) have memory limit applied"
+        )
+        assert result is None
+
+    def test_compose_nested_healthy(self, metadata_service_module):
+        result = metadata_service_module._structured_systemd_row(
+            "Compose", "  server/snapserver -> healthy"
+        )
+        assert result == ("server/snapserver", "healthy", "", "")
+
+    def test_compose_summary_row_falls_through(self, metadata_service_module):
+        """The 'server: 7/7 running, 7/7 healthy' summary uses different
+        formatting and must fall back to flat rendering."""
+        result = metadata_service_module._structured_systemd_row(
+            "Compose", "server: 7/7 running, 7/7 healthy"
+        )
+        assert result is None
+
+    def test_unrelated_section_falls_through(self, metadata_service_module):
+        """A timer-shaped line in a section we don't tabularise must not
+        be reformatted (could be coincidence in a free-text message)."""
+        result = metadata_service_module._structured_systemd_row(
+            "Host", "Timer foo.timer enabled and active — context"
+        )
+        assert result is None
