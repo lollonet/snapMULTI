@@ -81,14 +81,31 @@ if [[ -s "$BACKUP_DIR/data/server.json" ]]; then
     restored_any=1
 fi
 
-# 2. myMPD state subdir. Larger than snapserver state but still small
-# (~MB-scale). Skip silently when absent — first-boot devices never
-# had a chance to back up.
-if [[ -d "$BACKUP_DIR/mympd/state" ]]; then
-    mkdir -p "$INSTALL_DIR/mympd/workdir"
-    cp -a "$BACKUP_DIR/mympd/state" "$INSTALL_DIR/mympd/workdir/"
-    chown -R "$PUID:$PGID" "$INSTALL_DIR/mympd/workdir/state" 2>/dev/null || true
-    _log "restored myMPD state subdir: $INSTALL_DIR/mympd/workdir/state"
+# 2. myMPD WHOLE workdir (state + config + smartpls + scripts + pics).
+# Narrowing this to state/ alone would silently lose user-customised
+# smart playlists, scripts, theme settings, uploaded cover art on the
+# first reboot — discovered by review on PR #528. The PR #525 bind-
+# mount covered the whole workdir; this restore matches that scope.
+# Skip silently when absent — first-boot devices never had a chance
+# to back up.
+if [[ -d "$BACKUP_DIR/mympd/workdir" ]]; then
+    mkdir -p "$INSTALL_DIR/mympd"
+    # Replace existing workdir atomically: stage as workdir.restore,
+    # swap, remove old. Avoids a window where partial restore is
+    # visible to the mympd container if it (somehow) started in
+    # parallel. The mympd container is depends_on snapmulti-server's
+    # systemd unit but Docker compose may proceed in parallel.
+    _stage="$INSTALL_DIR/mympd/workdir.restore.$$"
+    _old="$INSTALL_DIR/mympd/workdir.old.$$"
+    rm -rf "$_stage" "$_old"
+    cp -a "$BACKUP_DIR/mympd/workdir" "$_stage"
+    if [[ -d "$INSTALL_DIR/mympd/workdir" ]]; then
+        mv "$INSTALL_DIR/mympd/workdir" "$_old"
+    fi
+    mv "$_stage" "$INSTALL_DIR/mympd/workdir"
+    rm -rf "$_old"
+    chown -R "$PUID:$PGID" "$INSTALL_DIR/mympd/workdir" 2>/dev/null || true
+    _log "restored myMPD workdir: $INSTALL_DIR/mympd/workdir (full scope: state + config + smartpls + scripts + pics)"
     restored_any=1
 fi
 

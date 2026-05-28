@@ -12,7 +12,7 @@
 #
 # This module surfaces:
 #   - whether the backup directory exists and is fresh
-#   - which artefacts are backed up (server.json, mympd/state)
+#   - which artefacts are backed up (server.json, mympd/workdir)
 #   - explicitly flags backups that lag behind the live source, since
 #     that would restore stale state on the next reboot
 #
@@ -50,19 +50,22 @@ check_state_backup() {
         _reported=true
     fi
 
-    # 2. myMPD state subdir — smart playlists, scripts, theme.
-    if [[ -d "$_BACKUP_DIR/mympd/state" ]]; then
+    # 2. myMPD WHOLE workdir — state + config + smartpls + scripts + pics.
+    # Scope matches the PR #525 bind-mount: narrowing to state/ alone
+    # silently lost user-customised smart playlists/scripts/theme on
+    # reboot (review on PR #528).
+    if [[ -d "$_BACKUP_DIR/mympd/workdir" ]]; then
         local _files _mt _age_min _src_mt=0
-        _files=$(find "$_BACKUP_DIR/mympd/state" -type f 2>/dev/null | wc -l)
-        _mt=$(stat -c %Y "$_BACKUP_DIR/mympd/state" 2>/dev/null || echo 0)
+        _files=$(find "$_BACKUP_DIR/mympd/workdir" -type f 2>/dev/null | wc -l)
+        _mt=$(stat -c %Y "$_BACKUP_DIR/mympd/workdir" 2>/dev/null || echo 0)
         _age_min=$(( (_now - _mt) / 60 ))
-        if [[ -d /opt/snapmulti/mympd/workdir/state ]]; then
-            _src_mt=$(stat -c %Y /opt/snapmulti/mympd/workdir/state 2>/dev/null || echo 0)
+        if [[ -d /opt/snapmulti/mympd/workdir ]]; then
+            _src_mt=$(stat -c %Y /opt/snapmulti/mympd/workdir 2>/dev/null || echo 0)
         fi
         if (( _src_mt > _mt + 60 )); then
-            warn "myMPD state backup behind live state directory — restore would load stale state on next reboot"
+            warn "myMPD workdir backup behind live workdir — restore would load stale state on next reboot"
         else
-            pass_check "myMPD state backup fresh: ${_files} files (dir ${_age_min} min old)"
+            pass_check "myMPD workdir backup fresh: ${_files} files (dir ${_age_min} min old)"
         fi
         _reported=true
     fi

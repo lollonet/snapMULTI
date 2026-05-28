@@ -1263,17 +1263,34 @@ install_snapmulti_state_restore() {
     local bk_dir
     bk_dir="$(dirname "$backup_src")"
     if [[ -f "$bk_dir/snapmulti-state-backup.service" && \
-          -f "$bk_dir/snapmulti-state-backup.path" ]]; then
+          -f "$bk_dir/snapmulti-state-backup.path" && \
+          -f "$bk_dir/snapmulti-state-backup.timer" ]]; then
         install -m 0644 "$bk_dir/snapmulti-state-backup.service" /etc/systemd/system/
         install -m 0644 "$bk_dir/snapmulti-state-backup.path"    /etc/systemd/system/
+        install -m 0644 "$bk_dir/snapmulti-state-backup.timer"   /etc/systemd/system/
         systemctl daemon-reload
+        # Event-driven .path unit catches direct writes to watched
+        # paths (low-latency, ~1 sec). Timer is the safety net for
+        # nested writes that don't trigger .path (systemd .path units
+        # aren't recursive). Both fire the same .service.
         if systemctl enable --now snapmulti-state-backup.path >/dev/null 2>&1; then
             ok "snapmulti-state-backup.path enabled and active"
         else
-            warn "snapmulti-state-backup.path could not be enabled — state changes will NOT be backed up"
+            warn "snapmulti-state-backup.path could not be enabled — state changes may not be backed up via event trigger"
         fi
+        if systemctl enable --now snapmulti-state-backup.timer >/dev/null 2>&1; then
+            ok "snapmulti-state-backup.timer enabled and active (10-min safety net)"
+        else
+            warn "snapmulti-state-backup.timer could not be enabled — nested-write safety net unavailable"
+        fi
+        # Seed: arm watcher catches FUTURE writes only. On upgrades
+        # where state already exists pre-watcher-arm, run the backup
+        # service once to capture current state. No-op when nothing
+        # to back up (backup-snapmulti-state.sh has presence checks).
+        systemctl start snapmulti-state-backup.service >/dev/null 2>&1 || \
+            warn "initial snapmulti-state-backup seed failed — first backup will run at next state change OR timer tick"
     else
-        warn "snapmulti-state-backup.{service,path} not staged alongside backup-snapmulti-state.sh — backup units skipped"
+        warn "snapmulti-state-backup.{service,path,timer} not all staged alongside backup-snapmulti-state.sh — backup units skipped"
     fi
 }
 
