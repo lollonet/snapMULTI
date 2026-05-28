@@ -84,11 +84,25 @@ backup_server_json() {
         fi
     fi
 
-    # Rotate: current → .prev, then publish temp. Atomic-mv on local
-    # filesystem; preserves one generation of grace against transient
-    # corruption (truncated write, power loss mid-publish).
+    # Rotate: current → .prev, then publish temp. Validate the
+    # existing current before promoting it: after a restore-from-
+    # .prev cycle, the current file on the boot partition is still
+    # the corrupt copy that triggered the fallback. Blindly rotating
+    # it to .prev would clobber the known-good fallback. Discard the
+    # invalid current instead, keeping the existing .prev as our
+    # grace generation. Same gates as the source validation above.
     if [[ -s "$dst" ]]; then
-        mv "$dst" "$prev"
+        local _dst_valid=true
+        (( $(wc -c < "$dst") >= 64 )) || _dst_valid=false
+        if [[ "$_dst_valid" == "true" ]] && command -v jq >/dev/null 2>&1; then
+            jq -e . "$dst" >/dev/null 2>&1 || _dst_valid=false
+        fi
+        if [[ "$_dst_valid" == "true" ]]; then
+            mv "$dst" "$prev"
+        else
+            rm -f "$dst"
+            logger -t backup-snapmulti-state "server.json: existing current is corrupt; discarded without rotation to preserve .prev"
+        fi
     fi
     mv "$tmp" "$dst"
     backed_up=1

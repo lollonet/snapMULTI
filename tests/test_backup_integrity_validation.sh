@@ -79,7 +79,20 @@ run_backup_in_sandbox() {
         if command -v jq >/dev/null 2>&1; then
             jq -e . "$tmp" >/dev/null 2>&1 || { rm -f "$tmp"; exit 0; }
         fi
-        [[ -s "$dst" ]] && mv "$dst" "$prev"
+        # Validate existing $dst before rotating — never promote a
+        # corrupt current backup to .prev (would destroy fallback).
+        if [[ -s "$dst" ]]; then
+            _dst_valid=true
+            (( $(wc -c < "$dst") >= 64 )) || _dst_valid=false
+            if [[ "$_dst_valid" == "true" ]] && command -v jq >/dev/null 2>&1; then
+                jq -e . "$dst" >/dev/null 2>&1 || _dst_valid=false
+            fi
+            if [[ "$_dst_valid" == "true" ]]; then
+                mv "$dst" "$prev"
+            else
+                rm -f "$dst"
+            fi
+        fi
         mv "$tmp" "$dst"
     '
 }
@@ -137,6 +150,36 @@ assert "[[ -s '$SBX/boot/snapmulti-backup/data/server.json.prev' ]]" \
 PREV_SHA=$(sha256sum "$SBX/boot/snapmulti-backup/data/server.json.prev" | cut -d' ' -f1)
 assert "[[ '$PREV_SHA' == '$ORIG_BACKUP_SHA' ]]" \
     ".prev contents match the previous good backup byte-for-byte"
+
+# --- Case 4: current backup is corrupt + .prev is good (post-restore-fallback state) ---
+# After restore-from-.prev, the corrupt current is still on disk. The
+# NEXT backup must NOT promote that garbage to .prev — that would
+# destroy the only known-good fallback.
+rm -rf "$SBX"; SBX="$(mktemp -d)"; setup_sandbox "$SBX"
+
+# Simulate the post-restore-fallback boot-partition state:
+echo "garbage truncated current" > "$SBX/boot/snapmulti-backup/data/server.json"  # < 64 bytes
+cat > "$SBX/boot/snapmulti-backup/data/server.json.prev" <<'EOF'
+{"Server":{"Groups":[{"name":"OriginalGood","clients":[{"id":"x"}]}],"streams":[]}}
+EOF
+PREV_SHA_ORIG=$(sha256sum "$SBX/boot/snapmulti-backup/data/server.json.prev" | cut -d' ' -f1)
+
+# snapserver wrote good state (restored from .prev) — simulate a backup cycle on it
+cat > "$SBX/install/data/server.json" <<'EOF'
+{"Server":{"Groups":[{"name":"NewState","clients":[{"id":"y"}]}],"streams":[]}}
+EOF
+
+run_backup_in_sandbox "$SBX"
+
+# .prev MUST still contain the original good content — corrupt current
+# was discarded, not promoted.
+PREV_SHA_AFTER=$(sha256sum "$SBX/boot/snapmulti-backup/data/server.json.prev" | cut -d' ' -f1)
+assert "[[ '$PREV_SHA_ORIG' == '$PREV_SHA_AFTER' ]]" \
+    "corrupt current was NOT promoted to .prev (good .prev preserved)"
+assert "grep -q OriginalGood '$SBX/boot/snapmulti-backup/data/server.json.prev'" \
+    ".prev still contains original good content"
+assert "grep -q NewState '$SBX/boot/snapmulti-backup/data/server.json'" \
+    "current contains the new valid backup"
 
 echo
 echo "## Summary"
