@@ -97,4 +97,22 @@ check_recovery() {
             pass_check "Periodic diagnostic snapshots on $_BOOT_FW: $snap_count present, newest ${snap_age_min} min old"
         fi
     fi
+
+    # /boot/firmware FAT32 free space. Partition is fixed at ~512MB on
+    # Pi Imager defaults. Full = no more diagnostic bundles, no MPD
+    # backup, no kernel/firmware upgrade. Hard cap on a path the user
+    # cannot grow.
+    local fw_avail_kb fw_total_kb
+    read -r fw_avail_kb fw_total_kb < <(df --output=avail,size -k "$_BOOT_FW" 2>/dev/null | tail -1)
+    if [[ -n "$fw_avail_kb" && -n "$fw_total_kb" && "$fw_total_kb" -gt 0 ]]; then
+        local fw_pct=$(( 100 * (fw_total_kb - fw_avail_kb) / fw_total_kb ))
+        local fw_avail_mb=$(( fw_avail_kb / 1024 ))
+        if (( fw_pct > 90 )); then
+            fail_check "Boot partition ${fw_pct}% full (${fw_avail_mb} MB free) — no room for diagnostic bundles, MPD backup, or kernel upgrade"
+        elif (( fw_pct > 75 )); then
+            warn "Boot partition ${fw_pct}% full (${fw_avail_mb} MB free) — clear old snapshots to free space"
+        else
+            pass_check "Boot partition ${fw_pct}% used (${fw_avail_mb} MB free)"
+        fi
+    fi
 }

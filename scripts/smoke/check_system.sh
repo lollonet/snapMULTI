@@ -54,6 +54,26 @@ check_system() {
         elif [[ -n "$_image_set" ]]; then
             info "Image set $_image_set (release unknown)"
         fi
+
+        # Update available? metadata-service /version endpoint already
+        # compares local release-manifest against the latest GitHub
+        # tag (cached locally). Surface it here so the status page
+        # tells the operator at a glance whether a reflash brings a
+        # newer release.
+        if command -v curl >/dev/null 2>&1; then
+            local _ver_json _current _latest _update_avail
+            _ver_json=$(curl -sS --max-time 3 http://127.0.0.1:8083/version 2>/dev/null || true)
+            if [[ -n "$_ver_json" ]] && command -v jq >/dev/null 2>&1; then
+                _current=$(jq -r '.current // empty' <<<"$_ver_json" 2>/dev/null || true)
+                _latest=$(jq -r '.latest // empty' <<<"$_ver_json" 2>/dev/null || true)
+                _update_avail=$(jq -r '.update_available // false' <<<"$_ver_json" 2>/dev/null || true)
+                if [[ "$_update_avail" == "true" && -n "$_current" && -n "$_latest" ]]; then
+                    info "Update available: ${_current} -> ${_latest} (reflash to apply)"
+                elif [[ "$_update_avail" == "false" && -n "$_current" ]]; then
+                    pass_check "Up to date with upstream (${_current} is latest)"
+                fi
+            fi
+        fi
     fi
 
     # 1. Cmdline — quiet boot flags. Only meaningful when display is
@@ -179,6 +199,39 @@ check_system() {
         warn "/run tmpfs size: ${run_mb} MB on ${total_mb} MB RAM (below ${floor_warn} MB warn floor for $expected_class — containerd may false-ENOSPC under apt install)"
     else
         fail_check "/run tmpfs size: ${run_mb} MB on ${total_mb} MB RAM (below ${floor_fail} MB fail floor for $expected_class — containerd self-heal will trigger repeatedly)"
+    fi
+
+    # Memory headroom. mympd OOM-kill in v0.7.8.16 (#516) was caught
+    # via journal review hours late — surface it on the status page.
+    local avail_kb avail_mb mem_used_pct
+    avail_kb=$(awk '/^MemAvailable:/ {print $2; exit}' /proc/meminfo 2>/dev/null || echo 0)
+    avail_mb=$(( avail_kb / 1024 ))
+    if (( total_kb > 0 )); then
+        mem_used_pct=$(( 100 * (total_kb - avail_kb) / total_kb ))
+        if (( mem_used_pct >= 92 )); then
+            fail_check "Memory ${mem_used_pct}% used (${avail_mb} MB available of ${total_mb} MB) — imminent OOM-kill risk for the smallest cgroup-limited container"
+        elif (( mem_used_pct >= 80 )); then
+            warn "Memory ${mem_used_pct}% used (${avail_mb} MB available of ${total_mb} MB) — running tight, audit container limits if it persists"
+        else
+            pass_check "Memory ${mem_used_pct}% used (${avail_mb} MB available of ${total_mb} MB)"
+        fi
+    fi
+
+    # Swap pressure. On Pi Zero 2W zram is masked (would fill overlay
+    # tmpfs); on bigger Pi there's typically a small dphys-swapfile.
+    # Significant swap usage in steady-state means under-provisioned
+    # memory limits — degrades audio.
+    local swap_total_kb swap_free_kb swap_used_kb swap_pct
+    swap_total_kb=$(awk '/^SwapTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null || echo 0)
+    swap_free_kb=$(awk '/^SwapFree:/ {print $2; exit}' /proc/meminfo 2>/dev/null || echo 0)
+    if (( swap_total_kb > 0 )); then
+        swap_used_kb=$(( swap_total_kb - swap_free_kb ))
+        swap_pct=$(( 100 * swap_used_kb / swap_total_kb ))
+        if (( swap_pct >= 50 )); then
+            warn "Swap ${swap_pct}% used ($(( swap_used_kb / 1024 ))/$(( swap_total_kb / 1024 )) MB) — heavy swapping degrades audio path latency"
+        elif (( swap_pct > 0 )); then
+            info "Swap ${swap_pct}% used ($(( swap_used_kb / 1024 ))/$(( swap_total_kb / 1024 )) MB)"
+        fi
     fi
 
     # 4. WiFi exclusivity. boot-tune.sh disables WiFi when eth0 has

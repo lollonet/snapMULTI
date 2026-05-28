@@ -83,4 +83,23 @@ check_persistence() {
         _size=$(stat -c %s "$_PERSIST_ROOT/data/server.json" 2>/dev/null || echo 0)
         info "snapserver state on persistent fs: server.json ($_size bytes)"
     fi
+
+    # /media/root-rw free space — backing fs that holds both the
+    # overlay upperdir AND snapmulti-persist/. Filled up means the
+    # overlay tmpfs cannot evict in-memory pages back to disk and
+    # subsequent writes go OOM; persistent state writes also start
+    # failing. Hard cap, no SD-level cleanup possible without ro-mode.
+    local _rw_avail_kb _rw_total_kb
+    read -r _rw_avail_kb _rw_total_kb < <(df --output=avail,size -k /media/root-rw 2>/dev/null | tail -1)
+    if [[ -n "$_rw_avail_kb" && -n "$_rw_total_kb" && "$_rw_total_kb" -gt 0 ]]; then
+        local _rw_pct=$(( 100 * (_rw_total_kb - _rw_avail_kb) / _rw_total_kb ))
+        local _rw_avail_mb=$(( _rw_avail_kb / 1024 ))
+        if (( _rw_pct > 90 )); then
+            fail_check "Backing fs /media/root-rw ${_rw_pct}% full (${_rw_avail_mb} MB free) — overlay cannot grow, OOM imminent"
+        elif (( _rw_pct > 75 )); then
+            warn "Backing fs /media/root-rw ${_rw_pct}% full (${_rw_avail_mb} MB free)"
+        else
+            pass_check "Backing fs /media/root-rw ${_rw_pct}% used (${_rw_avail_mb} MB free)"
+        fi
+    fi
 }
