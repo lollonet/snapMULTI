@@ -1,7 +1,8 @@
 [Unit]
 Description=Refresh snapMULTI system-status snapshot for /status web page
-# Run after Docker so smoke checks see the containers
-After=docker.service network-online.target
+# Run after Docker AND after the snapmulti server unit so smoke checks
+# observe the stack in steady state, not mid-boot.
+After=docker.service network-online.target snapmulti-server.service
 # Hard-fail-tolerant — the snapshot is best-effort; if smoke can't run
 # (Docker briefly down, etc.) the next timer firing tries again.
 StartLimitIntervalSec=300
@@ -9,9 +10,27 @@ StartLimitBurst=5
 
 [Service]
 Type=oneshot
-# TimeoutStartSec kills runaway runs that would block the next timer (RuntimeMaxSec has no effect on Type=oneshot).
-TimeoutStartSec=120
+# TimeoutStartSec needs to cover ExecStartPre (up to 5 min waiting for
+# MPD healthy) + ExecStart (~10-15 s steady state). 360 s total is the
+# upper bound; runs that hit it have a real problem worth surfacing.
+TimeoutStartSec=360
 KillMode=mixed
+# Adaptive wait for MPD healthy on the first post-boot firing. The
+# OnBootSec=4min in snapmulti-status.timer gives most installs enough
+# headroom, but Pi Zero / large libraries / cold NFS scans can push
+# MPD healthy out past that. Without this wait, the first snapshot
+# captures a misleading "mpd: starting" / "mpd: unhealthy" state and
+# /status shows red for 5 min until the next timer firing.
+# On subsequent firings MPD is already healthy → loop exits in 1
+# iteration (~0.1 s). Always exits 0 so a stuck MPD still publishes a
+# snapshot — the snapshot will FAIL the mpd check, which is the
+# correct outcome to surface.
+ExecStartPre=/bin/bash -c 'for _i in $(seq 1 60); do \
+    [[ "$(docker inspect mpd --format "{{if .State.Health}}{{.State.Health.Status}}{{end}}" 2>/dev/null)" == "healthy" ]] && exit 0; \
+    sleep 5; \
+done; \
+logger -t snapmulti-status "ExecStartPre: mpd still not healthy after 300s wait — publishing snapshot anyway"; \
+exit 0'
 # `flock --nonblock` exits 1 when the lock is busy (concurrent run). That's
 # the intended "skip this firing" behaviour, not a failure — tell systemd so
 # the journal doesn't log a misleading FAILED status.
