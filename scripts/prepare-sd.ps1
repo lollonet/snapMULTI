@@ -180,6 +180,7 @@ function Assert-PreparedSdCard {
             'client/scripts/diagnostic.sh',
             'client/scripts/audio-hat-detect.sh',
             'client/scripts/discover-server.sh',
+            'client/scripts/discover-server-native.sh',
             'client/scripts/display.sh',
             'client/scripts/display-detect.sh',
             'client/scripts/common/install-deps.sh',

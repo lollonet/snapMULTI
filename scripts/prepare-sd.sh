@@ -598,6 +598,7 @@ copy_client_files() {
     [[ -f "$CLIENT_DIR/common/scripts/audio-hat-detect.sh" ]] && cp "$CLIENT_DIR/common/scripts/audio-hat-detect.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/discover-server.sh" ]] && cp "$CLIENT_DIR/common/scripts/discover-server.sh" "$dest/scripts/"
+    [[ -f "$CLIENT_DIR/common/scripts/discover-server-native.sh" ]] && cp "$CLIENT_DIR/common/scripts/discover-server-native.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/display.sh" ]] && cp "$CLIENT_DIR/common/scripts/display.sh" "$dest/scripts/"
     [[ -f "$CLIENT_DIR/common/scripts/display-detect.sh" ]] && cp "$CLIENT_DIR/common/scripts/display-detect.sh" "$dest/scripts/"
 

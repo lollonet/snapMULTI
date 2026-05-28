@@ -419,15 +419,49 @@ SNAPCLIENT_OPTS="--hostID ${CLIENT_ID} --soundcard ${SOUNDCARD} --mixer ${MIXER}
 EOF
 ok "/etc/default/snapclient configured"
 
+# ── IPv4-pin discover hook ───────────────────────────────────────
+# snapclient's built-in libavahi-client browse can latch onto an IPv6
+# link-local SRV target that doesn't route on Pi Zero 2W LANs, leaving
+# audio silent with a healthy server. Ship a small ExecStartPre that
+# pins --host <IPv4> in /etc/default/snapclient before each start.
+# Mirrors discover-server.sh's IPv4 filter, scaled down (no anti-flap
+# state machine — single-shot per service start is enough for native).
+step "Installing IPv4-pin discover helper"
+DISCOVER_SCRIPT="/usr/local/sbin/snapmulti-discover-snapserver"
+_discover_src=""
+for _cand in \
+    "$SCRIPT_DIR/discover-server-native.sh" \
+    "$SCRIPT_DIR/../scripts/discover-server-native.sh" \
+    "/opt/snapclient/scripts/discover-server-native.sh"; do
+    if [[ -f "$_cand" ]]; then
+        _discover_src="$_cand"
+        break
+    fi
+done
+if [[ -n "$_discover_src" ]]; then
+    install -m 0755 "$_discover_src" "$DISCOVER_SCRIPT"
+    ok "Installed $DISCOVER_SCRIPT"
+else
+    warn "discover-server-native.sh not staged — IPv4 pinning disabled (snapclient will fall back to built-in mDNS)"
+    DISCOVER_SCRIPT=""
+fi
+unset _cand _discover_src
+
 # ── systemd drop-in override ─────────────────────────────────────
 # The .deb ships /lib/systemd/system/snapclient.service with
 # User=snapclient Group=snapclient and Restart=on-failure. We layer
 # a drop-in to add restart limits, real-time audio scheduling, and
 # explicit network ordering. Drop-ins survive .deb upgrades cleanly.
+#
+# ExecStartPre runs as root (drop-in inherits User= from .deb unit
+# but ExecStartPre+ entries override that). Without root, the rewrite
+# of /etc/default/snapclient would fail silently and discovery would
+# stay broken — the `+` prefix is the supported way.
 step "Installing systemd drop-in override"
 DROPIN_DIR=/etc/systemd/system/snapclient.service.d
 mkdir -p "$DROPIN_DIR"
-cat > "$DROPIN_DIR/snapmulti-override.conf" <<'EOF'
+{
+    cat <<'EOF'
 # Drop-in override installed by snapMULTI setup-zero2w.sh.
 # Layered on top of the upstream snapclient.service shipped by the
 # badaix snapcast .deb. Survives .deb upgrades.
@@ -444,6 +478,12 @@ RestartSec=5
 LimitRTPRIO=10
 LimitMEMLOCK=infinity
 EOF
+    if [[ -n "$DISCOVER_SCRIPT" ]]; then
+        cat <<EOF
+ExecStartPre=+${DISCOVER_SCRIPT}
+EOF
+    fi
+} > "$DROPIN_DIR/snapmulti-override.conf"
 ok "systemd drop-in installed at $DROPIN_DIR/snapmulti-override.conf"
 
 # ── Enable + start ───────────────────────────────────────────────
