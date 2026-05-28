@@ -26,12 +26,11 @@ BACKUP_DIR="$BOOT/snapmulti-backup"
 backed_up=0
 
 # Preserve the boot partition's prior mount state. During firstboot
-# (both-mode) /boot/firmware is rw because raspi-config + cmdline
-# patcher need to write to it; unconditionally remounting ro on exit
-# there broke quiet-boot patching and raspi-config do_overlayfs in
-# v0.7.9 (regression root cause — overlay never activated on snapvideo).
-# Post-firstboot the partition is typically ro for SD wear protection;
-# we restore THAT state on exit.
+# /boot/firmware is rw because raspi-config + cmdline patcher need to
+# write to it; unconditionally remounting ro on exit there can break
+# quiet-boot patching and raspi-config do_overlayfs. Post-firstboot
+# the partition is typically ro for SD wear protection; we restore
+# THAT state on exit.
 boot_was_ro=false
 if findmnt -n -o OPTIONS "$BOOT" 2>/dev/null | tr ',' '\n' | grep -qx ro; then
     boot_was_ro=true

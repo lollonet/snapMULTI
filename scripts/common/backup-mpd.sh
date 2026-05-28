@@ -64,10 +64,10 @@ if [[ -z "$MPD_DB" ]]; then
 fi
 
 # Preserve prior boot partition mount state. Defensive consistency
-# with backup-snapmulti-state.sh: this timer-driven script doesn't
-# currently fire during firstboot (timer doesn't run before firstboot
-# completes + reboots), but match the safe pattern so a future
-# trigger-on-install regression can't reintroduce the v0.7.9.1 bug.
+# with backup-snapmulti-state.sh: this script's trigger is the
+# snapmulti-backup.timer which doesn't fire during firstboot, but
+# match the safe pattern so a future trigger-on-install path can't
+# leave /boot/firmware ro mid-install.
 boot_was_ro=false
 if findmnt -n -o OPTIONS "$BOOT" 2>/dev/null | tr ',' '\n' | grep -qx ro; then
     boot_was_ro=true
