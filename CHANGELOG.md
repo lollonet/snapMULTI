@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Seed on install** runs `snapmulti-state-backup.service` once when arming the watcher — protects upgrade scenarios where state pre-exists the watcher and would otherwise leave the boot-partition backup stale until the next user change.
   - **Boot partition mount state preserved** — `backup-snapmulti-state.sh` + `backup-mpd.sh` detect whether `/boot/firmware` was previously ro and restore THAT state on exit. The original v0.7.9 fix unconditionally remounted ro at exit, which during firstboot (both-mode) cascaded to break `raspi-config do_overlayfs` and prevented overlay activation entirely — discovered by user pattern-recognition ("readonly in server mode has always worked").
   - Removed `snapmulti-data-persistence.service`, `snapmulti-data-setup.sh`, and the misleading `check_persistence.sh` smoke module; replaced with `check_state_backup.sh` (verifies backup freshness on the actual persistent path) + `check_timers.sh` now also asserts the path + timer units are enabled and active.
+  - **`backup-from-sd.sh` catches up to widened backup scope (#530)** — host-side reflash extractor now handles the current `mympd/workdir/` layout (atomic stage+swap to avoid merging stale files from the previous SD with the restored backup) and restores `data/server.json`. Legacy `mympd/state/`-only backups still work with a warning that user customisations aren't in the backup.
 
 ## [0.7.9] — 2026-05-28
 

@@ -96,11 +96,43 @@ main() {
         restored=$((restored + 1))
     fi
 
-    # myMPD state
-    if [[ -d "$backup_dir/mympd/state" ]]; then
+    # myMPD workdir — current layout is the whole workdir/ (state +
+    # config + smartpls + scripts + pics). Older backups may carry
+    # just state/; support both layouts.
+    if [[ -d "$backup_dir/mympd/workdir" ]]; then
+        mkdir -p "$PROJECT_DIR/mympd"
+        # Replace any existing workdir at the destination to avoid
+        # merging stale files from the previous SD with the restored
+        # backup. Same atomic stage+swap idiom as the boot-time
+        # restore script.
+        local _stage="$PROJECT_DIR/mympd/workdir.restore.$$"
+        local _old="$PROJECT_DIR/mympd/workdir.old.$$"
+        rm -rf "$_stage" "$_old"
+        cp -a "$backup_dir/mympd/workdir" "$_stage"
+        if [[ -d "$PROJECT_DIR/mympd/workdir" ]]; then
+            mv "$PROJECT_DIR/mympd/workdir" "$_old"
+        fi
+        mv "$_stage" "$PROJECT_DIR/mympd/workdir"
+        rm -rf "$_old"
+        ok "myMPD workdir restored → mympd/workdir/ (state + config + smartpls + scripts + pics)"
+        restored=$((restored + 1))
+    elif [[ -d "$backup_dir/mympd/state" ]]; then
+        # Legacy layout — pre-v0.7.9.x SD card. Only state/ subdir
+        # was backed up; user-customised smart playlists / scripts /
+        # theme are not present in this backup.
         mkdir -p "$PROJECT_DIR/mympd/workdir"
         cp -r "$backup_dir/mympd/state" "$PROJECT_DIR/mympd/workdir/"
-        ok "myMPD playlists restored → mympd/workdir/state/"
+        ok "myMPD state restored (legacy backup layout, state/ only) → mympd/workdir/state/"
+        warn "Backup is from a pre-v0.7.9.x install — smart playlists / scripts / theme not present in this backup. Future backups will cover the full workdir."
+        restored=$((restored + 1))
+    fi
+
+    # snapserver group state (server.json) — added in the
+    # post-v0.7.9 persistence pattern. Older backups predate this.
+    if [[ -f "$backup_dir/data/server.json" ]]; then
+        mkdir -p "$PROJECT_DIR/data"
+        cp "$backup_dir/data/server.json" "$PROJECT_DIR/data/server.json"
+        ok "snapserver group state restored → data/server.json"
         restored=$((restored + 1))
     fi
 
