@@ -90,9 +90,10 @@ if [[ -d "$BACKUP_DIR/mympd/workdir" ]]; then
     mkdir -p "$INSTALL_DIR/mympd"
     # Replace existing workdir atomically: stage as workdir.restore,
     # swap, remove old. Avoids a window where partial restore is
-    # visible to the mympd container if it (somehow) started in
-    # parallel. The mympd container is depends_on snapmulti-server's
-    # systemd unit but Docker compose may proceed in parallel.
+    # visible to mympd if it started in parallel. This script runs as
+    # ExecStartPre on the snapmulti-server systemd unit — before
+    # docker compose up — so both containers see restored state even
+    # if compose starts them concurrently.
     _stage="$INSTALL_DIR/mympd/workdir.restore.$$"
     _old="$INSTALL_DIR/mympd/workdir.old.$$"
     rm -rf "$_stage" "$_old"
