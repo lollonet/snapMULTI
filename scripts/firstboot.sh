@@ -1241,7 +1241,8 @@ if [[ -n "$DIAG_SCRIPT" ]]; then
     log_info "Diagnostic log persistence installed"
 fi
 
-# MPD database backup to boot partition (server installs only)
+# MPD database + snapserver/myMPD state backup to boot partition
+# (server installs only)
 if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     BACKUP_SCRIPT=""
     for _bk_candidate in \
@@ -1260,6 +1261,25 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
             systemctl enable snapmulti-backup.timer
         fi
         log_info "MPD backup timer installed (daily to boot partition)"
+    fi
+
+    STATE_BACKUP_SCRIPT=""
+    for _state_bk_candidate in \
+        "$COMMON/backup-snapmulti-state.sh" \
+        "$SERVER_DIR/scripts/common/backup-snapmulti-state.sh"; do
+        [[ -f "$_state_bk_candidate" ]] && STATE_BACKUP_SCRIPT="$_state_bk_candidate" && break
+    done
+    if [[ -n "$STATE_BACKUP_SCRIPT" ]]; then
+        install -m 755 "$STATE_BACKUP_SCRIPT" /usr/local/bin/backup-snapmulti-state
+        state_bk_dir="$(dirname "$STATE_BACKUP_SCRIPT")"
+        if [[ -f "$state_bk_dir/snapmulti-state-backup.service" && \
+              -f "$state_bk_dir/snapmulti-state-backup.path" ]]; then
+            install -m 0644 "$state_bk_dir/snapmulti-state-backup.service" /etc/systemd/system/
+            install -m 0644 "$state_bk_dir/snapmulti-state-backup.path" /etc/systemd/system/
+            systemctl daemon-reload
+            systemctl enable --now snapmulti-state-backup.path
+        fi
+        log_info "snapserver/myMPD state backup path installed"
     fi
 fi
 

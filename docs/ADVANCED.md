@@ -94,7 +94,7 @@ sudo /opt/snapmulti/scripts/ro-mode.sh disable   # then reboot
 sudo /opt/snapmulti/scripts/ro-mode.sh enable    # then reboot
 ```
 
-> **Exceptions — state that survives overlayroot wipes:** `snapmulti-backup.timer` snapshots snapserver `server.json` (group state) + myMPD `state/` subdir + MPD `mpd.db` to `/boot/firmware/snapmulti-backup/` (FAT32, the only userland-writable persistent path under `overlayroot="tmpfs"`). On every boot, `restore-snapmulti-state` (wired as `ExecStartPre` on `snapmulti-server.service`) copies the backup back into `/opt/snapmulti/` before containers start. Trade-off: a reboot within 5 min of the last state change loses those last edits — the timer interval is the persistence floor. v0.7.9's `snapmulti-data-persistence.service` bind-mount approach was removed in v0.7.9.1 (see #527) — it was a no-op on tmpfs-mode overlayroot.
+> **Exceptions — state that survives overlayroot wipes:** `snapmulti-state-backup.path` snapshots snapserver `server.json` (group state) + myMPD `state/` subdir to `/boot/firmware/snapmulti-backup/` when those paths change. `snapmulti-backup.timer` separately backs up MPD `mpd.db` on boot/daily cadence. On every boot, `restore-snapmulti-state` (wired as `ExecStartPre` on `snapmulti-server.service`) copies the state backup back into `/opt/snapmulti/` before containers start. v0.7.9's `snapmulti-data-persistence.service` bind-mount approach was removed in v0.7.9.1 (see #527) — it was a no-op on tmpfs-mode overlayroot.
 
 `/boot/firmware/cmdline.txt` is owned by `scripts/common/cmdline-manager.sh` — don't hand-edit it. See ADR-003 for the rationale.
 
@@ -145,7 +145,7 @@ Full schema: [Snapcast JSON-RPC v2.0.0](https://github.com/badaix/snapcast/blob/
 
 After install, systemd owns container lifecycle (ADR-005). Docker `restart: unless-stopped` handles crashes, systemd handles boot.
 
-- Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`
+- Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`, `snapmulti-state-backup.path`
 - Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (HDMI clients only)
 - All: `snapmulti-boot-tune.service` (CPU governor, USB autosuspend, WiFi powersave)
 

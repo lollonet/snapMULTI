@@ -8,6 +8,7 @@
 #   - snapmulti-status.timer       : 5-min status snapshot (issue #177)
 #   - snapmulti-diagnostics.timer  : 30-min diagnostic dump (rotation)
 #   - snapmulti-backup.timer       : daily 4am MPD db backup
+#   - snapmulti-state-backup.path  : event-driven snapserver/myMPD state backup
 #   - snapclient-discover.timer    : mDNS rediscovery for client failover
 # A timer that is enabled-but-not-active means firstboot installed it
 # but something later disabled it (e.g. a partial reflash). A timer
@@ -54,6 +55,40 @@ _check_timer() {
     esac
 }
 
+_check_path() {
+    local path_unit="$1" desc="$2" mode_filter="$3"
+
+    case "$mode_filter" in
+        "")            ;;
+        server)        [[ "$MODE" == "server" || "$MODE" == "both" ]] || return 0 ;;
+        client)        [[ "$MODE" == "client" || "$MODE" == "both" ]] || return 0 ;;
+        both)          [[ "$MODE" == "both" ]] || return 0 ;;
+    esac
+
+    local enabled active
+    enabled=$(systemctl is-enabled "$path_unit" 2>/dev/null || echo "missing")
+    active=$(systemctl is-active "$path_unit" 2>/dev/null || echo "inactive")
+
+    case "$enabled" in
+        enabled|enabled-runtime|static)
+            if [[ "$active" == "active" ]]; then
+                pass_check "Path unit $path_unit enabled and active — $desc"
+            else
+                fail_check "Path unit $path_unit enabled but state is '$active' — $desc"
+            fi
+            ;;
+        missing|not-found)
+            fail_check "Path unit $path_unit NOT installed — $desc (firstboot finalize incomplete?)"
+            ;;
+        disabled|masked)
+            fail_check "Path unit $path_unit is '$enabled' — $desc (was it disabled by accident?)"
+            ;;
+        *)
+            warn "Path unit $path_unit in unexpected state '$enabled' / '$active'"
+            ;;
+    esac
+}
+
 check_timers() {
     section "Timers"
 
@@ -61,6 +96,7 @@ check_timers() {
     _check_timer "snapmulti-status.timer"       "5-min status snapshot for /status web" server
     _check_timer "snapmulti-diagnostics.timer"  "30-min diagnostic snapshots for /var/lib/snapmulti-diagnostics" server
     _check_timer "snapmulti-backup.timer"       "daily MPD database backup to boot partition (cross-reflash continuity)" server
+    _check_path  "snapmulti-state-backup.path"  "snapserver/myMPD state backup to boot partition on change" server
 
     # Client-side scheduled features. snapclient-discover.timer drives
     # the multi-server failover mechanism (PR #285); without it, a

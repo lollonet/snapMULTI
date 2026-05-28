@@ -1,0 +1,8 @@
+[Unit]
+Description=Backup snapMULTI runtime state to boot partition
+After=local-fs.target
+ConditionPathExists=/opt/snapmulti
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/backup-snapmulti-state

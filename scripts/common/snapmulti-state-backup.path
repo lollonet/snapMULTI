@@ -1,0 +1,12 @@
+[Unit]
+Description=Watch snapMULTI runtime state for boot-partition backup
+
+[Path]
+PathChanged=/opt/snapmulti/data/server.json
+PathModified=/opt/snapmulti/data/server.json
+PathChanged=/opt/snapmulti/mympd/workdir/state
+PathModified=/opt/snapmulti/mympd/workdir/state
+Unit=snapmulti-state-backup.service
+
+[Install]
+WantedBy=multi-user.target

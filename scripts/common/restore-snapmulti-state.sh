@@ -6,10 +6,10 @@
 # Required because under overlayroot=tmpfs (the snapMULTI standard),
 # /opt/ lives in volatile RAM — every reboot wipes server.json (snapcast
 # groups, client positions) and mympd/workdir/state (smart playlists,
-# theme). The companion timer scripts/common/backup-mpd.sh writes these
-# files to /boot/firmware/snapmulti-backup/ (FAT32, persistent) every
-# 5 min after boot + daily; this script copies them back at the next
-# boot before containers start.
+# theme). The companion snapmulti-state-backup.path writes these files
+# to /boot/firmware/snapmulti-backup/ (FAT32, persistent) when they
+# change; this script copies them back at the next boot before
+# containers start.
 #
 # Wired as ExecStartPre on snapmulti-server.service. Must complete
 # BEFORE compose up — otherwise snapserver creates a default empty
@@ -25,6 +25,21 @@ PGID="${PGID:-1000}"
 TAG="[restore-snapmulti-state]"
 
 _log() { echo "$TAG $*" >&2; }
+
+load_owner_from_env() {
+    local env_file="$INSTALL_DIR/.env"
+    [[ -f "$env_file" ]] || return 0
+
+    local key value
+    while IFS='=' read -r key value; do
+        case "$key" in
+            PUID) [[ "$value" =~ ^[0-9]+$ ]] && PUID="$value" ;;
+            PGID) [[ "$value" =~ ^[0-9]+$ ]] && PGID="$value" ;;
+        esac
+    done < <(grep -E '^(PUID|PGID)=[0-9]+$' "$env_file" 2>/dev/null || true)
+}
+
+load_owner_from_env
 
 # Detect boot partition (same logic as backup-mpd.sh).
 if [[ -d /boot/firmware ]]; then
