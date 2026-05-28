@@ -7,12 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **v0.7.9 persistence regression (#527)** — `snapmulti-data-persistence.service` shipped in v0.7.9 was a no-op on the standard `overlayroot="tmpfs"` setup. The bind-mount source `/media/root-rw/snapmulti-persist/` was itself tmpfs (only `overlay/` + `overlay-workdir/` live there), so the bind worked at runtime but the entire persistent location got wiped at reboot. The smoke check `[OK] Persistent bind active` actively MASKED the problem by reporting the bind healthy mid-boot. Replaced with the proven `/boot/firmware/`-backup pattern already used for MPD database: `snapmulti-backup.timer` (5 min after boot + daily) now also snapshots `server.json`, and `restore-snapmulti-state` (new ExecStartPre on `snapmulti-server.service`) copies the backup back before containers start. Worst-case latency: a reboot within 5 min of the last group change loses those last edits. Removed `snapmulti-data-persistence.service`, `snapmulti-data-setup.sh`, and the misleading `check_persistence.sh` smoke module; replaced with `check_state_backup.sh` which verifies backup freshness on the actual persistent path.
+
 ## [0.7.9] — 2026-05-28
 
-> Script-only patch (image_set stays 0.7.7). Network-stack simplification (IPv6 off at kernel level) + state persistence under overlayroot + expanded status-page coverage. Resolves a class of dual-stack mDNS / Snapcast discovery failures and the long-standing "snapcast groups vanish at reboot" gap.
+> Script-only patch (image_set stays 0.7.7). Network-stack simplification (IPv6 off at kernel level) + expanded status-page coverage. Resolves a class of dual-stack mDNS / Snapcast discovery failures.
+>
+> **Known issue (fixed in [Unreleased]):** `snapmulti-data-persistence.service` shipped in this version does NOT actually persist on the standard `overlayroot="tmpfs"` setup. The smoke check `[OK] Persistent bind active` is misleading. See #527 + the [Unreleased] entry above for the proper fix.
 
-### Added
-- **snapserver + myMPD state persistence (`snapmulti-data-persistence.service`, #525)** — overlayroot's tmpfs upper layer used to wipe `/opt/snapmulti/data/server.json` (snapcast group names, client positions, group memberships) and `/opt/snapmulti/mympd/workdir/` (myMPD smart playlists, custom scripts, theme prefs) on every reboot. New systemd oneshot service binds those paths to `/media/root-rw/snapmulti-persist/` (a directory outside the overlay tree, on the writable backing fs) so all container-written state survives reboot. `EnvironmentFile=-${PROJECT_ROOT}/.env` propagates PUID/PGID so non-default user installs work too. First-run migration copies any existing content from the staged path into the persistent location before activating the bind, so no state is lost on upgrade. No-op on non-overlayroot installs. Documented in [ADVANCED](docs/ADVANCED.md#read-only-filesystem) + [USAGE](docs/USAGE.md#systemd-units).
+### Added (FAILED — see Known issue)
+- ~~**snapserver + myMPD state persistence (`snapmulti-data-persistence.service`, #525)**~~ — architecturally broken on tmpfs-mode overlayroot. The bind-mount source `/media/root-rw/snapmulti-persist/` was itself tmpfs, wiped at reboot. Replaced in [Unreleased] with `/boot/firmware/` backup pattern.
 - **Status page coverage expanded (#525)** — 6 new checks surface previously-invisible state:
   - `/boot/firmware` FAT32 free space (fixed 512 MB partition — full = no diagnostic bundles, no MPD backup, no kernel upgrade)
   - `/media/root-rw` backing fs free space (full = overlay cannot grow, OOM imminent)

@@ -148,6 +148,22 @@ assert 'echo "$server_unit" | grep -qE "ExecStartPre=-.*docker inspect snapserve
 assert 'echo "$server_unit" | grep -qE "ExecStartPre=-.*if \[\[ .*mem.* == .0..*compose up -d --force-recreate"' \
        'server mem-drift guard force-recreates when HostConfig.Memory=0'
 
+# State restore must run before the mem-drift guard because that guard can
+# start Compose via force-recreate. Restoring afterward is too late:
+# snapserver may already have created a default server.json.
+restore_line=$(echo "$server_unit" | grep -nE "^ExecStartPre=/usr/local/sbin/restore-snapmulti-state" | head -1 | cut -d: -f1)
+mem_line=$(echo "$server_unit" | grep -nE "^ExecStartPre=-.*docker inspect snapserver.*HostConfig.Memory" | head -1 | cut -d: -f1)
+if [[ -n "$restore_line" && -n "$mem_line" && "$restore_line" -lt "$mem_line" ]]; then
+    echo "  PASS: restore-snapmulti-state runs BEFORE mem-drift force-recreate"
+    pass=$((pass+1))
+else
+    echo "  FAIL: restore-snapmulti-state order wrong (restore=$restore_line, mem=$mem_line)"
+    fail=$((fail+1))
+fi
+
+assert 'echo "$server_unit" | grep -qE "^ExecStartPre=/usr/local/sbin/restore-snapmulti-state"' \
+       'restore-snapmulti-state failures are fatal (no leading -)'
+
 # PartOf=avahi-daemon.service has been removed: it gave Avahi full
 # lifecycle control over the audio stack, so a routine avahi restart
 # took the whole stack down. Server-side recovery from the snapcast

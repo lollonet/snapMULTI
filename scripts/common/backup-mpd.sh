@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Backup MPD database to boot partition (FAT32).
-# Runs periodically via systemd timer. The backup survives on the SD card
-# so that backup-from-sd.sh can extract it before reflashing.
+# Backup MPD database to the boot partition (FAT32, the only path that
+# survives a reboot under overlayroot=tmpfs).
+# Runs periodically via snapmulti-backup.timer.
 #
-# Also backs up myMPD playlists if present.
+# Runtime state (snapserver server.json + myMPD state/) is handled by
+# backup-snapmulti-state.sh and snapmulti-state-backup.path so it is
+# not coupled to MPD availability.
 set -euo pipefail
 
 # Detect install directory
@@ -55,7 +57,7 @@ if [[ -z "$MPD_DB" ]] && [[ -s "$INSTALL_DIR/mpd/data/mpd.db" ]]; then
     MPD_DB="$INSTALL_DIR/mpd/data/mpd.db"
 fi
 
-# Nothing to back up — log it so the timer's next run is observable
+# Nothing to back up — log it so the timer's next run is observable.
 if [[ -z "$MPD_DB" ]]; then
     logger -t backup-mpd "skipped: no usable mpd.db (container_state=$container_state)"
     exit 0
@@ -69,11 +71,5 @@ mkdir -p "$BACKUP_DIR/mpd/data"
 
 # Copy MPD database (temp file cleaned up by EXIT trap)
 cp "$MPD_DB" "$BACKUP_DIR/mpd/data/mpd.db"
-
-# Optional: myMPD playlists
-if [[ -d "$INSTALL_DIR/mympd/workdir/state" ]]; then
-    mkdir -p "$BACKUP_DIR/mympd"
-    cp -r "$INSTALL_DIR/mympd/workdir/state" "$BACKUP_DIR/mympd/" 2>/dev/null || true
-fi
 
 logger -t backup-mpd "MPD database backed up to $BACKUP_DIR"

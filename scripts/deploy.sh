@@ -1098,13 +1098,10 @@ install_systemd_service() {
 [Unit]
 Description=snapMULTI Docker Compose Server
 Requires=docker.service
-After=docker.service network-online.target avahi-daemon.service snapmulti-data-persistence.service
-Wants=network-online.target avahi-daemon.service snapmulti-data-persistence.service
+After=docker.service network-online.target avahi-daemon.service
+Wants=network-online.target avahi-daemon.service
 # Block startup until project root + /audio (FIFO dir) are mounted; avoids
-# a Docker race where compose starts before NFS/USB attaches /music or /audio.
-# The After=/Wants= clauses above gate on snapmulti-data-persistence.service
-# completion so the /opt/snapmulti/data bind-mount is in place before
-# snapserver's container bind-mount evaluates.
+# a Docker race where compose starts before NFS/USB attaches /music or /audio
 RequiresMountsFor=${PROJECT_ROOT} ${PROJECT_ROOT}/audio${music_mount_clause}
 # NOTE on snapcast 0.35 mDNS reconnect bug: when avahi-daemon restarts,
 # snapserver's libavahi-client connection drops and the daemon never
@@ -1124,6 +1121,11 @@ Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=${PROJECT_ROOT}
 $(docker_info_ready_execstartpre)
+# State restore from /boot/firmware/snapmulti-backup/ (see #527).
+# Runs BEFORE any ExecStartPre that can start Compose. Fresh installs
+# no-op when no backup exists; real restore errors must block startup
+# to avoid booting with empty/default snapserver/myMPD state.
+ExecStartPre=/usr/local/sbin/restore-snapmulti-state
 # Wait for avahi-daemon to be fully ready before \`docker compose up\`.
 # Without this, snapserver's libavahi-client connect race-loses against
 # avahi-daemon initialisation and falls back to PTR-only UDP 5353
@@ -1199,91 +1201,79 @@ EOF
 }
 
 #######################################
-# Persistent snapserver data dir (overlayroot bypass)
+# Snapserver + myMPD state persistence (boot-partition backup/restore)
 #
-# snapserver writes runtime state (groups, group names, client
-# positions) to /opt/snapmulti/data/server.json. Under overlayroot
-# the path lives on the volatile upper tmpfs — every reboot wipes
-# the upper layer and snapserver reverts to the post-firstboot
-# state on the ext4 lower layer.
+# Replaces the failed bind-mount approach from PR #525 (#527): under
+# overlayroot=tmpfs (the snapMULTI standard), /media/root-rw is itself
+# tmpfs — there is no userland-writable persistent path under /. The
+# only path that survives a reboot is /boot/firmware (FAT32, separately
+# mounted, see pattern_boot_partition_rescue).
 #
-# Fix: bind-mount /media/root-rw/snapmulti-data over
-# /opt/snapmulti/data. /media/root-rw is the writable backing fs
-# (it holds the overlay upperdir itself); a sibling directory
-# there is OUTSIDE the overlay tree and truly persistent. The
-# bind is established early at boot by snapmulti-data-persistence
-# .service, before snapmulti-server.service starts the snapserver
-# container.
-#
-# No-op on non-overlayroot installs — the setup script exits
-# silently when /media/root-rw is missing.
+# Pattern: snapmulti-state-backup.path watches snapserver/myMPD state
+# and snapshots it to /boot/firmware/snapmulti-backup/ on real changes.
+# Restore at boot via ExecStartPre on snapmulti-server.service BEFORE
+# any Compose-starting preflight — otherwise snapserver creates a fresh
+# empty server.json that the next backup tick would overwrite the good
+# prior snapshot with.
 #######################################
-install_snapmulti_data_persistence() {
-    step "Installing snapmulti-data-persistence.service"
+install_snapmulti_state_restore() {
+    step "Installing snapmulti state restore + event-driven backup"
 
-    local script_src="" script_dst="/usr/local/sbin/snapmulti-data-setup"
+    # 1) Restore script (consumed by snapmulti-server.service ExecStartPre).
+    local script_src="" script_dst="/usr/local/sbin/restore-snapmulti-state"
     local cand
     for cand in \
-        "${SCRIPT_DIR:-$(dirname "${BASH_SOURCE[0]}")}/common/snapmulti-data-setup.sh" \
-        "$PROJECT_ROOT/scripts/common/snapmulti-data-setup.sh" \
-        "/boot/firmware/snapmulti/common/snapmulti-data-setup.sh"; do
+        "${SCRIPT_DIR:-$(dirname "${BASH_SOURCE[0]}")}/common/restore-snapmulti-state.sh" \
+        "$PROJECT_ROOT/scripts/common/restore-snapmulti-state.sh" \
+        "/boot/firmware/snapmulti/common/restore-snapmulti-state.sh"; do
         if [[ -f "$cand" ]]; then
             script_src="$cand"
             break
         fi
     done
     if [[ -z "$script_src" ]]; then
-        warn "snapmulti-data-setup.sh not staged — snapserver state will NOT persist across reboot under overlayroot"
+        warn "restore-snapmulti-state.sh not staged — snapserver/myMPD state will NOT survive reboot"
         return 0
     fi
     install -m 0755 "$script_src" "$script_dst"
     ok "Installed $script_dst"
 
-    # Unquoted heredoc so ${PROJECT_ROOT} expands at unit-generation
-    # time. EnvironmentFile=- (with leading dash) is non-fatal when
-    # .env is absent (non-overlayroot / test environments). This
-    # propagates PUID/PGID from the operator's .env into the persist
-    # setup script — otherwise the persistent dirs are always created
-    # as 1000:1000 and a container running as a non-default uid (e.g.
-    # PUID=1001) cannot write into the bind-mounted location, silently
-    # losing state on every flush despite the smoke gate reporting OK.
-    cat > /etc/systemd/system/snapmulti-data-persistence.service <<EOF
-[Unit]
-Description=snapMULTI persistent snapserver data dir (overlayroot bypass)
-DefaultDependencies=no
-After=local-fs.target
-Before=docker.service basic.target
-ConditionPathExists=/media/root-rw
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-EnvironmentFile=-${PROJECT_ROOT}/.env
-ExecStart=/usr/local/sbin/snapmulti-data-setup
-# Best-effort umount on stop. Each line is independent (\`-\`) so a
-# missing mount (e.g. mympd workdir bind was never established on
-# a fresh server-only install where the dir didn't exist) doesn't
-# fail the stop. Add new paths here as STAGED_PATHS in the setup
-# script grows.
-ExecStop=-/bin/umount /opt/snapmulti/data
-ExecStop=-/bin/umount /opt/snapmulti/mympd/workdir
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload
-    if systemctl enable snapmulti-data-persistence.service >/dev/null 2>&1; then
-        ok "snapmulti-data-persistence.service enabled"
-    else
-        warn "snapmulti-data-persistence.service could not be enabled"
+    # 2) Backup mechanism (path-watched, event-driven). Symmetric with
+    # firstboot.sh installation — without these units, deploy.sh-only
+    # paths (manual install on existing Linux host, bypassing firstboot)
+    # would wire restore as ExecStartPre but never populate the boot-
+    # partition backup, leaving restore a perpetual no-op.
+    local backup_src="" backup_dst="/usr/local/bin/backup-snapmulti-state"
+    for cand in \
+        "${SCRIPT_DIR:-$(dirname "${BASH_SOURCE[0]}")}/common/backup-snapmulti-state.sh" \
+        "$PROJECT_ROOT/scripts/common/backup-snapmulti-state.sh" \
+        "/boot/firmware/snapmulti/common/backup-snapmulti-state.sh"; do
+        if [[ -f "$cand" ]]; then
+            backup_src="$cand"
+            break
+        fi
+    done
+    if [[ -z "$backup_src" ]]; then
+        warn "backup-snapmulti-state.sh not staged — state changes will NOT be backed up to boot partition"
+        return 0
     fi
-    # Start immediately so the bind-mount is active before start_services
-    # runs `docker compose up` for the first time on this boot.
-    if systemctl start snapmulti-data-persistence.service 2>/dev/null; then
-        ok "snapmulti-data-persistence.service active"
+    install -m 0755 "$backup_src" "$backup_dst"
+    ok "Installed $backup_dst"
+
+    local bk_dir
+    bk_dir="$(dirname "$backup_src")"
+    if [[ -f "$bk_dir/snapmulti-state-backup.service" && \
+          -f "$bk_dir/snapmulti-state-backup.path" ]]; then
+        install -m 0644 "$bk_dir/snapmulti-state-backup.service" /etc/systemd/system/
+        install -m 0644 "$bk_dir/snapmulti-state-backup.path"    /etc/systemd/system/
+        systemctl daemon-reload
+        if systemctl enable --now snapmulti-state-backup.path >/dev/null 2>&1; then
+            ok "snapmulti-state-backup.path enabled and active"
+        else
+            warn "snapmulti-state-backup.path could not be enabled — state changes will NOT be backed up"
+        fi
     else
-        warn "snapmulti-data-persistence.service could not be started — snapserver state may not persist this boot"
+        warn "snapmulti-state-backup.{service,path} not staged alongside backup-snapmulti-state.sh — backup units skipped"
     fi
 }
 
@@ -1394,12 +1384,12 @@ main() {
     # directly. This way the unit's ExecStartPost mDNS self-heal takes
     # effect on first boot — not just on restarts after install
     # completes.
-    # Install the persistence bind-mount unit BEFORE the server unit
-    # so its Wants=/After= clauses on snapmulti-data-persistence.service
-    # resolve to an existing unit. The function also starts the unit
-    # immediately so the bind is active for the upcoming start_services
-    # call (snapserver writes server.json on first compose up).
-    install_snapmulti_data_persistence
+    # Install the restore script BEFORE the server unit, so the
+    # snapmulti-server.service generated by install_systemd_service
+    # can reference /usr/local/sbin/restore-snapmulti-state in its
+    # ExecStartPre. No backup yet on fresh installs — the restore is
+    # a documented no-op until snapmulti-state-backup.path creates one.
+    install_snapmulti_state_restore
     install_systemd_service
     start_services
     verify_services

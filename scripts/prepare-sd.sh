@@ -1023,7 +1023,7 @@ VERIFY_ERRORS=0
 # -- snapMULTI files --
 echo ""
 echo "--- snapMULTI files ---"
-for f in install.conf firstboot.sh release-manifest.json common/progress.sh common/logging.sh common/unified-log.sh common/sanitize.sh common/system-tune.sh common/install-docker.sh common/install-deps.sh common/setup-docker.sh common/wait-network.sh common/mount-music.sh common/systemd-snippets.sh common/release-manifest.sh common/play-smoke-tone.sh common/auto-boot-smoke.sh common/snapmulti-data-setup.sh common/audio/smoke-pass.wav common/audio/smoke-warn.wav common/audio/smoke-fail.wav common/audio/smoke-skip.wav; do
+for f in install.conf firstboot.sh release-manifest.json common/progress.sh common/logging.sh common/unified-log.sh common/sanitize.sh common/system-tune.sh common/install-docker.sh common/install-deps.sh common/setup-docker.sh common/wait-network.sh common/mount-music.sh common/systemd-snippets.sh common/release-manifest.sh common/play-smoke-tone.sh common/auto-boot-smoke.sh common/restore-snapmulti-state.sh common/backup-snapmulti-state.sh common/snapmulti-state-backup.service common/snapmulti-state-backup.path common/audio/smoke-pass.wav common/audio/smoke-warn.wav common/audio/smoke-fail.wav common/audio/smoke-skip.wav; do
     if [[ -f "$DEST/$f" ]]; then
         echo "  [OK] snapmulti/$f"
     else
