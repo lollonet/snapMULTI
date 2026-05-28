@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# Backup MPD database to boot partition (FAT32).
-# Runs periodically via systemd timer. The backup survives on the SD card
-# so that backup-from-sd.sh can extract it before reflashing.
+# Backup MPD database AND snapserver group state to the boot partition
+# (FAT32, the only path that survives a reboot under overlayroot=tmpfs).
+# Runs periodically via snapmulti-backup.timer.
 #
-# Also backs up myMPD playlists if present.
+# Restored on every boot by /usr/local/sbin/restore-snapmulti-state
+# (ExecStartPre on snapmulti-server.service) so snapcast group names +
+# myMPD smart playlists / theme settings survive normal reboots, not
+# just reflashes.
+#
+# Also backs up myMPD state subdir (smart playlists, scripts, theme).
 set -euo pipefail
 
 # Detect install directory
@@ -76,4 +81,17 @@ if [[ -d "$INSTALL_DIR/mympd/workdir/state" ]]; then
     cp -r "$INSTALL_DIR/mympd/workdir/state" "$BACKUP_DIR/mympd/" 2>/dev/null || true
 fi
 
-logger -t backup-mpd "MPD database backed up to $BACKUP_DIR"
+# Snapserver group state (server.json). Atomic write so a power loss
+# mid-cp doesn't leave a half-written file that the restore step
+# would then copy back. server.json is small (~2KB), no size check
+# needed — but reject empty (snapserver writes "{}" briefly during
+# startup which would clobber a good prior backup).
+if [[ -s "$INSTALL_DIR/data/server.json" ]]; then
+    mkdir -p "$BACKUP_DIR/data"
+    if (( $(wc -c < "$INSTALL_DIR/data/server.json") >= 64 )); then
+        cp "$INSTALL_DIR/data/server.json" "$BACKUP_DIR/data/server.json.tmp"
+        mv "$BACKUP_DIR/data/server.json.tmp" "$BACKUP_DIR/data/server.json"
+    fi
+fi
+
+logger -t backup-mpd "MPD database + snapserver state backed up to $BACKUP_DIR"

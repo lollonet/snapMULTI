@@ -94,7 +94,7 @@ sudo /opt/snapmulti/scripts/ro-mode.sh disable   # then reboot
 sudo /opt/snapmulti/scripts/ro-mode.sh enable    # then reboot
 ```
 
-> **Exceptions — state that survives overlayroot wipes:** `snapmulti-data-persistence.service` bind-mounts `/opt/snapmulti/data` (snapserver group state) and `/opt/snapmulti/mympd/workdir` (myMPD smart playlists / custom scripts / theme) to `/media/root-rw/snapmulti-persist/`, which is outside the overlay tree. These directories persist across reboots without the maintenance toggle. Other MPD database state is backed up daily to the boot partition by `snapmulti-backup.timer`.
+> **Exceptions — state that survives overlayroot wipes:** `snapmulti-backup.timer` snapshots snapserver `server.json` (group state) + myMPD `state/` subdir + MPD `mpd.db` to `/boot/firmware/snapmulti-backup/` (FAT32, the only userland-writable persistent path under `overlayroot="tmpfs"`). On every boot, `restore-snapmulti-state` (wired as `ExecStartPre` on `snapmulti-server.service`) copies the backup back into `/opt/snapmulti/` before containers start. Trade-off: a reboot within 5 min of the last state change loses those last edits — the timer interval is the persistence floor. v0.7.9's `snapmulti-data-persistence.service` bind-mount approach was removed in v0.7.9.1 (see #527) — it was a no-op on tmpfs-mode overlayroot.
 
 `/boot/firmware/cmdline.txt` is owned by `scripts/common/cmdline-manager.sh` — don't hand-edit it. See ADR-003 for the rationale.
 
