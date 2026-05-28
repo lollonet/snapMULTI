@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Static checks for log-hygiene fixes:
 #   - Compose security_opt uses `=` (not deprecated `:`) for no-new-privileges + apparmor
-#   - udev USB autosuspend rule scoped to DEVTYPE==usb_device (interfaces don't expose power/autosuspend)
+#   - udev USB autosuspend rule omits DEVTYPE (PR #517 — interface events emit "Invalid key" warnings)
 
 set -euo pipefail
 
@@ -31,13 +31,13 @@ for f in "$ROOT/docker-compose.yml" "$ROOT/client/common/docker-compose.yml"; do
 done
 
 echo
-echo "## udev USB autosuspend — scoped to usb_device"
+echo "## udev USB autosuspend — DEVTYPE omitted (PR #517)"
 
 TUNE="$ROOT/scripts/common/system-tune.sh"
-assert "grep -q 'DEVTYPE==\"usb_device\"' '$TUNE'" \
-    "system-tune.sh: rule filters DEVTYPE==usb_device"
+assert "! grep -qE \"^[[:space:]]*if !.*DEVTYPE==\\\"usb_device\\\"\" '$TUNE'" \
+    "system-tune.sh: rule no longer carries DEVTYPE filter (would re-introduce udev warnings)"
 assert "grep -q 'TEST==\"power/autosuspend\"' '$TUNE'" \
-    "system-tune.sh: rule keeps TEST==power/autosuspend (belt+suspenders)"
+    "system-tune.sh: rule keeps TEST==power/autosuspend (selector)"
 
 echo
 echo "## Summary"

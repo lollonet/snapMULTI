@@ -116,9 +116,9 @@ snapcast_output="$(
     MODE=both \
     bash -c "section() { printf 'SECTION %s\\n' \"\$*\"; }; pass_check() { printf '[OK] %s\\n' \"\$*\"; }; fail_check() { printf '[ERROR] %s\\n' \"\$*\"; }; warn() { printf '[WARN] %s\\n' \"\$*\"; }; info() { printf '[INFO] %s\\n' \"\$*\"; }; source '$CHECK_SNAPCAST'; check_snapcast"
 )"
-assert_contains "$snapcast_output" "[OK] Snapcast: 2/3 clients connected" "offline Snapcast clients do not prevent pass"
-assert_contains "$snapcast_output" "[INFO] Disconnected Snapcast client(s): pi3-1gb(192.0.2.89)" "offline Snapcast clients are listed"
-assert_not_contains "$snapcast_output" "[WARN] Snapcast: 2/3 clients connected" "offline Snapcast clients are not warnings"
+assert_contains "$snapcast_output" "[OK] Snapcast clients: 2 of 3 connected" "offline Snapcast clients do not prevent pass"
+assert_contains "$snapcast_output" "[INFO] Snapcast clients offline: pi3-1gb(192.0.2.89)" "offline Snapcast clients are listed"
+assert_not_contains "$snapcast_output" "[WARN] Snapcast clients: 2 of 3 connected" "offline Snapcast clients are not warnings"
 
 set +e
 container_output="$(
@@ -130,7 +130,7 @@ rc=$?
 set -e
 assert_rc "$rc" "0" "historical restart on healthy container does not fail"
 assert_contains "$container_output" "[OK] No active container restart failures among 1 snapMULTI container(s)" "healthy restart history is classified as OK"
-assert_contains "$container_output" "[INFO] Past container restart(s) observed, current state not failing: mympd(RC=1)" "historical restart is still reported"
+assert_contains "$container_output" "[INFO] Container(s) restarted in the past but stable now: mympd(RC=1)" "historical restart is still reported"
 assert_not_contains "$container_output" "crash-loop" "historical restart is not called crash-loop"
 
 unhealthy_output="$(
