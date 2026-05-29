@@ -283,7 +283,7 @@ The HAT-detection issue is usually `otg_mode=1` or `dr_mode=host` in `config.txt
 snapMULTI enables IPv6 at the kernel level by default (ADR-008 supersedes the earlier ADR-007 kernel-disable). `ip -6 addr` returning addresses on a snapMULTI device is the **expected** state. Software defenses (Avahi `use-ipv6=no`, snapclient IPv4 SRV pin via `discover-server.sh`, fb-display IPv4 zeroconf filter, `boot-tune.sh` single-publish) cover the original dual-stack mDNS races; the kernel kill-switch was redundant and broke Tidal Connect's WebSocket listen.
 
 Symptoms that are **not** caused by IPv6 being on:
-- snapclient can't find the server → check `avahi-browse -rpt _snapcast._tcp` returns the IPv4 advertiser (Avahi `use-ipv6=no` keeps publishes IPv4-only).
+- snapclient can't find the server → check `avahi-browse -rpt _snapcast._tcp` returns the IPv4 advertiser (Avahi `use-ipv6=no` keeps publishing IPv4-only).
 - AirPlay / Tidal / Spotify cast app doesn't see the device → same probe with `_airplay._tcp`, `_tidalconnect._tcp`, `_spotify-connect._tcp`.
 - apt-get update slow → if you opted into `DISABLE_IPV6=true` then `/etc/apt/apt.conf.d/99force-ipv4` self-installs; with the default IPv6-on, apt works dual-stack and no force-IPv4 config is written.
 
