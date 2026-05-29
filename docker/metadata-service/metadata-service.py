@@ -34,6 +34,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+import aiohttp
 import websockets
 from aiohttp import web
 
@@ -2233,6 +2234,158 @@ STATUS_JSON_PATH = "/audio/system-status.json"
 STATUS_BOOT_GRACE_SECONDS = 600  # 10 minutes
 
 
+# ── Snapcast clients panel (#551) — live per-client state from the local
+# snapserver's JSON-RPC API. Cached 30 s: clients change state (connect,
+# disconnect, volume) faster than the 5-min snapshot timer can track.
+SNAPCAST_RPC_URL = "http://127.0.0.1:1780/jsonrpc"
+_SNAPCLIENTS_CACHE_TTL_SECONDS = 30
+_snapclients_cache: dict[str, tuple[float, list[dict] | None]] = {}
+
+
+def _parse_snapcast_clients(rpc_result: dict) -> list[dict]:
+    """Extract flat client list from Server.GetStatus result.
+
+    Snapcast result shape: result.server.groups[].clients[]. Each client carries
+    connection state, host info, config (volume, stream), and last-seen timestamp.
+    """
+    clients: list[dict] = []
+    server = rpc_result.get("server") if isinstance(rpc_result, dict) else None
+    if not isinstance(server, dict):
+        return []
+    for group in server.get("groups") or []:
+        if not isinstance(group, dict):
+            continue
+        group_name = str(group.get("name") or "")
+        group_stream = str(group.get("stream_id") or "")
+        for client in group.get("clients") or []:
+            if not isinstance(client, dict):
+                continue
+            host = client.get("host") or {}
+            config = client.get("config") or {}
+            # Snapcast normally returns a non-null volume object, but old
+            # servers / mid-state-transition can send `"volume": null` —
+            # use isinstance instead of `or {}` so the null collapse doesn't
+            # silently report muted=False / volume=0% for a real client.
+            volume = (
+                config.get("volume") if isinstance(config.get("volume"), dict) else {}
+            )
+            last_seen = client.get("lastSeen") or {}
+            try:
+                last_seen_sec = int(last_seen.get("sec", 0))
+            except (TypeError, ValueError):
+                last_seen_sec = 0
+            try:
+                volume_pct = int(volume.get("percent", 0))
+            except (TypeError, ValueError):
+                volume_pct = 0
+            clients.append(
+                {
+                    "name": str(config.get("name") or host.get("name") or "?"),
+                    "host": str(host.get("name") or "?"),
+                    "ip": str(host.get("ip") or ""),
+                    "connected": bool(client.get("connected")),
+                    "muted": bool(volume.get("muted")),
+                    "volume": volume_pct,
+                    "stream": str(config.get("stream_id") or group_stream or ""),
+                    "group": group_name,
+                    "last_seen_sec": last_seen_sec,
+                }
+            )
+    clients.sort(key=lambda c: (not c["connected"], c["name"].lower()))
+    return clients
+
+
+async def _fetch_snapcast_clients(timeout_s: float = 3.0) -> list[dict] | None:
+    """POST `Server.GetStatus` to localhost snapserver; return clients or None on error."""
+    now = time.time()
+    cached = _snapclients_cache.get("data")
+    if cached is not None and (now - cached[0]) < _SNAPCLIENTS_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    payload = {"id": 1, "jsonrpc": "2.0", "method": "Server.GetStatus", "params": {}}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                SNAPCAST_RPC_URL,
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=timeout_s),
+            ) as resp:
+                if resp.status != 200:
+                    logger.debug("snapclients: RPC returned HTTP %d", resp.status)
+                    _snapclients_cache["data"] = (now, None)
+                    return None
+                data = await resp.json()
+    except Exception as exc:  # noqa: BLE001 — snapserver down is the common case.
+        logger.debug("snapclients: RPC fetch failed: %s", exc)
+        _snapclients_cache["data"] = (now, None)
+        return None
+
+    # JSON-RPC structured error — log so "API change" is distinguishable from
+    # "snapserver down".
+    rpc_error = data.get("error") if isinstance(data, dict) else None
+    if rpc_error:
+        logger.warning("snapclients: JSON-RPC error: %s", rpc_error)
+        _snapclients_cache["data"] = (now, None)
+        return None
+    result = data.get("result") if isinstance(data, dict) else None
+    if not isinstance(result, dict):
+        _snapclients_cache["data"] = (now, None)
+        return None
+    clients = _parse_snapcast_clients(result)
+    _snapclients_cache["data"] = (time.time(), clients)
+    return clients
+
+
+def _render_snapcast_clients_section(clients: list[dict] | None) -> str:
+    """Render the Snapcast Clients section (#551)."""
+    if clients is None:
+        return (
+            "<section><h2>Snapcast Clients</h2><ul>"
+            '<li class="r-info"><span class="icon">ℹ</span>'
+            "Snapserver JSON-RPC unreachable at 127.0.0.1:1780"
+            "</li></ul></section>"
+        )
+    if not clients:
+        return (
+            "<section><h2>Snapcast Clients</h2><ul>"
+            '<li class="r-info"><span class="icon">ℹ</span>'
+            "No clients connected"
+            "</li></ul></section>"
+        )
+    rows: list[str] = []
+    for c in clients:
+        if c["connected"]:
+            icon_class, icon = "pass", "✓"
+            state_label = "connected"
+        else:
+            icon_class, icon = "info", "ℹ"
+            state_label = "disconnected"
+        name = html.escape(c.get("name", "?"))
+        ip = html.escape(c.get("ip", ""))
+        stream = html.escape(c.get("stream", ""))
+        group = html.escape(c.get("group", ""))
+        # Parser already normalises volume to int, but defend against a
+        # bypass path (future debug/test feeding the renderer directly):
+        # graceful fallback to 0 instead of a 500 on the status page.
+        try:
+            vol = int(c.get("volume") or 0)
+        except (TypeError, ValueError):
+            vol = 0
+        muted = " (muted)" if c.get("muted") else ""
+        ip_part = f" · {ip}" if ip else ""
+        stream_part = f" · stream {stream}" if stream else ""
+        group_part = f" · group {group}" if group else ""
+        rows.append(
+            f'<li class="r-{icon_class}"><span class="icon">{icon}</span>'
+            f"{name}{ip_part} — {state_label} · "
+            f"volume {vol}%{muted}{stream_part}{group_part}</li>"
+        )
+    return (
+        f"<section><h2>Snapcast Clients ({len(clients)})</h2>"
+        f"<ul>{''.join(rows)}</ul></section>"
+    )
+
+
 def _read_status_snapshot() -> tuple[dict | None, float | None]:
     """Read the JSON snapshot file. Returns (data, age_seconds) or (None, None).
 
@@ -2375,7 +2528,12 @@ def _structured_systemd_row(section: str, msg: str) -> tuple[str, str, str, str]
     return None
 
 
-def _status_to_html(data: dict | None, age_s: float | None) -> str:
+def _status_to_html(
+    data: dict | None,
+    age_s: float | None,
+    snapclients: list[dict] | None = None,
+    show_snapclients: bool = False,
+) -> str:
     """Render the snapshot to a beginner-friendly HTML page.
 
     All content is escaped via html.escape — message text from device-smoke
@@ -2502,6 +2660,12 @@ def _status_to_html(data: dict | None, age_s: float | None) -> str:
         sec_html_parts.append(
             f"<section><h2>{html.escape(sec_name)}</h2><ul>{''.join(rows)}</ul></section>"
         )
+
+    # Snapcast clients (#551) — appended whenever we have a live snapshot,
+    # so the operator sees per-client state alongside the aggregate counts
+    # already in the Compose / Snapcast sections.
+    if show_snapclients:
+        sec_html_parts.append(_render_snapcast_clients_section(snapclients))
 
     if age_s is not None:
         if age_s < 60:
@@ -2706,7 +2870,13 @@ async def handle_status(request: web.Request) -> web.Response:
             data,
             headers={"Cache-Control": "no-store"},
         )
-    body = _status_to_html(data, age_s)
+    # Fetch live snapcast client state only when we already have a snapshot to
+    # render (during the boot grace window the page is the "starting up"
+    # placeholder — no point doing the RPC then).
+    snapclients = await _fetch_snapcast_clients() if data is not None else None
+    body = _status_to_html(
+        data, age_s, snapclients=snapclients, show_snapclients=data is not None
+    )
     return web.Response(
         text=body,
         content_type="text/html",

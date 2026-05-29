@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`/status` Snapcast Clients panel (#551)** — new "Snapcast Clients" section on the local `/status` page with per-client live state: name, IP, connected/disconnected, volume %, muted flag, assigned stream, group. Data source: a single async POST to `http://127.0.0.1:1780/jsonrpc` (`Server.GetStatus`) on the local snapserver — no new container, no new dependency, no subprocess, no mDNS discovery (deliberately tighter scope than the closed Fleet experiment in #549/#550). Cache 30 s — clients change state faster than the 5-min snapshot timer but RPC fetch is sub-100 ms. Graceful degradation: when snapserver is down or returning non-200, the section renders an info row "Snapserver JSON-RPC unreachable at 127.0.0.1:1780" instead of failing the page. 12 new tests cover the parser (flattens groups, sort connected-first, malformed value fallback) and renderer (XSS escaping, muted marker, disconnected class).
+
 ### Changed
 - **`/status` page: overlayroot-aware journal message + remove user-facing `(issue #177 path)` jargon** — two beginner-confusion fixes on the system-health page:
   - `check_boot_health.sh` was emitting `No previous boot recorded in journal (fresh reflash or rotated logs)` on every snapMULTI device. On `overlayroot=tmpfs` the journal lives in `/run` (tmpfs) and is wiped every reboot — "no previous boot" is structural, not a fresh-reflash sign. The message now detects overlayroot via `findmnt` and surfaces `Journal volatile (overlayroot=tmpfs) — previous boots not retained` on those devices, keeping the old wording only for non-overlayroot setups (dev clones, manual installs).
