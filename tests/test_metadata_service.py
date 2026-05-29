@@ -200,12 +200,16 @@ class TestUpdateAvailableSemverComparison:
 
     @staticmethod
     def _is_update(module, current: str, latest: str) -> bool:
-        """Replicate the comparison block from handle_version against the helper."""
-        current_tuple = module._parse_version_tuple(current)
-        latest_tuple = module._parse_version_tuple(latest) if latest else None
+        # Mirror handle_version's comparison block — must stay in sync with
+        # docker/metadata-service/metadata-service.py:handle_version.
+        # Both sides are v-stripped FIRST to match production exactly.
+        current_clean = current.lstrip("v")
+        latest_clean = (latest or current).lstrip("v")
+        current_tuple = module._parse_version_tuple(current_clean)
+        latest_tuple = module._parse_version_tuple(latest_clean) if latest else None
         if current_tuple is not None and latest_tuple is not None:
             return latest_tuple > current_tuple
-        return bool(latest and latest != current)
+        return bool(latest and latest != current_clean)
 
     def test_current_ahead_of_latest_no_update(self, metadata_service_module):
         # The exact snapvideo scenario.
@@ -223,6 +227,12 @@ class TestUpdateAvailableSemverComparison:
     def test_unparseable_falls_back_to_inequality(self, metadata_service_module):
         # Dev clone where current is "unknown" — fall back to `!=` rather than crash.
         assert self._is_update(metadata_service_module, "unknown", "0.7.9.5") is True
+
+    def test_v_prefix_stripped_in_fallback(self, metadata_service_module):
+        # Production strips `v` from current BEFORE the `!=` fallback. Pins
+        # the helper's behaviour so a future drift between test and prod is caught.
+        assert self._is_update(metadata_service_module, "v0.7.9.5", "v0.7.9.5") is False
+        assert self._is_update(metadata_service_module, "unknown", "v0.7.9.5") is True
 
     def test_major_minor_jump(self, metadata_service_module):
         # Ensure tuple ordering handles cross-segment correctly (not lexicographic).

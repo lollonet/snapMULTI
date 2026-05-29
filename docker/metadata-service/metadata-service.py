@@ -2140,13 +2140,7 @@ _latest_version_cache: dict[str, str | float] = {"version": "", "checked_at": 0.
 
 
 def _parse_version_tuple(version: str) -> tuple[int, ...] | None:
-    """Parse 'v0.7.9.5' / '0.7.9.5' → (0, 7, 9, 5). None if any component non-numeric.
-
-    Used by handle_version to compare two versions semantically (latest > current)
-    instead of via simple `!=`. snapMULTI tags are pure numeric MAJOR.MINOR.PATCH[.BUILD]
-    so int tuples sort correctly. Dev builds or weird tags (e.g. "0.7.9.5-rc1") return
-    None → caller falls back to string inequality.
-    """
+    """Parse 'v0.7.9.5' → (0, 7, 9, 5); None if any component is non-numeric."""
     if not version:
         return None
     try:
