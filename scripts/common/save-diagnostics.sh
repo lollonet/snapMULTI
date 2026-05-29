@@ -23,6 +23,14 @@ MAX_SNAPSHOTS=12
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 SNAPSHOT="$DIAG_DIR/$TIMESTAMP"
 
+# Serialise /boot/firmware mount/write with sibling backup scripts (see
+# backup-mpd.sh for the race scenario).
+exec 9>/run/snapmulti-boot-write.lock
+if ! flock -w 60 9; then
+    logger -t save-diagnostics "skipped: could not acquire /run/snapmulti-boot-write.lock within 60s"
+    exit 0
+fi
+
 # See backup-mpd.sh for the remount validation rationale.
 remount_rw() {
     mount -o remount,rw "$BOOT" 2>&1 || true

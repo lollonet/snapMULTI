@@ -63,6 +63,20 @@ if [[ -z "$MPD_DB" ]]; then
     exit 0
 fi
 
+# Serialise /boot/firmware mount/write with sibling backup scripts. Without
+# this lock the EXIT trap of a concurrent writer (e.g. backup-snapmulti-state
+# triggered by snapmulti-state-backup.path / .timer at the same tick) can
+# remount the partition ro between our findmnt check and the mkdir/cp below,
+# producing 'cannot create directory: Read-only file system' on a fs we just
+# successfully validated as rw. Observed on snapvideo 2026-05-29 17:16:44:
+# state-backup + mpd-backup fired in the same second, state-backup's cleanup
+# remounted ro mid-flight, mpd-backup hit the race.
+exec 9>/run/snapmulti-boot-write.lock
+if ! flock -w 60 9; then
+    logger -t backup-mpd "skipped: could not acquire /run/snapmulti-boot-write.lock within 60s"
+    exit 0
+fi
+
 # Preserve prior boot partition mount state. Defensive consistency
 # with backup-snapmulti-state.sh: this script's trigger is the
 # snapmulti-backup.timer which doesn't fire during firstboot, but
