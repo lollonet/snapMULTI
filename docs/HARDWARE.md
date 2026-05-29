@@ -359,48 +359,47 @@ Container memory limits are applied automatically based on detected hardware (mi
 
 ## Reference builds — real-world measurements
 
-Two production scenarios captured on **2026-05-13** with `docker stats --no-stream`, `free -h`, and `vcgencmd measure_temp`. Intended as realistic upper bounds while the system is actively streaming, *not* idle baselines.
+Two production scenarios captured on **2026-05-29** with `docker stats --no-stream`, `free -h`, and `vcgencmd measure_temp`. Intended as realistic upper bounds while the system is actively streaming, *not* idle baselines.
 
-### Scenario A — `pi-server` fan-out: 3 sources → 3 client groups
+### Scenario A — `snapvideo` fan-out: 3 active sources → multiple client groups
 
-`pi-server` serves three different audio sources simultaneously to three distinct clients, each on its own Snapweb group.
+`snapvideo` (server + local display) serves three sources simultaneously (MPD library, AirPlay session, Spotify Connect) to two remote snapclients plus its own loopback display.
 
 | Role | Hostname | Board | RAM | Audio | Source it plays |
 |------|----------|-------|-----|-------|-----------------|
-| Server + display | `pi-server` | Pi 4 B Rev 1.4 | 8 GB | HiFiBerry DAC+ (analog) | — (fans out all 3) |
-| Client group A | `pi3-1gb` | Pi 3 B+ Rev 1.4 | 1 GB | InnoMaker HIFI DAC HAT (PCM5122) | MPD library |
-| Client group B | `pi-zero` | Pi Zero 2 W Rev 1.0 | 512 MB | InnoMaker DAC (PCM5122), native snapclient | Spotify |
-| Client group C | `pi-display` | Pi 4 B Rev 1.1 | 2 GB | HDMI to LG 50" (with cover-art display) | Tidal Connect |
+| Server + display | `snapvideo` | Pi 4 B | 8 GB | HiFiBerry DAC+ (analog) | — (fans out 3) |
+| Client group A | `snapdigi` | Pi 4 B | 2 GB | HDMI to LG 50" (with cover-art display) | MPD library |
+| Client group B | `pizero` | Pi Zero 2 W | 512 MB | InnoMaker DAC (PCM5122), native snapclient | Spotify |
+| Loopback | `snapvideo` (self) | Pi 4 B | 8 GB | HiFiBerry DAC+ | AirPlay |
 
-**Server load** (`pi-server`, uptime 6 h, load avg `1.62`):
+**Server load** (`snapvideo`, uptime 43 min, load avg `0.45`):
 
 | Container | CPU % | RAM | Notes |
 |-----------|-------|-----|-------|
-| snapserver | 13.32% | 91 MiB | Fans out audio to all 3 clients |
-| mpd | 11.23% | 255 MiB | Group A is streaming from the local library |
-| fb-display | 10.93% | 133 MiB | Server-with-display (cover art on this Pi too) |
-| audio-visualizer | 7.53% | 54 MiB | Server-with-display |
-| librespot (Spotify) | 3.02% | 58 MiB | Group B is casting Spotify |
-| metadata | 2.02% | 62 MiB | Serves cover art / now-playing to clients + display |
-| snapclient (loopback) | 1.65% | 18 MiB | pi-server also plays locally |
-| tidal-connect | 1.47% | 95 MiB | Group C is casting Tidal |
-| shairport-sync | 0.00% | 18 MiB | AirPlay idle (no active stream) |
-| mympd | 0.00% | 18 MiB | Idle web UI |
-| **Server total** | **~51% CPU** | **~803 MiB** | of 384 MiB+256 MiB+96 MiB+128 MiB+192 MiB+128 MiB+96 MiB+192 MiB+96 MiB+128 MiB limits |
+| snapserver | 10.96% | 90.34 MiB | Fans out audio to all clients |
+| fb-display | 8.16% | 109.8 MiB | Server-with-display (cover art rendered locally too) |
+| tidal-connect | 3.84% | 32.18 MiB | Idle (no active Tidal cast — daemon stays warm) |
+| librespot (Spotify) | 3.71% | 40.81 MiB | Group B is casting Spotify |
+| audio-visualizer | 3.52% | 54.10 MiB | Server-with-display |
+| shairport-sync | 1.76% | 21.95 MiB | AirPlay active session (loopback playback) |
+| snapclient (loopback) | 1.38% | 18.38 MiB | snapvideo also plays locally |
+| mpd | 0.45% | 249.1 MiB | Group A is streaming from the local library |
+| metadata | 0.10% | 63.11 MiB | Serves cover art / now-playing to clients + display |
+| mympd | 0.00% | 14.78 MiB | Idle web UI |
+| **Server total** | **~34% CPU** | **~895 MiB** | of 384+192+96+128+128+96+96+256+256+128 = 1.76 GiB cumulative limit |
 
-Host: 2.8 GiB used / 7.5 GiB total, **4.6 GiB available**. Temperature **64.2 °C**.
+Host: 710 MiB used / 7.5 GiB total, **6.8 GiB available**. Temperature **68.6 °C**.
 
 **Client load** (per group, all healthy on smoke test):
 
 | Client | snapclient CPU % | snapclient RAM | Host RAM used / total | Temp |
 |--------|------------------|----------------|-----------------------|------|
-| `pi3-1gb` (Pi 3 B+ 1 GB, headless) | 1.36% | 18 MiB | 223 / 955 MiB | 49.4 °C |
-| `pi-zero` (Pi Zero 2 W, native install) | 1.8% (process) | 13 MiB RSS | 159 / 416 MiB | 44.0 °C |
-| `pi-display` (Pi 4 2 GB + 4K HDMI display) | 1.80% | 9 MiB | 848 / 1.6 GiB | 59.9 °C |
+| `snapdigi` (Pi 4 2 GB + 4K HDMI display) | 1.40% | 17.96 MiB | 439 / 1.6 GiB | 61.8 °C |
+| `pizero` (Pi Zero 2 W, native install) | 0.1% (process) | 13.4 MiB RSS | 153 / 416 MiB | 47.8 °C |
 
-On `pi-display`, the cover-art stack adds: `fb-display` **66.16% / 124 MiB** (4K rendering is the dominant cost) and `audio-visualizer` 8.92% / 33 MiB. snapclient itself stays trivial on every client.
+On `snapdigi`, the cover-art stack adds: `fb-display` **63.12% / 145.8 MiB** (4K HDMI rendering remains the dominant client cost) and `audio-visualizer` 4.04% / 53.53 MiB. snapclient itself stays trivial on every client.
 
-> **Note on Pi Zero 2 W.** It runs the native `snapclient` .deb (no Docker, no display containers — see [Pi Zero 2 W Notes](#pi-zero-2-w-notes)). The result is a single process at 13 MiB RSS / 1.8% CPU, which is why a 512 MB board sustains it indefinitely. The same role under Docker would not fit.
+> **Note on Pi Zero 2 W.** It runs the native `snapclient` .deb (no Docker, no display containers — see [Pi Zero 2 W Notes](#pi-zero-2-w-notes)). The result is a single process at ~13 MiB RSS / 0.1 % CPU, which is why a 512 MB board sustains it indefinitely. The same role under Docker would not fit.
 
 ### Scenario B — `pi4-test` single-host both-mode (local library only)
 

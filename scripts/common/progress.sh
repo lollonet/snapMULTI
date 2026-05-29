@@ -172,8 +172,7 @@ render_progress() {
         printf '  +%s+\n' "$hline"
         printf '  | \033[1m%-*.*s\033[0m |\n' "$_inner_width" "$_inner_width" "$PROGRESS_TITLE"
         printf '  +%s+\n' "$hline"
-        # ETA label — empty when env unset (dev invocations). Use plain white
-        # (\033[37m) instead of dim (\033[2m) for framebuffer console compat.
+        # \033[37m not \033[2m — framebuffer console lacks dim support.
         local _eta_label=""
         if [[ -n "${EXPECTED_TOTAL_MIN:-}" ]]; then
             _eta_label=" / ~${EXPECTED_TOTAL_MIN} min"

@@ -58,16 +58,13 @@ assert 'grep -qE "EXPECTED_TOTAL_MIN" "$PROGRESS_SH"' \
 assert 'grep -qE "~\\$\\{EXPECTED_TOTAL_MIN\\} min" "$PROGRESS_SH"' \
     'progress.sh prints "~${EXPECTED_TOTAL_MIN} min" label'
 
-# Behaviour: empty when not set (dev invocations shouldn't render a "~ min" gap).
-out=$(EXPECTED_TOTAL_MIN='' bash -c '
-    if [[ -n "${EXPECTED_TOTAL_MIN:-}" ]]; then
-        echo "WITH"
-    else
-        echo "WITHOUT"
-    fi
-')
-assert '[[ "$out" == "WITHOUT" ]]' \
-    'empty EXPECTED_TOTAL_MIN → no label (per the env-aware branch in progress.sh)'
+# Behaviour: empty EXPECTED_TOTAL_MIN must produce no "~ NN min" fragment in
+# the rendered output. Actually exercise render_progress() — not just bash
+# built-ins — so an inverted condition in progress.sh would be caught here.
+out=$(STEP_NAMES=("Step") STEP_WEIGHTS=(1) PROGRESS_LOG=/dev/null EXPECTED_TOTAL_MIN='' \
+        bash -c 'source "$1" 2>/dev/null; render_progress 1 0 0 ""' _ "$PROGRESS_SH" 2>&1 || true)
+assert '! echo "$out" | grep -q "~ "' \
+    'render_progress with empty EXPECTED_TOTAL_MIN emits no "~ NN min" label'
 
 echo
 echo "=== Summary ==="
