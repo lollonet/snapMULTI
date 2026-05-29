@@ -172,8 +172,13 @@ render_progress() {
         printf '  +%s+\n' "$hline"
         printf '  | \033[1m%-*.*s\033[0m |\n' "$_inner_width" "$_inner_width" "$PROGRESS_TITLE"
         printf '  +%s+\n' "$hline"
-        printf '  \033[36m%02d:%02d\033[0m  \033[33m[%s]\033[0m\n' \
-            $((elapsed/60)) $((elapsed%60)) "$bar"
+        # \033[37m not \033[2m — framebuffer console lacks dim support.
+        local _eta_label=""
+        if [[ -n "${EXPECTED_TOTAL_MIN:-}" ]]; then
+            _eta_label=" / ~${EXPECTED_TOTAL_MIN} min"
+        fi
+        printf '  \033[36m%02d:%02d\033[0m\033[37m%s\033[0m  \033[33m[%s]\033[0m\n' \
+            $((elapsed/60)) $((elapsed%60)) "$_eta_label" "$bar"
         printf '  %3d%% %s\n' "$pct" "$spinner"
         printf '\n'
         for i in $(seq 1 "$total"); do

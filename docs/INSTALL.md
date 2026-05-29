@@ -16,7 +16,7 @@ Already comfortable with Raspberry Pi Imager and terminals? This is the whole in
 4. Download the latest snapMULTI release ZIP or `git clone https://github.com/lollonet/snapMULTI.git`.
 5. From the snapMULTI folder, run `./scripts/prepare-sd.sh` on macOS/Linux or `.\scripts\prepare-sd.ps1` on Windows.
 6. Choose what this Pi should do: **Audio Player**, **Music Server**, or **Server + Player**.
-7. Eject the SD, boot the Pi, and wait about 10-15 minutes. It installs, verifies, then reboots once.
+7. Eject the SD, boot the Pi, and wait roughly 15-20 minutes on a Pi 4/5 (longer on Pi 3 or Pi Zero 2 W). It installs, verifies, then reboots once. The HDMI progress display surfaces the expected total time alongside elapsed so you know how far along you are.
 8. Open `http://<hostname>.local:8083/` — the start page links to Snapweb, myMPD, status, and API endpoints.
 
 If any step is unclear, continue with the detailed walkthrough below. If first boot fails, recover the diagnostic bundle from the SD card as described in [TROUBLESHOOTING.md — When in doubt](TROUBLESHOOTING.md#when-in-doubt--grab-the-diagnostic-bundle).

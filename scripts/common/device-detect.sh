@@ -42,3 +42,9 @@ device_model() {
 is_pi_zero_2w() {
     [[ "$(device_model)" == *"Zero 2 W"* ]]
 }
+
+# True iff this host is a Raspberry Pi 3 (3B, 3B+, 3A+). Used to bucket
+# install-time ETA — Pi 3 is ~40% slower than Pi 4/5 on apt + Docker pull.
+is_pi_3() {
+    [[ "$(device_model)" == *"Raspberry Pi 3"* ]]
+}

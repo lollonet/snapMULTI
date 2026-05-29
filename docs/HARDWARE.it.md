@@ -359,48 +359,47 @@ I limiti di memoria dei container vengono applicati automaticamente in base all'
 
 ## Build di riferimento — misurazioni reali
 
-Due scenari di produzione catturati il **2026-05-13** con `docker stats --no-stream`, `free -h` e `vcgencmd measure_temp`. Pensati come limiti superiori realistici mentre il sistema sta attivamente trasmettendo, *non* come baseline a riposo.
+Due scenari di produzione catturati il **2026-05-29** con `docker stats --no-stream`, `free -h` e `vcgencmd measure_temp`. Pensati come limiti superiori realistici mentre il sistema sta attivamente trasmettendo, *non* come baseline a riposo.
 
-### Scenario A — `pi-server` fan-out: 3 sorgenti → 3 gruppi di client
+### Scenario A — `snapvideo` fan-out: 3 sorgenti attive → più gruppi di client
 
-`pi-server` serve tre sorgenti audio diverse simultaneamente a tre client distinti, ognuno sul proprio gruppo Snapweb.
+`snapvideo` (server + display locale) serve tre sorgenti simultaneamente (libreria MPD, sessione AirPlay, Spotify Connect) a due snapclient remoti e al proprio display loopback.
 
 | Ruolo | Hostname | Scheda | RAM | Audio | Sorgente riprodotta |
 |-------|----------|--------|-----|-------|---------------------|
-| Server + display | `pi-server` | Pi 4 B Rev 1.4 | 8 GB | HiFiBerry DAC+ (analogico) | — (serve tutti e 3) |
-| Client gruppo A | `pi3-1gb` | Pi 3 B+ Rev 1.4 | 1 GB | InnoMaker HIFI DAC HAT (PCM5122) | Libreria MPD |
-| Client gruppo B | `pi-zero` | Pi Zero 2 W Rev 1.0 | 512 MB | InnoMaker DAC (PCM5122), snapclient nativo | Spotify |
-| Client gruppo C | `pi-display` | Pi 4 B Rev 1.1 | 2 GB | HDMI verso LG 50" (con display copertine) | Tidal Connect |
+| Server + display | `snapvideo` | Pi 4 B | 8 GB | HiFiBerry DAC+ (analogico) | — (serve tutti e 3) |
+| Client gruppo A | `snapdigi` | Pi 4 B | 2 GB | HDMI verso LG 50" (con display copertine) | Libreria MPD |
+| Client gruppo B | `pizero` | Pi Zero 2 W | 512 MB | InnoMaker DAC (PCM5122), snapclient nativo | Spotify |
+| Loopback | `snapvideo` (sé stesso) | Pi 4 B | 8 GB | HiFiBerry DAC+ | AirPlay |
 
-**Carico server** (`pi-server`, uptime 6 h, load avg `1.62`):
+**Carico server** (`snapvideo`, uptime 43 min, load avg `0,45`):
 
 | Container | CPU % | RAM | Note |
 |-----------|-------|-----|------|
-| snapserver | 13.32% | 91 MiB | Distribuisce l'audio a tutti e 3 i client |
-| mpd | 11.23% | 255 MiB | Il gruppo A sta riproducendo dalla libreria locale |
-| fb-display | 10.93% | 133 MiB | Server-con-display (copertine anche su questo Pi) |
-| audio-visualizer | 7.53% | 54 MiB | Server-con-display |
-| librespot (Spotify) | 3.02% | 58 MiB | Il gruppo B sta facendo cast da Spotify |
-| metadata | 2.02% | 62 MiB | Serve copertina / brano in corso a client + display |
-| snapclient (loopback) | 1.65% | 18 MiB | pi-server suona anche localmente |
-| tidal-connect | 1.47% | 95 MiB | Il gruppo C sta facendo cast da Tidal |
-| shairport-sync | 0.00% | 18 MiB | AirPlay a riposo (nessuno stream attivo) |
-| mympd | 0.00% | 18 MiB | Web UI a riposo |
-| **Totale server** | **~51% CPU** | **~803 MiB** | su 384+256+96+128+192+128+96+192+96+128 MiB di limiti |
+| snapserver | 10,96% | 90,34 MiB | Distribuisce l'audio a tutti i client |
+| fb-display | 8,16% | 109,8 MiB | Server-con-display (copertine renderizzate anche localmente) |
+| tidal-connect | 3,84% | 32,18 MiB | A riposo (nessun cast Tidal — daemon resta caldo) |
+| librespot (Spotify) | 3,71% | 40,81 MiB | Il gruppo B sta facendo cast da Spotify |
+| audio-visualizer | 3,52% | 54,10 MiB | Server-con-display |
+| shairport-sync | 1,76% | 21,95 MiB | Sessione AirPlay attiva (riproduzione loopback) |
+| snapclient (loopback) | 1,38% | 18,38 MiB | snapvideo suona anche localmente |
+| mpd | 0,45% | 249,1 MiB | Il gruppo A sta trasmettendo dalla libreria locale |
+| metadata | 0,10% | 63,11 MiB | Serve copertina / brano in corso a client + display |
+| mympd | 0,00% | 14,78 MiB | Web UI a riposo |
+| **Totale server** | **~34% CPU** | **~895 MiB** | su 384+192+96+128+128+96+96+256+256+128 = 1,76 GiB di limiti cumulativi |
 
-Host: 2,8 GiB usati / 7,5 GiB totali, **4,6 GiB disponibili**. Temperatura **64,2 °C**.
+Host: 710 MiB usati / 7,5 GiB totali, **6,8 GiB disponibili**. Temperatura **68,6 °C**.
 
 **Carico client** (per gruppo, tutti verdi al test di salute):
 
 | Client | CPU % snapclient | RAM snapclient | RAM host usata / totale | Temp |
 |--------|------------------|----------------|--------------------------|------|
-| `pi3-1gb` (Pi 3 B+ 1 GB, headless) | 1,36% | 18 MiB | 223 / 955 MiB | 49,4 °C |
-| `pi-zero` (Pi Zero 2 W, install nativa) | 1,8% (processo) | 13 MiB RSS | 159 / 416 MiB | 44,0 °C |
-| `pi-display` (Pi 4 2 GB + display HDMI 4K) | 1,80% | 9 MiB | 848 / 1,6 GiB | 59,9 °C |
+| `snapdigi` (Pi 4 2 GB + display HDMI 4K) | 1,40% | 17,96 MiB | 439 / 1,6 GiB | 61,8 °C |
+| `pizero` (Pi Zero 2 W, install nativa) | 0,1% (processo) | 13,4 MiB RSS | 153 / 416 MiB | 47,8 °C |
 
-Su `pi-display`, lo stack copertine aggiunge: `fb-display` **66,16% / 124 MiB** (il rendering 4K è il costo dominante) e `audio-visualizer` 8,92% / 33 MiB. snapclient di per sé resta trascurabile su ogni client.
+Su `snapdigi`, lo stack copertine aggiunge: `fb-display` **63,12% / 145,8 MiB** (il rendering HDMI 4K resta il costo dominante del client) e `audio-visualizer` 4,04% / 53,53 MiB. snapclient di per sé resta trascurabile su ogni client.
 
-> **Nota sul Pi Zero 2 W.** Esegue snapclient nativo da `.deb` (niente Docker, niente container display — vedi [Note Pi Zero 2 W](#note-pi-zero-2-w)). Il risultato è un singolo processo a 13 MiB RSS / 1,8% CPU, ed è per questo che una scheda da 512 MB lo sostiene a tempo indefinito. Lo stesso ruolo sotto Docker non starebbe in RAM.
+> **Nota sul Pi Zero 2 W.** Esegue snapclient nativo da `.deb` (niente Docker, niente container display — vedi [Note Pi Zero 2 W](#note-pi-zero-2-w)). Il risultato è un singolo processo a ~13 MiB RSS / 0,1 % CPU, ed è per questo che una scheda da 512 MB lo sostiene a tempo indefinito. Lo stesso ruolo sotto Docker non starebbe in RAM.
 
 ### Scenario B — `pi4-test` both-mode single-host (solo libreria locale)
 

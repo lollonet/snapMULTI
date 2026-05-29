@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **HARDWARE.md Scenario A refreshed with measurements from current fleet (snapvideo / snapdigi / pizero)** — the 2026-05-13 capture referenced a `pi-server` host and Pi 3 + Pi 4 + Pi Zero client mix that is no longer the active fleet. Re-measured 2026-05-29 on snapvideo (server + loopback display, 3 active sources: MPD + AirPlay + Spotify) fanning out to `snapdigi` (Pi 4 2 GB + 4K HDMI client) and `pizero` (Pi Zero 2 W native client): server now sits at ~34 % CPU / ~895 MiB total / 68.6 °C, available host RAM 6.8 GiB. Topology + numbers mirrored in `HARDWARE.it.md`.
+- **Install TUI shows expected total time + docs updated with realistic per-hardware figures** — the HDMI progress bar now displays `02:15 / ~16 min  [████░░░░]` alongside the running elapsed counter so the operator can tell whether 12 minutes in is "almost done" or "barely halfway". `EXPECTED_TOTAL_MIN` is computed in `firstboot.sh` per `(hardware, INSTALL_TYPE)` bucket using measured install logs (snapvideo Pi 4 8GB both: 16:17, snapdigi Pi 4 2GB client: 10:30, pizero Pi Zero 2W client-native: 18:25; Pi 3 projected at +40%) and `progress.sh` renders the label when the env var is set. README + `docs/INSTALL.md` (+ Italian) updated from the stale "10-15 min" to the realistic "15-20 min on Pi 4/5, longer on Pi 3 / Pi Zero 2W". 9-assertion static test gates the helper, env var, label format.
+
 ## [0.7.9.6] — 2026-05-29
 
 > Script-only patch (image_set stays 0.7.7). Adds the per-client snapclient panel to `/status` (#552), closes the concurrent-remount race on backup scripts (#553), surfaces semver-aware update detection (#546), fixes apt-get kernel kept-back (#545), backup graceful-degrade (#547), `/status` overlayroot-aware journal message (#548). Validated live on snapvideo without reflash for #552 and #553.

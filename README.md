@@ -59,7 +59,7 @@ If this is your first snapMULTI install, use the boring path: **Raspberry Pi 4 (
 - **Pi Zero 2 W** is supported as a headless Audio Player only; it is not a server or "Server + Player" target.
 - **NAS share paths with spaces** are rejected. Rename `Music Share` to `Music_Share` on the NAS side.
 - **Tidal Connect** uses an upstream proprietary component. It is enabled by default on ARM installs; remove `tidal` from `COMPOSE_PROFILES` in `/opt/snapmulti/.env` if you want a fully free-software stack.
-- **Updates are reflash-first**. The filesystem is read-only, so you update by re-flashing the SD with a new release (~10 min, settings auto-detect) rather than patching a running system.
+- **Updates are reflash-first**. The filesystem is read-only, so you update by re-flashing the SD with a new release (~15-20 min on Pi 4/5, settings auto-detect) rather than patching a running system.
 - **Hardware quality matters**. Bad SD cards, weak PSUs and flaky WiFi cause most first-install failures.
 
 ## Quick start
@@ -98,7 +98,7 @@ The script walks you through a few questions: the role (**Audio Player** / **Mus
 
 ### 4. Boot the Pi
 
-Eject the SD, insert it in the Pi, power on. Wait about 10-15 minutes — the first-boot installer runs on its own (no SSH), shows progress on HDMI if a screen is attached, then reboots once.
+Eject the SD, insert it in the Pi, power on. Wait roughly 15-20 minutes on a Pi 4/5 (longer on Pi 3 or Pi Zero 2 W) — the first-boot installer runs on its own (no SSH), shows progress on HDMI if a screen is attached, then reboots once. The HDMI progress display shows the expected total time so you know whether 8 minutes in is "almost there" or "barely halfway".
 
 **It worked when**: with a screen attached, the HDMI display shows the snapMULTI now-playing screen (cover art / spectrum). Either way, from another device open `http://<hostname>.local:8083/`, then open **Status** — every check should be green. Then cast something (see **After install** below).
 

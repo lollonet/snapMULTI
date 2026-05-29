@@ -296,6 +296,30 @@ case "$INSTALL_TYPE" in
 esac
 PROGRESS_TITLE="$PROGRESS_TITLE ($(hostname))"
 
+# ETA shown on TUI elapsed line. Pi 4 + Pi Zero 2W measured (snapvideo 16m, snapdigi 10:30, pizero 18:25); Pi 3 projected at ~+40% vs Pi 4.
+if is_pi_zero_2w; then
+    case "$INSTALL_TYPE" in
+        client|client-native) EXPECTED_TOTAL_MIN=18 ;;
+        *)                    EXPECTED_TOTAL_MIN=25 ;;  # server/both on Zero 2W not supported but defensive
+    esac
+elif is_pi_3; then
+    case "$INSTALL_TYPE" in
+        server) EXPECTED_TOTAL_MIN=20 ;;
+        client) EXPECTED_TOTAL_MIN=16 ;;
+        both)   EXPECTED_TOTAL_MIN=24 ;;
+        *)      EXPECTED_TOTAL_MIN=20 ;;
+    esac
+else
+    # Pi 4, Pi 5, and any other modern board fall here.
+    case "$INSTALL_TYPE" in
+        server) EXPECTED_TOTAL_MIN=14 ;;
+        client) EXPECTED_TOTAL_MIN=11 ;;
+        both)   EXPECTED_TOTAL_MIN=16 ;;
+        *)      EXPECTED_TOTAL_MIN=15 ;;
+    esac
+fi
+export EXPECTED_TOTAL_MIN
+
 # Verify step arrays match
 if [[ ${#STEP_NAMES[@]} -ne ${#STEP_WEIGHTS[@]} ]]; then
     log_error "BUG: STEP_NAMES (${#STEP_NAMES[@]}) != STEP_WEIGHTS (${#STEP_WEIGHTS[@]})"
