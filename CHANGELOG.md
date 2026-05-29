@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.9.6] — 2026-05-29
+
+> Script-only patch (image_set stays 0.7.7). Adds the per-client snapclient panel to `/status` (#552), closes the concurrent-remount race on backup scripts (#553), surfaces semver-aware update detection (#546), fixes apt-get kernel kept-back (#545), backup graceful-degrade (#547), `/status` overlayroot-aware journal message (#548). Validated live on snapvideo without reflash for #552 and #553.
+
 ### Fixed
 - **Boot-partition writers serialised via `flock` to fix concurrent remount race** — `backup-mpd.sh`, `backup-snapmulti-state.sh`, and `save-diagnostics.sh` now acquire a shared lock on `/run/snapmulti-boot-write.lock` (60 s timeout) before any `mount -o remount,rw /boot/firmware` so a sibling script cannot run its EXIT trap (`remount,ro`) mid-write of another. Observed on snapvideo 2026-05-29 17:16:44: `snapmulti-state-backup.service` and `snapmulti-backup.service` fired in the same second; state-backup's cleanup remounted ro while mpd-backup was between its findmnt-validate (passed `rw`) and the `mkdir`, surfacing `mkdir: cannot create directory: Read-only file system` and degrading `/status` until `reset-failed`. PR #547 had decoupled the failure mode from `/status` by exiting 0 on remount validation failure — this PR closes the actual race so the backup succeeds instead of being skipped. 9-assertion static test gates the invariant.
 
