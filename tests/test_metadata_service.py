@@ -167,6 +167,81 @@ class TestEnrichTags:
         assert "original_date" not in metadata
 
 
+class TestVersionTupleParsing:
+    """`_parse_version_tuple()` extracts numeric (major, minor, patch, [build]) tuples."""
+
+    def test_parses_three_part(self, metadata_service_module):
+        assert metadata_service_module._parse_version_tuple("0.7.9") == (0, 7, 9)
+
+    def test_parses_four_part_build(self, metadata_service_module):
+        assert metadata_service_module._parse_version_tuple("0.7.9.5") == (0, 7, 9, 5)
+
+    def test_strips_v_prefix(self, metadata_service_module):
+        assert metadata_service_module._parse_version_tuple("v0.7.9.5") == (0, 7, 9, 5)
+
+    def test_empty_returns_none(self, metadata_service_module):
+        assert metadata_service_module._parse_version_tuple("") is None
+
+    def test_non_numeric_returns_none(self, metadata_service_module):
+        assert metadata_service_module._parse_version_tuple("0.7.9-rc1") is None
+        assert metadata_service_module._parse_version_tuple("unknown") is None
+        assert metadata_service_module._parse_version_tuple("0.7.9.5-dev") is None
+
+
+class TestUpdateAvailableSemverComparison:
+    """`/version`'s update_available must use semver-tuple comparison, NOT `!=`.
+
+    Regression: PR #545 sibling — observed on snapvideo with v0.7.9.5 in .env
+    while GitHub `releases/latest` returned v0.7.9.3 (v0.7.9.4 + v0.7.9.5 were
+    tag-without-publish). The old `latest != current` flagged update_available
+    true, surfacing the misleading "Update available: 0.7.9.5 -> 0.7.9.3" on
+    /status. Direction must be enforced: ahead is NOT an update.
+    """
+
+    @staticmethod
+    def _is_update(module, current: str, latest: str) -> bool:
+        """Replicate the comparison block from handle_version against the helper."""
+        current_tuple = module._parse_version_tuple(current)
+        latest_tuple = module._parse_version_tuple(latest) if latest else None
+        if current_tuple is not None and latest_tuple is not None:
+            return latest_tuple > current_tuple
+        return bool(latest and latest != current)
+
+    def test_current_ahead_of_latest_no_update(self, metadata_service_module):
+        # The exact snapvideo scenario.
+        assert (
+            self._is_update(metadata_service_module, "0.7.9.5", "0.7.9.3") is False
+        )
+
+    def test_current_behind_latest_update_available(self, metadata_service_module):
+        assert (
+            self._is_update(metadata_service_module, "0.7.9.3", "0.7.9.5") is True
+        )
+
+    def test_equal_no_update(self, metadata_service_module):
+        assert (
+            self._is_update(metadata_service_module, "0.7.9.5", "0.7.9.5") is False
+        )
+
+    def test_empty_latest_no_update(self, metadata_service_module):
+        assert self._is_update(metadata_service_module, "0.7.9.5", "") is False
+
+    def test_unparseable_falls_back_to_inequality(self, metadata_service_module):
+        # Dev clone where current is "unknown" — fall back to `!=` rather than crash.
+        assert (
+            self._is_update(metadata_service_module, "unknown", "0.7.9.5") is True
+        )
+
+    def test_major_minor_jump(self, metadata_service_module):
+        # Ensure tuple ordering handles cross-segment correctly (not lexicographic).
+        assert (
+            self._is_update(metadata_service_module, "0.7.10.0", "0.7.9.99") is False
+        )
+        assert (
+            self._is_update(metadata_service_module, "0.7.9.99", "0.7.10.0") is True
+        )
+
+
 class TestResolveExternalHost:
     """`_resolve_external_host()` picks a usable EXTERNAL_HOST per #460."""
 

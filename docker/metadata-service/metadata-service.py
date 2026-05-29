@@ -2139,6 +2139,22 @@ async def handle_health(request: web.Request) -> web.Response:
 _latest_version_cache: dict[str, str | float] = {"version": "", "checked_at": 0.0}
 
 
+def _parse_version_tuple(version: str) -> tuple[int, ...] | None:
+    """Parse 'v0.7.9.5' / '0.7.9.5' → (0, 7, 9, 5). None if any component non-numeric.
+
+    Used by handle_version to compare two versions semantically (latest > current)
+    instead of via simple `!=`. snapMULTI tags are pure numeric MAJOR.MINOR.PATCH[.BUILD]
+    so int tuples sort correctly. Dev builds or weird tags (e.g. "0.7.9.5-rc1") return
+    None → caller falls back to string inequality.
+    """
+    if not version:
+        return None
+    try:
+        return tuple(int(p) for p in version.lstrip("v").split("."))
+    except ValueError:
+        return None
+
+
 async def handle_version(request: web.Request) -> web.Response:
     """Version check endpoint — returns current snapmulti_release, image_set, and latest from GitHub."""
     import time
@@ -2183,7 +2199,18 @@ async def handle_version(request: web.Request) -> web.Response:
     # "v" stripped uniformly: current arrives from .env with prefix, latest from GitHub without.
     current_clean = current.lstrip("v")
     latest_clean = (latest or current).lstrip("v")
-    update_available = bool(latest and latest != current_clean)
+    # Semver comparison: GitHub `releases/latest` only sees PUBLISHED releases,
+    # so a tag-without-publish workflow can have current AHEAD of latest. Plain
+    # `latest != current` then wrongly flags update_available=true and the
+    # /status page renders the misleading "Update available: 0.7.9.5 -> 0.7.9.3".
+    # Compare numeric tuples instead; fall back to `!=` only when one side is
+    # unparseable (dev clone, pre-release tag, etc.).
+    current_tuple = _parse_version_tuple(current_clean)
+    latest_tuple = _parse_version_tuple(latest_clean) if latest else None
+    if current_tuple is not None and latest_tuple is not None:
+        update_available = latest_tuple > current_tuple
+    else:
+        update_available = bool(latest and latest != current_clean)
 
     return web.json_response(
         {
