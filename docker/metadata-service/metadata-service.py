@@ -34,6 +34,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+import aiohttp
 import websockets
 from aiohttp import web
 
@@ -2266,8 +2267,6 @@ async def _discover_snapmulti_peers(
 ) -> list[dict]:
     # Spawns avahi-browse via create_subprocess_exec (list-args, NO shell —
     # args are fixed string literals; not vulnerable to command injection).
-    import asyncio
-
     try:
         proc = await asyncio.create_subprocess_exec(
             "avahi-browse",
@@ -2295,8 +2294,6 @@ async def _fetch_peer_status_summary(
     peer_host: str, timeout_s: float = 5.0
 ) -> dict | None:
     """Fetch peer /status?format=json and extract a per-peer summary; None on any error."""
-    import aiohttp
-
     url = f"http://{peer_host}:8083/status?format=json"
     try:
         async with aiohttp.ClientSession() as session:
@@ -2306,7 +2303,8 @@ async def _fetch_peer_status_summary(
                 if resp.status != 200:
                     return None
                 data = await resp.json()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — broad on purpose: any error drops the peer; debug log preserves diagnostics.
+        logger.debug("fleet: fetch %s failed: %s", peer_host, exc)
         return None
 
     summary: dict = {
@@ -2337,8 +2335,6 @@ async def _fetch_peer_status_summary(
 
 async def _build_fleet_view(own_hostname: str) -> list[dict]:
     """Discover peers + fetch summaries in parallel; cached by _FLEET_CACHE_TTL_SECONDS."""
-    import asyncio
-
     now = time.time()
     cached = _fleet_cache.get("data")
     if cached is not None and (now - cached[0]) < _FLEET_CACHE_TTL_SECONDS:
@@ -2525,13 +2521,22 @@ def _render_fleet_section(fleet_data: list[dict]) -> str:
         icon_class = {"ok": "pass", "warn": "warn", "fail": "fail"}.get(status, "info")
         icon = {"pass": "✓", "warn": "⚠", "fail": "✗"}.get(icon_class, "ℹ")
         hostname = _html.escape(str(peer.get("hostname", "?")))
-        url = _html.escape(str(peer.get("url", "")))
+        # Scheme allow-list defends against a malicious LAN peer supplying
+        # `javascript:` or `data:` in a future field. html.escape converts
+        # quotes but does not block executable URL schemes.
+        raw_url = str(peer.get("url", ""))
+        url = (
+            _html.escape(raw_url)
+            if raw_url.lower().startswith(("http://", "https://"))
+            else ""
+        )
         mode = _html.escape(str(peer.get("mode", "?")))
         release = _html.escape(str(peer.get("release") or "release unknown"))
         containers = _html.escape(str(peer.get("containers") or "container status n/a"))
+        link = f'<a href="{url}">{hostname}</a>' if url else hostname
         rows.append(
             f'<li class="r-{icon_class}"><span class="icon">{icon}</span>'
-            f'<a href="{url}">{hostname}</a> — {mode} mode · '
+            f"{link} — {mode} mode · "
             f"{release} · {containers}</li>"
         )
     return f"<section><h2>Fleet ({len(fleet_data)} peer(s))</h2><ul>{''.join(rows)}</ul></section>"

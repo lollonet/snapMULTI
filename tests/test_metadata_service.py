@@ -336,6 +336,18 @@ class TestFleetRenderHtml:
         )
         assert "<script>alert(1)</script>" not in html
         assert "&lt;script&gt;" in html
+        # Scheme allow-list: javascript: must NOT be rendered as href.
+        assert 'href="javascript:' not in html
+        assert 'href="javascript:' not in html
+
+    def test_non_http_url_renders_hostname_without_link(self, metadata_service_module):
+        # data:, file:, javascript: all must drop the <a> wrapper entirely.
+        for bad in ("javascript:alert(1)", "data:text/html,<x>", "file:///etc/passwd"):
+            html = metadata_service_module._render_fleet_section(
+                [{"hostname": "pi-evil", "status": "ok", "url": bad}]
+            )
+            assert "<a" not in html, f"bad URL {bad!r} rendered as link"
+            assert "pi-evil" in html  # hostname still shown
 
 
 class TestResolveExternalHost:

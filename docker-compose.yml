@@ -291,6 +291,10 @@ services:
       # "no snapshot available" failure verdict even when the host-side
       # timer is healthy (issue surfaced after v0.6.4 ship).
       - ./audio:/audio:ro
+      # D-Bus socket for avahi-browse — needed by /status?fleet=1 (#549)
+      # to discover peer snapMULTI instances via _snapcast._tcp mDNS.
+      # Read-only: this container only browses, never publishes.
+      - /var/run/dbus:/var/run/dbus:ro
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)"]
       interval: 30s
