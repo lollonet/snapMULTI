@@ -240,6 +240,104 @@ class TestUpdateAvailableSemverComparison:
         assert self._is_update(metadata_service_module, "0.7.9.99", "0.7.10.0") is True
 
 
+class TestFleetParseAvahi:
+    """`_parse_avahi_browse_peers()` extracts peer dicts from avahi-browse -rpt."""
+
+    @staticmethod
+    def _sample(own: str = "pi-server") -> str:
+        return (
+            "=;wlan0;IPv4;snapMULTI;_snapcast._tcp;local;pi-server.local;192.168.1.10;1704;\n"
+            "=;wlan0;IPv4;snapMULTI;_snapcast._tcp;local;pi-other.local;192.168.1.11;1704;\n"
+            "=;wlan0;IPv6;snapMULTI;_snapcast._tcp;local;pi-other.local;fe80::1;1704;\n"
+            "+;wlan0;IPv4;snapMULTI;_snapcast._tcp;local\n"
+            "=;wlan0;IPv4;snapMULTI;_snapcast._tcp;local;pi-third.local;192.168.1.12;1704;\n"
+        )
+
+    def test_excludes_self(self, metadata_service_module):
+        peers = metadata_service_module._parse_avahi_browse_peers(
+            self._sample(), "pi-server"
+        )
+        names = [p["hostname"] for p in peers]
+        assert "pi-server.local" not in names
+        assert "pi-other.local" in names
+        assert "pi-third.local" in names
+
+    def test_dedups_same_host_across_families(self, metadata_service_module):
+        peers = metadata_service_module._parse_avahi_browse_peers(
+            self._sample(), "pi-server"
+        )
+        assert sum(p["hostname"] == "pi-other.local" for p in peers) == 1
+
+    def test_self_match_strips_local_and_dots(self, metadata_service_module):
+        # Own hostname can arrive as "pi-server", "pi-server.local", "pi-server."
+        for own in ("pi-server", "pi-server.local", "pi-server.local."):
+            peers = metadata_service_module._parse_avahi_browse_peers(
+                self._sample(), own
+            )
+            assert all("pi-server" not in p["hostname"].lower() for p in peers)
+
+    def test_skips_ptr_only_lines(self, metadata_service_module):
+        # `+;…` are PTR-only, no SRV+TXT data — must be ignored.
+        peers = metadata_service_module._parse_avahi_browse_peers(
+            self._sample(), "pi-server"
+        )
+        # Only `=;` lines yield peers — the `+;` line in the sample has no port/addr.
+        for p in peers:
+            assert p["addr"]
+            assert p["port"]
+
+    def test_empty_output_no_peers(self, metadata_service_module):
+        assert metadata_service_module._parse_avahi_browse_peers("", "pi-server") == []
+
+
+class TestFleetRenderHtml:
+    """`_render_fleet_section()` is a pure renderer — no I/O."""
+
+    def test_no_peers_message(self, metadata_service_module):
+        html = metadata_service_module._render_fleet_section([])
+        assert "No peer snapMULTI servers discovered" in html
+        assert "<h2>Fleet</h2>" in html
+
+    def test_one_peer_renders_link_and_summary(self, metadata_service_module):
+        html = metadata_service_module._render_fleet_section(
+            [
+                {
+                    "hostname": "pi-other",
+                    "mode": "both",
+                    "status": "ok",
+                    "release": "Release v0.7.9.5 (images 0.7.7)",
+                    "containers": "server: 7/7 running, 7/7 healthy",
+                    "url": "http://pi-other.local:8083/status",
+                }
+            ]
+        )
+        assert "Fleet (1 peer(s))" in html
+        assert 'href="http://pi-other.local:8083/status"' in html
+        assert "pi-other" in html
+        assert "Release v0.7.9.5" in html
+        assert "7/7 healthy" in html
+        assert 'class="r-pass"' in html
+
+    def test_fail_peer_uses_fail_class(self, metadata_service_module):
+        html = metadata_service_module._render_fleet_section(
+            [{"hostname": "pi-broken", "status": "fail", "url": "http://x"}]
+        )
+        assert 'class="r-fail"' in html
+
+    def test_html_escapes_peer_fields(self, metadata_service_module):
+        html = metadata_service_module._render_fleet_section(
+            [
+                {
+                    "hostname": "<script>alert(1)</script>",
+                    "status": "ok",
+                    "url": 'javascript:alert("xss")',
+                }
+            ]
+        )
+        assert "<script>alert(1)</script>" not in html
+        assert "&lt;script&gt;" in html
+
+
 class TestResolveExternalHost:
     """`_resolve_external_host()` picks a usable EXTERNAL_HOST per #460."""
 

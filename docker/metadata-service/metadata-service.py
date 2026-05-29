@@ -2226,6 +2226,139 @@ async def handle_version(request: web.Request) -> web.Response:
 # JSON snapshot here every 5 min.
 STATUS_JSON_PATH = "/audio/system-status.json"
 
+# ── Fleet observation (#549) — read-only mDNS aggregation of peer instances.
+# Browser auto-refreshes /status every 60 s; cache 120 s so most refreshes hit
+# cache and only every other refresh does live discovery.
+_FLEET_CACHE_TTL_SECONDS = 120
+_fleet_cache: dict[str, tuple[float, list[dict]]] = {}
+
+
+def _normalize_mdns_host(name: str) -> str:
+    """Strip trailing dot then '.local' so comparison is form-independent."""
+    return name.lower().strip().rstrip(".").removesuffix(".local").rstrip(".")
+
+
+def _parse_avahi_browse_peers(stdout: str, own_hostname: str) -> list[dict]:
+    """Parse `avahi-browse -rpt _snapcast._tcp` output; return peer dicts minus self."""
+    own_lc = _normalize_mdns_host(own_hostname)
+    peers: list[dict] = []
+    seen: set[str] = set()
+    # Format: =;iface;family;name;type;domain;HOST;addr;port;txt
+    for line in stdout.splitlines():
+        if not line.startswith("="):
+            continue
+        fields = line.split(";")
+        if len(fields) < 9:
+            continue
+        host_full = fields[6].strip()
+        host_lc = _normalize_mdns_host(host_full)
+        if not host_lc or host_lc == own_lc:
+            continue
+        if host_lc in seen:
+            continue
+        seen.add(host_lc)
+        peers.append({"hostname": host_full, "addr": fields[7], "port": fields[8]})
+    return peers
+
+
+async def _discover_snapmulti_peers(
+    own_hostname: str, timeout_s: float = 8.0
+) -> list[dict]:
+    # Spawns avahi-browse via create_subprocess_exec (list-args, NO shell —
+    # args are fixed string literals; not vulnerable to command injection).
+    import asyncio
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "avahi-browse",
+            "-rpt",
+            "_snapcast._tcp",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except (FileNotFoundError, OSError):
+        return []
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        return []
+    return _parse_avahi_browse_peers(
+        stdout.decode("utf-8", errors="ignore"), own_hostname
+    )
+
+
+async def _fetch_peer_status_summary(
+    peer_host: str, timeout_s: float = 5.0
+) -> dict | None:
+    """Fetch peer /status?format=json and extract a per-peer summary; None on any error."""
+    import aiohttp
+
+    url = f"http://{peer_host}:8083/status?format=json"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url, timeout=aiohttp.ClientTimeout(total=timeout_s)
+            ) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+    except Exception:
+        return None
+
+    summary: dict = {
+        "hostname": data.get("hostname", peer_host),
+        "mode": data.get("mode", "?"),
+        "status": data.get("status", "?"),
+        "failures": int(data.get("failures", 0)),
+        "warnings": int(data.get("warnings", 0)),
+        "finished_at": data.get("finished_at", ""),
+        "release": "",
+        "containers": "",
+        "url": f"http://{peer_host}:8083/status",
+    }
+    for r in data.get("records", []):
+        msg = r.get("msg", "")
+        sec = r.get("section", "")
+        if not summary["release"] and sec == "System" and msg.startswith("Release "):
+            summary["release"] = msg
+        elif (
+            not summary["containers"]
+            and sec == "Compose"
+            and "running" in msg
+            and "healthy" in msg
+        ):
+            summary["containers"] = msg
+    return summary
+
+
+async def _build_fleet_view(own_hostname: str) -> list[dict]:
+    """Discover peers + fetch summaries in parallel; cached by _FLEET_CACHE_TTL_SECONDS."""
+    import asyncio
+
+    now = time.time()
+    cached = _fleet_cache.get("data")
+    if cached is not None and (now - cached[0]) < _FLEET_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    peers = await _discover_snapmulti_peers(own_hostname)
+    if not peers:
+        _fleet_cache["data"] = (now, [])
+        return []
+
+    results = await asyncio.gather(
+        *(_fetch_peer_status_summary(p["hostname"]) for p in peers),
+        return_exceptions=True,
+    )
+    summaries: list[dict] = [r for r in results if isinstance(r, dict)]
+    summaries.sort(key=lambda s: s.get("hostname", "").lower())
+    _fleet_cache["data"] = (now, summaries)
+    return summaries
+
+
 # Beginner-friendly grace period: when the snapshot file is older than this
 # much after host boot, we still trust it; when it's MISSING entirely AND
 # the container itself was started recently, we render "starting up" instead
@@ -2375,7 +2508,40 @@ def _structured_systemd_row(section: str, msg: str) -> tuple[str, str, str, str]
     return None
 
 
-def _status_to_html(data: dict | None, age_s: float | None) -> str:
+def _render_fleet_section(fleet_data: list[dict]) -> str:
+    """Render the Fleet observation section (#549) as a <section> block."""
+    import html as _html
+
+    if not fleet_data:
+        return (
+            "<section><h2>Fleet</h2><ul>"
+            '<li class="r-info"><span class="icon">ℹ</span>'
+            "No peer snapMULTI servers discovered on the LAN via mDNS</li>"
+            "</ul></section>"
+        )
+    rows: list[str] = []
+    for peer in fleet_data:
+        status = peer.get("status", "?")
+        icon_class = {"ok": "pass", "warn": "warn", "fail": "fail"}.get(status, "info")
+        icon = {"pass": "✓", "warn": "⚠", "fail": "✗"}.get(icon_class, "ℹ")
+        hostname = _html.escape(str(peer.get("hostname", "?")))
+        url = _html.escape(str(peer.get("url", "")))
+        mode = _html.escape(str(peer.get("mode", "?")))
+        release = _html.escape(str(peer.get("release") or "release unknown"))
+        containers = _html.escape(str(peer.get("containers") or "container status n/a"))
+        rows.append(
+            f'<li class="r-{icon_class}"><span class="icon">{icon}</span>'
+            f'<a href="{url}">{hostname}</a> — {mode} mode · '
+            f"{release} · {containers}</li>"
+        )
+    return f"<section><h2>Fleet ({len(fleet_data)} peer(s))</h2><ul>{''.join(rows)}</ul></section>"
+
+
+def _status_to_html(
+    data: dict | None,
+    age_s: float | None,
+    fleet_data: list[dict] | None = None,
+) -> str:
     """Render the snapshot to a beginner-friendly HTML page.
 
     All content is escaped via html.escape — message text from device-smoke
@@ -2503,6 +2669,10 @@ def _status_to_html(data: dict | None, age_s: float | None) -> str:
             f"<section><h2>{html.escape(sec_name)}</h2><ul>{''.join(rows)}</ul></section>"
         )
 
+    # Fleet observation (#549) — appended only when ?fleet=1 is requested.
+    if fleet_data is not None:
+        sec_html_parts.append(_render_fleet_section(fleet_data))
+
     if age_s is not None:
         if age_s < 60:
             age_label = f"{int(age_s)}s ago"
@@ -2525,11 +2695,20 @@ def _status_to_html(data: dict | None, age_s: float | None) -> str:
     else:
         footer = ""
 
+    # Fleet button (#549): visible on the local view; suppressed when the
+    # caller is already viewing fleet (avoids the redundant self-link).
+    fleet_link = ""
+    if fleet_data is None:
+        fleet_link = (
+            ' · <a href="?fleet=1" style="color:inherit;text-decoration:underline">'
+            "View fleet</a>"
+        )
+
     return _render_html_shell(
         verdict_class=verdict_class,
         verdict_icon=verdict_icon,
         verdict_text=verdict_text,
-        subtext=schema_banner + subtext,
+        subtext=schema_banner + subtext + fleet_link,
         sections_html="".join(sec_html_parts),
         footer=footer,
         embedded_json=json.dumps(data).replace("</", "<\\/"),
@@ -2695,6 +2874,17 @@ async def handle_status(request: web.Request) -> web.Response:
     """
     data, age_s = _read_status_snapshot()
     fmt = request.query.get("format", "")
+    scope = request.query.get("scope", "")
+    fleet_flag = request.query.get("fleet", "") == "1"
+
+    if fmt == "json" and scope == "fleet":
+        own_host = (data or {}).get("hostname") or socket.gethostname()
+        fleet = await _build_fleet_view(own_host)
+        return web.json_response(
+            {"schema_version": 1, "self_hostname": own_host, "peers": fleet},
+            headers={"Cache-Control": "no-store"},
+        )
+
     if fmt == "json":
         if data is None:
             return web.json_response(
@@ -2706,7 +2896,12 @@ async def handle_status(request: web.Request) -> web.Response:
             data,
             headers={"Cache-Control": "no-store"},
         )
-    body = _status_to_html(data, age_s)
+
+    fleet_data: list[dict] | None = None
+    if fleet_flag:
+        own_host = (data or {}).get("hostname") or socket.gethostname()
+        fleet_data = await _build_fleet_view(own_host)
+    body = _status_to_html(data, age_s, fleet_data=fleet_data)
     return web.Response(
         text=body,
         content_type="text/html",

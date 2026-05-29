@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`/status` Fleet observation tab (#549)** — read-only LAN-wide aggregation of peer snapMULTI instances. The local `/status` HTML page now shows a "View fleet" link in its subtext; clicking surfaces `?fleet=1` which discovers peers via `avahi-browse _snapcast._tcp` (reusing the existing Snapcast mDNS publication — no new mDNS service), fetches each peer's `/status?format=json` in parallel (5 s per-peer timeout), and renders a Fleet section with: hostname (clickable link to peer's `/status`), mode, release tag, container health summary, status icon. Programmatic clients can request `?format=json&scope=fleet` to receive `{schema_version: 1, self_hostname: …, peers: [...]}`. Per-peer cache (120 s TTL) absorbs the browser's 60 s auto-refresh so cold-cache discovery (~5-8 s) only fires every other refresh. Closes the **observation half** of #162; cross-instance control / multi-site / unified config remain out of scope per CLAUDE.md non-goals. 16 new tests pin the matrix (avahi parse / self-exclusion / dedup / PTR-only skip + HTML render with no peers / single peer / fail status / XSS escaping).
+
 ### Changed
 - **`/status` page: overlayroot-aware journal message + remove user-facing `(issue #177 path)` jargon** — two beginner-confusion fixes on the system-health page:
   - `check_boot_health.sh` was emitting `No previous boot recorded in journal (fresh reflash or rotated logs)` on every snapMULTI device. On `overlayroot=tmpfs` the journal lives in `/run` (tmpfs) and is wiped every reboot — "no previous boot" is structural, not a fresh-reflash sign. The message now detects overlayroot via `findmnt` and surfaces `Journal volatile (overlayroot=tmpfs) — previous boots not retained` on those devices, keeping the old wording only for non-overlayroot setups (dev clones, manual installs).
