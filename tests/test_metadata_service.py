@@ -70,6 +70,11 @@ def metadata_service_module(monkeypatch, tmp_path):
         AppRunner=_DummyAppRunner,
         TCPSite=_DummyTCPSite,
     )
+    # Stub for `_fetch_snapcast_clients` / `_fetch_peer_status_summary`: any
+    # future test that actually drives the success RPC path will read
+    # `aiohttp.ClientTimeout(...)` — keep the attribute reachable so the
+    # production code can be exercised without an AttributeError.
+    aiohttp_module.ClientTimeout = lambda *a, **kw: None
     monkeypatch.setitem(sys.modules, "aiohttp", aiohttp_module)
 
     spec = importlib.util.spec_from_file_location(
