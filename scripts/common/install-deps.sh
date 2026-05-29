@@ -142,17 +142,14 @@ install_dependencies() {
     # tmpfs pressure low on Pi Zero / Pi 3 1 GB.
     #
     # NOTE: these go through a separate `--no-install-recommends` pass
-    # below to minimise transitive packages. pcp (Performance Co-Pilot,
-    # ~50 MB) is pulled anyway as a HARD Depends of `iotop-c` (libpcp3,
-    # libpcp-pmda3) — `--no-install-recommends` cannot block Depends.
-    # pcp persists during install and is removed by the explicit
-    # `apt-get purge pcp pcp-conf 'pcp-pmda-*'` below. During that ~3 min
-    # window every `systemctl daemon-reload` emits
-    # `systemd-sysv-generator: SysV service '/etc/init.d/pcp' lacks a
-    # native systemd unit file` to journald — known transient noise.
-    # `dstat` also Depends on `python3-pcp`; it is intentionally NOT in
-    # this list because it duplicates `sar` capabilities for the small
-    # tradeoff of pulling more pcp surface.
+    # below to minimise transitive packages. On Debian trixie neither
+    # `sysstat` nor `iotop-c` Depends on pcp (Performance Co-Pilot),
+    # so this install does not pull the ~50 MB multi-daemon stack.
+    # `dstat` is intentionally NOT in this list: it Depends on
+    # `python3-pcp` which would re-introduce the entire pcp tree.
+    # `sar` from sysstat already covers dstat's realtime CPU/mem/disk
+    # use case. Any orphan pcp from a prior install state is reaped
+    # by the `apt-get autoremove --purge` step further below.
     local -a monitoring_pkgs=()
     command -v sar   &>/dev/null || monitoring_pkgs+=(sysstat)
     command -v iotop &>/dev/null || monitoring_pkgs+=(iotop-c)
@@ -250,27 +247,24 @@ install_dependencies() {
     update-locale LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null || true
 
     # Drop unused packages pulled in as Recommends earlier in the install
-    # (mesa/wayland/GL libs from a previous desktop image, locales, etc.).
-    # Observed live on a fresh pi-zero install: 19 packages flagged by apt
-    # as "automatically installed and are no longer required" — all of them
+    # (mesa/wayland/GL libs from a previous desktop image, locales, etc.)
+    # AND any pcp library set lingering from a base Pi OS image. Observed
+    # live on a fresh pi-zero install: 19 packages flagged by apt as
+    # "automatically installed and are no longer required" — all of them
     # mesa/wayland/X11 libraries irrelevant to snapMULTI's framebuffer-only
-    # display path. `--purge` also removes conffiles for a cleaner appliance
-    # state. Best-effort: a failure here must NOT abort the install (we've
-    # already done the meaningful work).
+    # display path. Since neither `sysstat` nor `iotop-c` Depends on pcp
+    # on Debian trixie, dropping `dstat` (PR #545) means new installs
+    # never pull pcp at all — autoremove --purge is the safety net for
+    # stale state, not the primary mechanism. `--purge` also removes
+    # conffiles for a cleaner appliance state. Best-effort: a failure
+    # here must NOT abort the install (we've already done the meaningful
+    # work).
     log_info "Removing unused dependencies (apt autoremove --purge)..."
     if apt-get autoremove --purge -y >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
         log_info "apt autoremove --purge complete"
     else
         log_warn "apt autoremove --purge failed (non-fatal — install proceeds)"
     fi
-
-    # Purge legacy `pcp` (Performance Co-Pilot). New installs avoid it via
-    # --no-install-recommends on sysstat, but devices reflashed from a Pi OS
-    # image that ships pcp preinstalled (or upgraded from an earlier snapMULTI)
-    # keep it around. pcp's SysV init script floods journald with
-    # "lacks a native systemd unit file" on every daemon-reload — and snapMULTI
-    # doesn't use pcp at all. Best-effort: missing package returns 100, ignored.
-    apt-get purge -y pcp pcp-conf 'pcp-pmda-*' >> "${UNIFIED_LOG:-/dev/null}" 2>&1 || true
 
     log_info "System dependencies installed"
 }
