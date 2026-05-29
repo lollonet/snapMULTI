@@ -23,7 +23,8 @@ fail=0
 
 assert_script() {
     local f="$1"
-    local name="$(basename "$f")"
+    local name
+    name="$(basename "$f")"
 
     if [[ ! -f "$f" ]]; then
         echo "  FAIL: $name not found"
