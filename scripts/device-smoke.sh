@@ -1000,7 +1000,12 @@ if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
                 #
                 #   (a) Snapshot file missing on host. On fresh boot the
                 #       timer fires at OnBootSec=4min — INFO until then,
-                #       FAIL after.
+                #       FAIL after. Plus snapmulti-status.service has an
+                #       ExecStartPre that waits up to 5 min for MPD
+                #       healthy on first boot with a large NFS library;
+                #       during that wait the service is in 'activating'
+                #       state and the snapshot is legitimately not yet
+                #       on disk — also INFO.
                 #   (b) File present on host but metadata container can't
                 #       see it. Bind-mount missing or wrong perms.
                 #   (c) File present + readable in container but service
@@ -1010,8 +1015,11 @@ if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
                 _uptime_s=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 999999)
                 if [[ ! -e "$_snap_file" ]]; then
                     _last_trig=$(systemctl show snapmulti-status.timer -p LastTriggerUSec --value 2>/dev/null || true)
+                    _svc_state=$(systemctl is-active snapmulti-status.service 2>/dev/null || true)
                     if { [[ -z "$_last_trig" ]] || [[ "$_last_trig" == "n/a" ]]; } && (( _uptime_s < 300 )); then
                         info "/status snapshot not yet generated — snapmulti-status.timer fires at OnBootSec=4min (uptime ${_uptime_s}s, timer not yet armed)"
+                    elif [[ "$_svc_state" == "activating" ]]; then
+                        info "/status snapshot pending — snapmulti-status.service in ExecStartPre wait (up to 5 min for MPD healthy on first boot with large NFS library)"
                     else
                         fail_check "/status snapshot missing on host ($_snap_file). snapmulti-status.timer has not produced one — check 'journalctl -u snapmulti-status.service' for ExecStart errors"
                     fi

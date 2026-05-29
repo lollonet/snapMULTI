@@ -99,12 +99,24 @@ check_boot_health() {
 
     local sys_state
     sys_state=$(systemctl is-system-running 2>/dev/null || true)
-    # Self-referential paradox: when smoke runs from snapmulti-auto-boot-smoke.service,
-    # system state cannot be 'running' yet — it's pending on the auto-boot-smoke
-    # service itself. Treat 'starting' as info in that context. SNAPMULTI_AUTO_BOOT
-    # is set by the auto-boot wrapper (scripts/common/auto-boot-smoke.sh).
-    if [[ "$sys_state" == "starting" && "${SNAPMULTI_AUTO_BOOT:-}" == "1" ]]; then
-        info "systemd still 'starting' (expected — smoke is itself a pending boot unit)"
+    # 'starting' tolerance — two paths:
+    #
+    # (a) Self-referential paradox: when smoke runs from
+    #     snapmulti-auto-boot-smoke.service, system state cannot be
+    #     'running' yet — it's pending on the auto-boot-smoke service
+    #     itself. SNAPMULTI_AUTO_BOOT=1 is set by the auto-boot wrapper.
+    #
+    # (b) First-boot window: when smoke runs from
+    #     snapmulti-status.timer (no env var), the snapshot is
+    #     produced while MPD may still be scanning the library and
+    #     snapmulti-server.service may still be activating. Under
+    #     ~10 min uptime the 'starting' state is expected; after
+    #     that, it is a real problem worth surfacing.
+    local _uptime_s
+    _uptime_s=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 999999)
+    if [[ "$sys_state" == "starting" ]] \
+        && { [[ "${SNAPMULTI_AUTO_BOOT:-}" == "1" ]] || (( _uptime_s < 600 )); }; then
+        info "systemd still 'starting' (boot window — uptime ${_uptime_s}s, services may still be settling)"
         return 0
     fi
     case "$sys_state" in
