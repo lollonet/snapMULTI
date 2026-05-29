@@ -240,6 +240,335 @@ class TestUpdateAvailableSemverComparison:
         assert self._is_update(metadata_service_module, "0.7.9.99", "0.7.10.0") is True
 
 
+class TestSnapcastClientsParse:
+    """`_parse_snapcast_clients()` extracts a flat client list from Server.GetStatus."""
+
+    @staticmethod
+    def _sample_result() -> dict:
+        return {
+            "server": {
+                "groups": [
+                    {
+                        "name": "Kitchen",
+                        "stream_id": "MPD",
+                        "clients": [
+                            {
+                                "connected": True,
+                                "host": {
+                                    "name": "snapclient-kitchen",
+                                    "ip": "192.168.1.10",
+                                },
+                                "config": {
+                                    "name": "Kitchen Sonos",
+                                    "stream_id": "MPD",
+                                    "volume": {"muted": False, "percent": 75},
+                                },
+                                "lastSeen": {"sec": 1700000000, "usec": 0},
+                            },
+                            {
+                                "connected": False,
+                                "host": {
+                                    "name": "snapclient-old",
+                                    "ip": "192.168.1.11",
+                                },
+                                "config": {
+                                    "name": "Old Pi",
+                                    "stream_id": "MPD",
+                                    "volume": {"muted": True, "percent": 50},
+                                },
+                                "lastSeen": {"sec": 1699000000, "usec": 0},
+                            },
+                        ],
+                    },
+                    {
+                        "name": "Office",
+                        "stream_id": "Spotify",
+                        "clients": [
+                            {
+                                "connected": True,
+                                "host": {
+                                    "name": "snapclient-office",
+                                    "ip": "192.168.1.20",
+                                },
+                                "config": {
+                                    "name": "Office Speaker",
+                                    "stream_id": "Spotify",
+                                    "volume": {"muted": False, "percent": 60},
+                                },
+                                "lastSeen": {"sec": 1700001000, "usec": 0},
+                            }
+                        ],
+                    },
+                ]
+            }
+        }
+
+    def test_flattens_groups_into_one_list(self, metadata_service_module):
+        clients = metadata_service_module._parse_snapcast_clients(self._sample_result())
+        assert len(clients) == 3
+
+    def test_extracts_per_client_fields(self, metadata_service_module):
+        clients = metadata_service_module._parse_snapcast_clients(self._sample_result())
+        by_name = {c["name"]: c for c in clients}
+        kitchen = by_name["Kitchen Sonos"]
+        assert kitchen["ip"] == "192.168.1.10"
+        assert kitchen["connected"] is True
+        assert kitchen["muted"] is False
+        assert kitchen["volume"] == 75
+        assert kitchen["stream"] == "MPD"
+        assert kitchen["group"] == "Kitchen"
+
+    def test_disconnected_clients_sort_last(self, metadata_service_module):
+        clients = metadata_service_module._parse_snapcast_clients(self._sample_result())
+        assert clients[0]["connected"] is True
+        assert clients[-1]["connected"] is False
+        assert clients[-1]["name"] == "Old Pi"
+
+    def test_empty_result_returns_empty_list(self, metadata_service_module):
+        assert metadata_service_module._parse_snapcast_clients({}) == []
+        assert metadata_service_module._parse_snapcast_clients({"server": {}}) == []
+        assert (
+            metadata_service_module._parse_snapcast_clients({"server": {"groups": []}})
+            == []
+        )
+
+    def test_malformed_volume_falls_back_to_zero(self, metadata_service_module):
+        bad = {
+            "server": {
+                "groups": [
+                    {
+                        "name": "G",
+                        "stream_id": "S",
+                        "clients": [
+                            {
+                                "connected": True,
+                                "host": {"name": "h"},
+                                "config": {
+                                    "name": "C",
+                                    "stream_id": "S",
+                                    "volume": {
+                                        "muted": False,
+                                        "percent": "not-a-number",
+                                    },
+                                },
+                                "lastSeen": {"sec": "bad", "usec": 0},
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+        clients = metadata_service_module._parse_snapcast_clients(bad)
+        assert clients[0]["volume"] == 0
+        assert clients[0]["last_seen_sec"] == 0
+
+
+class TestSnapcastClientsRender:
+    """`_render_snapcast_clients_section()` is a pure renderer; defends against XSS."""
+
+    def test_none_renders_rpc_unreachable(self, metadata_service_module):
+        html_str = metadata_service_module._render_snapcast_clients_section(None)
+        assert "Snapserver JSON-RPC unreachable" in html_str
+        assert "<h2>Snapcast Clients</h2>" in html_str
+
+    def test_empty_renders_no_clients(self, metadata_service_module):
+        html_str = metadata_service_module._render_snapcast_clients_section([])
+        assert "No clients connected" in html_str
+
+    def test_client_row_shows_state_volume_stream(self, metadata_service_module):
+        html_str = metadata_service_module._render_snapcast_clients_section(
+            [
+                {
+                    "name": "Kitchen",
+                    "host": "snapclient-kitchen",
+                    "ip": "192.168.1.10",
+                    "connected": True,
+                    "muted": False,
+                    "volume": 75,
+                    "stream": "MPD",
+                    "group": "Kitchen",
+                }
+            ]
+        )
+        assert "Kitchen" in html_str
+        assert "192.168.1.10" in html_str
+        assert "connected" in html_str
+        assert "75%" in html_str
+        assert "MPD" in html_str
+        assert 'class="r-pass"' in html_str
+
+    def test_muted_client_renders_muted_marker(self, metadata_service_module):
+        html_str = metadata_service_module._render_snapcast_clients_section(
+            [
+                {
+                    "name": "Office",
+                    "connected": True,
+                    "muted": True,
+                    "volume": 60,
+                    "ip": "",
+                    "stream": "",
+                    "group": "",
+                }
+            ]
+        )
+        assert "(muted)" in html_str
+
+    def test_disconnected_client_uses_info_class(self, metadata_service_module):
+        html_str = metadata_service_module._render_snapcast_clients_section(
+            [
+                {
+                    "name": "Gone",
+                    "connected": False,
+                    "ip": "",
+                    "volume": 0,
+                    "stream": "",
+                    "group": "",
+                }
+            ]
+        )
+        assert "disconnected" in html_str
+        assert 'class="r-info"' in html_str
+
+    def test_xss_in_client_name_is_escaped(self, metadata_service_module):
+        html_str = metadata_service_module._render_snapcast_clients_section(
+            [
+                {
+                    "name": "<script>alert(1)</script>",
+                    "connected": True,
+                    "ip": "",
+                    "volume": 0,
+                    "stream": "",
+                    "group": "",
+                }
+            ]
+        )
+        assert "<script>alert(1)</script>" not in html_str
+        assert "&lt;script&gt;" in html_str
+
+
+class TestSnapcastClientsCacheAndRouting:
+    """Cache TTL + handle_status routing — gates on regressions the parser/renderer
+    tests can't catch (e.g. wiring change that bypasses the cache or skips the fetch).
+    """
+
+    def test_cache_hit_within_ttl_skips_rpc(self, metadata_service_module, monkeypatch):
+        # Pre-populate cache with a known value; call must NOT hit aiohttp.
+        sentinel = [{"name": "cached-client", "connected": True}]
+        metadata_service_module._snapclients_cache["data"] = (
+            metadata_service_module.time.time(),
+            sentinel,
+        )
+
+        class _BoomSession:
+            def __init__(self, *a, **kw):
+                raise RuntimeError("aiohttp must not be called on cache hit")
+
+        monkeypatch.setattr(
+            metadata_service_module.aiohttp,
+            "ClientSession",
+            _BoomSession,
+            raising=False,
+        )
+        import asyncio
+
+        result = asyncio.run(metadata_service_module._fetch_snapcast_clients())
+        assert result is sentinel
+
+    def test_cache_expired_triggers_rpc(self, metadata_service_module, monkeypatch):
+        # Cache entry older than TTL → must refetch (and fail cleanly when aiohttp
+        # mock is missing, returning None — same code path as "snapserver down").
+        ttl = metadata_service_module._SNAPCLIENTS_CACHE_TTL_SECONDS
+        old_ts = metadata_service_module.time.time() - ttl - 10
+        metadata_service_module._snapclients_cache["data"] = (
+            old_ts,
+            [{"name": "stale"}],
+        )
+
+        called = {"value": False}
+
+        class _CaughtSession:
+            def __init__(self, *a, **kw):
+                called["value"] = True
+                raise RuntimeError("any error → returns None")
+
+        monkeypatch.setattr(
+            metadata_service_module.aiohttp,
+            "ClientSession",
+            _CaughtSession,
+            raising=False,
+        )
+        import asyncio
+
+        result = asyncio.run(metadata_service_module._fetch_snapcast_clients())
+        assert called["value"] is True, "expired cache must trigger fresh RPC"
+        assert result is None  # fetch failed → None cached
+
+    def test_handle_status_calls_fetch_only_with_snapshot(
+        self, metadata_service_module, monkeypatch
+    ):
+        """Boot-grace window (data is None) → _fetch_snapcast_clients must NOT fire."""
+        fetch_calls = {"count": 0}
+
+        async def fake_fetch(timeout_s=3.0):
+            fetch_calls["count"] += 1
+            return []
+
+        monkeypatch.setattr(
+            metadata_service_module, "_fetch_snapcast_clients", fake_fetch
+        )
+        monkeypatch.setattr(
+            metadata_service_module,
+            "_read_status_snapshot",
+            lambda: (None, None),  # no snapshot yet
+        )
+
+        import asyncio
+
+        request = types.SimpleNamespace(query={})
+        asyncio.run(metadata_service_module.handle_status(request))
+        assert fetch_calls["count"] == 0, (
+            "RPC must not be made during boot-grace (no snapshot)"
+        )
+
+    def test_handle_status_calls_fetch_when_snapshot_present(
+        self, metadata_service_module, monkeypatch
+    ):
+        fetch_calls = {"count": 0}
+
+        async def fake_fetch(timeout_s=3.0):
+            fetch_calls["count"] += 1
+            return [{"name": "c1", "connected": True}]
+
+        monkeypatch.setattr(
+            metadata_service_module, "_fetch_snapcast_clients", fake_fetch
+        )
+        monkeypatch.setattr(
+            metadata_service_module,
+            "_read_status_snapshot",
+            lambda: (
+                {
+                    "schema_version": 1,
+                    "status": "ok",
+                    "hostname": "pi-self",
+                    "mode": "both",
+                    "failures": 0,
+                    "warnings": 0,
+                    "records": [],
+                },
+                0.0,
+            ),
+        )
+
+        import asyncio
+
+        request = types.SimpleNamespace(query={})
+        resp = asyncio.run(metadata_service_module.handle_status(request))
+        assert fetch_calls["count"] == 1, "snapshot present → RPC should fire"
+        body = resp.kwargs.get("text") or (resp.args[0] if resp.args else "")
+        assert "Snapcast Clients" in body
+        assert "c1" in body
+
+
 class TestResolveExternalHost:
     """`_resolve_external_host()` picks a usable EXTERNAL_HOST per #460."""
 
