@@ -18,6 +18,26 @@ sys.path.insert(
 import fb_display
 
 
+def _mock_proc_uptime(monkeypatch, seconds: float) -> None:
+    """Make `open('/proc/uptime')` return the given uptime value.
+
+    `_get_lan_ip()` reads /proc/uptime to decide between the transient
+    'Booting…' label and the persistent '?.?.?.?' fallback. Tests pin
+    that value so the assertion does not depend on real host uptime
+    (e.g. dev laptop has been up for hours, CI container for seconds).
+    """
+    import io
+
+    real_open = open
+
+    def fake_open(path, *a, **kw):
+        if str(path) == "/proc/uptime":
+            return io.StringIO(f"{seconds} {seconds}\n")
+        return real_open(path, *a, **kw)
+
+    monkeypatch.setattr("builtins.open", fake_open)
+
+
 class TestFormatTime:
     """Test time formatting function."""
 
@@ -498,6 +518,60 @@ class TestGetLanIp:
 
         monkeypatch.setattr(socket, "socket", _raise)
         monkeypatch.setattr(socket, "getaddrinfo", _raise)
+        # Pin uptime to past the 90 s boot-age gate so the test asserts
+        # the bare placeholder (the actual fail-mode contract) and is
+        # not flaky on CI runners whose container uptime is < 90 s.
+        _mock_proc_uptime(monkeypatch, 600.0)
+        assert fb_display._get_lan_ip() == "?.?.?.?"
+
+    def test_booting_placeholder_during_first_90s(self, monkeypatch):
+        """Within 90 s of boot, no-IP should render as 'Booting…' rather
+        than '?.?.?.?' — the placeholder reads as broken-network and
+        triggered unnecessary user reboots on every fresh boot."""
+        import socket
+
+        def _raise(*a, **kw):
+            raise OSError("no network yet")
+
+        monkeypatch.setattr(socket, "socket", _raise)
+        monkeypatch.setattr(socket, "getaddrinfo", _raise)
+        _mock_proc_uptime(monkeypatch, 30.0)
+        assert fb_display._get_lan_ip() == "Booting…"
+
+    def test_placeholder_returns_at_90s_threshold(self, monkeypatch):
+        """At uptime >= 90 s the no-IP state is a real persistent
+        failure and the bare placeholder must surface."""
+        import socket
+
+        def _raise(*a, **kw):
+            raise OSError("no network")
+
+        monkeypatch.setattr(socket, "socket", _raise)
+        monkeypatch.setattr(socket, "getaddrinfo", _raise)
+        _mock_proc_uptime(monkeypatch, 90.0)
+        assert fb_display._get_lan_ip() == "?.?.?.?"
+
+    def test_unreadable_uptime_falls_through_conservative(self, monkeypatch):
+        """If /proc/uptime cannot be read at all (exotic container, no
+        /proc mount, IO error), the boot-age gate must NOT silently
+        cover up a real outage — fall through to '?.?.?.?' so a true
+        failure still surfaces."""
+        import socket
+
+        def _raise(*a, **kw):
+            raise OSError("no network")
+
+        monkeypatch.setattr(socket, "socket", _raise)
+        monkeypatch.setattr(socket, "getaddrinfo", _raise)
+        # Open of /proc/uptime raises OSError → caught → fall through
+        real_open = open
+
+        def fake_open(path, *a, **kw):
+            if str(path) == "/proc/uptime":
+                raise OSError("not mounted")
+            return real_open(path, *a, **kw)
+
+        monkeypatch.setattr("builtins.open", fake_open)
         assert fb_display._get_lan_ip() == "?.?.?.?"
 
 
@@ -514,7 +588,9 @@ class TestDiscoverSnapservers:
 
         class FakeZeroconf:
             def get_service_info(self, type_, name):
-                return FakeServiceInfo([b"\xc0\x00\x02\x68"])  # 192.0.2.104 (0xc0.0x00.0x02.0x68)
+                return FakeServiceInfo(
+                    [b"\xc0\x00\x02\x68"]
+                )  # 192.0.2.104 (0xc0.0x00.0x02.0x68)
 
             def close(self):
                 pass

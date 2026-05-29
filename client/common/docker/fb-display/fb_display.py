@@ -46,7 +46,18 @@ TARGET_FPS = 20
 
 
 def _get_lan_ip() -> str:
-    """Get LAN IP. Works on offline LANs (no internet required)."""
+    """Get LAN IP. Works on offline LANs (no internet required).
+
+    On total failure: if the device is still in the first 90 s after
+    boot (per /proc/uptime), return "Booting…" instead of "?.?.?.?".
+    The placeholder ?.?.?.? on a fresh-boot HDMI screen reads as
+    "network broken!" and triggered unnecessary user reboots; during
+    the WiFi-association + DHCP window it is normal to have no IP
+    yet, and the right message is "device is starting" not "device
+    is broken". After 90 s the fallback is still ?.?.?.? — a
+    persistent placeholder means a real persistent failure that
+    should surface as such.
+    """
     # Try default gateway first (works without internet)
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -63,6 +74,18 @@ def _get_lan_ip() -> str:
                 return ip
     except OSError:
         pass
+    # Boot-age gate before the bare placeholder. /proc/uptime first field
+    # is float seconds since boot on every Linux system; if unreadable
+    # (CI container without /proc, exotic mount, etc.), fall through to
+    # the conservative ?.?.?.? rather than ever silently hiding a real
+    # outage as "Booting…".
+    try:
+        with open("/proc/uptime") as f:
+            uptime = float(f.read().split()[0])
+        if uptime < 90:
+            return "Booting…"
+    except (OSError, ValueError, IndexError):
+        pass
     return "?.?.?.?"
 
 
@@ -78,9 +101,10 @@ def get_lan_ip() -> str:
     global _LAN_IP_CACHE
     now = time.time()
     cached_ip, cached_at = _LAN_IP_CACHE
-    # Refresh if TTL expired, OR if we still have the placeholder (keep retrying
-    # cheaply until DHCP gives us something real).
-    if cached_ip == "?.?.?.?" or now - cached_at > _LAN_IP_TTL:
+    # Refresh if TTL expired, OR if we still have a non-IP placeholder
+    # ("?.?.?.?" or "Booting…") — keep retrying cheaply until DHCP gives
+    # us a real address. TTL only locks in once we have an actual IP.
+    if cached_ip in ("?.?.?.?", "Booting…") or now - cached_at > _LAN_IP_TTL:
         _LAN_IP_CACHE = (_get_lan_ip(), now)
     return _LAN_IP_CACHE[0]
 
