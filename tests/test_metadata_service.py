@@ -318,6 +318,156 @@ class TestFleetHostnameValidation:
         assert metadata_service_module._SAFE_HOST_RE.match(host) is None
 
 
+class TestFleetFetchPeerStatusSummary:
+    """`_fetch_peer_status_summary` must reject unsafe hostnames BEFORE the URL is built."""
+
+    def test_ssrf_reject_does_not_call_aiohttp(
+        self, metadata_service_module, monkeypatch
+    ):
+        # If the SSRF check is bypassed, aiohttp.ClientSession() will be
+        # called and we'll see a sentinel exception. This pins the security
+        # gate so future refactors can't accidentally re-introduce the bug.
+        called = {"value": False}
+
+        class _BoomSession:
+            def __init__(self, *a, **kw):
+                called["value"] = True
+                raise RuntimeError("aiohttp must not be called for unsafe hosts")
+
+        monkeypatch.setattr(
+            metadata_service_module.aiohttp,
+            "ClientSession",
+            _BoomSession,
+            raising=False,
+        )
+        import asyncio
+
+        for bad in (
+            "evil.com@attacker.com",
+            "host#frag",
+            "host:8888",
+            "host/path",
+            "",
+        ):
+            result = asyncio.run(
+                metadata_service_module._fetch_peer_status_summary(bad)
+            )
+            assert result is None, f"unsafe host {bad!r} should return None"
+        assert called["value"] is False, (
+            "aiohttp.ClientSession must NOT be called for unsafe hostnames"
+        )
+
+
+class TestHandleStatusFleetRouting:
+    """`handle_status()` must wire `?scope=fleet` and `?fleet=1` correctly.
+
+    Without these tests a routing regression (e.g. typo in the query-param
+    name) would silently disable the entire Fleet feature with no CI signal.
+    """
+
+    @staticmethod
+    def _make_request(query: dict[str, str]):
+        return types.SimpleNamespace(query=query)
+
+    def test_json_scope_fleet_returns_peers(self, metadata_service_module, monkeypatch):
+        fake_peers = [{"hostname": "pi-other", "mode": "both", "status": "ok"}]
+
+        async def fake_build(hostname):
+            return fake_peers
+
+        monkeypatch.setattr(metadata_service_module, "_build_fleet_view", fake_build)
+        monkeypatch.setattr(
+            metadata_service_module,
+            "_read_status_snapshot",
+            lambda: ({"hostname": "pi-self"}, 0.0),
+        )
+
+        import asyncio
+
+        request = self._make_request({"format": "json", "scope": "fleet"})
+        resp = asyncio.run(metadata_service_module.handle_status(request))
+        payload = resp.args[0]
+        assert payload["peers"] == fake_peers
+        assert payload["self_hostname"] == "pi-self"
+
+    def test_html_fleet_query_triggers_build(
+        self, metadata_service_module, monkeypatch
+    ):
+        fake_peers = [
+            {"hostname": "pi-x", "status": "ok", "url": "http://pi-x:8083/status"}
+        ]
+        builds = {"count": 0}
+
+        async def fake_build(hostname):
+            builds["count"] += 1
+            return fake_peers
+
+        monkeypatch.setattr(metadata_service_module, "_build_fleet_view", fake_build)
+        monkeypatch.setattr(
+            metadata_service_module,
+            "_read_status_snapshot",
+            lambda: (
+                {
+                    "schema_version": 1,
+                    "status": "ok",
+                    "hostname": "pi-self",
+                    "mode": "both",
+                    "failures": 0,
+                    "warnings": 0,
+                    "records": [],
+                },
+                0.0,
+            ),
+        )
+
+        import asyncio
+
+        request = self._make_request({"fleet": "1"})
+        resp = asyncio.run(metadata_service_module.handle_status(request))
+        assert builds["count"] == 1, (
+            "handle_status must call _build_fleet_view when ?fleet=1"
+        )
+        # HTML response — text contains Fleet section.
+        body = resp.kwargs.get("text") or (resp.args[0] if resp.args else "")
+        assert "Fleet" in body
+        assert "pi-x" in body
+
+    def test_html_default_does_not_trigger_fleet_build(
+        self, metadata_service_module, monkeypatch
+    ):
+        builds = {"count": 0}
+
+        async def fake_build(hostname):
+            builds["count"] += 1
+            return []
+
+        monkeypatch.setattr(metadata_service_module, "_build_fleet_view", fake_build)
+        monkeypatch.setattr(
+            metadata_service_module,
+            "_read_status_snapshot",
+            lambda: (
+                {
+                    "schema_version": 1,
+                    "status": "ok",
+                    "hostname": "pi-self",
+                    "mode": "both",
+                    "failures": 0,
+                    "warnings": 0,
+                    "records": [],
+                },
+                0.0,
+            ),
+        )
+
+        import asyncio
+
+        request = self._make_request({})
+        asyncio.run(metadata_service_module.handle_status(request))
+        assert builds["count"] == 0, (
+            "default /status must NOT call _build_fleet_view (perf regression)"
+        )
+
+
 class TestFleetRenderHtml:
     """`_render_fleet_section()` is a pure renderer — no I/O."""
 

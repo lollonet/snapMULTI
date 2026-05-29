@@ -2320,6 +2320,11 @@ async def _fetch_peer_status_summary(
                 url, timeout=aiohttp.ClientTimeout(total=timeout_s)
             ) as resp:
                 if resp.status != 200:
+                    # Distinguish 404 (version skew) from 503 (peer overloaded)
+                    # from 401/403 (auth) in operator debugging.
+                    logger.debug(
+                        "fleet: fetch %s returned HTTP %d", peer_host, resp.status
+                    )
                     return None
                 data = await resp.json()
     except Exception as exc:  # noqa: BLE001 — broad on purpose: any error drops the peer; debug log preserves diagnostics.
@@ -2378,7 +2383,15 @@ async def _build_fleet_view(own_hostname: str) -> list[dict]:
             *(_fetch_peer_status_summary(p["hostname"]) for p in peers),
             return_exceptions=True,
         )
-        summaries: list[dict] = [r for r in results if isinstance(r, dict)]
+        summaries: list[dict] = []
+        for peer, res in zip(peers, results, strict=True):
+            if isinstance(res, dict):
+                summaries.append(res)
+            elif isinstance(res, BaseException):
+                # gather caught an exception that _fetch_peer_status_summary's
+                # own except block didn't (e.g. scheduling-time error). Log so
+                # an operator can correlate "peer missing from fleet" with cause.
+                logger.debug("fleet: gather for %s raised %s", peer["hostname"], res)
         summaries.sort(key=lambda s: s.get("hostname", "").lower())
         _fleet_cache["data"] = (time.time(), summaries)
         return summaries
