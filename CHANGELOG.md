@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **fb-display: show "Booting…" instead of `?.?.?.?` during the first 90 s of boot (#540)** — the bare placeholder reads as "network broken" on a fresh HDMI screen and triggered unnecessary user reboots during the normal WiFi-association + DHCP window. `_get_lan_ip()` now consults `/proc/uptime` after the socket probes fail: `< 90 s` → `"Booting…"`, `≥ 90 s` → `"?.?.?.?"` (real persistent failure surfaces). `/proc/uptime` unreadable falls through conservatively to `"?.?.?.?"` so an outage is never silently hidden. Cache invariant also bypasses on `"Booting…"` so the display picks up the real IP the moment DHCP completes. 4 new regression tests pin the matrix.
 - **`/status` snapshot smoke check disambiguated** — the HTTP 503 branch used to lump three distinct root causes into one message ("check snapmulti-status.timer AND /audio bind-mount on metadata container"), forcing the operator to chase both. The check now probes directly: (a) snapshot file missing on host — INFO on fresh boot (< 5 min uptime + timer not yet armed), FAIL after; (b) file present on host but metadata container cannot read it — FAIL pointing at the bind-mount + PUID/PGID; (c) file present and readable in container but service still returns 503 — FAIL with the actual response body so the cause is visible. No false-positive on the first-boot window before `OnBootSec=4min`.
 
 ## [0.7.9.3] — 2026-05-29
