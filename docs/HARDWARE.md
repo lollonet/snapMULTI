@@ -357,77 +357,52 @@ Container memory limits are applied automatically based on detected hardware (mi
 
 ---
 
-## Reference builds — real-world measurements
+## Reference builds — load characteristics
 
-Two production scenarios captured on **2026-05-29** with `docker stats --no-stream`, `free -h`, and `vcgencmd measure_temp`. Intended as realistic upper bounds while the system is actively streaming, *not* idle baselines.
+Per-service memory limits live in [ADVANCED.md — Resource profiles](ADVANCED.md#resource-profiles). The notes below describe how the system *behaves* under load, so you can size hardware without chasing point-in-time benchmarks.
 
-### Scenario A — `snapvideo` fan-out: 3 active sources → multiple client groups
+### Scenario A — server fan-out (multi-source → multiple client groups)
 
-`snapvideo` (server + local display) serves three sources simultaneously (MPD library, AirPlay session, Spotify Connect) to two remote snapclients plus its own loopback display.
+A server-with-display Pi feeding several remote snapclients plus its own loopback. Typical workload: MPD library, AirPlay, and Spotify Connect active at the same time, each routed to a different client group.
 
-| Role | Hostname | Board | RAM | Audio | Source it plays |
-|------|----------|-------|-----|-------|-----------------|
-| Server + display | `snapvideo` | Pi 4 B | 8 GB | HiFiBerry DAC+ (analog) | — (fans out 3) |
-| Client group A | `snapdigi` | Pi 4 B | 2 GB | HDMI to LG 50" (with cover-art display) | MPD library |
-| Client group B | `pizero` | Pi Zero 2 W | 512 MB | InnoMaker DAC (PCM5122), native snapclient | Spotify |
-| Loopback | `snapvideo` (self) | Pi 4 B | 8 GB | HiFiBerry DAC+ | AirPlay |
+| Role | Board floor | Audio path |
+|------|-------------|------------|
+| Server + display | Pi 4 4 GB+ (8 GB recommended for headroom) | HAT DAC, analog or digital |
+| Client group with display | Pi 4 2 GB+ | HDMI / HAT DAC |
+| Client group, headless | Pi 3 / Pi Zero 2 W native | HAT DAC |
+| Loopback (server plays locally too) | same Pi as server | server HAT DAC |
 
-**Server load** (`snapvideo`, uptime 43 min, load avg `0.45`):
+**Dominant costs to size for:**
 
-| Container | CPU % | RAM | Notes |
-|-----------|-------|-----|-------|
-| snapserver | 10.96% | 90.34 MiB | Fans out audio to all clients |
-| fb-display | 8.16% | 109.8 MiB | Server-with-display (cover art rendered locally too) |
-| tidal-connect | 3.84% | 32.18 MiB | Idle (no active Tidal cast — daemon stays warm) |
-| librespot (Spotify) | 3.71% | 40.81 MiB | Group B is casting Spotify |
-| audio-visualizer | 3.52% | 54.10 MiB | Server-with-display |
-| shairport-sync | 1.76% | 21.95 MiB | AirPlay active session (loopback playback) |
-| snapclient (loopback) | 1.38% | 18.38 MiB | snapvideo also plays locally |
-| mpd | 0.45% | 249.1 MiB | Group A is streaming from the local library |
-| metadata | 0.10% | 63.11 MiB | Serves cover art / now-playing to clients + display |
-| mympd | 0.00% | 14.78 MiB | Idle web UI |
-| **Server total** | **~34% CPU** | **~895 MiB** | of 384+192+96+128+128+96+96+256+256+128 = 1.76 GiB cumulative limit |
+- **MPD library streaming** is the heaviest server-side workload — it grows with library size and NFS/SMB latency, not with the number of fan-out clients. Cover-art generation amplifies the RAM footprint.
+- **snapserver fan-out itself is cheap.** Adding remote client groups bumps CPU only marginally; the main cost stays in the source decoders.
+- **Per-client CPU is dominated by the display stack, not `snapclient`.** A 4K HDMI cover-art display can take an order of magnitude more CPU than the audio client. Headless clients are essentially free.
+- **Spotify/Tidal/AirPlay daemons stay warm even when idle** — they hold modest baseline RAM so handoff between sources is immediate.
 
-Host: 710 MiB used / 7.5 GiB total, **6.8 GiB available**. Temperature **68.6 °C**.
+**Sizing rule of thumb for the server:** Pi 4 4 GB is the comfortable floor when the server also runs the cover-art display; 8 GB gives margin for MPD scans, source switches, and a growing library. A Pi 3 / Pi 4 2 GB can serve audio fan-out but will feel tight as soon as the local display stack joins in.
 
-**Client load** (per group, all healthy on smoke test):
+> **Pi Zero 2 W stays viable as a client** *only* via the native `.deb` install (no Docker, no display containers — see [Pi Zero 2 W Notes](#pi-zero-2-w-notes)). Under Docker the same role would not fit in 512 MB; native, it is a single lightweight process and runs indefinitely.
 
-| Client | snapclient CPU % | snapclient RAM | Host RAM used / total | Temp |
-|--------|------------------|----------------|-----------------------|------|
-| `snapdigi` (Pi 4 2 GB + 4K HDMI display) | 1.40% | 17.96 MiB | 439 / 1.6 GiB | 61.8 °C |
-| `pizero` (Pi Zero 2 W, native install) | 0.1% (process) | 13.4 MiB RSS | 153 / 416 MiB | 47.8 °C |
-
-On `snapdigi`, the cover-art stack adds: `fb-display` **63.12% / 145.8 MiB** (4K HDMI rendering remains the dominant client cost) and `audio-visualizer` 4.04% / 53.53 MiB. snapclient itself stays trivial on every client.
-
-> **Note on Pi Zero 2 W.** It runs the native `snapclient` .deb (no Docker, no display containers — see [Pi Zero 2 W Notes](#pi-zero-2-w-notes)). The result is a single process at ~13 MiB RSS / 0.1 % CPU, which is why a 512 MB board sustains it indefinitely. The same role under Docker would not fit.
-
-### Scenario B — `pi4-test` single-host both-mode (local library only)
+### Scenario B — single-host both-mode (local library only)
 
 A single Pi running server + client at the same time, playing from its own MPD library to its own snapclient. No fan-out, no remote clients.
 
-| Container | CPU % | RAM |
-|-----------|-------|-----|
-| snapserver | 4.24% | 77 MiB |
-| mpd | 3.12% | 182 MiB |
-| tidal-connect | 4.31% | 20 MiB |
-| metadata | 0.99% | 53 MiB |
-| snapclient (loopback) | 1.09% | 18 MiB |
-| librespot | 0.00% | 17 MiB |
-| shairport-sync | 0.00% | 14 MiB |
-| mympd | 0.00% | 10 MiB |
-| **Total** | **~18% CPU** | **~390 MiB** |
+**Characteristics:**
 
-Board: Pi 4 B Rev 1.5 / **2 GB RAM**. Host: 798 / 1.9 GiB used (1.1 GiB available). Temperature 53 °C. Uptime 5 h.
+- All container costs collapse onto one board, but with no fan-out the snapserver path is light.
+- The heaviest single contributor is MPD when scanning or playing from a large library.
+- Tidal/Spotify/AirPlay daemons remain resident but quiet when not actively casting.
+- A Pi 4 2 GB has clear margin for both-mode without a server-side display; jumping to 4 GB is overkill for this case. The 4 GB+ floor only matters once cover-art display containers join the stack.
 
-### Takeaways
+**Sizing rule of thumb for both-mode:** Pi 4 2 GB is enough for pure audio (no display). Add the cover-art display stack → step up to 4 GB+. Both-mode on Pi 3 / Pi Zero is not supported — see the [hardware compatibility matrix](ADVANCED.md#hardware-compatibility-matrix).
 
-- **Pi 4 8 GB is comfortable for a 3-source × 3-group fan-out** even with a server-side cover-art display active. ~51% CPU and ~800 MiB of container RAM leave the rest of the board for spikes (MPD scans, simultaneous Spotify / Tidal switches). The dominant cost was MPD library streaming, not snapserver fan-out itself.
-- **Per-client CPU is dominated by the display stack, not by `snapclient`.** On `pi-display`, `fb-display` at 4K HDMI takes 66% CPU while `snapclient` stays under 2%. Headless clients are essentially free.
-- **The Pi Zero 2 W native install is decisively lighter than Docker** — 13 MiB RSS / 1.8% CPU vs. ~64 MiB and Docker daemon overhead. This is what makes a 512 MB board viable for snapMULTI.
-- **A single Pi 4 2 GB sustains both-mode comfortably** when there are no fan-out clients (Scenario B): ~18% CPU and ~390 MiB. The 2 GB model has clear margin; 4 GB is overkill for this use case.
-- **Thermals are well within margin** on all five boards — the hottest (`pi-server` at 64 °C) is far from the throttling threshold (80 °C). Passive cooling sufficed.
+### General observations
 
-> **How this was collected.** On every device: `docker stats --no-stream` (or `ps -o pcpu,pmem,rss -C snapclient` for the Pi Zero 2 W native install), `free -h`, `vcgencmd measure_temp`. The smoke test (`scripts/device-smoke.sh`) was green on every device before the snapshot. CPU percentages are point-in-time samples and vary with playback activity.
+- **Thermals stay within margin** on all Pi 4 boards under typical home-streaming load — passive cooling (heatsink case) is sufficient, no active fan required. The hottest component tends to be the server when running cover-art rendering alongside audio fan-out.
+- **Container memory limits target steady-state, not peaks.** Brief headroom during MPD scans, container restarts, or source switches is normal; the per-service ceilings in [ADVANCED.md](ADVANCED.md#resource-profiles) leave room for it.
+- **Reflash-first deployment means actual RAM usage decays after first boot.** The MPD cached database removes the worst-case scan cost on subsequent boots — see [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for the first-boot scan window on large NFS libraries.
+
+> **Want point-in-time numbers?** Run `docker stats --no-stream`, `free -h`, and `vcgencmd measure_temp` on your own device after smoke test passes — actual figures depend on library size, source mix, and playback activity, so a snapshot in this doc rots within months.
 
 ---
 

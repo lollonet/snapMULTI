@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **ADR-008 supersedes ADR-007 — IPv6 enabled by default** (#557, #558). Tidal Connect now works out-of-box; software defenses (Avahi `use-ipv6=no`, snapclient IPv4 pin, fb-display filter, `boot-tune.sh`) cover the original races. Opt back into the kernel disable with `DISABLE_IPV6=true`. Validated live on snapvideo + pizero + snapdigi.
-- **HARDWARE.md Scenario A refreshed with 2026-05-29 measurements** from snapvideo + snapdigi + pizero (replaces stale 2026-05-13 `pi-server`/Pi 3 mix). 3-source fan-out: server ~34 % CPU / ~895 MiB / 68.6 °C, host 6.8 GiB available. Italian mirrored.
+- **HARDWARE.md reference builds replaced with qualitative sizing notes** (#559) — point-in-time `docker stats` tables removed; section now lists cost drivers, board floors, and sizing rules of thumb. Memory limits stay in ADVANCED.md (SSOT). Italian mirrored.
 - **Install TUI shows expected total time + INSTALL docs updated** (PR #556). HDMI progress bar now reads `02:15 / ~16 min [...]`. `EXPECTED_TOTAL_MIN` per `(hardware, INSTALL_TYPE)` from measured logs; README / `INSTALL.md` (+ Italian) flipped from stale "10-15 min" to realistic 15-20 min Pi 4/5, ~18 min Pi Zero 2 W.
 
 ## [0.7.9.6] — 2026-05-29
