@@ -122,7 +122,11 @@ assert 'echo "$quiet_block" | grep -qE "\\[\\[ -c /dev/fb0 \\]\\]"' \
        'quiet boot block gated on /dev/fb0 presence'
 
 for flag in quiet loglevel=3 systemd.show_status=false vt.global_cursor_default=0 logo.nologo; do
-    if echo "$quiet_block" | grep -qF "$flag"; then
+    # here-string avoids `echo | grep -q` SIGPIPE race under `set -o pipefail`:
+    # grep -q exits at first match → echo gets SIGPIPE → pipefail propagates
+    # non-zero → false FAIL even when the flag is present. Flaky on CI when
+    # the block fits the pipe buffer in some runs but not others.
+    if grep -qF "$flag" <<< "$quiet_block"; then
         echo "  PASS: cmdline flag '$flag' is appended"
         pass=$((pass + 1))
     else

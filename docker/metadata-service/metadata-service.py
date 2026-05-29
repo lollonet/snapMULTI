@@ -2232,6 +2232,13 @@ STATUS_JSON_PATH = "/audio/system-status.json"
 # cache and only every other refresh does live discovery.
 _FLEET_CACHE_TTL_SECONDS = 120
 _fleet_cache: dict[str, tuple[float, list[dict]]] = {}
+_fleet_build_lock = asyncio.Lock()
+# RFC 1123 hostnames are [a-zA-Z0-9.-]; `_` is non-standard but common; reject
+# everything else. Defends against SSRF when a malicious LAN device publishes
+# a Snapcast mDNS SRV record like `evil.com@attacker.com` — that interpolated
+# into f"http://{host}:8083/..." would tunnel via RFC 3986 user-info syntax
+# and aiohttp would connect to attacker.com:8083, not the LAN peer.
+_SAFE_HOST_RE = re.compile(r"^[a-zA-Z0-9._-]{1,253}$")
 
 
 def _normalize_mdns_host(name: str) -> str:
@@ -2285,6 +2292,13 @@ async def _discover_snapmulti_peers(
         except ProcessLookupError:
             pass
         return []
+    if proc.returncode != 0:
+        # avahi-daemon down / D-Bus socket missing → empty result is misleading.
+        logger.warning(
+            "fleet: avahi-browse exited %d — is avahi-daemon running on host?",
+            proc.returncode,
+        )
+        return []
     return _parse_avahi_browse_peers(
         stdout.decode("utf-8", errors="ignore"), own_hostname
     )
@@ -2294,6 +2308,11 @@ async def _fetch_peer_status_summary(
     peer_host: str, timeout_s: float = 5.0
 ) -> dict | None:
     """Fetch peer /status?format=json and extract a per-peer summary; None on any error."""
+    # SSRF defence: reject anything beyond RFC 1123 hostname chars before
+    # interpolating into a URL. See _SAFE_HOST_RE for the attack scenario.
+    if not _SAFE_HOST_RE.match(peer_host):
+        logger.warning("fleet: rejecting unsafe peer hostname %r", peer_host)
+        return None
     url = f"http://{peer_host}:8083/status?format=json"
     try:
         async with aiohttp.ClientSession() as session:
@@ -2340,19 +2359,29 @@ async def _build_fleet_view(own_hostname: str) -> list[dict]:
     if cached is not None and (now - cached[0]) < _FLEET_CACHE_TTL_SECONDS:
         return cached[1]
 
-    peers = await _discover_snapmulti_peers(own_hostname)
-    if not peers:
-        _fleet_cache["data"] = (now, [])
-        return []
+    # Serialise cold-cache builds: a second concurrent request arriving during
+    # the 5-8 s discovery window would otherwise spawn a duplicate avahi-browse
+    # + N parallel peer fetches. The lock holds for the build; the second
+    # waiter re-checks the cache after acquiring and returns the just-published
+    # result without re-doing the work.
+    async with _fleet_build_lock:
+        cached = _fleet_cache.get("data")
+        if cached is not None and (time.time() - cached[0]) < _FLEET_CACHE_TTL_SECONDS:
+            return cached[1]
 
-    results = await asyncio.gather(
-        *(_fetch_peer_status_summary(p["hostname"]) for p in peers),
-        return_exceptions=True,
-    )
-    summaries: list[dict] = [r for r in results if isinstance(r, dict)]
-    summaries.sort(key=lambda s: s.get("hostname", "").lower())
-    _fleet_cache["data"] = (now, summaries)
-    return summaries
+        peers = await _discover_snapmulti_peers(own_hostname)
+        if not peers:
+            _fleet_cache["data"] = (time.time(), [])
+            return []
+
+        results = await asyncio.gather(
+            *(_fetch_peer_status_summary(p["hostname"]) for p in peers),
+            return_exceptions=True,
+        )
+        summaries: list[dict] = [r for r in results if isinstance(r, dict)]
+        summaries.sort(key=lambda s: s.get("hostname", "").lower())
+        _fleet_cache["data"] = (time.time(), summaries)
+        return summaries
 
 
 # Beginner-friendly grace period: when the snapshot file is older than this

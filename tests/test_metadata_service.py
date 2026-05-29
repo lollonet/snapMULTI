@@ -290,6 +290,34 @@ class TestFleetParseAvahi:
         assert metadata_service_module._parse_avahi_browse_peers("", "pi-server") == []
 
 
+class TestFleetHostnameValidation:
+    """`_SAFE_HOST_RE` is the SSRF gate before URL interpolation."""
+
+    @pytest.mark.parametrize(
+        "host",
+        ["pi-server", "pi-server.local", "rpi3.lan", "device_1", "Server-42.local"],
+    )
+    def test_accepts_rfc1123_like(self, metadata_service_module, host):
+        assert metadata_service_module._SAFE_HOST_RE.match(host) is not None
+
+    @pytest.mark.parametrize(
+        "host",
+        [
+            "evil.com@attacker.com",  # RFC 3986 user-info hijack
+            "host#fragment",  # URL fragment truncates port
+            "host:8888",  # explicit port override
+            "host/path",  # path injection
+            "host?query=1",  # query injection
+            "host with space",
+            "127.0.0.1%00.evil.com",  # null-byte attempt
+            "",  # empty rejected
+            "a" * 254,  # > 253 chars rejected
+        ],
+    )
+    def test_rejects_malicious(self, metadata_service_module, host):
+        assert metadata_service_module._SAFE_HOST_RE.match(host) is None
+
+
 class TestFleetRenderHtml:
     """`_render_fleet_section()` is a pure renderer — no I/O."""
 
