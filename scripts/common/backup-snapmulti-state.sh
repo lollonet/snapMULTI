@@ -44,9 +44,7 @@ cleanup_boot_mount() {
 }
 trap cleanup_boot_mount EXIT
 
-# Validate the remount actually took. See backup-mpd.sh for the
-# rationale: mount(8) can return 0 silently while the fs stays ro.
-# Exit 0 — best-effort backup, .path unit will re-fire on next change.
+# See backup-mpd.sh — mount(8) can return 0 while fs stays ro; exit 0 so .path re-fires on next change.
 if findmnt -n -o OPTIONS "$BOOT" 2>/dev/null | tr ',' '\n' | grep -qx ro; then
     logger -t backup-snapmulti-state \
         "skipped: $BOOT failed to remount rw (mount err: ${mount_err:-none})"

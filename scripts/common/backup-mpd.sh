@@ -82,13 +82,7 @@ cleanup_boot_and_temp() {
 }
 trap cleanup_boot_and_temp EXIT
 
-# Validate the remount actually took — mount(8) can return 0 silently while
-# leaving the filesystem ro (observed on snapvideo 2026-05-29 first boot:
-# the daily backup unit failed with "cannot create directory: Read-only
-# file system" despite the prior `mount -o remount,rw` returning success).
-# Exit 0 on failure: backup is best-effort and the daily timer will retry
-# tomorrow when the transient condition has cleared — degrading /status
-# for 24 h on a transient first-boot race is not worth the signal.
+# mount(8) can return 0 silently while fs stays ro (snapvideo 2026-05-29 first-boot race); exit 0 so transient remount failure doesn't degrade /status for 24h.
 if findmnt -n -o OPTIONS "$BOOT" 2>/dev/null | tr ',' '\n' | grep -qx ro; then
     logger -t backup-mpd \
         "skipped: $BOOT failed to remount rw (mount err: ${mount_err:-none}) — will retry next timer tick"
