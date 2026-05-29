@@ -25,14 +25,14 @@ esac
 #   no library), so 90 s is plenty and we don't want to delay the
 #   audible "device ready" cue.
 # - server / both: MPD scans the library on first boot. Local or small
-#   NFS libraries (≤ ~10 k tracks) finish within ~3-4 min — extending
-#   the cap to 240 s lets the tone land PASS (ascending chime) on
+#   NFS libraries (≤ ~10 k tracks) finish within ~3-5 min — extending
+#   the cap to 300 s lets the tone land PASS (ascending chime) on
 #   those installs instead of always firing FAIL during MPD warmup.
-#   Very large libraries (50 k+ tracks NFS) still exceed 240 s —
+#   Very large libraries (50 k+ tracks NFS) still exceed 300 s —
 #   covered by the TROUBLESHOOTING entry on benign first-scan fail
 #   tone + the backup-from-sd.sh mpd.db pre-warm workflow.
 case "$INSTALL_TYPE" in
-    server|both) WAIT_CAP_SEC=240 ;;
+    server|both) WAIT_CAP_SEC=300 ;;
     *)           WAIT_CAP_SEC=90  ;;
 esac
 WAIT_ITERATIONS=$(( WAIT_CAP_SEC / 5 ))

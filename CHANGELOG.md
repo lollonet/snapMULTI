@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **auto-boot-smoke: mode-aware wait cap (server/both 240 s, client 90 s)** — on server/both installs the boot-time smoke check now waits up to 240 s for snapserver / snapclient healthy (was 90 s); on client / client-native it stays at 90 s because snapclient is ready in seconds (no MPD, no library scan). The extension lets small / medium libraries (≤ ~10 k tracks local or NFS) finish MPD's first scan before the tone fires → PASS chime instead of always FAIL during MPD warmup. Very large libraries (50 k+ NFS) still exceed 240 s → fail tone remains, covered by the existing TROUBLESHOOTING entry + `backup-from-sd.sh` mpd.db pre-warm workflow. `TimeoutStartSec` bumped 240 → 600 s only on the server/both unit (client keeps 240 s).
+- **auto-boot-smoke: mode-aware wait cap (server/both 300 s, client 90 s)** — on server/both installs the boot-time smoke check now waits up to 300 s for snapserver / snapclient healthy (was 90 s); on client / client-native it stays at 90 s because snapclient is ready in seconds (no MPD, no library scan). The extension lets small / medium libraries (≤ ~10 k tracks local or NFS) finish MPD's first scan before the tone fires → PASS chime instead of always FAIL during MPD warmup. Very large libraries (50 k+ NFS) still exceed 300 s → fail tone remains, covered by the existing TROUBLESHOOTING entry + `backup-from-sd.sh` mpd.db pre-warm workflow. `TimeoutStartSec` bumped 240 → 720 s only on the server/both unit (client keeps 240 s).
 
 ## [0.7.9.4] — 2026-05-29
 
