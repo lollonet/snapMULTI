@@ -159,7 +159,7 @@ services:
           memory: ${SPOTIFY_MEM_RESERVE:-128M}
 
   mympd:
-    image: ghcr.io/jcorporation/mympd/mympd:v25.0.2
+    image: ghcr.io/jcorporation/mympd/mympd:25.0.2
     container_name: mympd
     restart: unless-stopped
     network_mode: host

@@ -255,7 +255,7 @@ Configurazione del firewall (regole `ufw`) e setup QoS / `cake` qdisc sono docum
 | `ghcr.io/devgianlu/go-librespot:v0.7.3` | ~30–50 MB |
 | `lollonet/snapmulti-mpd:latest` | ~50–80 MB |
 | `lollonet/snapmulti-metadata:latest` | ~60–80 MB |
-| `ghcr.io/jcorporation/mympd/mympd:v25.0.2` | ~30–50 MB |
+| `ghcr.io/jcorporation/mympd/mympd:25.0.2` | ~30–50 MB |
 | `lollonet/snapmulti-tidal:latest` | ~200–300 MB |
 
 **Immagini client** (dalla directory [client](../client/)):
