@@ -23,17 +23,28 @@ MAX_SNAPSHOTS=12
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 SNAPSHOT="$DIAG_DIR/$TIMESTAMP"
 
-# Remount boot partition read-write
+# Remount boot partition read-write — see backup-mpd.sh for the rationale
+# behind validating with findmnt after the mount call.
 remount_rw() {
-    mount -o remount,rw "$BOOT" 2>/dev/null || true
+    mount -o remount,rw "$BOOT" 2>&1 || true
 }
 
 remount_ro() {
     mount -o remount,ro "$BOOT" 2>/dev/null || true
 }
 
-remount_rw
+mount_err=$(remount_rw)
 trap 'remount_ro' EXIT
+
+# Exit 0 on remount failure: diagnostics are best-effort; the next timer
+# tick (every 15 min) will retry. Degrading /status for 24 h on a
+# transient first-boot remount race is not worth the signal.
+if findmnt -n -o OPTIONS "$BOOT" 2>/dev/null | tr ',' '\n' | grep -qx ro; then
+    logger -t save-diagnostics \
+        "skipped: $BOOT failed to remount rw (mount err: ${mount_err:-none})"
+    exit 0
+fi
+
 mkdir -p "$DIAG_DIR"
 
 # Rotate: keep only the last MAX_SNAPSHOTS.

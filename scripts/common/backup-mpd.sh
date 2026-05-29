@@ -73,7 +73,7 @@ if findmnt -n -o OPTIONS "$BOOT" 2>/dev/null | tr ',' '\n' | grep -qx ro; then
     boot_was_ro=true
 fi
 
-mount -o remount,rw "$BOOT" 2>/dev/null || true
+mount_err=$(mount -o remount,rw "$BOOT" 2>&1 || true)
 cleanup_boot_and_temp() {
     [[ "${MPD_DB:-}" == /tmp/* ]] && rm -f "$MPD_DB"
     if [[ "$boot_was_ro" == "true" ]]; then
@@ -81,6 +81,19 @@ cleanup_boot_and_temp() {
     fi
 }
 trap cleanup_boot_and_temp EXIT
+
+# Validate the remount actually took — mount(8) can return 0 silently while
+# leaving the filesystem ro (observed on snapvideo 2026-05-29 first boot:
+# the daily backup unit failed with "cannot create directory: Read-only
+# file system" despite the prior `mount -o remount,rw` returning success).
+# Exit 0 on failure: backup is best-effort and the daily timer will retry
+# tomorrow when the transient condition has cleared — degrading /status
+# for 24 h on a transient first-boot race is not worth the signal.
+if findmnt -n -o OPTIONS "$BOOT" 2>/dev/null | tr ',' '\n' | grep -qx ro; then
+    logger -t backup-mpd \
+        "skipped: $BOOT failed to remount rw (mount err: ${mount_err:-none}) — will retry next timer tick"
+    exit 0
+fi
 
 mkdir -p "$BACKUP_DIR/mpd/data"
 
