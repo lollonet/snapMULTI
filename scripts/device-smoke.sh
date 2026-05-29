@@ -991,7 +991,7 @@ if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
         # actually working end-to-end".
         _status_code=$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' 'http://127.0.0.1:8083/status?format=json' 2>/dev/null || true)
         case "$_status_code" in
-            200) pass_check "/status snapshot present and readable (issue #177 path)" ;;
+            200) pass_check "/status snapshot present and readable" ;;
             503)
                 # Disambiguate the 503 — three distinct root causes used
                 # to be lumped under "check snapmulti-status.timer AND
