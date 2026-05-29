@@ -902,26 +902,16 @@ if [[ -f "$CMDLINE" ]]; then
     done
     unset _boot_mask_unit BOOT_MASK_UNITS
 
-    # ── Disable IPv6 at kernel level (ADR-007) ────────────────────
-    # snapMULTI is a LAN-only audio appliance. Dual-stack mDNS on
-    # consumer LANs causes Snapcast discovery to occasionally latch
-    # onto IPv6 link-local SRV targets that don't route, leaving the
-    # device silent with a healthy server (see PR #521 for the
-    # surgical workaround that this kernel-level fix supersedes).
-    # Earliest possible disable point: kernel cmdline. Beats sysctl /
-    # NM tweaks because it pre-empts every userland subsystem before
-    # PID 1 starts. Lives on FAT32 /boot/firmware — survives
-    # overlayroot upper-layer wipes. Opt out with DISABLE_IPV6=false
-    # in the prepare-sd environment.
-    if [[ "${DISABLE_IPV6:-true}" == "true" ]]; then
+    # ADR-008: IPv6 ON by default — software defenses (Avahi use-ipv6=no, PR #521 #306, boot-tune.sh) cover the original ADR-007 races; kernel disable broke Tidal Connect WebSocket [::] listen.
+    if [[ "${DISABLE_IPV6:-false}" == "true" ]]; then
         if ! ( cmdline_path() { printf '%s\n' "$CMDLINE"; }
                cmdline_add_token "ipv6.disable=1" ); then
             echo "  WARNING: Failed to add ipv6.disable=1 to cmdline.txt"
         else
-            echo "  IPv6 disabled at kernel cmdline (set DISABLE_IPV6=false to keep)"
+            echo "  IPv6 disabled at kernel cmdline (DISABLE_IPV6=true)"
         fi
     else
-        echo "  IPv6 kernel disable skipped (DISABLE_IPV6=false)"
+        echo "  IPv6 left enabled at kernel (default — Tidal Connect needs it)"
     fi
 fi
 

@@ -367,21 +367,21 @@ sudo ufw allow 5353/udp   # mDNS (Avahi / Bonjour)
 
 Full port table (with direction and purpose): [USAGE.md](USAGE.md).
 
-## IPv6 disabled by default
+## IPv6 enabled by default
 
-snapMULTI disables IPv6 by default to avoid dual-stack mDNS / Snapcast discovery failures on consumer LANs. IPv4 is the supported path. The disable is added to `/boot/firmware/cmdline.txt` as `ipv6.disable=1` by `prepare-sd.sh` / `prepare-sd.ps1` and takes effect at the earliest possible point in the boot sequence (kernel reads cmdline.txt before any unit starts).
+snapMULTI enables IPv6 at the kernel level by default (ADR-008 supersedes the earlier ADR-007 kernel-disable). The original dual-stack mDNS races are closed by software defenses (Avahi `use-ipv6=no`, snapclient IPv4 SRV pin via `discover-server.sh`, fb-display IPv4 zeroconf filter, `boot-tune.sh` single-publish on dual-iface hosts), so the kernel kill-switch was redundant. Tidal Connect's proprietary binary requires `socket(AF_INET6)` for its WebSocket listen — leaving IPv6 on means it works out-of-box.
 
-Advanced users can re-enable IPv6 by setting `DISABLE_IPV6=false` before preparing the SD card:
+Operators with a hard reason to disable IPv6 at the kernel level (legacy network, broken router advertisements, etc.) can opt back into the ADR-007 behaviour by setting `DISABLE_IPV6=true` before preparing the SD card:
 
 ```bash
-DISABLE_IPV6=false ./scripts/prepare-sd.sh /Volumes/bootfs
+DISABLE_IPV6=true ./scripts/prepare-sd.sh /Volumes/bootfs
 ```
 
 ```powershell
-$env:DISABLE_IPV6='false'; .\scripts\prepare-sd.ps1 -Boot E:\
+$env:DISABLE_IPV6='true'; .\scripts\prepare-sd.ps1 -Boot E:\
 ```
 
-To re-enable IPv6 on an already-installed device without reflashing: mount the boot partition, remove `ipv6.disable=1` from `cmdline.txt`, reboot. `/boot/firmware/` is FAT32 and writable from any host. See ADR-007 for the full rationale.
+To disable IPv6 on an already-installed device without reflashing: mount the boot partition, append `ipv6.disable=1` to `cmdline.txt`, reboot. `/boot/firmware/` is FAT32 and writable from any host. See ADR-008 for the full rationale (and ADR-007 for the historical context it supersedes).
 
 ## Network QoS
 

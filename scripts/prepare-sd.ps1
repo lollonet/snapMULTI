@@ -950,19 +950,21 @@ if (Test-Path $cmdline) {
         }
     }
 
-    # Disable IPv6 at kernel level (ADR-007). LAN-only audio appliance
-    # — dual-stack mDNS causes Snapcast discovery to occasionally latch
-    # IPv6 link-local. Earliest disable point. Opt out via env var.
+    # IPv6 kernel state (ADR-008 supersedes ADR-007). Default ON —
+    # software defenses (Avahi use-ipv6=no, snapclient IPv4 SRV pin,
+    # fb-display IPv4 filter) carry the load. Tidal Connect needs the
+    # IPv6 stack for its WebSocket listen. Opt back in to disable via
+    # DISABLE_IPV6=true.
     $disableIpv6 = $env:DISABLE_IPV6
-    if (-not $disableIpv6) { $disableIpv6 = 'true' }
+    if (-not $disableIpv6) { $disableIpv6 = 'false' }
     if ($disableIpv6 -eq 'true') {
         $ipv6Flag = 'ipv6.disable=1'
         if ($content -notmatch ('\b' + [regex]::Escape($ipv6Flag) + '\b')) {
             $content = "$content $ipv6Flag"
-            Write-Host '  IPv6 disabled at kernel cmdline (set DISABLE_IPV6=false to keep)'
+            Write-Host '  IPv6 disabled at kernel cmdline (DISABLE_IPV6=true)'
         }
     } else {
-        Write-Host '  IPv6 kernel disable skipped (DISABLE_IPV6=false)'
+        Write-Host '  IPv6 left enabled at kernel (default — Tidal Connect needs it)'
     }
 
     [System.IO.File]::WriteAllText($cmdline, "$content`n", $Utf8NoBom)

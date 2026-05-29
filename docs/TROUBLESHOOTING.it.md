@@ -278,24 +278,24 @@ Il problema del rilevamento HAT di solito è `otg_mode=1` o `dr_mode=host` in `c
 
 ---
 
-## IPv6 disattivato — è un problema?
+## IPv6 attivato per default — è normale?
 
-Per default snapMULTI disabilita IPv6 a livello kernel (`ipv6.disable=1` in `cmdline.txt`). Scelta voluta: snapMULTI è un'appliance audio solo-LAN e il dual-stack mDNS / Snapcast causa fallimenti silenti intermittenti su LAN domestiche (vedi ADR-007). `ip -6 addr` che ritorna vuoto su un device snapMULTI è lo stato **atteso**.
+snapMULTI abilita IPv6 a livello kernel per default (ADR-008 supersede l'ADR-007 originale che lo disabilitava). `ip -6 addr` che ritorna indirizzi su un device snapMULTI è lo stato **atteso**. Le difese software (Avahi `use-ipv6=no`, pin IPv4 SRV di snapclient via `discover-server.sh`, filtro IPv4 di fb-display in zeroconf, `boot-tune.sh` single-publish) coprono le race dual-stack mDNS originali; il kill-switch a kernel era ridondante e impediva il WebSocket listen di Tidal Connect.
 
-Sintomi che **non** dipendono da questa scelta:
-- snapclient non trova il server → verifica che `avahi-browse -rpt _snapcast._tcp` ritorni l'advertiser IPv4
-- App di casting AirPlay / Tidal / Spotify non vede il device → verifica la pubblicazione mDNS su IPv4 con `avahi-browse -rpt _airplay._tcp` ecc.
-- `apt-get update` lento → assicurati che `/etc/apt/apt.conf.d/99force-ipv4` esista (installato in automatico da snapMULTI al primo boot, contiene `Acquire::ForceIPv4 "true";`)
+Sintomi che **non** dipendono dall'IPv6 attivo:
+- snapclient non trova il server → verifica che `avahi-browse -rpt _snapcast._tcp` ritorni l'advertiser IPv4 (Avahi `use-ipv6=no` continua a pubblicare solo IPv4).
+- App di casting AirPlay / Tidal / Spotify non vede il device → stesso check con `_airplay._tcp`, `_tidalconnect._tcp`, `_spotify-connect._tcp`.
+- `apt-get update` lento → se hai scelto l'opt-in `DISABLE_IPV6=true` allora `/etc/apt/apt.conf.d/99force-ipv4` si installa da solo; con il default IPv6-on, apt funziona dual-stack e nessun force-IPv4 config viene scritto.
 
-Per ri-abilitare IPv6 su un device:
+Per disabilitare IPv6 su un device (rete legacy, router advertisement bacati, ecc.):
 
 ```bash
 # Monta la partizione di boot da un altro host (FAT32, fuori da overlayroot)
-# Modifica cmdline.txt — rimuovi il token `ipv6.disable=1`
+# Aggiungi `ipv6.disable=1` a cmdline.txt
 # Riavvia il Pi
 ```
 
-Per un'installazione fresca, imposta `DISABLE_IPV6=false` prima di lanciare `prepare-sd.sh` / `prepare-sd.ps1` (vedi [ADVANCED.it.md](ADVANCED.it.md#ipv6-disattivato-per-default)).
+Per un'installazione fresca, imposta `DISABLE_IPV6=true` prima di lanciare `prepare-sd.sh` / `prepare-sd.ps1` (vedi [ADVANCED.it.md](ADVANCED.it.md#ipv6-attivato-per-default)).
 
 ## Log che servono
 
