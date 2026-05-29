@@ -394,7 +394,7 @@ Un singolo Pi che esegue server + client simultaneamente, riproducendo dalla pro
 - I demoni Tidal/Spotify/AirPlay restano residenti ma quiescenti se non attivamente in cast.
 - Un Pi 4 2 GB ha margine evidente per il both-mode senza display server-side; passare a 4 GB è sovradimensionato in questo caso. La soglia di 4 GB+ conta solo quando i container display copertine entrano nello stack.
 
-**Regola pratica per il both-mode:** Pi 4 2 GB basta per audio puro (senza display). Aggiungere lo stack display copertine → salire a 4 GB+. Both-mode su Pi 3 / Pi Zero non è supportato — vedi la [matrice di compatibilità hardware](ADVANCED.it.md#matrice-di-compatibilità-hardware).
+**Regola pratica per il both-mode:** Pi 4 2 GB basta per audio puro (senza display). Aggiungere lo stack display copertine → salire a 4 GB+. Both-mode su Pi 3 / Pi Zero non è supportato — vedi la [matrice di compatibilità hardware](ADVANCED.it.md#matrice-compatibilità-hardware).
 
 ### Osservazioni generali
 
