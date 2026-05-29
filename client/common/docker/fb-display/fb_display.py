@@ -80,7 +80,8 @@ def _get_lan_ip() -> str:
     # the conservative ?.?.?.? rather than ever silently hiding a real
     # outage as "Booting…".
     try:
-        uptime = float(open("/proc/uptime").read().split()[0])
+        with open("/proc/uptime") as f:
+            uptime = float(f.read().split()[0])
         if uptime < 90:
             return "Booting…"
     except (OSError, ValueError, IndexError):
