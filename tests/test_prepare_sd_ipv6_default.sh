@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Pin the ADR-008 default: prepare-sd.sh does NOT add ipv6.disable=1 to
-# the cmdline unless DISABLE_IPV6=true is explicitly set.
+# Pin ADR-008 default: prepare-sd writes ipv6.disable=1 only when DISABLE_IPV6=true.
 
 set -euo pipefail
 
