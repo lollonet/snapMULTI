@@ -37,7 +37,9 @@ assert "grep -q 'docker compose ps' '$WRAP'" "polls docker compose for container
 assert "grep -q 'CORE_CHECKS=' '$WRAP'" "waits only for audio CORE (snapserver/snapclient), not MPD — large NFS scans would time out otherwise"
 assert "grep -q '/opt/snapmulti:snapserver /opt/snapclient:snapclient' '$WRAP'" "both-mode queries each service from ITS OWN compose project (snapclient lives in /opt/snapclient, not /opt/snapmulti)"
 assert "grep -q 'is-system-running' '$WRAP'" "waits for systemd to exit 'starting' (avoids false-positive systemd state FAIL)"
-assert "grep -qE 'seq 1 18' '$WRAP'" "caps each wait at 90 s (18 × 5 s) — well under TimeoutStartSec=240"
+assert "grep -q 'WAIT_CAP_SEC=300' '$WRAP'" "server/both wait cap is 300 s (covers MPD scan on local / small NFS)"
+assert "grep -q 'WAIT_CAP_SEC=90' '$WRAP'" "client/client-native wait cap is 90 s (snapclient ready in seconds; no MPD)"
+assert "grep -q 'WAIT_ITERATIONS=\$(( WAIT_CAP_SEC / 5 ))' '$WRAP'" "wait iteration count derived from per-mode cap (× 5 s sleep)"
 assert "grep -q 'SNAPMULTI_FORCE_TONE=1' '$WRAP'" "forces tone even with active Snapcast stream (option B: user must hear post-boot status)"
 assert "grep -qE '\\|\\| true\\s*$|exit 0' '$WRAP'" "always exits 0 — tone is the signal, never fails the systemd unit"
 
