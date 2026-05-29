@@ -209,37 +209,25 @@ class TestUpdateAvailableSemverComparison:
 
     def test_current_ahead_of_latest_no_update(self, metadata_service_module):
         # The exact snapvideo scenario.
-        assert (
-            self._is_update(metadata_service_module, "0.7.9.5", "0.7.9.3") is False
-        )
+        assert self._is_update(metadata_service_module, "0.7.9.5", "0.7.9.3") is False
 
     def test_current_behind_latest_update_available(self, metadata_service_module):
-        assert (
-            self._is_update(metadata_service_module, "0.7.9.3", "0.7.9.5") is True
-        )
+        assert self._is_update(metadata_service_module, "0.7.9.3", "0.7.9.5") is True
 
     def test_equal_no_update(self, metadata_service_module):
-        assert (
-            self._is_update(metadata_service_module, "0.7.9.5", "0.7.9.5") is False
-        )
+        assert self._is_update(metadata_service_module, "0.7.9.5", "0.7.9.5") is False
 
     def test_empty_latest_no_update(self, metadata_service_module):
         assert self._is_update(metadata_service_module, "0.7.9.5", "") is False
 
     def test_unparseable_falls_back_to_inequality(self, metadata_service_module):
         # Dev clone where current is "unknown" — fall back to `!=` rather than crash.
-        assert (
-            self._is_update(metadata_service_module, "unknown", "0.7.9.5") is True
-        )
+        assert self._is_update(metadata_service_module, "unknown", "0.7.9.5") is True
 
     def test_major_minor_jump(self, metadata_service_module):
         # Ensure tuple ordering handles cross-segment correctly (not lexicographic).
-        assert (
-            self._is_update(metadata_service_module, "0.7.10.0", "0.7.9.99") is False
-        )
-        assert (
-            self._is_update(metadata_service_module, "0.7.9.99", "0.7.10.0") is True
-        )
+        assert self._is_update(metadata_service_module, "0.7.10.0", "0.7.9.99") is False
+        assert self._is_update(metadata_service_module, "0.7.9.99", "0.7.10.0") is True
 
 
 class TestResolveExternalHost:
