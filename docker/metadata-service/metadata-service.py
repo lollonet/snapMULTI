@@ -2262,7 +2262,13 @@ def _parse_snapcast_clients(rpc_result: dict) -> list[dict]:
                 continue
             host = client.get("host") or {}
             config = client.get("config") or {}
-            volume = config.get("volume") or {}
+            # Snapcast normally returns a non-null volume object, but old
+            # servers / mid-state-transition can send `"volume": null` —
+            # use isinstance instead of `or {}` so the null collapse doesn't
+            # silently report muted=False / volume=0% for a real client.
+            volume = (
+                config.get("volume") if isinstance(config.get("volume"), dict) else {}
+            )
             last_seen = client.get("lastSeen") or {}
             try:
                 last_seen_sec = int(last_seen.get("sec", 0))
@@ -2358,7 +2364,13 @@ def _render_snapcast_clients_section(clients: list[dict] | None) -> str:
         ip = html.escape(c.get("ip", ""))
         stream = html.escape(c.get("stream", ""))
         group = html.escape(c.get("group", ""))
-        vol = int(c.get("volume", 0))
+        # Parser already normalises volume to int, but defend against a
+        # bypass path (future debug/test feeding the renderer directly):
+        # graceful fallback to 0 instead of a 500 on the status page.
+        try:
+            vol = int(c.get("volume") or 0)
+        except (TypeError, ValueError):
+            vol = 0
         muted = " (muted)" if c.get("muted") else ""
         ip_part = f" · {ip}" if ip else ""
         stream_part = f" · stream {stream}" if stream else ""
