@@ -36,13 +36,20 @@ if findmnt -n -o OPTIONS "$BOOT" 2>/dev/null | tr ',' '\n' | grep -qx ro; then
     boot_was_ro=true
 fi
 
-mount -o remount,rw "$BOOT" 2>/dev/null || true
+mount_err=$(mount -o remount,rw "$BOOT" 2>&1 || true)
 cleanup_boot_mount() {
     if [[ "$boot_was_ro" == "true" ]]; then
         mount -o remount,ro "$BOOT" 2>/dev/null || true
     fi
 }
 trap cleanup_boot_mount EXIT
+
+# See backup-mpd.sh — mount(8) can return 0 while fs stays ro; exit 0 so .path re-fires on next change.
+if findmnt -n -o OPTIONS "$BOOT" 2>/dev/null | tr ',' '\n' | grep -qx ro; then
+    logger -t backup-snapmulti-state \
+        "skipped: $BOOT failed to remount rw (mount err: ${mount_err:-none})"
+    exit 0
+fi
 
 backup_server_json() {
     local src="$INSTALL_DIR/data/server.json"
