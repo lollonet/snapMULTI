@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.9.4] — 2026-05-29
+
+> Script-only patch (image_set stays 0.7.7). UX papercuts surfaced after the v0.7.9.3 reflash on a large NFS library: bundles the `/status` 503 diagnostic disambiguation (#538), fb-display "Booting…" placeholder during the first 90 s of boot (#540), and a TROUBLESHOOTING entry explaining the benign "fail" tone during the first MPD library scan (#539). No image rebuild.
+
 ### Documentation
 - **TROUBLESHOOTING: first-boot "fail" tone on large NFS / SMB libraries** — added [a new section](docs/TROUBLESHOOTING.md#first-boot-fail-tone-large-library) (EN + IT) explaining that the boot-time acoustic cue can play the descending "fail" tone during the initial MPD library scan when the library is large and `mpd.db` was not pre-warmed via `backup-from-sd.sh`. Includes the `docker exec mpd mpc status` probe to distinguish a real failure (no `Updating DB`) from the benign scan-in-progress state. No code change — the FAIL is genuine while the scan runs; documenting beats hiding it.
 
