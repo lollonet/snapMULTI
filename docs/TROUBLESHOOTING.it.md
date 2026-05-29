@@ -206,6 +206,28 @@ sudo reboot
 
 Dopo il reboot, rilancia il test di salute (`sudo bash /opt/snapmulti/scripts/device-smoke.sh --server`) e verifica che `mount | grep ' on / type overlay'` riporti l'overlay attivo.
 
+## Tono "fail" al primo boot su librerie NFS / SMB grandi <a id="tono-fail-primo-boot-libreria-grande"></a>
+
+**Sintomi.** Subito dopo un reflash fresco con una libreria musicale di rete molto grande (≥ ~50 k tracce), il segnale acustico di fine boot è il tono **fail** discendente a due note (non l'arpeggio **pass** ascendente a tre note). Ogni reboot successivo nella stessa giornata può continuare a suonare **fail** finché la scansione della libreria non finisce. La pagina `/status` mostra il container MPD come `unhealthy`. Nient'altro sembra rotto — i client si connettono, AirPlay / Spotify / Tidal funzionano.
+
+**Causa probabile.** La prima scansione di MPD su NFS/SMB a cache fredda dura più della finestra healthcheck del container. Finché la scansione è in corso (ore su librerie enormi) l'healthcheck riporta `unhealthy`. `device-smoke.sh` lo classifica come fallimento → il verdetto complessivo è FAIL → il tono di boot riflette FAIL. È atteso, non un guasto reale: la scansione è il costo one-shot del primo install.
+
+**Come confermare che è una scansione, non un guasto reale.**
+
+```bash
+docker exec mpd mpc status | head
+# Cerca: la riga "Updating DB (#NNN)" — è la scansione in corso
+# Se presente: la scansione gira davvero, l'unhealthy è benigno
+# Se assente e mpd resta unhealthy: problema MPD vero (vedi "Niente audio" sopra)
+```
+
+**Cosa provare.**
+
+1. **Aspetta.** La prima scansione finisce tra minuti (libreria piccola) e diverse ore (50 k+ tracce su NFS lento). Una volta completata, il tono al prossimo boot sarà **pass** (ascendente).
+2. **Pre-warm del prossimo reflash.** Prima del reflash, lancia `sudo bash /opt/snapmulti/scripts/backup-from-sd.sh` sull'SD vecchia. Lo script estrae `mpd.db` di MPD sulla partizione boot; sul nuovo install MPD carica il database cached in secondi invece di rescansionare tutta la share NFS. Vedi [ADVANCED.it.md — Libreria musicale in rete](ADVANCED.it.md#libreria-musicale-in-rete).
+
+**Se è ancora bloccato.** Se `docker exec mpd mpc status` NON mostra `Updating DB` E mpd resta `unhealthy` per più di un'ora, hai un problema vero — controlla `docker logs mpd` e la raggiungibilità del NAS ([Libreria NAS vuota o non si monta](#libreria-nas-vuota-o-non-si-monta-nfs--smb)).
+
 ## Docker / "no space left on device"
 
 **Sintomi.** I container non partono con `no space left on device` in `docker compose logs`. `df -h` mostra il rootfs quasi pieno o l'overlay tmpfs pieno.
