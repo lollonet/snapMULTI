@@ -25,6 +25,15 @@ fi
 BACKUP_DIR="$BOOT/snapmulti-backup"
 backed_up=0
 
+# Serialise /boot/firmware mount/write with sibling backup scripts (see
+# backup-mpd.sh for the race scenario). Without this, our EXIT trap can
+# remount ro while a sibling is still mid-write, or vice versa.
+exec 9>/run/snapmulti-boot-write.lock
+if ! flock -w 60 9; then
+    logger -t backup-snapmulti-state "skipped: could not acquire /run/snapmulti-boot-write.lock within 60s"
+    exit 0
+fi
+
 # Preserve the boot partition's prior mount state. During firstboot
 # /boot/firmware is rw because raspi-config + cmdline patcher need to
 # write to it; unconditionally remounting ro on exit there can break
