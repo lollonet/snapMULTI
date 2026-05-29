@@ -20,23 +20,38 @@ esac
 
 [[ -x "$SMOKE" ]] || exit 0
 
-# Cap waits at 90 s each (well under TimeoutStartSec=240) — fire the tone even if MPD is still scanning a large NFS library (can take hours).
+# Mode-aware wait cap.
+# - client / client-native: snapclient is ready in seconds (no MPD,
+#   no library), so 90 s is plenty and we don't want to delay the
+#   audible "device ready" cue.
+# - server / both: MPD scans the library on first boot. Local or small
+#   NFS libraries (≤ ~10 k tracks) finish within ~3-4 min — extending
+#   the cap to 240 s lets the tone land PASS (ascending chime) on
+#   those installs instead of always firing FAIL during MPD warmup.
+#   Very large libraries (50 k+ tracks NFS) still exceed 240 s —
+#   covered by the TROUBLESHOOTING entry on benign first-scan fail
+#   tone + the backup-from-sd.sh mpd.db pre-warm workflow.
+case "$INSTALL_TYPE" in
+    server|both) WAIT_CAP_SEC=240 ;;
+    *)           WAIT_CAP_SEC=90  ;;
+esac
+WAIT_ITERATIONS=$(( WAIT_CAP_SEC / 5 ))
 
-# Wait up to 90 s for systemd to leave 'starting' (avoids false-positive `systemd state unexpected: 'starting'` smoke FAIL).
-for _ in $(seq 1 18); do
+# Wait up to WAIT_CAP_SEC for systemd to leave 'starting' (avoids false-positive `systemd state unexpected: 'starting'` smoke FAIL).
+for _ in $(seq 1 "$WAIT_ITERATIONS"); do
     state=$(systemctl is-system-running 2>/dev/null || true)
     [[ "$state" == "starting" ]] || break
     sleep 5
 done
 
-# Wait up to 90 s for the audio CORE — snapserver (server/both) and snapclient (client/both). MPD/metadata/etc. are best-effort: if they're slow (NFS scan), the tone still fires and signals the audio path is up.
+# Wait up to WAIT_CAP_SEC for the audio CORE — snapserver (server/both) and snapclient (client/both). MPD/metadata/etc. are best-effort: if they're slow (NFS scan), the tone still fires and signals the audio path is up.
 # Format: "<compose-dir>:<service>" — both-mode keeps snapserver in /opt/snapmulti and snapclient in /opt/snapclient (separate compose projects per CLAUDE.md).
 case "$INSTALL_TYPE" in
     client|client-native) CORE_CHECKS="/opt/snapclient:snapclient" ;;
     both)                 CORE_CHECKS="/opt/snapmulti:snapserver /opt/snapclient:snapclient" ;;
     *)                    CORE_CHECKS="/opt/snapmulti:snapserver" ;;
 esac
-for _ in $(seq 1 18); do
+for _ in $(seq 1 "$WAIT_ITERATIONS"); do
     all_healthy=1
     for check in $CORE_CHECKS; do
         compose_dir="${check%%:*}"
