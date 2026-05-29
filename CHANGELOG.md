@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **`/status` snapshot smoke check disambiguated** — the HTTP 503 branch used to lump three distinct root causes into one message ("check snapmulti-status.timer AND /audio bind-mount on metadata container"), forcing the operator to chase both. The check now probes directly: (a) snapshot file missing on host — INFO on fresh boot (< 5 min uptime + timer not yet armed), FAIL after; (b) file present on host but metadata container cannot read it — FAIL pointing at the bind-mount + PUID/PGID; (c) file present and readable in container but service still returns 503 — FAIL with the actual response body so the cause is visible. No false-positive on the first-boot window before `OnBootSec=4min`.
+
 ## [0.7.9.3] — 2026-05-29
 
 > Hotfix for v0.7.9.2. The myMPD pin in that release was `:v25.0.2`, but the upstream Docker registry tags myMPD as `25.0.2` (no `v` prefix). Reflash failed at the deploy step with `manifest unknown`. v0.7.9.3 fixes the tag — no other changes. v0.7.9.2 should be considered stillborn.
