@@ -94,8 +94,13 @@ install_dependencies() {
         log_info "Skipping apt upgrade (SKIP_UPGRADE=true)"
     else
         log_info "Upgrading system packages..."
-        if ! apt-get upgrade -y >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
-            log_warn "apt upgrade failed (non-fatal, continuing)"
+        # dist-upgrade (not upgrade) so kernel meta-packages (linux-image-rpi-*,
+        # rpi-eeprom) get pulled even when the new version requires installing
+        # NEW packages (the new kernel image deb) or removing OLD ones.
+        # Plain `apt-get upgrade` keeps these back — observed on snapvideo
+        # 2026-05-29: 6.12.75 → 6.18.29 + rpi-eeprom 28.15 → 28.24 all stuck.
+        if ! apt-get dist-upgrade -y >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
+            log_warn "apt dist-upgrade failed (non-fatal, continuing)"
         fi
     fi
 
@@ -125,12 +130,11 @@ install_dependencies() {
     # quotes/newlines from journalctl/arping output) — jq handles this correctly.
     command -v jq &>/dev/null || pkgs+=(jq)
 
-    # Monitoring tools (sar, iostat, mpstat, pidstat from sysstat; iotop-c;
-    # dstat) — useful for ad-hoc troubleshooting on any role. Total cost
-    # is ~4 MB (sysstat ~3 MB, iotop-c ~600 KB, dstat ~80 KB). The Pi Zero
-    # 2W is the device that most needs `iostat -x 1` and `sar -r` during
-    # SD-pressure or RAM-pressure debugging, and it was the only one
-    # without these tools installed.
+    # Monitoring tools (sar, iostat, mpstat, pidstat from sysstat;
+    # iotop-c) — useful for ad-hoc troubleshooting on any role. Total
+    # cost ~3.6 MB. The Pi Zero 2W is the device that most needs
+    # `iostat -x 1` and `sar -r` during SD-pressure or RAM-pressure
+    # debugging, and it was the only one without these tools installed.
     #
     # Sysstat's *binaries* go everywhere; its *cron collector* (writing
     # /var/log/sysstat/ every 10 min) stays server-only — see the
@@ -138,18 +142,20 @@ install_dependencies() {
     # tmpfs pressure low on Pi Zero / Pi 3 1 GB.
     #
     # NOTE: these go through a separate `--no-install-recommends` pass
-    # below so `sysstat` does NOT pull its `pcp` Recommends. pcp is a
-    # ~50 MB multi-daemon stack we don't use; on Pi OS it also ships a
-    # SysV init script that floods journald with
+    # below to minimise transitive packages. pcp (Performance Co-Pilot,
+    # ~50 MB) is pulled anyway as a HARD Depends of `iotop-c` (libpcp3,
+    # libpcp-pmda3) — `--no-install-recommends` cannot block Depends.
+    # pcp persists during install and is removed by the explicit
+    # `apt-get purge pcp pcp-conf 'pcp-pmda-*'` below. During that ~3 min
+    # window every `systemctl daemon-reload` emits
     # `systemd-sysv-generator: SysV service '/etc/init.d/pcp' lacks a
-    # native systemd unit file` on every `systemctl daemon-reload`
-    # (observed during pi-zero install: 6+ events per second across the
-    # 10-min apt-upgrade phase). The base `apt-get install -y` call
-    # below installs the always-want packages WITH Recommends.
+    # native systemd unit file` to journald — known transient noise.
+    # `dstat` also Depends on `python3-pcp`; it is intentionally NOT in
+    # this list because it duplicates `sar` capabilities for the small
+    # tradeoff of pulling more pcp surface.
     local -a monitoring_pkgs=()
     command -v sar   &>/dev/null || monitoring_pkgs+=(sysstat)
     command -v iotop &>/dev/null || monitoring_pkgs+=(iotop-c)
-    command -v dstat &>/dev/null || monitoring_pkgs+=(dstat)
 
     # Client: audio + HAT detection tools
     if [[ "$role" == "client" || "$role" == "both" ]]; then
@@ -177,13 +183,13 @@ install_dependencies() {
         return 1
     fi
 
-    # Monitoring tools: separate pass with --no-install-recommends so
-    # sysstat doesn't drag in pcp (see comment further up). Failure is
-    # not fatal — operator can still install them manually.
+    # Monitoring tools: separate pass with --no-install-recommends to
+    # minimise transitive surface (see comment above re. pcp Depends).
+    # Failure is not fatal — operator can still install them manually.
     if (( ${#monitoring_pkgs[@]} > 0 )); then
         log_info "Installing monitoring tools (no-recommends): ${monitoring_pkgs[*]}"
         if ! apt-get install -y --no-install-recommends "${monitoring_pkgs[@]}" >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
-            log_warn "Monitoring tools install failed — continuing without sar/iotop/dstat"
+            log_warn "Monitoring tools install failed — continuing without sar/iotop"
         fi
     fi
 

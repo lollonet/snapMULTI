@@ -1213,8 +1213,8 @@ else
     fi
     if ! apt-get update >>"$UNIFIED_LOG" 2>&1; then
         log_warn "Final apt-get update failed (non-fatal)"
-    elif ! apt-get upgrade -y >>"$UNIFIED_LOG" 2>&1; then
-        log_warn "Final apt upgrade failed (non-fatal)"
+    elif ! apt-get dist-upgrade -y >>"$UNIFIED_LOG" 2>&1; then
+        log_warn "Final apt dist-upgrade failed (non-fatal)"
     else
         log_info "Final package refresh complete"
     fi

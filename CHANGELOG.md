@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **install-deps: `apt-get upgrade` → `apt-get dist-upgrade` so kernel + rpi-eeprom are not kept back** — plain `upgrade` refuses to install new packages or remove old ones, so meta-packages like `linux-image-rpi-2712` / `linux-image-rpi-v8` / `rpi-eeprom` are silently held back when the new version requires installing a new sub-package (the new kernel image deb). Observed on snapvideo 2026-05-29: 6.12.75 → 6.18.29 kernel + 28.15 → 28.24 eeprom all stuck after a clean reflash. Fix applies to both `install-deps.sh` and the final upgrade pass in `firstboot.sh`. `apt-get dist-upgrade -y` is the standard for "actually apply pending kernel + eeprom updates".
+- **install-deps: drop `dstat` from monitoring tools (pulls full `pcp` stack)** — `dstat` Depends on `python3-pcp`, which transitively pulls Performance Co-Pilot (~50 MB, multi-daemon). The original code commented `--no-install-recommends` blocks `pcp` — wrong, `pcp` is a HARD Depends. `iotop-c` ALSO Depends on libpcp3/libpcp-pmda3, so `pcp` still gets installed transiently and removed by the trailing purge; but at least we stop adding `dstat` on top. `sar` from sysstat covers dstat's main use case (CPU/mem/disk realtime).
+- **install-deps: comment block corrected re. pcp Depends vs Recommends** — the old comment claimed `--no-install-recommends` keeps pcp out; in reality `iotop-c` brings it in as a Depends. The comment now documents the transient install-then-purge correctly so future maintainers don't chase a non-bug.
+
 ## [0.7.9.5] — 2026-05-29
 
 > Script-only patch (image_set stays 0.7.7). Boot-time acoustic and smoke-page UX polishing on first-reflash + post-firstboot reboot: the tone now lands PASS on local / small NFS installs (#542) and the /status page no longer surfaces transient first-boot states as FAIL (#543). Validated on snapvideo with 76k-track NFS library.
