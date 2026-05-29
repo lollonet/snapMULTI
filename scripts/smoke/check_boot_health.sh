@@ -193,7 +193,15 @@ check_boot_health() {
                 info "Previous boot ended cleanly at: $_prev_end"
             fi
         else
-            info "No previous boot recorded in journal (fresh reflash or rotated logs)"
+            # On overlayroot=tmpfs the journal lives in /run (tmpfs) and is
+            # wiped at every reboot — "no previous boot" is structural, not a
+            # fresh-reflash sign. Detect and label accurately to avoid the
+            # misleading "fresh reflash or rotated logs" diagnosis.
+            if findmnt -n -o FSTYPE / 2>/dev/null | grep -qx overlay; then
+                info "Journal volatile (overlayroot=tmpfs) — previous boots not retained"
+            else
+                info "No previous boot recorded in journal (fresh reflash or rotated logs)"
+            fi
         fi
     fi
 }
