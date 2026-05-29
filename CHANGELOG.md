@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.9.3] — 2026-05-29
+
+> Hotfix for v0.7.9.2. The myMPD pin in that release was `:v25.0.2`, but the upstream Docker registry tags myMPD as `25.0.2` (no `v` prefix). Reflash failed at the deploy step with `manifest unknown`. v0.7.9.3 fixes the tag — no other changes. v0.7.9.2 should be considered stillborn.
+
+### Fixed
+- **myMPD pin: `:v25.0.2` → `:25.0.2` (#536)** — upstream registry doesn't use the `v` prefix on myMPD tags (unlike the GitHub release tag name). v0.7.9.2 reflash hits `Error response from daemon: manifest unknown` at the deploy step.
+
 ## [0.7.9.2] — 2026-05-29
 
 > Script-only patch (image_set stays 0.7.7). Bundles the `/status` first-snapshot timing fix (no more misleading red on first boot) and two upstream dep bumps (go-librespot v0.7.3 — likely fix for iPhone-zeroconf loadContext crash; myMPD pinned to v25.0.2 for reproducibility).
