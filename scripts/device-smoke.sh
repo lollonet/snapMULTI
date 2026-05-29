@@ -992,7 +992,36 @@ if [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
         _status_code=$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' 'http://127.0.0.1:8083/status?format=json' 2>/dev/null || true)
         case "$_status_code" in
             200) pass_check "/status snapshot present and readable (issue #177 path)" ;;
-            503) fail_check "/status reports no snapshot — check snapmulti-status.timer AND /audio bind-mount on metadata container" ;;
+            503)
+                # Disambiguate the 503 — three distinct root causes used
+                # to be lumped under "check snapmulti-status.timer AND
+                # /audio bind-mount" which forced the operator to chase
+                # both. Probe directly.
+                #
+                #   (a) Snapshot file missing on host. On fresh boot the
+                #       timer fires at OnBootSec=4min — INFO until then,
+                #       FAIL after.
+                #   (b) File present on host but metadata container can't
+                #       see it. Bind-mount missing or wrong perms.
+                #   (c) File present + readable in container but service
+                #       still returns 503. Stale / parse error in
+                #       metadata-service itself — surface the body.
+                _snap_file="/opt/snapmulti/audio/system-status.json"
+                _uptime_s=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 999999)
+                if [[ ! -e "$_snap_file" ]]; then
+                    _last_trig=$(systemctl show snapmulti-status.timer -p LastTriggerUSec --value 2>/dev/null || true)
+                    if { [[ -z "$_last_trig" ]] || [[ "$_last_trig" == "n/a" ]]; } && (( _uptime_s < 300 )); then
+                        info "/status snapshot not yet generated — snapmulti-status.timer fires at OnBootSec=4min (uptime ${_uptime_s}s, timer not yet armed)"
+                    else
+                        fail_check "/status snapshot missing on host ($_snap_file). snapmulti-status.timer has not produced one — check 'journalctl -u snapmulti-status.service' for ExecStart errors"
+                    fi
+                elif ! docker exec metadata test -r /audio/system-status.json 2>/dev/null; then
+                    fail_check "/status snapshot present on host ($_snap_file) but metadata container cannot read it — /audio bind-mount missing in docker-compose.yml metadata service, or PUID/PGID mismatch on file"
+                else
+                    _body=$(curl -sS --max-time 5 'http://127.0.0.1:8083/status?format=json' 2>/dev/null | head -c 200 || true)
+                    fail_check "/status snapshot present + readable in metadata container, but service returns HTTP 503. Body: ${_body:-empty}"
+                fi
+                ;;
             *)   fail_check "/status not responding — HTTP ${_status_code:-no-response}" ;;
         esac
     else
