@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.9.5] — 2026-05-29
+
+> Script-only patch (image_set stays 0.7.7). Boot-time acoustic and smoke-page UX polishing on first-reflash + post-firstboot reboot: the tone now lands PASS on local / small NFS installs (#542) and the /status page no longer surfaces transient first-boot states as FAIL (#543). Validated on snapvideo with 76k-track NFS library.
+
 ### Fixed
 - **smoke: two false-positive FAILs during first-boot window** —
   - `check_boot_health.sh`: `systemd state unexpected: 'starting'` was fired when smoke was invoked by `snapmulti-status.timer` (no `SNAPMULTI_AUTO_BOOT` env var) during the first ~10 min after boot, while MPD was still scanning a large library and other services were still settling. The 'starting' tolerance now ALSO holds when uptime < 600 s — bypass via env var or boot window, whichever applies.
