@@ -338,7 +338,6 @@ class TestFleetRenderHtml:
         assert "&lt;script&gt;" in html
         # Scheme allow-list: javascript: must NOT be rendered as href.
         assert 'href="javascript:' not in html
-        assert 'href="javascript:' not in html
 
     def test_non_http_url_renders_hostname_without_link(self, metadata_service_module):
         # data:, file:, javascript: all must drop the <a> wrapper entirely.

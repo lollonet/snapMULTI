@@ -2506,8 +2506,6 @@ def _structured_systemd_row(section: str, msg: str) -> tuple[str, str, str, str]
 
 def _render_fleet_section(fleet_data: list[dict]) -> str:
     """Render the Fleet observation section (#549) as a <section> block."""
-    import html as _html
-
     if not fleet_data:
         return (
             "<section><h2>Fleet</h2><ul>"
@@ -2520,19 +2518,19 @@ def _render_fleet_section(fleet_data: list[dict]) -> str:
         status = peer.get("status", "?")
         icon_class = {"ok": "pass", "warn": "warn", "fail": "fail"}.get(status, "info")
         icon = {"pass": "✓", "warn": "⚠", "fail": "✗"}.get(icon_class, "ℹ")
-        hostname = _html.escape(str(peer.get("hostname", "?")))
+        hostname = html.escape(str(peer.get("hostname", "?")))
         # Scheme allow-list defends against a malicious LAN peer supplying
         # `javascript:` or `data:` in a future field. html.escape converts
         # quotes but does not block executable URL schemes.
         raw_url = str(peer.get("url", ""))
         url = (
-            _html.escape(raw_url)
+            html.escape(raw_url)
             if raw_url.lower().startswith(("http://", "https://"))
             else ""
         )
-        mode = _html.escape(str(peer.get("mode", "?")))
-        release = _html.escape(str(peer.get("release") or "release unknown"))
-        containers = _html.escape(str(peer.get("containers") or "container status n/a"))
+        mode = html.escape(str(peer.get("mode", "?")))
+        release = html.escape(str(peer.get("release") or "release unknown"))
+        containers = html.escape(str(peer.get("containers") or "container status n/a"))
         link = f'<a href="{url}">{hostname}</a>' if url else hostname
         rows.append(
             f'<li class="r-{icon_class}"><span class="icon">{icon}</span>'
