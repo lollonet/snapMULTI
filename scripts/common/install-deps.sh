@@ -94,8 +94,13 @@ install_dependencies() {
         log_info "Skipping apt upgrade (SKIP_UPGRADE=true)"
     else
         log_info "Upgrading system packages..."
-        if ! apt-get upgrade -y >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
-            log_warn "apt upgrade failed (non-fatal, continuing)"
+        # dist-upgrade (not upgrade) so kernel meta-packages (linux-image-rpi-*,
+        # rpi-eeprom) get pulled even when the new version requires installing
+        # NEW packages (the new kernel image deb) or removing OLD ones.
+        # Plain `apt-get upgrade` keeps these back — observed on snapvideo
+        # 2026-05-29: 6.12.75 → 6.18.29 + rpi-eeprom 28.15 → 28.24 all stuck.
+        if ! apt-get dist-upgrade -y >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
+            log_warn "apt dist-upgrade failed (non-fatal, continuing)"
         fi
     fi
 
@@ -125,12 +130,11 @@ install_dependencies() {
     # quotes/newlines from journalctl/arping output) — jq handles this correctly.
     command -v jq &>/dev/null || pkgs+=(jq)
 
-    # Monitoring tools (sar, iostat, mpstat, pidstat from sysstat; iotop-c;
-    # dstat) — useful for ad-hoc troubleshooting on any role. Total cost
-    # is ~4 MB (sysstat ~3 MB, iotop-c ~600 KB, dstat ~80 KB). The Pi Zero
-    # 2W is the device that most needs `iostat -x 1` and `sar -r` during
-    # SD-pressure or RAM-pressure debugging, and it was the only one
-    # without these tools installed.
+    # Monitoring tools (sar, iostat, mpstat, pidstat from sysstat;
+    # iotop-c) — useful for ad-hoc troubleshooting on any role. Total
+    # cost ~3.6 MB. The Pi Zero 2W is the device that most needs
+    # `iostat -x 1` and `sar -r` during SD-pressure or RAM-pressure
+    # debugging, and it was the only one without these tools installed.
     #
     # Sysstat's *binaries* go everywhere; its *cron collector* (writing
     # /var/log/sysstat/ every 10 min) stays server-only — see the
@@ -138,18 +142,17 @@ install_dependencies() {
     # tmpfs pressure low on Pi Zero / Pi 3 1 GB.
     #
     # NOTE: these go through a separate `--no-install-recommends` pass
-    # below so `sysstat` does NOT pull its `pcp` Recommends. pcp is a
-    # ~50 MB multi-daemon stack we don't use; on Pi OS it also ships a
-    # SysV init script that floods journald with
-    # `systemd-sysv-generator: SysV service '/etc/init.d/pcp' lacks a
-    # native systemd unit file` on every `systemctl daemon-reload`
-    # (observed during pi-zero install: 6+ events per second across the
-    # 10-min apt-upgrade phase). The base `apt-get install -y` call
-    # below installs the always-want packages WITH Recommends.
+    # below to minimise transitive packages. On Debian trixie neither
+    # `sysstat` nor `iotop-c` Depends on pcp (Performance Co-Pilot),
+    # so this install does not pull the ~50 MB multi-daemon stack.
+    # `dstat` is intentionally NOT in this list: it Depends on
+    # `python3-pcp` which would re-introduce the entire pcp tree.
+    # `sar` from sysstat already covers dstat's realtime CPU/mem/disk
+    # use case. Any orphan pcp from a prior install state is reaped
+    # by the `apt-get autoremove --purge` step further below.
     local -a monitoring_pkgs=()
     command -v sar   &>/dev/null || monitoring_pkgs+=(sysstat)
     command -v iotop &>/dev/null || monitoring_pkgs+=(iotop-c)
-    command -v dstat &>/dev/null || monitoring_pkgs+=(dstat)
 
     # Client: audio + HAT detection tools
     if [[ "$role" == "client" || "$role" == "both" ]]; then
@@ -177,13 +180,13 @@ install_dependencies() {
         return 1
     fi
 
-    # Monitoring tools: separate pass with --no-install-recommends so
-    # sysstat doesn't drag in pcp (see comment further up). Failure is
-    # not fatal — operator can still install them manually.
+    # Monitoring tools: separate pass with --no-install-recommends to
+    # minimise transitive surface (see comment above re. pcp Depends).
+    # Failure is not fatal — operator can still install them manually.
     if (( ${#monitoring_pkgs[@]} > 0 )); then
         log_info "Installing monitoring tools (no-recommends): ${monitoring_pkgs[*]}"
         if ! apt-get install -y --no-install-recommends "${monitoring_pkgs[@]}" >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
-            log_warn "Monitoring tools install failed — continuing without sar/iotop/dstat"
+            log_warn "Monitoring tools install failed — continuing without sar/iotop"
         fi
     fi
 
@@ -244,27 +247,24 @@ install_dependencies() {
     update-locale LANG=C.UTF-8 LC_ALL=C.UTF-8 2>/dev/null || true
 
     # Drop unused packages pulled in as Recommends earlier in the install
-    # (mesa/wayland/GL libs from a previous desktop image, locales, etc.).
-    # Observed live on a fresh pi-zero install: 19 packages flagged by apt
-    # as "automatically installed and are no longer required" — all of them
+    # (mesa/wayland/GL libs from a previous desktop image, locales, etc.)
+    # AND any pcp library set lingering from a base Pi OS image. Observed
+    # live on a fresh pi-zero install: 19 packages flagged by apt as
+    # "automatically installed and are no longer required" — all of them
     # mesa/wayland/X11 libraries irrelevant to snapMULTI's framebuffer-only
-    # display path. `--purge` also removes conffiles for a cleaner appliance
-    # state. Best-effort: a failure here must NOT abort the install (we've
-    # already done the meaningful work).
+    # display path. Since neither `sysstat` nor `iotop-c` Depends on pcp
+    # on Debian trixie, dropping `dstat` (PR #545) means new installs
+    # never pull pcp at all — autoremove --purge is the safety net for
+    # stale state, not the primary mechanism. `--purge` also removes
+    # conffiles for a cleaner appliance state. Best-effort: a failure
+    # here must NOT abort the install (we've already done the meaningful
+    # work).
     log_info "Removing unused dependencies (apt autoremove --purge)..."
     if apt-get autoremove --purge -y >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
         log_info "apt autoremove --purge complete"
     else
         log_warn "apt autoremove --purge failed (non-fatal — install proceeds)"
     fi
-
-    # Purge legacy `pcp` (Performance Co-Pilot). New installs avoid it via
-    # --no-install-recommends on sysstat, but devices reflashed from a Pi OS
-    # image that ships pcp preinstalled (or upgraded from an earlier snapMULTI)
-    # keep it around. pcp's SysV init script floods journald with
-    # "lacks a native systemd unit file" on every daemon-reload — and snapMULTI
-    # doesn't use pcp at all. Best-effort: missing package returns 100, ignored.
-    apt-get purge -y pcp pcp-conf 'pcp-pmda-*' >> "${UNIFIED_LOG:-/dev/null}" 2>&1 || true
 
     log_info "System dependencies installed"
 }
