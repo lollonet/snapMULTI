@@ -2386,6 +2386,66 @@ def _render_snapcast_clients_section(clients: list[dict] | None) -> str:
     )
 
 
+_PROFILE_SERVICE_LIMITS: tuple[tuple[str, str], ...] = (
+    ("snapserver", "SNAPSERVER_MEM_LIMIT"),
+    ("airplay", "AIRPLAY_MEM_LIMIT"),
+    ("spotify", "SPOTIFY_MEM_LIMIT"),
+    ("mpd", "MPD_MEM_LIMIT"),
+    ("mympd", "MYMPD_MEM_LIMIT"),
+    ("metadata", "METADATA_MEM_LIMIT"),
+    ("tidal", "TIDAL_MEM_LIMIT"),
+)
+
+
+def _get_resource_profile() -> dict | None:
+    """Active profile from env vars set by deploy.sh / docker-compose.yml.
+
+    Returns None when SNAPMULTI_PROFILE is empty (dev clone or manual
+    `docker compose up` without deploy.sh): the section is hidden entirely
+    rather than rendered with a misleading "unknown" placeholder.
+    """
+    name = os.environ.get("SNAPMULTI_PROFILE", "").strip()
+    if not name:
+        return None
+    limits: list[tuple[str, str]] = []
+    for label, var in _PROFILE_SERVICE_LIMITS:
+        value = os.environ.get(var, "").strip()
+        if value:
+            limits.append((label, value))
+    return {"name": name, "limits": limits}
+
+
+def _render_resource_profile_section(profile: dict | None) -> str:
+    """Render the Resource Profile section: name + per-service memory limits.
+
+    Empty string when profile is None — the page omits the section entirely
+    on dev clones. When the profile is set but no `*_MEM_LIMIT` env vars
+    propagated (older deploys / partial wiring), render the name alone with
+    an info row instead of an empty table.
+    """
+    if profile is None:
+        return ""
+    name = html.escape(profile["name"])
+    limits: list[tuple[str, str]] = profile["limits"]
+    head = (
+        '<li class="r-pass"><span class="icon">✓</span>'
+        f"Active profile: <strong>{name}</strong></li>"
+    )
+    if not limits:
+        body = (
+            '<li class="r-info"><span class="icon">ℹ</span>'
+            "Per-service memory limits not propagated to this container."
+            "</li>"
+        )
+    else:
+        body = "".join(
+            '<li class="r-info"><span class="icon">·</span>'
+            f"{html.escape(svc)}: <code>{html.escape(lim)}</code></li>"
+            for svc, lim in limits
+        )
+    return f"<section><h2>Resource Profile</h2><ul>{head}{body}</ul></section>"
+
+
 def _read_status_snapshot() -> tuple[dict | None, float | None]:
     """Read the JSON snapshot file. Returns (data, age_seconds) or (None, None).
 
@@ -2666,6 +2726,13 @@ def _status_to_html(
     # already in the Compose / Snapcast sections.
     if show_snapclients:
         sec_html_parts.append(_render_snapcast_clients_section(snapclients))
+
+    # Resource profile — env-driven, no I/O. Section hides itself on dev
+    # clones where SNAPMULTI_PROFILE isn't set, so the page stays clean on
+    # manual `docker compose up` without deploy.sh.
+    profile_html = _render_resource_profile_section(_get_resource_profile())
+    if profile_html:
+        sec_html_parts.append(profile_html)
 
     if age_s is not None:
         if age_s < 60:

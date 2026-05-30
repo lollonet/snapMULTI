@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`/status` Resource Profile section** — new "Resource Profile" panel surfaces the active server profile (`minimal` / `standard` / `performance`) and the per-service memory limits (`SNAPSERVER_MEM_LIMIT`, `MPD_MEM_LIMIT`, etc.) `deploy.sh` wrote to `.env`. Env-driven (no subprocess, no file I/O): `deploy.sh` writes `SNAPMULTI_PROFILE=<name>` inside each `# Hardware Profile: BEGIN…END` block; `docker-compose.yml` propagates that plus the `*_MEM_LIMIT` set to the `metadata` container. Dev clones / manual `docker compose up` (where `SNAPMULTI_PROFILE` is empty) hide the section entirely. 8 new unit tests cover the env reader and renderer (XSS escaping on profile name and limit values).
+
 ### Changed
 - **Doc sweep — image-set pinning + install-time + ADR-008 index** — `docs/`, `README*`, `CLAUDE.md`, `CONTRIBUTING.md`, `SECURITY.md`, `THIRD-PARTY-NOTICES.md` and `docs/adr/ADR-INDEX.md` aligned: image references use `:<image-set>` from `release-manifest.json` (no stale `:latest`), upstream pins refreshed (`go-librespot` v0.7.3, `mympd` 25.0.2), residual `~10-15 min` install times flipped to `~15-20 min Pi 4/5`, ADR-007 marked superseded by ADR-008 in the index. CONTRIBUTING gains an inline Non-goals section.
 - **ADR-008 supersedes ADR-007 — IPv6 enabled by default** (#557, #558). Tidal Connect now works out-of-box; software defenses (Avahi `use-ipv6=no`, snapclient IPv4 pin, fb-display filter, `boot-tune.sh`) cover the original races. Opt back into the kernel disable with `DISABLE_IPV6=true`. Validated live on snapvideo + pizero + snapdigi.
