@@ -483,7 +483,11 @@ class TestResourceProfile:
         monkeypatch.setenv("MPD_MEM_LIMIT", "384M")
         monkeypatch.setenv("METADATA_MEM_LIMIT", "128M")
         for _, var in metadata_service_module._PROFILE_SERVICE_LIMITS:
-            if var not in {"SNAPSERVER_MEM_LIMIT", "MPD_MEM_LIMIT", "METADATA_MEM_LIMIT"}:
+            if var not in {
+                "SNAPSERVER_MEM_LIMIT",
+                "MPD_MEM_LIMIT",
+                "METADATA_MEM_LIMIT",
+            }:
                 monkeypatch.delenv(var, raising=False)
         profile = metadata_service_module._get_resource_profile()
         assert profile is not None
