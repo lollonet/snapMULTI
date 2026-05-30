@@ -187,6 +187,8 @@ Explicitly out of scope — refuse scope-creep PRs that propose any of these wit
 - **Custom Linux distribution.** Use Debian bookworm + cloud-init. No Buildroot, no Yocto, no custom OS.
 - **Custom PCB / proprietary hardware.** Pi 3/4/5 + commodity HATs only.
 - **Vendor cloud / hosted services.** No snapMULTI account system, telemetry endpoint, or hosted control plane. Everything runs on the user's LAN.
+- **Public-WAN deployment without an operator-managed reverse proxy and authentication.** The security model assumes a trusted LAN; exposing snapMULTI ports on the public internet is the operator's responsibility, not a product feature.
+- **In-place upgrade workflow for ordinary users.** The supported path is reflash-first ([DEC-003](docs/decisions/DEC-003-reflash-only-updates.md)); manual `ro-mode disable` + `git pull` is documented for advanced users but not officially supported as an upgrade UX.
 - **Unified UI replacing snapweb + myMPD + metadata-service.** The project federates existing tools; building a new web app is years of work with dubious ROI.
 - **AI / voice assistants / DSP / spatial audio / room correction.** Audio enhancement belongs in the amp or a dedicated DSP upstream of snapMULTI.
 - **Marketplace plugin system for sources.** Sources are pinned in `config/snapserver.conf` + `docker-compose.yml`. Adding a source is a deliberate architectural change, not user-configurable.
