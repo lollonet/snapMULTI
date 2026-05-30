@@ -37,7 +37,7 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 | **Beginners** | Raspberry Pi 4 | Zero-touch SD | `prepare-sd.sh` → `firstboot.sh` → `deploy.sh`/`setup.sh` |
 | **Advanced** | Pi4 or x86_64 | Automated or Manual | `deploy.sh` (optional) |
 
-**Beginners**: No Linux administration required. Flash SD card on another computer, run `prepare-sd.sh` (or `prepare-sd.ps1` on Windows), choose what to install, insert in Pi, power on. HDMI shows a TUI progress display during installation (~10-15 min). The Pi becomes a dedicated audio appliance.
+**Beginners**: No Linux administration required. Flash SD card on another computer, run `prepare-sd.sh` (or `prepare-sd.ps1` on Windows), choose what to install, insert in Pi, power on. HDMI shows a TUI progress display during installation (~15-20 min on Pi 4/5; longer on Pi 3 / Pi Zero 2 W). The Pi becomes a dedicated audio appliance.
 
 **Advanced**: Clone repo on any Linux host (Pi, x86_64, VM, NAS). Use `deploy.sh` for automation (hardware detection, directory setup, resource profiles) or skip it and just run `docker compose up`.
 
@@ -169,7 +169,7 @@ ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian 
 
 ## Conventions
 
-- **Docker images**: `lollonet/snapmulti-{server,airplay,mpd,metadata}:latest` (Docker Hub, built in CI) + `ghcr.io/devgianlu/go-librespot:v0.7.3` (upstream) + `lollonet/snapmulti-tidal:latest` (ARM only)
+- **Docker images**: snapMULTI images use the pinned `image_set` from `release-manifest.json` (Docker Hub, built in CI when `requires_image_rebuild=true`) + `ghcr.io/devgianlu/go-librespot:v0.7.3` (upstream) + `ghcr.io/jcorporation/mympd/mympd:25.0.2` (upstream) + `edgecrush3r/tidal-connect:latest` (ARM only, upstream)
 - **Multi-arch**: linux/amd64 (studio) + linux/arm64 (ci-runner-x86), native builds on self-hosted runners
 - **Config paths**: all config in `config/`, all scripts in `scripts/`, shared libs in `scripts/common/`
 - **Deployment**: tag push (`v*`) triggers build → manifest → deploy

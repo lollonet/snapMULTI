@@ -34,7 +34,7 @@ For a hardware report, include: Pi model + RAM, SD card model/class if known, PS
 
 ## Documentation
 
-Each topic has ONE authoritative file (full SSOT table in [CLAUDE.md](CLAUDE.md)). Don't duplicate content across docs.
+Each topic has ONE authoritative file. Don't duplicate content across docs.
 
 | File | Content |
 |------|---------|
@@ -67,7 +67,15 @@ By contributing, you agree your contributions are licensed under `GPL-3.0-only` 
 
 snapMULTI is currently maintained by a single principal maintainer (architectural decisions, code review, releases). PRs from external contributors go through CI gates (shellcheck, smoke gate per ADR-005, automated review) and a human review before merge. Dependabot PRs are admin-squash-merged after diff + release-notes review.
 
-The project is intentionally appliance-shaped — see the `## Non-goals` section in [CLAUDE.md](CLAUDE.md) for what we will NOT accept as scope. A "no" to a feature is not personal; it usually means the change belongs in a separate layer (the amp, Home Assistant, a custom snapclient deployment) rather than in snapMULTI itself.
+The project is intentionally appliance-shaped. A "no" to a feature is not personal; it usually means the change belongs in a separate layer (the amp, Home Assistant, a custom snapclient deployment) rather than in snapMULTI itself.
+
+### Non-goals
+
+- No hosted snapMULTI cloud or account system.
+- No commercial SLA or universal hardware support promise.
+- No public-WAN deployment without an operator-managed reverse proxy and authentication.
+- No in-place upgrade workflow for ordinary users; the supported path is reflash-first.
+- No broad plugin marketplace or arbitrary audio-stack configurator in the appliance core.
 
 ### Path to co-maintainership
 

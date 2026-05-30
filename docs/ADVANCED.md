@@ -125,7 +125,7 @@ nano .env                          # at minimum: PUID/PGID, MUSIC_PATH, MUSIC_SO
 sudo docker compose up -d
 ```
 
-Tag push (`v*`) triggers CI multi-arch builds (amd64 + arm64 native runners) → Docker Hub `:latest`. Reflash to pick up the new images.
+Reflash with the latest release to pick up the release manifest and any image-set change. Script-only releases reuse the existing Docker image set; container-changing releases publish a new pinned image set through CI.
 
 ## MPD from the command line
 
@@ -180,7 +180,7 @@ After every reflash or in-place update, run the smoke test on the device to conf
 
 snapMULTI separates two version concepts so a script-only release (CHANGELOG, docs, installer fixes) does not force a Docker image rebuild + repush:
 
-- **`SNAPMULTI_RELEASE`** — the git tag of the release (e.g. `v0.7.8.16`). What `gh release view` shows.
+- **`SNAPMULTI_RELEASE`** — the git tag of the release (e.g. `v0.7.9.6`). What `gh release view` shows.
 - **`SNAPMULTI_IMAGE_SET`** — the Docker image tag the release pins to (e.g. `0.7.7`). What `docker compose pull` fetches.
 
 Most releases bump both. A script-only release bumps `SNAPMULTI_RELEASE` and keeps `SNAPMULTI_IMAGE_SET` at the last published value. The source of truth is `release-manifest.json` at the repo root, staged onto the SD by `prepare-sd.sh`.
@@ -241,7 +241,7 @@ The gate bypasses both `requires_image_rebuild=false` and the Docker Hub existen
 
 After a deploy / reflash:
 
-- Smoke test info line: `device-smoke.sh` → `System` section → `Release v0.7.8.16 (images 0.7.7)`
+- Smoke test info line: `device-smoke.sh` → `System` section → `Release v0.7.9.6 (images 0.7.7)`
 - Diagnostic bundle: `scripts/diagnostic.sh` produces `meta.txt` with `snapmulti_release=...` and `snapmulti_image_set=...`; the bundle also includes the scrubbed `release-manifest.json` from the boot partition.
 - Server `.env`: `grep ^SNAPMULTI_ /opt/snapmulti/.env`
 - Client `.env`: `grep ^SNAPMULTI_ /opt/snapclient/.env`

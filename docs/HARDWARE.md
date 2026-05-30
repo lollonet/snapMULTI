@@ -155,10 +155,13 @@ Detail:
 
 snapMULTI uses **Docker Compose for client deployment** via the [client](../client/) directory. This provides a self-contained stack including snapclient, cover art display, and audio visualizer — all managed together.
 
-The client Docker stack runs three containers:
-- `lollonet/snapclient-pi:latest` — Snapcast audio player
-- `lollonet/snapclient-pi-fb-display:latest` — Cover art display (framebuffer)
-- `lollonet/snapclient-pi-visualizer:latest` — Audio visualizer
+The client Docker stack runs three containers from the pinned release image set:
+
+- `lollonet/snapclient-pi:<image-set>` — Snapcast audio player
+- `lollonet/snapclient-pi-fb-display:<image-set>` — Cover art display (framebuffer)
+- `lollonet/snapclient-pi-visualizer:<image-set>` — Audio visualizer
+
+`<image-set>` comes from `release-manifest.json`. Script-only releases can reuse the same image set; container-changing releases publish a new pinned image set. Do not use `latest` for reproducible appliance installs.
 
 See [README.md](../README.md) for the full installation procedure (SD card path or manual).
 
@@ -250,21 +253,21 @@ Firewall configuration (`ufw` rules) and QoS / `cake` qdisc setup are documented
 
 | Image | Size |
 |-------|------|
-| `lollonet/snapmulti-server:latest` | ~80–120 MB |
-| `lollonet/snapmulti-airplay:latest` | ~30–50 MB |
+| `lollonet/snapmulti-server:<image-set>` | ~80–120 MB |
+| `lollonet/snapmulti-airplay:<image-set>` | ~30–50 MB |
 | `ghcr.io/devgianlu/go-librespot:v0.7.3` | ~30–50 MB |
-| `lollonet/snapmulti-mpd:latest` | ~50–80 MB |
-| `lollonet/snapmulti-metadata:latest` | ~60–80 MB |
+| `lollonet/snapmulti-mpd:<image-set>` | ~50–80 MB |
+| `lollonet/snapmulti-metadata:<image-set>` | ~60–80 MB |
 | `ghcr.io/jcorporation/mympd/mympd:25.0.2` | ~30–50 MB |
-| `lollonet/snapmulti-tidal:latest` | ~200–300 MB |
+| `lollonet/snapmulti-tidal:<image-set>` | ~200–300 MB |
 
 **Client images** (from [client](../client/) directory):
 
 | Image | Size |
 |-------|------|
-| `lollonet/snapclient-pi:latest` | ~30–50 MB |
-| `lollonet/snapclient-pi-fb-display:latest` | ~80–120 MB |
-| `lollonet/snapclient-pi-visualizer:latest` | ~50–80 MB |
+| `lollonet/snapclient-pi:<image-set>` | ~30–50 MB |
+| `lollonet/snapclient-pi-fb-display:<image-set>` | ~80–120 MB |
+| `lollonet/snapclient-pi-visualizer:<image-set>` | ~50–80 MB |
 
 ### Music Library
 
@@ -314,7 +317,7 @@ If a node connects to an AV receiver via optical cable, use HiFiBerry Digi+ inst
 
 ## Tested Combinations
 
-These hardware combinations have been verified end-to-end (firstboot → smoke test → audio playback) on the dates indicated. Treat this table as the source of truth for launch-validated hardware. The 2026-04-27 batch was the v0.6.x release-gate validation: 6 devices reflashed from `main`, smoke test PASS on each, ALSA `hw_ptr` advancing during playback (audio actually reaching the DAC, not just the FIFO).
+These hardware combinations have been verified end-to-end (firstboot → smoke test → audio playback) on the dates indicated. Treat this table as the source of truth for launch-validated hardware. This table records hardware validation, not the latest release gate; release-level confidence comes from the current device/fleet smoke runs described in the changelog and release notes. The 2026-04-27 batch was the v0.6.x hardware validation run: 6 devices reflashed from `main`, smoke test PASS on each, ALSA `hw_ptr` advancing during playback (audio actually reaching the DAC, not just the FIFO).
 
 | Hostname | Pi Model | Audio HAT | DAC chip | Mode | Display | Music Source | Validated | Status |
 |---|---|---|---|---|---|---|---|---|

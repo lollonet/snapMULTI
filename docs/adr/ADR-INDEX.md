@@ -15,4 +15,5 @@ source_of_truth: true
 | ADR-004 | [Centralized Metadata Service](ADR-004.metadata-architecture.md) | Accepted | 2026-02-19 |
 | ADR-005 | [Reflash-Only, systemd Lifecycle, Robustness-First](ADR-005.reflash-systemd-robustness.md) | Accepted | 2026-04-22 |
 | ADR-006 | [Release Identity & Script-Only Patches](ADR-006.release-identity-script-only-patches.md) | Accepted | 2026-05-26 |
-| ADR-007 | [IPv4-Only LAN Appliance](ADR-007.ipv4-only-lan-appliance.md) | Accepted | 2026-05-28 |
+| ADR-007 | [IPv4-Only LAN Appliance](ADR-007.ipv4-only-lan-appliance.md) | Superseded by ADR-008 | 2026-05-28 |
+| ADR-008 | [IPv6 Enabled by Default](ADR-008.ipv6-default-on.md) | Accepted | 2026-05-29 |
