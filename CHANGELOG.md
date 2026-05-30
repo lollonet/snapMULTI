@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`/status` Resource Profile section** — new "Resource Profile" panel surfaces the active server profile (`minimal` / `standard` / `performance`) and the per-service memory limits (`SNAPSERVER_MEM_LIMIT`, `MPD_MEM_LIMIT`, etc.) `deploy.sh` wrote to `.env`. Env-driven (no subprocess, no file I/O): `deploy.sh` writes `SNAPMULTI_PROFILE=<name>` inside each `# Hardware Profile: BEGIN…END` block; `docker-compose.yml` propagates that plus the `*_MEM_LIMIT` set to the `metadata` container. Dev clones / manual `docker compose up` (where `SNAPMULTI_PROFILE` is empty) hide the section entirely. 8 new unit tests cover the env reader and renderer (XSS escaping on profile name and limit values).
+
 ### Changed
 - **ADR-008 supersedes ADR-007 — IPv6 enabled by default** (#557, #558). Tidal Connect now works out-of-box; software defenses (Avahi `use-ipv6=no`, snapclient IPv4 pin, fb-display filter, `boot-tune.sh`) cover the original races. Opt back into the kernel disable with `DISABLE_IPV6=true`. Validated live on snapvideo + pizero + snapdigi.
 - **HARDWARE.md reference builds replaced with qualitative sizing notes** (#559) — point-in-time `docker stats` tables removed; section now lists cost drivers, board floors, and sizing rules of thumb. Memory limits stay in ADVANCED.md (SSOT). Italian mirrored.

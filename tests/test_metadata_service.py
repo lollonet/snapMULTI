@@ -451,6 +451,87 @@ class TestSnapcastClientsRender:
         assert "&lt;script&gt;" in html_str
 
 
+class TestResourceProfile:
+    """`_get_resource_profile()` + `_render_resource_profile_section()` — env-driven,
+    pure functions. Tests pin: (a) hide on dev clones; (b) name-only when limits
+    missing; (c) full table when limits propagated; (d) XSS defence on env values
+    (in case a malicious .env lands on a device — same hardening as other sections).
+    """
+
+    def test_empty_env_returns_none(self, metadata_service_module, monkeypatch):
+        monkeypatch.delenv("SNAPMULTI_PROFILE", raising=False)
+        assert metadata_service_module._get_resource_profile() is None
+
+    def test_whitespace_only_env_returns_none(
+        self, metadata_service_module, monkeypatch
+    ):
+        monkeypatch.setenv("SNAPMULTI_PROFILE", "   ")
+        assert metadata_service_module._get_resource_profile() is None
+
+    def test_name_only_when_limits_missing(self, metadata_service_module, monkeypatch):
+        monkeypatch.setenv("SNAPMULTI_PROFILE", "standard")
+        for _, var in metadata_service_module._PROFILE_SERVICE_LIMITS:
+            monkeypatch.delenv(var, raising=False)
+        profile = metadata_service_module._get_resource_profile()
+        assert profile == {"name": "standard", "limits": []}
+
+    def test_full_propagation_yields_ordered_limits(
+        self, metadata_service_module, monkeypatch
+    ):
+        monkeypatch.setenv("SNAPMULTI_PROFILE", "performance")
+        monkeypatch.setenv("SNAPSERVER_MEM_LIMIT", "256M")
+        monkeypatch.setenv("MPD_MEM_LIMIT", "384M")
+        monkeypatch.setenv("METADATA_MEM_LIMIT", "128M")
+        for _, var in metadata_service_module._PROFILE_SERVICE_LIMITS:
+            if var not in {"SNAPSERVER_MEM_LIMIT", "MPD_MEM_LIMIT", "METADATA_MEM_LIMIT"}:
+                monkeypatch.delenv(var, raising=False)
+        profile = metadata_service_module._get_resource_profile()
+        assert profile is not None
+        # Order follows _PROFILE_SERVICE_LIMITS (snapserver before mpd before metadata),
+        # not the order env vars were set in.
+        assert profile["limits"] == [
+            ("snapserver", "256M"),
+            ("mpd", "384M"),
+            ("metadata", "128M"),
+        ]
+
+    def test_render_none_yields_empty_string(self, metadata_service_module):
+        assert metadata_service_module._render_resource_profile_section(None) == ""
+
+    def test_render_name_only_uses_info_row(self, metadata_service_module):
+        html_str = metadata_service_module._render_resource_profile_section(
+            {"name": "minimal", "limits": []}
+        )
+        assert "<h2>Resource Profile</h2>" in html_str
+        assert "Active profile: <strong>minimal</strong>" in html_str
+        assert "Per-service memory limits not propagated" in html_str
+
+    def test_render_with_limits_lists_each_service(self, metadata_service_module):
+        html_str = metadata_service_module._render_resource_profile_section(
+            {
+                "name": "standard",
+                "limits": [("snapserver", "192M"), ("mpd", "384M")],
+            }
+        )
+        assert "Active profile: <strong>standard</strong>" in html_str
+        assert "<code>192M</code>" in html_str
+        assert "<code>384M</code>" in html_str
+        # Service labels appear in the order given.
+        assert html_str.index("snapserver") < html_str.index("mpd")
+
+    def test_render_escapes_profile_name_and_limits(self, metadata_service_module):
+        html_str = metadata_service_module._render_resource_profile_section(
+            {
+                "name": "<script>alert(1)</script>",
+                "limits": [("svc&", "<b>192M</b>")],
+            }
+        )
+        assert "<script>alert(1)</script>" not in html_str
+        assert "&lt;script&gt;" in html_str
+        assert "<b>192M</b>" not in html_str
+        assert "&lt;b&gt;192M&lt;/b&gt;" in html_str
+
+
 class TestSnapcastClientsCacheAndRouting:
     """Cache TTL + handle_status routing — gates on regressions the parser/renderer
     tests can't catch (e.g. wiring change that bypasses the cache or skips the fetch).

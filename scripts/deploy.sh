@@ -199,6 +199,7 @@ apply_resource_profile() {
 # For: Pi Zero 2 W, Pi 3, systems with <2GB RAM
 # Measured baseline (idle): snapserver 87M, shairport 18M, librespot 22M,
 #   mpd 90M (6k songs), mympd 8M, metadata 52M, tidal 32M
+SNAPMULTI_PROFILE=minimal
 SNAPSERVER_MEM_LIMIT=128M
 SNAPSERVER_MEM_RESERVE=64M
 SNAPSERVER_CPU_LIMIT=0.5
@@ -236,6 +237,7 @@ EOF
 #   Headroom check: 1895 MB total RAM, sum of limits previously 1120 MB +
 #   200 MB host overhead = 1320 MB worst-case; raising MPD by 128 MB still
 #   leaves ~450 MB free in the worst case. Bumped to 384 MB for safety.
+SNAPMULTI_PROFILE=standard
 SNAPSERVER_MEM_LIMIT=192M
 SNAPSERVER_MEM_RESERVE=96M
 SNAPSERVER_CPU_LIMIT=1.0
@@ -268,6 +270,7 @@ EOF
 # For: Pi 4 4GB+, Pi 5, systems with 8GB+ RAM
 # Measured baseline (idle): snapserver 87M, shairport 18M, librespot 22M,
 #   mpd 90M (6k songs), mympd 8M, metadata 52M, tidal 32M
+SNAPMULTI_PROFILE=performance
 SNAPSERVER_MEM_LIMIT=256M
 SNAPSERVER_MEM_RESERVE=128M
 SNAPSERVER_CPU_LIMIT=2.0

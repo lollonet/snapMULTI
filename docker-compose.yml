@@ -277,6 +277,17 @@ services:
       # SNAPMULTI_RELEASE / SNAPMULTI_IMAGE_SET from .env let /version distinguish git tag from Docker tag; empty defaults so dev clones still start.
       - SNAPMULTI_RELEASE=${SNAPMULTI_RELEASE:-}
       - SNAPMULTI_IMAGE_SET=${SNAPMULTI_IMAGE_SET:-}
+      # SNAPMULTI_PROFILE + per-service *_MEM_LIMIT propagate the active resource
+      # profile to the /status "Resource profile" section. Empty defaults: dev
+      # clones / manual `docker compose up` without deploy.sh render "unknown".
+      - SNAPMULTI_PROFILE=${SNAPMULTI_PROFILE:-}
+      - SNAPSERVER_MEM_LIMIT=${SNAPSERVER_MEM_LIMIT:-}
+      - AIRPLAY_MEM_LIMIT=${AIRPLAY_MEM_LIMIT:-}
+      - SPOTIFY_MEM_LIMIT=${SPOTIFY_MEM_LIMIT:-}
+      - MPD_MEM_LIMIT=${MPD_MEM_LIMIT:-}
+      - MYMPD_MEM_LIMIT=${MYMPD_MEM_LIMIT:-}
+      - METADATA_MEM_LIMIT=${METADATA_MEM_LIMIT:-}
+      - TIDAL_MEM_LIMIT=${TIDAL_MEM_LIMIT:-}
     volumes:
       - ./artwork:/app/artwork
       # Bind-mount the renderer source so a fix lands without an image
