@@ -2423,8 +2423,6 @@ def _render_resource_profile_section(profile: dict | None) -> str:
     propagated (older deploys / partial wiring), render the name alone with
     an info row instead of an empty table.
     """
-    import html
-
     if profile is None:
         return ""
     name = html.escape(profile["name"])
