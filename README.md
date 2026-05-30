@@ -43,7 +43,7 @@ snapMULTI is not "open Sonos". It is a community-maintained appliance for people
 
 ## Realistic expectations
 
-- **Time**: ~10–15 min from inserting the SD to hearing audio. First boot does the install over the network, then reboots once.
+- **Time**: ~15-20 min on a Pi 4/5 from inserting the SD to hearing audio; longer on Pi 3 or Pi Zero 2 W. First boot does the install over the network, then reboots once.
 - **Skill floor**: you should be comfortable flashing an SD with Raspberry Pi Imager, finding your Pi by hostname (`.local`) or IP, and copying a small file off the SD card if something goes wrong. You do **not** need to know Docker, systemd, ALSA, or Snapcast — snapMULTI handles them.
 - **SD card matters**: cheap microSDs are the #1 cause of "install hangs". Use a SanDisk / Samsung A1 (or better). 16 GB is the minimum.
 - **Network**: 2.4 GHz works but 5 GHz or Ethernet is more stable.
@@ -133,7 +133,7 @@ Or any Linux box: `sudo apt install snapclient`.
 
 ## Updating
 
-snapMULTI updates by re-flashing, not by patching. The Pi runs a read-only filesystem (a power cut can't corrupt it), so there is no in-place upgrade — you write the latest release onto the SD again, exactly like the first time. It takes the same ~10–15 min, and every setting (role, audio HAT, NAS path, network) is auto-detected on first boot, so you reconfigure nothing.
+snapMULTI updates by re-flashing, not by patching. The Pi runs a read-only filesystem (a power cut can't corrupt it), so there is no in-place upgrade — you write the latest release onto the SD again, exactly like the first time. It takes the same ~15-20 min on a Pi 4/5, and every setting (role, audio HAT, NAS path, network) is auto-detected on first boot, so you reconfigure nothing.
 
 Before re-flashing, run `./scripts/backup-from-sd.sh` to preserve your MPD music index — otherwise the library re-scan starts from scratch.
 

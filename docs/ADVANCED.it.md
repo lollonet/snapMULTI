@@ -125,7 +125,7 @@ nano .env                          # come minimo: PUID/PGID, MUSIC_PATH, MUSIC_S
 sudo docker compose up -d
 ```
 
-Il push di un tag (`v*`) innesca la build multi-arch in CI (runner nativi amd64 + arm64) → Docker Hub `:latest`. Riflasha per prendere le nuove immagini.
+Riflasha con l'ultima release per prendere il manifest di release e qualsiasi cambio di set di immagini. Le release di soli script riusano il set di immagini esistente; le release che cambiano container pubblicano un nuovo set di immagini fissato tramite CI.
 
 ## MPD da riga di comando
 
@@ -174,20 +174,20 @@ Riflashare per primo è il default del progetto ([DEC-003](decisions/DEC-003-ref
 
 Dopo ogni reflash o aggiornamento in-place, esegui il test di salute sul device per confermare che la piattaforma sia tornata sana: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server` (oppure `--client` / `--both`). È lo stesso release gate (ADR-005) che `fleet-smoke.sh` esegue su più device. Descrizione completa in [TROUBLESHOOTING.it.md — Prima cosa da fare](TROUBLESHOOTING.it.md#prima-cosa-da-fare--esegui-il-test-di-salute).
 
-## Strategia release & pinning image-set
+## Strategia release e set di immagini fissato
 
 > Razionale architetturale: [ADR-006](adr/ADR-006.release-identity-script-only-patches.md).
 
 snapMULTI separa due concetti di versione, così una release di soli script (CHANGELOG, docs, fix nell'installer) non costringe a ricostruire e ripubblicare le immagini Docker:
 
-- **`SNAPMULTI_RELEASE`** — il tag git della release (es. `v0.7.8.16`). Quello che `gh release view` mostra.
+- **`SNAPMULTI_RELEASE`** — il tag git della release (es. `v0.7.9.6`). Quello che `gh release view` mostra.
 - **`SNAPMULTI_IMAGE_SET`** — il tag Docker delle immagini a cui la release si aggancia (es. `0.7.7`). Quello che `docker compose pull` scarica.
 
 La maggior parte delle release incrementa entrambi. Una release di soli script incrementa `SNAPMULTI_RELEASE` e mantiene `SNAPMULTI_IMAGE_SET` all'ultimo valore pubblicato. La fonte di verità è `release-manifest.json` alla radice del repo, copiato sulla SD da `prepare-sd.sh`.
 
 ### Catena di precedenza
 
-Da v0.7.8.10 (consolidamento SSOT), `install.conf` non porta più la release identity — `release-manifest.json` sulla SD è l'unica fonte. `IMAGE_TAG` resta in `install.conf` come unico legittimo operator override.
+Da v0.7.8.10 (consolidamento SSOT), `install.conf` non porta più l'identità della release — `release-manifest.json` sulla SD è l'unica fonte. `IMAGE_TAG` resta in `install.conf` come unico override operatore legittimo.
 
 - **`SNAPMULTI_RELEASE`** = `manifest snapmulti_release` > `""`
 - **`SNAPMULTI_IMAGE_SET`** = `manifest image_set` > `""`
@@ -228,7 +228,7 @@ Riprodotta in `tests/test_firstboot_image_tag_derivation.sh`.
 
 ### Override d'emergenza — `force_rebuild`
 
-Se l'image-set pubblicato su Docker Hub è mancante o corrotto (CVE di sicurezza in un'immagine base, cancellazione accidentale di un tag, incidente su GitHub Container Registry), lancia `build-push.yml` a mano con `force_rebuild=true`:
+Se il set di immagini pubblicato su Docker Hub è mancante o corrotto (CVE di sicurezza in un'immagine base, cancellazione accidentale di un tag, incidente su GitHub Container Registry), lancia `build-push.yml` a mano con `force_rebuild=true`:
 
 ```text
 GitHub → Actions → Build and Push Images → Run workflow
@@ -241,7 +241,7 @@ Il gate bypassa sia `requires_image_rebuild=false` sia il check di esistenza su 
 
 Dopo deploy / reflash:
 
-- Riga info del test di salute: `device-smoke.sh` → sezione `System` → `Release v0.7.8.16 (images 0.7.7)`
+- Riga info del test di salute: `device-smoke.sh` → sezione `System` → `Release v0.7.9.6 (images 0.7.7)`
 - Pacchetto diagnostico: `scripts/diagnostic.sh` produce `meta.txt` con `snapmulti_release=...` e `snapmulti_image_set=...`; il pacchetto include anche il `release-manifest.json` (scrubbato) dalla partizione di boot.
 - `.env` del server: `grep ^SNAPMULTI_ /opt/snapmulti/.env`
 - `.env` del client: `grep ^SNAPMULTI_ /opt/snapclient/.env`

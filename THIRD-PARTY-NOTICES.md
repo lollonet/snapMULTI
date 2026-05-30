@@ -33,7 +33,7 @@ recipe.
 - Project: <https://github.com/jcorporation/myMPD>
 - Author: jcorporation
 - License: GPL-2.0-or-later
-- Version: upstream `ghcr.io/jcorporation/mympd/mympd:latest` (image used as-is,
+- Version: upstream `ghcr.io/jcorporation/mympd/mympd:25.0.2` (image used as-is,
   not rebuilt by snapMULTI)
 
 ## Streaming sources
@@ -52,7 +52,7 @@ recipe.
 - Project: <https://github.com/devgianlu/go-librespot>
 - Author: devgianlu
 - License: LGPL-3.0
-- Version pinned: `v0.7.1` (`ghcr.io/devgianlu/go-librespot:v0.7.1` in
+- Version pinned: `v0.7.3` (`ghcr.io/devgianlu/go-librespot:v0.7.3` in
   `docker-compose.yml`, image used as-is, not rebuilt)
 - Note: Spotify Connect protocol is reverse-engineered; snapMULTI does not
   bundle any Spotify proprietary code

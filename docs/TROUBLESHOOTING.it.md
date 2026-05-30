@@ -64,7 +64,7 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 **Causa probabile.** Il primo boot sta scaricando le immagini container dalla rete (la parte lenta, 2–6 minuti su WiFi domestico tipico). Anche le SD economiche / contraffatte sembrano "appendersi" — in realtà l'install sta aspettando il throughput in scrittura della SD.
 
 **Cosa provare.**
-1. Aspetta i 10–15 minuti completi prima di sospettare un problema — l'install gira come `cloud-init` → `snapmulti-firstboot.service`, entrambi headless.
+1. Aspetta tutti i 15-20 minuti su Pi 4/5 prima di sospettare un problema — di più su Pi 3 o Pi Zero 2 W. L'install gira come `cloud-init` → `snapmulti-firstboot.service`, entrambi headless.
 2. Dal laptop: `ping <hostname>.local`. Se risponde, la rete è OK.
 3. Se SSH funziona: `ssh <username>@<hostname>.local`, poi `sudo journalctl -u snapmulti-firstboot.service -f` per vedere l'install in tempo reale.
 
@@ -95,7 +95,7 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 2. Da lì: `sudo ro-mode disable && sudo reboot` se servono modifiche persistenti (vedi [ADVANCED.it.md — Filesystem read-only](ADVANCED.it.md#filesystem-read-only)).
 3. Se il Pi non arriva mai al login: estrai la SD, apri la **partizione boot** sul laptop, modifica `user-data` per resettare le credenziali, reinserisci e accendi.
 
-**Se è ancora bloccato.** Riflasha con Imager — snapMULTI è reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)), e l'install dura solo 10–15 min. Fai prima un backup di `/opt/snapmulti/mpd.db` con `scripts/backup-from-sd.sh` se vuoi preservare l'indice della libreria musicale.
+**Se è ancora bloccato.** Riflasha con Imager — snapMULTI è reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)), e l'install dura circa 15-20 min su Pi 4/5. Fai prima un backup di `/opt/snapmulti/mpd.db` con `scripts/backup-from-sd.sh` se vuoi preservare l'indice della libreria musicale.
 
 ## Niente audio
 
@@ -164,7 +164,7 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 3. Verifica che il path non abbia **spazi** lato NAS. Rinomina `Music Share` → `Music_Share`.
 4. Per SMB, le credenziali persistenti vivono in `/etc/snapmulti-smb-credentials` (root-only, su ext4). Vengono scritte anche dentro `install.conf` sulla partizione FAT32 di boot durante `prepare-sd.sh` e `firstboot.sh`, poi rimosse una volta che `mount-music` le ha copiate in `/etc/snapmulti-smb-credentials`.
 
-**Se è ancora bloccato.** Riflasha l'SD con il path NAS corretto — snapMULTI è reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)) e un install fresco dura solo 10–15 min. È possibile un recupero manuale senza reflash, ma non è ufficialmente supportato; richiede di modificare a mano `/etc/snapmulti-smb-credentials` e le unit systemd `.mount`/`.automount`. La scansione MPD su NFS è lenta alla prima esecuzione — vedi [ADVANCED.it.md — Libreria musicale](ADVANCED.it.md#libreria-musicale-in-rete) per il trucco del backup `mpd.db`.
+**Se è ancora bloccato.** Riflasha l'SD con il path NAS corretto — snapMULTI è reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)) e un install fresco dura circa 15-20 min su Pi 4/5. È possibile un recupero manuale senza reflash, ma non è ufficialmente supportato; richiede di modificare a mano `/etc/snapmulti-smb-credentials` e le unit systemd `.mount`/`.automount`. La scansione MPD su NFS è lenta alla prima esecuzione — vedi [ADVANCED.it.md — Libreria musicale](ADVANCED.it.md#libreria-musicale-in-rete) per il trucco del backup `mpd.db`.
 
 ## Install marcato fallito ma i container girano <a id="install-marcato-fallito-ma-i-container-girano"></a>
 

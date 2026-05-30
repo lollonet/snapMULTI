@@ -31,7 +31,7 @@ snapMULTI is designed for **home/prosumer networks** behind a firewall:
 
 - **Containers**: `cap_drop: ALL` with minimal capabilities, `read_only: true`, `no-new-privileges`
 - **Network**: Host networking for low-latency audio; not designed for public-facing deployment
-- **Filesystem**: Optional read-only root via overlayroot (protects SD card from corruption)
+- **Filesystem**: Read-only root via overlayroot is enabled by default on Pi installs (protects SD card from corruption) and can be disabled for maintenance.
 - **Secrets**: SMB credentials stored in `/etc/snapmulti-smb-credentials` (mode 600), referenced by a systemd `.mount` unit in `/etc/systemd/system/`; NFS uses host-based auth
 - **Updates**: Docker images built in CI on GitHub Actions, published multi-arch (amd64 + arm64) to Docker Hub. Image signing (cosign / sigstore) is not yet implemented — track via SECURITY advisories if integrity attestation is required for your deployment. Full upgrades use the reflash path ([DEC-003](docs/decisions/DEC-003-reflash-only-updates.md))
 

@@ -326,7 +326,7 @@ You should see **"All checks passed."** and **"SD card ready!"** at the end.
 1. **Remove the SD card** from your computer
 2. Insert it into the Pi
 3. Connect power
-4. **Wait ~10–15 minutes** — the Pi installs Docker, pulls images, starts all services, verifies them, then reboots once
+4. **Wait ~15-20 minutes on a Pi 4/5** — longer on Pi 3 or Pi Zero 2 W. The Pi installs Docker, pulls images, starts all services, verifies them, then reboots once
 
 ### What you'll see on HDMI
 
@@ -345,7 +345,7 @@ snapMULTI Auto-Install
 
 The Pi **reboots automatically** when installation is complete. After the reboot, the display goes dark (normal — no desktop on Lite OS).
 
-> If the HDMI stays blank throughout: the installation is still running in the background — `firstboot.sh` is a systemd service that does not need a display. **The green ACT LED on the Pi will flash irregularly throughout the 10–15 min — that's SD-card activity, your sign the install is making progress.** Wait the full window; to check progress without a screen, `ssh <username>@<hostname>.local` and run `sudo journalctl -u snapmulti-firstboot.service -f`.
+> If the HDMI stays blank throughout: the installation is still running in the background — `firstboot.sh` is a systemd service that does not need a display. **The green ACT LED on the Pi will flash irregularly throughout the 15-20 min Pi 4/5 window — that's SD-card activity, your sign the install is making progress.** Wait the full window; to check progress without a screen, `ssh <username>@<hostname>.local` and run `sudo journalctl -u snapmulti-firstboot.service -f`.
 
 ### What you'll hear
 

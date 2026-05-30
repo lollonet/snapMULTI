@@ -43,7 +43,7 @@ snapMULTI non è "Sonos open-source". È un'appliance mantenuta dalla community 
 
 ## Aspettative realistiche
 
-- **Tempo**: ~10–15 min dall'inserimento dell'SD al primo suono. Il primo boot installa via rete, poi si riavvia una volta.
+- **Tempo**: ~15-20 min su Pi 4/5 dall'inserimento dell'SD al primo suono; di più su Pi 3 o Pi Zero 2 W. Il primo boot installa via rete, poi si riavvia una volta.
 - **Livello richiesto**: devi sapere flashare un'SD con Raspberry Pi Imager, trovare il Pi tramite hostname (`.local`) o IP, e copiare un piccolo file dalla SD card se qualcosa va storto. **Non** ti serve conoscere Docker, systemd, ALSA o Snapcast — li gestisce snapMULTI.
 - **L'SD è importante**: le microSD economiche sono la prima causa di "install che si blocca". Usa una SanDisk / Samsung A1 (o migliore). Minimo 16 GB.
 - **Rete**: il 2,4 GHz funziona ma il 5 GHz o Ethernet sono più stabili.
@@ -59,7 +59,7 @@ Se è la tua prima installazione snapMULTI, scegli il percorso noioso: **Raspber
 - **Pi Zero 2 W** è supportato solo come Audio Player headless; non è un target server o "Server + Player".
 - **Path NAS con spazi** vengono rifiutati. Rinomina `Music Share` in `Music_Share` lato NAS.
 - **Tidal Connect** usa un componente proprietario upstream. È abilitato di default sugli install ARM; rimuovi `tidal` da `COMPOSE_PROFILES` in `/opt/snapmulti/.env` se vuoi uno stack interamente free software.
-- **Gli aggiornamenti sono reflash-first**. Il filesystem è read-only: aggiorni riscrivendo l'SD con una nuova release (~10 min, le impostazioni si auto-rilevano), non applicando patch a un sistema in esecuzione.
+- **Gli aggiornamenti sono reflash-first**. Il filesystem è read-only: aggiorni riscrivendo l'SD con una nuova release (~15-20 min su Pi 4/5, le impostazioni si auto-rilevano), non applicando patch a un sistema in esecuzione.
 - **La qualità hardware conta**. SD scadenti, alimentatori deboli e WiFi instabile causano la maggior parte dei fallimenti iniziali.
 
 ## Quick start
@@ -98,7 +98,7 @@ Lo script ti guida con poche domande: il ruolo (**Audio Player** / **Music Serve
 
 ### 4. Avvia il Pi
 
-Espelli l'SD, inseriscila nel Pi, accendi. Aspetta circa 10-15 minuti — l'installer al primo boot gira da solo (niente SSH), mostra l'avanzamento su HDMI se hai uno schermo collegato, poi si riavvia una volta.
+Espelli l'SD, inseriscila nel Pi, accendi. Aspetta circa 15-20 minuti su Pi 4/5 (di più su Pi 3 o Pi Zero 2 W) — l'installer al primo boot gira da solo (niente SSH), mostra l'avanzamento su HDMI se hai uno schermo collegato, poi si riavvia una volta.
 
 **Ha funzionato quando**: con uno schermo collegato, il display HDMI mostra la schermata "in riproduzione" di snapMULTI (copertina / spettro). In ogni caso, da un altro dispositivo apri `http://<hostname>.local:8083/`, poi apri **Status** — tutti i controlli devono essere verdi. Poi fai cast di qualcosa (vedi **Dopo l'installazione** più sotto).
 
@@ -133,7 +133,7 @@ O su qualsiasi Linux: `sudo apt install snapclient`.
 
 ## Aggiornamento
 
-snapMULTI si aggiorna riscrivendo l'SD, non applicando patch. Il Pi gira con un filesystem read-only (un blackout non può corromperlo), quindi non esiste un upgrade in-place: riscrivi l'ultima release sull'SD esattamente come la prima volta. Ci vogliono gli stessi ~10–15 min, e ogni impostazione (ruolo, HAT audio, path NAS, rete) si auto-rileva al primo boot, quindi non riconfiguri nulla.
+snapMULTI si aggiorna riscrivendo l'SD, non applicando patch. Il Pi gira con un filesystem read-only (un blackout non può corromperlo), quindi non esiste un upgrade in-place: riscrivi l'ultima release sull'SD esattamente come la prima volta. Ci vogliono gli stessi ~15-20 min su Pi 4/5, e ogni impostazione (ruolo, HAT audio, path NAS, rete) si auto-rileva al primo boot, quindi non riconfiguri nulla.
 
 Prima di riflashare, esegui `./scripts/backup-from-sd.sh` per conservare l'indice della libreria MPD — altrimenti la scansione della libreria riparte da zero.
 

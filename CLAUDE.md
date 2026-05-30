@@ -37,7 +37,7 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 | **Beginners** | Raspberry Pi 4 | Zero-touch SD | `prepare-sd.sh` → `firstboot.sh` → `deploy.sh`/`setup.sh` |
 | **Advanced** | Pi4 or x86_64 | Automated or Manual | `deploy.sh` (optional) |
 
-**Beginners**: No Linux administration required. Flash SD card on another computer, run `prepare-sd.sh` (or `prepare-sd.ps1` on Windows), choose what to install, insert in Pi, power on. HDMI shows a TUI progress display during installation (~10-15 min). The Pi becomes a dedicated audio appliance.
+**Beginners**: No Linux administration required. Flash SD card on another computer, run `prepare-sd.sh` (or `prepare-sd.ps1` on Windows), choose what to install, insert in Pi, power on. HDMI shows a TUI progress display during installation (~15-20 min on Pi 4/5; longer on Pi 3 / Pi Zero 2 W). The Pi becomes a dedicated audio appliance.
 
 **Advanced**: Clone repo on any Linux host (Pi, x86_64, VM, NAS). Use `deploy.sh` for automation (hardware detection, directory setup, resource profiles) or skip it and just run `docker compose up`.
 
@@ -169,7 +169,7 @@ ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian 
 
 ## Conventions
 
-- **Docker images**: `lollonet/snapmulti-{server,airplay,mpd,metadata}:latest` (Docker Hub, built in CI) + `ghcr.io/devgianlu/go-librespot:v0.7.3` (upstream) + `lollonet/snapmulti-tidal:latest` (ARM only)
+- **Docker images**: snapMULTI images use the pinned `image_set` from `release-manifest.json` (Docker Hub, built in CI when `requires_image_rebuild=true`) + `lollonet/snapmulti-tidal:<image-set>` (ARM only) + `ghcr.io/devgianlu/go-librespot:v0.7.3` (upstream) + `ghcr.io/jcorporation/mympd/mympd:25.0.2` (upstream)
 - **Multi-arch**: linux/amd64 (studio) + linux/arm64 (ci-runner-x86), native builds on self-hosted runners
 - **Config paths**: all config in `config/`, all scripts in `scripts/`, shared libs in `scripts/common/`
 - **Deployment**: tag push (`v*`) triggers build → manifest → deploy
@@ -187,6 +187,8 @@ Explicitly out of scope — refuse scope-creep PRs that propose any of these wit
 - **Custom Linux distribution.** Use Debian bookworm + cloud-init. No Buildroot, no Yocto, no custom OS.
 - **Custom PCB / proprietary hardware.** Pi 3/4/5 + commodity HATs only.
 - **Vendor cloud / hosted services.** No snapMULTI account system, telemetry endpoint, or hosted control plane. Everything runs on the user's LAN.
+- **Public-WAN deployment without an operator-managed reverse proxy and authentication.** The security model assumes a trusted LAN; exposing snapMULTI ports on the public internet is the operator's responsibility, not a product feature.
+- **In-place upgrade workflow for ordinary users.** The supported path is reflash-first ([DEC-003](docs/decisions/DEC-003-reflash-only-updates.md)); manual `ro-mode disable` + `git pull` is documented for advanced users but not officially supported as an upgrade UX.
 - **Unified UI replacing snapweb + myMPD + metadata-service.** The project federates existing tools; building a new web app is years of work with dubious ROI.
 - **AI / voice assistants / DSP / spatial audio / room correction.** Audio enhancement belongs in the amp or a dedicated DSP upstream of snapMULTI.
 - **Marketplace plugin system for sources.** Sources are pinned in `config/snapserver.conf` + `docker-compose.yml`. Adding a source is a deliberate architectural change, not user-configurable.

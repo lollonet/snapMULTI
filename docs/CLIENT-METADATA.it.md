@@ -151,7 +151,7 @@ Stessa URL significa stessi bytes. Se l'artwork cambia, cambia anche la URL.
 Ordine di fallback:
 
 ```
-artwork -> artist_image -> placeholder bundled
+artwork -> artist_image -> placeholder incluso
 ```
 
 Su 404 per un artwork, trattalo come transiente: riprova una volta dopo
