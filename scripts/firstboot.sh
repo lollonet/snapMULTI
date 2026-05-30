@@ -1305,8 +1305,10 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
             install -m 0644 "$mpd_upd_dir/snapmulti-mpd-update.timer" /etc/systemd/system/
             systemctl daemon-reload
             systemctl enable snapmulti-mpd-update.timer
+            log_info "MPD nightly NFS-rescan timer installed (no-op on local libraries)"
+        else
+            log_warn "MPD nightly NFS-rescan: script installed but systemd units missing (partial staging) — timer NOT registered"
         fi
-        log_info "MPD nightly NFS-rescan timer installed (no-op on local libraries)"
     fi
 
     STATE_BACKUP_SCRIPT=""

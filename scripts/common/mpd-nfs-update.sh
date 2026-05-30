@@ -25,8 +25,10 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 # MUSIC_PATH is the host-side mount point that maps into the MPD
-# container as /music. Tolerant to optional quoting in the .env value.
-music_path=$(grep -E '^MUSIC_PATH=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
+# container as /music. Tolerant to optional quoting and CRLF line
+# endings (operator editing .env on Windows) — a trailing \r would
+# silently fail `df -T` and misclassify the library as local.
+music_path=$(grep -E '^MUSIC_PATH=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d $'\r')
 if [[ -z "$music_path" ]]; then
     logger -t snapmulti-mpd-update "skip: MUSIC_PATH unset in $ENV_FILE"
     exit 0
@@ -35,6 +37,16 @@ fi
 # Network-mount detection — same predicate as scripts/deploy.sh#is_network_mount.
 # df -T returns the underlying fs type even if MUSIC_PATH is a bind mount.
 fstype=$(df -T "$music_path" 2>/dev/null | awk 'NR==2 {print $2}')
+
+# Distinguish "df failed" (NFS unreachable, path missing) from "df succeeded
+# and reported a local fs". The former is a transient connectivity problem
+# that the next nightly firing should retry — don't silently mark it as
+# "local fs" because that's actively wrong and hides NAS outages.
+if [[ -z "$fstype" ]]; then
+    logger -t snapmulti-mpd-update "skip: cannot determine fstype for $music_path (df failed — NFS down? path missing?)"
+    exit 0
+fi
+
 case "$fstype" in
     nfs|nfs4|cifs|smb|smbfs|fuse.sshfs|fuse.rclone)
         : # network — proceed
@@ -69,12 +81,28 @@ if ! docker exec mpd mpc update >/dev/null 2>&1; then
     exit 0
 fi
 
+# Give MPD a moment to set updating_db before the first poll. Without
+# this, very small libraries or a freshly-noop walk could complete the
+# scan before MPD has even flipped the flag, making the loop exit
+# "finished" prematurely on the first iteration. 2 s is negligible
+# against a 1-3 min scan and well within the 35-min unit timeout.
+sleep 2
+
 # Poll updating_db until it clears. Cap at 30 min — past that, something
 # is wrong and the next nightly firing handles it. Each poll is cheap
 # (a single `docker exec mpd mpc status`), 10 s cadence is plenty.
+#
+# Separate the docker-exec exit code from the status-line lookup so a
+# container crash / OOM / Docker daemon hiccup during the scan does not
+# get silently miscategorised as "scan finished". On exec failure we
+# warn and abort: the next nightly firing handles the retry.
 deadline=$(( $(date +%s) + 1800 ))
 while (( $(date +%s) < deadline )); do
-    status=$(docker exec mpd mpc status 2>/dev/null | grep -o 'updating_db: [0-9]*' || true)
+    if ! mpc_out=$(docker exec mpd mpc status 2>/dev/null); then
+        logger -t snapmulti-mpd-update "warn: docker exec mpd mpc status failed mid-scan — aborting (next nightly firing will retry)"
+        exit 0
+    fi
+    status=$(printf '%s\n' "$mpc_out" | grep -o 'updating_db: [0-9]*' || true)
     if [[ -z "$status" ]]; then
         logger -t snapmulti-mpd-update "incremental update finished"
         exit 0
