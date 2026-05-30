@@ -48,20 +48,14 @@ check "uses plain 'docker exec mpd mpc update' (no path arg)" "grep -qE '^[[:spa
 check "polls updating_db field for completion" "grep -q 'updating_db' '$SCRIPT'"
 check "30-min deadline cap" "grep -qE 'deadline.*1800|1800.*deadline' '$SCRIPT'"
 check "uses logger for journal trace" "grep -q 'logger -t snapmulti-mpd-update' '$SCRIPT'"
-# CRLF check uses an explicit byte comparison rather than the `check` helper to
-# avoid the nested shell-escape hell of matching a literal `$'\r'` token via eval.
-if grep -qF "tr -d \$'"$'\r'"'" "$SCRIPT"; then
+# CRLF check uses inline assertion rather than `check` helper — matching the
+# literal 5-char sequence `$'\r'` via eval would require painful nested escapes.
+if grep -qE "tr -d \\\$'\\\\r'" "$SCRIPT"; then
     echo "  PASS: strips CRLF from .env MUSIC_PATH (Windows-edit safety)"
     pass=$((pass + 1))
 else
-    # Fallback: literal sequence as ASCII (in case the file uses a different escape).
-    if grep -qE "tr -d \\\$'\\\\r'" "$SCRIPT"; then
-        echo "  PASS: strips CRLF from .env MUSIC_PATH (Windows-edit safety)"
-        pass=$((pass + 1))
-    else
-        echo "  FAIL: strips CRLF from .env MUSIC_PATH (Windows-edit safety)"
-        fail=$((fail + 1))
-    fi
+    echo "  FAIL: strips CRLF from .env MUSIC_PATH (Windows-edit safety)"
+    fail=$((fail + 1))
 fi
 check "empty fstype is guarded BEFORE the case (NFS-down does not mislog 'local fs')" "awk '/fstype=\\\$\\(df -T/{found=1} found && /\\[\\[ -z \"\\\$fstype\" \\]\\]/{ok=1; exit} found && /^case/{exit} END{exit !ok}' '$SCRIPT'"
 check "initial sleep before poll loop (avoids premature 'finished' on tiny scans)" "awk '/mpc update >/{seen_update=1} seen_update && /^sleep / && !/sleep 10/{ok=1; exit} seen_update && /^while/{exit} END{exit !ok}' '$SCRIPT'"
