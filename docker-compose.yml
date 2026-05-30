@@ -279,7 +279,8 @@ services:
       - SNAPMULTI_IMAGE_SET=${SNAPMULTI_IMAGE_SET:-}
       # SNAPMULTI_PROFILE + per-service *_MEM_LIMIT propagate the active resource
       # profile to the /status "Resource profile" section. Empty defaults: dev
-      # clones / manual `docker compose up` without deploy.sh render "unknown".
+      # clones / manual `docker compose up` without deploy.sh hide the section
+      # entirely rather than showing a placeholder.
       - SNAPMULTI_PROFILE=${SNAPMULTI_PROFILE:-}
       - SNAPSERVER_MEM_LIMIT=${SNAPSERVER_MEM_LIMIT:-}
       - AIRPLAY_MEM_LIMIT=${AIRPLAY_MEM_LIMIT:-}
