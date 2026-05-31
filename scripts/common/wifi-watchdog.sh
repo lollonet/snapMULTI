@@ -196,7 +196,13 @@ while :; do
 
     if (( failures >= SOFT_FAILURES )) && ! $soft_recovery_attempted; then
         soft_recovery_attempted=true
-        soft_recovery
+        # Bare call would exit the watchdog under `set -e` when
+        # soft_recovery returns 1 (no active NM connection) — exactly
+        # the failure scenario where we most need the watchdog alive.
+        # The function logs its own failure paths; the watchdog must
+        # keep counting until HARD_FAILURES regardless of recovery
+        # outcome.
+        soft_recovery || true
     fi
 
     sleep "$INTERVAL"

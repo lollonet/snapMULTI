@@ -45,6 +45,7 @@ check "ping bound to WiFi interface (-I \$WIFI_IFACE)" "grep -qE 'ping.*-I.*WIFI
 check "ping has -W timeout (5 s)" "grep -qE 'ping[^|]*-W 5' '$SCRIPT'"
 check "soft recovery cycles nmcli connection down/up" "grep -q 'nmcli connection down' '$SCRIPT' && grep -q 'nmcli connection up' '$SCRIPT'"
 check "soft recovery flagged so it does not fire repeatedly without intervening success" "grep -q 'soft_recovery_attempted=true' '$SCRIPT'"
+check "soft_recovery call tolerates non-zero return (set -e cannot kill the watchdog)" "grep -qE 'soft_recovery \\|\\| true' '$SCRIPT'"
 check "hard recovery uses systemctl reboot (orderly container stop)" "grep -q 'systemctl reboot' '$SCRIPT'"
 check "hard recovery writes a marker on /boot/firmware for next-boot UI" "grep -q '/boot/firmware/snapmulti-wifi-watchdog-reboot.marker' '$SCRIPT'"
 check "failure counter resets on successful ping" "grep -qE 'failures=0' '$SCRIPT'"
