@@ -40,7 +40,30 @@ done
 # 2026-05-10 on pi-zero — snapmulti-boot-tune.service was failing in
 # 87 ms with no diagnostic in the journal, every boot.
 if command -v nmcli &>/dev/null; then
-    eth_ip=$(ip -4 addr show eth0 2>/dev/null | awk '/inet /{print $2; exit}' || true)
+    # Race condition guard: NetworkManager activates eth0 DHCP in the same
+    # window where this service runs (After=docker.service is too loose).
+    # Observed on snapvideo 2026-05-31: eth0 DHCP `activated` at 01:16:45
+    # ↔ boot-tune started at 01:16:45 (same second). The probe below
+    # then saw eth0 without an IP yet → kept WiFi ON → both interfaces
+    # came up with IPs → dual-mDNS risk + `192.168.63.4 conflict with
+    # eth0 MAC` in NetworkManager logs.
+    #
+    # Carrier means "cable plugged in"; the IP probe waits for DHCP to
+    # actually complete. 15 s covers any modern DHCP server on a healthy
+    # LAN; on WiFi-only devices (no eth0) carrier is 0/missing and the
+    # loop is skipped entirely.
+    eth_carrier=0
+    if [[ -e /sys/class/net/eth0/carrier ]]; then
+        eth_carrier=$(cat /sys/class/net/eth0/carrier 2>/dev/null || echo 0)
+    fi
+    eth_ip=""
+    if [[ "$eth_carrier" == "1" ]]; then
+        for _ in $(seq 1 15); do
+            eth_ip=$(ip -4 addr show eth0 2>/dev/null | awk '/inet /{print $2; exit}' || true)
+            [[ -n "$eth_ip" ]] && break
+            sleep 1
+        done
+    fi
     if [[ -n "$eth_ip" ]]; then
         # Ethernet has an IP — safe to disable WiFi
         nmcli radio wifi off 2>/dev/null \
