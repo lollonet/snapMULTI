@@ -90,16 +90,27 @@ fi
 # idempotent (no restart when nothing changed) and best-effort (any
 # failure logs and continues without aborting boot-tune).
 # Guard against the carrier-only race in tune_avahi_daemon (system-tune.sh
-# line ~477 picks the wired iface on carrier alone, no IP check). If eth0
-# has carrier but DHCP hasn't completed, the WiFi-disable block above kept
-# wlan0 ON (it has the working IP), but tune_avahi_daemon would still pick
-# eth0 → `allow-interfaces=eth0` while eth0 has no usable address → mDNS
-# silent on both interfaces. Defer the reconcile to the next boot when
-# eth0 has either an IP or no cable.
-_eth_carrier="${eth_carrier:-0}"
-_eth_ip="${eth_ip:-}"
-if [[ "$_eth_carrier" == "1" && -z "$_eth_ip" ]]; then
-    logger -t boot-tune "Avahi reconcile deferred: eth0 has carrier but no IP — wlan0 is the active interface"
+# line ~477 picks the wired iface on carrier alone, no IP check). If any
+# wired interface has carrier but DHCP hasn't completed, the WiFi-disable
+# block above kept wlan0 ON (it has the working IP), but tune_avahi_daemon
+# would still pick the wired iface → `allow-interfaces=<wired>` while
+# wired has no usable address → mDNS silent on both interfaces.
+#
+# Scan eth*/en* (not just eth0) so the guard also covers x86_64 hosts
+# where the wired iface is `enp3s0`, `end0`, etc. — same naming pattern
+# tune_avahi_daemon itself iterates.
+_wired_iface_pending=false
+for _wif in /sys/class/net/eth* /sys/class/net/en*; do
+    [[ -e "$_wif" ]] || continue
+    _wname="${_wif##*/}"
+    if [[ "$(cat "$_wif/carrier" 2>/dev/null)" == "1" ]] && \
+       ! ip -4 addr show "$_wname" 2>/dev/null | grep -qE 'inet [0-9]'; then
+        _wired_iface_pending=true
+        break
+    fi
+done
+if "$_wired_iface_pending"; then
+    logger -t boot-tune "Avahi reconcile deferred: wired iface has carrier but no IP — wlan0 is the active interface"
 else
     for _sysT_candidate in \
         /opt/snapmulti/scripts/common/system-tune.sh \
