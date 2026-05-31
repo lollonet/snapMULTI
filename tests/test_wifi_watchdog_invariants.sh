@@ -39,6 +39,9 @@ check "set -euo pipefail" "grep -q '^set -euo pipefail' '$SCRIPT'"
 
 # Behaviour invariants
 check "skips on wired-only hosts via IPv4-address probe (carrier alone is too loose)" "grep -qE 'ip -4 addr show eth0' '$SCRIPT'"
+check "eth0 IPv4 probe is wrapped in a bounded retry loop (DHCP race guard)" "awk '/^for _ in \\\$\\(seq 1/{seen=1; bound=\$0} seen && /ip -4 addr show eth0/{ok=1; exit} END{exit !ok}' '$SCRIPT'"
+check "eth0 retry loop bound is at least 10 s (covers normal DHCP)" "grep -oE 'for _ in \\\$\\(seq 1 [0-9]+\\)' '$SCRIPT' | awk '{n=\$6; sub(/\\)/, \"\", n); exit !(n>=10)}'"
+check "WiFi admin-disabled state (nmcli radio wifi == disabled) → graceful exit" "grep -qE 'nmcli radio wifi.*grep.*disabled' '$SCRIPT'"
 check "detects missing wlan interface and exits" "grep -qE 'class/net/.*WIFI_IFACE' '$SCRIPT'"
 check "auto-detects gateway from default route" "grep -q 'ip -4 route show default' '$SCRIPT'"
 check "ping bound to WiFi interface (-I \$WIFI_IFACE)" "grep -qE 'ping.*-I.*WIFI_IFACE' '$SCRIPT'"

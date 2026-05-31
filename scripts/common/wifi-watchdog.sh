@@ -94,8 +94,32 @@ fi
 # (carrier=1, no DHCP) while real traffic still goes via wlan0 — this is
 # the actual state observed on snapvideo 2026-05-31 (eth0 carrier=1
 # but `default via 192.168.63.1 dev wlan0` in the route table).
-if ip -4 addr show eth0 2>/dev/null | grep -qE 'inet [0-9]'; then
-    log "exit: eth0 has an IPv4 address — WiFi watchdog not needed on wired hosts"
+#
+# Retry with a bounded wait so we don't race DHCP. The unit has
+# `After=NetworkManager.service network-online.target`, but on snapMULTI
+# `cmdline.txt` masks `NetworkManager-wait-online.service` (so the
+# target fires before NM has actually assigned an IP). Observed on
+# snapvideo 2026-05-31: the one-shot probe fired t+0 of boot, saw no
+# IP yet, fell through to the main loop → pinged the eth0 gateway via
+# `-I wlan0` (admin-disabled) → 10 × 60 s failures → systemctl reboot
+# → reboot loop every 10 min.
+for _ in $(seq 1 30); do
+    if ip -4 addr show eth0 2>/dev/null | grep -qE 'inet [0-9]'; then
+        log "exit: eth0 has an IPv4 address — WiFi watchdog not needed on wired hosts"
+        exit 0
+    fi
+    sleep 1
+done
+
+# Defense in depth: if the WiFi radio is admin-disabled (operator ran
+# `nmcli radio wifi off`, e.g. to force single-mDNS during debugging),
+# there is no WiFi to watchdog. Without this check the script would
+# proceed to ping the default gateway with `-I wlan0` (DOWN), fail
+# every poll, and eventually reboot — same loop the eth0 retry above
+# guards against in the most common case, but this catches the
+# "Ethernet host with cable unplugged + radio off" edge.
+if command -v nmcli &>/dev/null && nmcli radio wifi 2>/dev/null | grep -qx disabled; then
+    log "exit: WiFi radio is admin-disabled (nmcli) — nothing to watchdog"
     exit 0
 fi
 
