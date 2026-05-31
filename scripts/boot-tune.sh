@@ -77,6 +77,35 @@ if command -v nmcli &>/dev/null; then
     fi
 fi
 
+# ── Avahi allow-interfaces reconciliation ─────────────────────────
+# tune_avahi_daemon (from scripts/common/system-tune.sh) picks the
+# wired-carrier-priority interface and writes /etc/avahi/avahi-daemon.conf.
+# That decision was historically made ONCE at firstboot. If the user
+# later changed network topology (plugged/unplugged Ethernet, moved the
+# Pi between stanze), `allow-interfaces` was left stale — observed on
+# snapvideo 2026-05-31: firstboot ran wired-down → `allow-interfaces=wlan0`;
+# user later attached eth0 → wlan0 disabled → Avahi muto on both ifaces
+# (the only allowed interface is DOWN). Re-running at every boot keeps
+# the file aligned with the current carrier state. The function is
+# idempotent (no restart when nothing changed) and best-effort (any
+# failure logs and continues without aborting boot-tune).
+for _sysT_candidate in \
+    /opt/snapmulti/scripts/common/system-tune.sh \
+    /opt/snapclient/scripts/common/system-tune.sh; do
+    if [[ -f "$_sysT_candidate" ]]; then
+        # shellcheck source=common/system-tune.sh
+        # shellcheck disable=SC1091
+        if source "$_sysT_candidate" 2>/dev/null \
+           && declare -F tune_avahi_daemon >/dev/null 2>&1; then
+            tune_avahi_daemon "$(hostname)" \
+                || logger -t boot-tune -p warning "tune_avahi_daemon failed (non-fatal)"
+        else
+            logger -t boot-tune -p warning "system-tune.sh present but tune_avahi_daemon not defined — Avahi reconfigure skipped"
+        fi
+        break
+    fi
+done
+
 # ── Memory tuning: reduce swappiness for audio workloads ──────────
 # Default 60 is too aggressive — audio buffers should stay in RAM
 echo 10 > /proc/sys/vm/swappiness 2>/dev/null || true
