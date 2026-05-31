@@ -85,6 +85,8 @@ check "WantedBy=multi-user.target" "grep -q 'WantedBy=multi-user.target' '$SERVI
 echo
 echo "== firstboot.sh integration =="
 check "firstboot installs the script to /usr/local/bin/snapmulti-wifi-watchdog" "grep -qE 'install -m 755.*WIFI_WD_SCRIPT.*/usr/local/bin/snapmulti-wifi-watchdog' '$FIRSTBOOT'"
+check "firstboot install candidates include CLIENT_DIR path (client-only installs)" "grep -qE 'CLIENT_DIR/scripts/common/wifi-watchdog.sh' '$FIRSTBOOT'"
+check "firstboot WiFi watchdog comment confirms it covers ALL install types" "grep -qE 'WiFi.*ALL install types|all.*install.*type|client.*client-native|client.*equally vulnerable' '$FIRSTBOOT'"
 check "firstboot installs the service unit" "grep -qE 'snapmulti-wifi-watchdog.service.*etc/systemd/system' '$FIRSTBOOT'"
 check "firstboot enables (and starts) the service" "grep -qE 'systemctl enable.*snapmulti-wifi-watchdog' '$FIRSTBOOT'"
 
