@@ -103,13 +103,19 @@ fi
 # IP yet, fell through to the main loop → pinged the eth0 gateway via
 # `-I wlan0` (admin-disabled) → 10 × 60 s failures → systemctl reboot
 # → reboot loop every 10 min.
-for _ in $(seq 1 30); do
-    if ip -4 addr show eth0 2>/dev/null | grep -qE 'inet [0-9]'; then
-        log "exit: eth0 has an IPv4 address — WiFi watchdog not needed on wired hosts"
-        exit 0
-    fi
-    sleep 1
-done
+# Only poll for DHCP if eth0 actually exists. On WiFi-only hosts
+# (Pi Zero 2 W, Pi 5 without Ethernet HAT, x86_64 with `en*` interface
+# names — see CLAUDE.md non-goal on universal hardware support) the
+# retry loop would add 30 s of blocked startup time for nothing.
+if ip link show eth0 &>/dev/null; then
+    for _ in $(seq 1 30); do
+        if ip -4 addr show eth0 2>/dev/null | grep -qE 'inet [0-9]'; then
+            log "exit: eth0 has an IPv4 address — WiFi watchdog not needed on wired hosts"
+            exit 0
+        fi
+        sleep 1
+    done
+fi
 
 # Defense in depth: if the WiFi radio is admin-disabled (operator ran
 # `nmcli radio wifi off`, e.g. to force single-mDNS during debugging),
