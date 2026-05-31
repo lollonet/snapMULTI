@@ -1287,6 +1287,30 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
         log_info "MPD backup timer installed (daily to boot partition)"
     fi
 
+    # MPD incremental rescan trigger — nightly, only fires on NFS/SMB
+    # libraries where inotify (and therefore MPD's `auto_update yes`)
+    # silently does NOT detect new files added on the NAS.
+    MPD_UPDATE_SCRIPT=""
+    for _mpd_upd_candidate in \
+        "$COMMON/mpd-nfs-update.sh" \
+        "$SERVER_DIR/scripts/common/mpd-nfs-update.sh"; do
+        [[ -f "$_mpd_upd_candidate" ]] && MPD_UPDATE_SCRIPT="$_mpd_upd_candidate" && break
+    done
+    if [[ -n "$MPD_UPDATE_SCRIPT" ]]; then
+        install -m 755 "$MPD_UPDATE_SCRIPT" /usr/local/bin/mpd-nfs-update
+        mpd_upd_dir="$(dirname "$MPD_UPDATE_SCRIPT")"
+        if [[ -f "$mpd_upd_dir/snapmulti-mpd-update.service" && \
+              -f "$mpd_upd_dir/snapmulti-mpd-update.timer" ]]; then
+            install -m 0644 "$mpd_upd_dir/snapmulti-mpd-update.service" /etc/systemd/system/
+            install -m 0644 "$mpd_upd_dir/snapmulti-mpd-update.timer" /etc/systemd/system/
+            systemctl daemon-reload
+            systemctl enable snapmulti-mpd-update.timer
+            log_info "MPD nightly NFS-rescan timer installed (no-op on local libraries)"
+        else
+            log_warn "MPD nightly NFS-rescan: script installed but systemd units missing (partial staging) — timer NOT registered"
+        fi
+    fi
+
     STATE_BACKUP_SCRIPT=""
     for _state_bk_candidate in \
         "$COMMON/backup-snapmulti-state.sh" \
