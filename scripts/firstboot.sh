@@ -1364,6 +1364,37 @@ if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
     fi
 fi
 
+# WiFi connectivity watchdog — guards against brcmfmac firmware wedges on
+# the BCM43455 (Pi 4 WiFi chip). Pings the default gateway, nmcli-resets
+# on consecutive failures, reboots if soft recovery also fails. No-op on
+# Ethernet-only hosts (eth0 IPv4 address probe at script startup).
+#
+# Installed for ALL install types because every WiFi-attached snapMULTI
+# host is exposed: pure audio players (`client`, `client-native`) running
+# on Pi 4 WiFi are equally vulnerable to the firmware lockup, not just
+# servers. The script's own startup probe handles the wired-host case.
+WIFI_WD_SCRIPT=""
+for _wifi_wd_candidate in \
+    "$COMMON/wifi-watchdog.sh" \
+    "$SERVER_DIR/scripts/common/wifi-watchdog.sh" \
+    "$CLIENT_DIR/scripts/common/wifi-watchdog.sh"; do
+    [[ -f "$_wifi_wd_candidate" ]] && WIFI_WD_SCRIPT="$_wifi_wd_candidate" && break
+done
+if [[ -n "$WIFI_WD_SCRIPT" ]]; then
+    install -m 755 "$WIFI_WD_SCRIPT" /usr/local/bin/snapmulti-wifi-watchdog
+    wifi_wd_dir="$(dirname "$WIFI_WD_SCRIPT")"
+    if [[ -f "$wifi_wd_dir/snapmulti-wifi-watchdog.service" ]]; then
+        install -m 0644 "$wifi_wd_dir/snapmulti-wifi-watchdog.service" /etc/systemd/system/
+        systemctl daemon-reload
+        # `enable --now` on an already-enabled unit is idempotent — safe
+        # on `both` installs where this block runs once for the host.
+        systemctl enable --now snapmulti-wifi-watchdog.service
+        log_info "WiFi watchdog installed (no-op on Ethernet hosts)"
+    else
+        log_warn "WiFi watchdog: script installed but service unit missing — NOT enabled"
+    fi
+fi
+
 # Network music bind workaround for overlayroot recurse=0 (issue: NFS/SMB
 # mounts land at /media/root-ro/media/<src>-music in the merged root, so
 # /media/<src>-music ends up empty and MPD's bind-mount serves nothing).

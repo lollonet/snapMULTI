@@ -1,0 +1,38 @@
+[Unit]
+Description=WiFi connectivity watchdog for snapMULTI hosts on BCM43455
+# Order against NetworkManager so the watchdog never fights a
+# legitimate boot-time DHCP handshake.
+After=NetworkManager.service network-online.target
+Wants=NetworkManager.service
+# Don't start as part of emergency / rescue — those targets explicitly
+# don't want long-running probes.
+DefaultDependencies=yes
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/snapmulti-wifi-watchdog
+# Restart=on-failure: a graceful exit 0 (e.g. "eth0 has IPv4, no-op")
+# must not restart in a tight loop. Real crashes (status != 0) still
+# get caught. RestartSec=30 prevents tight loops on transient errors
+# (e.g. /opt/snapmulti/.env briefly missing during deploy).
+Restart=on-failure
+RestartSec=30
+# Watchdog itself must not crash the host. systemd-journald already
+# captures stdout/stderr; explicit StandardOutput=journal is just
+# documentation here.
+StandardOutput=journal
+StandardError=journal
+# Cap memory hard — a watchdog leaking is worse than no watchdog.
+MemoryMax=32M
+# Hardening: no privilege escalation, no new network namespaces, etc.
+# The script needs `ping`, `nmcli`, and `systemctl reboot` — that's all.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# Allow /boot/firmware writes only for the reboot marker; everything
+# else stays read-only.
+ReadWritePaths=/boot/firmware
+
+[Install]
+WantedBy=multi-user.target
