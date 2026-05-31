@@ -58,10 +58,12 @@ if command -v nmcli &>/dev/null; then
     fi
     eth_ip=""
     if [[ "$eth_carrier" == "1" ]]; then
-        for _ in $(seq 1 15); do
+        for i in $(seq 1 15); do
             eth_ip=$(ip -4 addr show eth0 2>/dev/null | awk '/inet /{print $2; exit}' || true)
             [[ -n "$eth_ip" ]] && break
-            sleep 1
+            # Don't sleep on the last iteration — it would add ~1 s of
+            # boot delay for nothing (the loop is about to exit anyway).
+            [[ "$i" -lt 15 ]] && sleep 1
         done
     fi
     if [[ -n "$eth_ip" ]]; then
