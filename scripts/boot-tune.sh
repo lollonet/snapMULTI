@@ -93,14 +93,24 @@ for _sysT_candidate in \
     /opt/snapmulti/scripts/common/system-tune.sh \
     /opt/snapclient/scripts/common/system-tune.sh; do
     if [[ -f "$_sysT_candidate" ]]; then
+        # Split the two failure modes so the journal points at the real
+        # cause when this block can't reconcile Avahi:
+        #   - source failure (syntax error in system-tune.sh, missing
+        #     helper sourced from inside, perm denied) → capture stderr
+        #     into the warning instead of `2>/dev/null` swallowing it
+        #   - source OK but function genuinely absent (stale install,
+        #     partial deploy) → distinct message
         # shellcheck source=common/system-tune.sh
         # shellcheck disable=SC1091
-        if source "$_sysT_candidate" 2>/dev/null \
-           && declare -F tune_avahi_daemon >/dev/null 2>&1; then
+        if ! source "$_sysT_candidate" 2>/tmp/boot-tune-source.err; then
+            logger -t boot-tune -p warning \
+                "failed to source system-tune.sh ($(cat /tmp/boot-tune-source.err 2>/dev/null)) — Avahi reconfigure skipped"
+        elif ! declare -F tune_avahi_daemon >/dev/null 2>&1; then
+            logger -t boot-tune -p warning \
+                "tune_avahi_daemon not defined in system-tune.sh — Avahi reconfigure skipped"
+        else
             tune_avahi_daemon "$(hostname)" \
                 || logger -t boot-tune -p warning "tune_avahi_daemon failed (non-fatal)"
-        else
-            logger -t boot-tune -p warning "system-tune.sh present but tune_avahi_daemon not defined — Avahi reconfigure skipped"
         fi
         break
     fi

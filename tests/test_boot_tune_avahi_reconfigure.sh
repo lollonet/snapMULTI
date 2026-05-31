@@ -38,6 +38,8 @@ check "candidate path /opt/snapclient/scripts/common/system-tune.sh" "grep -q '/
 check "candidates iterated in a for loop (server + client install symmetric)" "grep -qE 'for _sysT_candidate in' '$BOOT_TUNE'"
 check "sources the first existing candidate" "grep -qE 'source \"\\\$_sysT_candidate\"' '$BOOT_TUNE'"
 check "verifies tune_avahi_daemon is defined before calling (declare -F)" "grep -qE 'declare -F tune_avahi_daemon' '$BOOT_TUNE'"
+check "source-failure path is distinguished from declare-F-failure (separate warnings)" "grep -qE 'failed to source system-tune.sh' '$BOOT_TUNE' && grep -qE 'tune_avahi_daemon not defined' '$BOOT_TUNE'"
+check "source stderr is captured (not swallowed by 2>/dev/null)" "grep -qE '2>/tmp/boot-tune-source.err' '$BOOT_TUNE'"
 check "calls tune_avahi_daemon with hostname" "grep -qE 'tune_avahi_daemon \"\\\$\\(hostname\\)\"' '$BOOT_TUNE'"
 check "call has non-fatal fallback (\\|\\| logger ...)" "awk '/tune_avahi_daemon \"\\\$\\(hostname\\)\"/{found=1} found && /logger.*non-fatal/{ok=1; exit} END{exit !ok}' '$BOOT_TUNE'"
 check "break after first matching candidate (no double-source on both installs)" "awk '/for _sysT_candidate in/{in_loop=1} in_loop && /^[[:space:]]*break\$/{ok=1; exit} END{exit !ok}' '$BOOT_TUNE'"
