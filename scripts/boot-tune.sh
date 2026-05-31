@@ -89,32 +89,59 @@ fi
 # the file aligned with the current carrier state. The function is
 # idempotent (no restart when nothing changed) and best-effort (any
 # failure logs and continues without aborting boot-tune).
-for _sysT_candidate in \
-    /opt/snapmulti/scripts/common/system-tune.sh \
-    /opt/snapclient/scripts/common/system-tune.sh; do
-    if [[ -f "$_sysT_candidate" ]]; then
-        # Split the two failure modes so the journal points at the real
-        # cause when this block can't reconcile Avahi:
-        #   - source failure (syntax error in system-tune.sh, missing
-        #     helper sourced from inside, perm denied) → capture stderr
-        #     into the warning instead of `2>/dev/null` swallowing it
-        #   - source OK but function genuinely absent (stale install,
-        #     partial deploy) → distinct message
-        # shellcheck source=common/system-tune.sh
-        # shellcheck disable=SC1091
-        if ! source "$_sysT_candidate" 2>/tmp/boot-tune-source.err; then
-            logger -t boot-tune -p warning \
-                "failed to source system-tune.sh ($(cat /tmp/boot-tune-source.err 2>/dev/null)) — Avahi reconfigure skipped"
-        elif ! declare -F tune_avahi_daemon >/dev/null 2>&1; then
-            logger -t boot-tune -p warning \
-                "tune_avahi_daemon not defined in system-tune.sh — Avahi reconfigure skipped"
-        else
+# Guard against the carrier-only race in tune_avahi_daemon (system-tune.sh
+# line ~477 picks the wired iface on carrier alone, no IP check). If eth0
+# has carrier but DHCP hasn't completed, the WiFi-disable block above kept
+# wlan0 ON (it has the working IP), but tune_avahi_daemon would still pick
+# eth0 → `allow-interfaces=eth0` while eth0 has no usable address → mDNS
+# silent on both interfaces. Defer the reconcile to the next boot when
+# eth0 has either an IP or no cable.
+_eth_carrier="${eth_carrier:-0}"
+_eth_ip="${eth_ip:-}"
+if [[ "$_eth_carrier" == "1" && -z "$_eth_ip" ]]; then
+    logger -t boot-tune "Avahi reconcile deferred: eth0 has carrier but no IP — wlan0 is the active interface"
+else
+    for _sysT_candidate in \
+        /opt/snapmulti/scripts/common/system-tune.sh \
+        /opt/snapclient/scripts/common/system-tune.sh; do
+        if [[ -f "$_sysT_candidate" ]]; then
+            # Split the two failure modes so the journal points at the real
+            # cause when this block can't reconcile Avahi:
+            #   - source failure (syntax error in system-tune.sh, missing
+            #     helper sourced from inside, perm denied) → capture stderr
+            #     into the warning instead of `2>/dev/null` swallowing it
+            #   - source OK but function genuinely absent (stale install,
+            #     partial deploy) → distinct message
+            # Use mktemp so the predictable-path leak / cross-boot stale
+            # content of /tmp/boot-tune-source.err is gone.
+            _err=$(mktemp -t boot-tune-source.XXXXXX.err 2>/dev/null \
+                   || mktemp /tmp/boot-tune-source.XXXXXX.err)
+            # shellcheck source=common/system-tune.sh
+            # shellcheck disable=SC1091
+            if ! source "$_sysT_candidate" 2>"$_err"; then
+                logger -t boot-tune -p warning \
+                    "failed to source system-tune.sh ($(cat "$_err" 2>/dev/null)) — Avahi reconfigure skipped"
+                rm -f "$_err"
+                # Next candidate may load cleanly — don't break the loop.
+                continue
+            fi
+            rm -f "$_err"
+            if ! declare -F tune_avahi_daemon >/dev/null 2>&1; then
+                logger -t boot-tune -p warning \
+                    "tune_avahi_daemon not defined in system-tune.sh — Avahi reconfigure skipped"
+                # System-tune.sh sourced cleanly but lacks the function.
+                # The next candidate would be the symmetric install path
+                # (server vs client) and would have the same content from
+                # the same git source, so trying it would be pointless.
+                break
+            fi
             tune_avahi_daemon "$(hostname)" \
                 || logger -t boot-tune -p warning "tune_avahi_daemon failed (non-fatal)"
+            # Success — don't try the second candidate.
+            break
         fi
-        break
-    fi
-done
+    done
+fi
 
 # ── Memory tuning: reduce swappiness for audio workloads ──────────
 # Default 60 is too aggressive — audio buffers should stay in RAM

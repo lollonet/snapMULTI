@@ -39,11 +39,15 @@ check "candidates iterated in a for loop (server + client install symmetric)" "g
 check "sources the first existing candidate" "grep -qE 'source \"\\\$_sysT_candidate\"' '$BOOT_TUNE'"
 check "verifies tune_avahi_daemon is defined before calling (declare -F)" "grep -qE 'declare -F tune_avahi_daemon' '$BOOT_TUNE'"
 check "source-failure path is distinguished from declare-F-failure (separate warnings)" "grep -qE 'failed to source system-tune.sh' '$BOOT_TUNE' && grep -qE 'tune_avahi_daemon not defined' '$BOOT_TUNE'"
-check "source stderr is captured (not swallowed by 2>/dev/null)" "grep -qE '2>/tmp/boot-tune-source.err' '$BOOT_TUNE'"
+check "source stderr is captured (not swallowed by 2>/dev/null)" "grep -qE '2>\"\\\$_err\"' '$BOOT_TUNE'"
 check "calls tune_avahi_daemon with hostname" "grep -qE 'tune_avahi_daemon \"\\\$\\(hostname\\)\"' '$BOOT_TUNE'"
 check "call has non-fatal fallback (\\|\\| logger ...)" "awk '/tune_avahi_daemon \"\\\$\\(hostname\\)\"/{found=1} found && /logger.*non-fatal/{ok=1; exit} END{exit !ok}' '$BOOT_TUNE'"
 check "break after first matching candidate (no double-source on both installs)" "awk '/for _sysT_candidate in/{in_loop=1} in_loop && /^[[:space:]]*break\$/{ok=1; exit} END{exit !ok}' '$BOOT_TUNE'"
-check "Avahi reconcile runs AFTER the WiFi disable/enable block (so carrier is settled)" "awk '/^if command -v nmcli/{nmcli_line=NR} /tune_avahi_daemon/{avahi_line=NR} END{exit !(avahi_line>nmcli_line)}' '$BOOT_TUNE'"
+check "Avahi reconcile runs AFTER the WiFi disable/enable block (so carrier is settled)" "awk '/^if command -v nmcli/{nmcli_line=NR} /tune_avahi_daemon/ && !avahi_line{avahi_line=NR} END{exit !(avahi_line>nmcli_line)}' '$BOOT_TUNE'"
+check "skip-reconcile guard: eth0 has carrier but no IP defers to next boot (carrier+IP race fix)" "awk '/eth_carrier.*==.*1/{found=1} found && /-z.*eth_ip/{ok=1; exit} END{exit !ok}' '$BOOT_TUNE'"
+check "source stderr file uses mktemp (no predictable /tmp/boot-tune-source.err leak)" "grep -qE 'mktemp.*boot-tune-source' '$BOOT_TUNE'"
+check "source-failure path does NOT break out of the candidate loop (next candidate tried)" "awk '/failed to source system-tune.sh/{f=1} f && /continue/{ok=1; exit} f && /^[[:space:]]*break[[:space:]]*\$/{exit !ok} END{exit !ok}' '$BOOT_TUNE'"
+check "success path breaks the loop (no double-tune on both-mode installs)" "awk '/tune_avahi_daemon \"\\\$\\(hostname\\)\"/{f=1} f && /^[[:space:]]*break[[:space:]]*\$/{ok=1; exit} END{exit !ok}' '$BOOT_TUNE'"
 check "shellcheck SC1091 disabled inline (sourced file path not statically checkable)" "grep -qE 'shellcheck disable=SC1091' '$BOOT_TUNE'"
 
 echo
