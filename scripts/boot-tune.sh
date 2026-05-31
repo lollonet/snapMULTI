@@ -77,6 +77,83 @@ if command -v nmcli &>/dev/null; then
     fi
 fi
 
+# ── Avahi allow-interfaces reconciliation ─────────────────────────
+# tune_avahi_daemon (from scripts/common/system-tune.sh) picks the
+# wired-carrier-priority interface and writes /etc/avahi/avahi-daemon.conf.
+# That decision was historically made ONCE at firstboot. If the user
+# later changed network topology (plugged/unplugged Ethernet, moved the
+# Pi between stanze), `allow-interfaces` was left stale — observed on
+# snapvideo 2026-05-31: firstboot ran wired-down → `allow-interfaces=wlan0`;
+# user later attached eth0 → wlan0 disabled → Avahi muto on both ifaces
+# (the only allowed interface is DOWN). Re-running at every boot keeps
+# the file aligned with the current carrier state. The function is
+# idempotent (no restart when nothing changed) and best-effort (any
+# failure logs and continues without aborting boot-tune).
+# Guard against the carrier-only race in tune_avahi_daemon (system-tune.sh
+# line ~477 picks the wired iface on carrier alone, no IP check). If any
+# wired interface has carrier but DHCP hasn't completed, the WiFi-disable
+# block above kept wlan0 ON (it has the working IP), but tune_avahi_daemon
+# would still pick the wired iface → `allow-interfaces=<wired>` while
+# wired has no usable address → mDNS silent on both interfaces.
+#
+# Scan eth*/en* (not just eth0) so the guard also covers x86_64 hosts
+# where the wired iface is `enp3s0`, `end0`, etc. — same naming pattern
+# tune_avahi_daemon itself iterates.
+_wired_iface_pending=false
+for _wif in /sys/class/net/eth* /sys/class/net/en*; do
+    [[ -e "$_wif" ]] || continue
+    _wname="${_wif##*/}"
+    if [[ "$(cat "$_wif/carrier" 2>/dev/null)" == "1" ]] && \
+       ! ip -4 addr show "$_wname" 2>/dev/null | grep -qE 'inet [0-9]'; then
+        _wired_iface_pending=true
+        break
+    fi
+done
+if "$_wired_iface_pending"; then
+    logger -t boot-tune "Avahi reconcile deferred: wired iface has carrier but no IP — wlan0 is the active interface"
+else
+    for _sysT_candidate in \
+        /opt/snapmulti/scripts/common/system-tune.sh \
+        /opt/snapclient/scripts/common/system-tune.sh; do
+        if [[ -f "$_sysT_candidate" ]]; then
+            # Split the two failure modes so the journal points at the real
+            # cause when this block can't reconcile Avahi:
+            #   - source failure (syntax error in system-tune.sh, missing
+            #     helper sourced from inside, perm denied) → capture stderr
+            #     into the warning instead of `2>/dev/null` swallowing it
+            #   - source OK but function genuinely absent (stale install,
+            #     partial deploy) → distinct message
+            # Use mktemp so the predictable-path leak / cross-boot stale
+            # content of /tmp/boot-tune-source.err is gone.
+            _err=$(mktemp -t boot-tune-source.XXXXXX.err 2>/dev/null \
+                   || mktemp /tmp/boot-tune-source.XXXXXX.err)
+            # shellcheck source=common/system-tune.sh
+            # shellcheck disable=SC1091
+            if ! source "$_sysT_candidate" 2>"$_err"; then
+                logger -t boot-tune -p warning \
+                    "failed to source system-tune.sh ($(cat "$_err" 2>/dev/null)) — Avahi reconfigure skipped"
+                rm -f "$_err"
+                # Next candidate may load cleanly — don't break the loop.
+                continue
+            fi
+            rm -f "$_err"
+            if ! declare -F tune_avahi_daemon >/dev/null 2>&1; then
+                logger -t boot-tune -p warning \
+                    "tune_avahi_daemon not defined in system-tune.sh — Avahi reconfigure skipped"
+                # System-tune.sh sourced cleanly but lacks the function.
+                # The next candidate would be the symmetric install path
+                # (server vs client) and would have the same content from
+                # the same git source, so trying it would be pointless.
+                break
+            fi
+            tune_avahi_daemon "$(hostname)" \
+                || logger -t boot-tune -p warning "tune_avahi_daemon failed (non-fatal)"
+            # Success — don't try the second candidate.
+            break
+        fi
+    done
+fi
+
 # ── Memory tuning: reduce swappiness for audio workloads ──────────
 # Default 60 is too aggressive — audio buffers should stay in RAM
 echo 10 > /proc/sys/vm/swappiness 2>/dev/null || true

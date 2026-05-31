@@ -7,18 +7,29 @@
 #
 # Requires: scripts/common/logging.sh (info, warn, ok, error)
 
-# Guard: source logging.sh + cmdline-manager.sh if not already loaded
-if ! command -v info &>/dev/null; then
+# Guard: source logging.sh + cmdline-manager.sh + device-detect.sh
+# if not already loaded.
+#
+# CRITICAL — use `declare -F` (shell function lookup), NOT `command -v`.
+# `command -v info` also resolves /usr/bin/info on Debian (the GNU info
+# reader binary), so the guard would return true in any fresh bash
+# context where logging.sh has never been sourced (e.g. boot-tune.sh
+# calling tune_avahi_daemon). Result: logging.sh skipped, `ok()` /
+# `warn()` / `error()` undefined, `ok()` calls fail with exit 127 →
+# tune_avahi_daemon returns 127 → `|| logger ... failed (non-fatal)`
+# fires at EVERY boot, even when Avahi was correctly updated. Observed
+# 2026-05-31 from PR #565 review.
+if ! declare -F info &>/dev/null; then
     TUNE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     # shellcheck source=logging.sh
     source "$TUNE_DIR/logging.sh"
 fi
-if ! command -v cmdline_path &>/dev/null; then
+if ! declare -F cmdline_path &>/dev/null; then
     TUNE_DIR="${TUNE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
     # shellcheck source=cmdline-manager.sh
     source "$TUNE_DIR/cmdline-manager.sh"
 fi
-if ! command -v is_pi_zero_2w &>/dev/null; then
+if ! declare -F is_pi_zero_2w &>/dev/null; then
     TUNE_DIR="${TUNE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
     # shellcheck source=device-detect.sh
     source "$TUNE_DIR/device-detect.sh"
