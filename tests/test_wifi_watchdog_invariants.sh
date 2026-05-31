@@ -69,6 +69,13 @@ for knob in WIFI_WATCHDOG_INTERVAL WIFI_WATCHDOG_SOFT_FAILURES WIFI_WATCHDOG_HAR
     check "reads .env knob $knob" "grep -q '$knob' '$SCRIPT'"
 done
 
+# Numeric knobs MUST be integer-validated — a non-integer override
+# resolves to 0 in `(( ))` and would fire hard_recovery (reboot) on the
+# first poll. Non-numeric INTERVAL also crashes `sleep` under `set -e`.
+for knob in WIFI_WATCHDOG_INTERVAL WIFI_WATCHDOG_SOFT_FAILURES WIFI_WATCHDOG_HARD_FAILURES; do
+    check "numeric knob $knob is integer-validated before assignment" "awk -v k='$knob' '\$0 ~ \"_read_env \\\"\"k\"\\\"\"{found=1; next} found && /=~ \\^\\[0-9\\]\\+\\\$/{ok=1; exit} END{exit !ok}' '$SCRIPT'"
+done
+
 echo
 echo "== snapmulti-wifi-watchdog.service =="
 check "service file exists" "[[ -f '$SERVICE' ]]"

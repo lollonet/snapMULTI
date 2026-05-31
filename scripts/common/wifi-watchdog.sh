@@ -68,9 +68,20 @@ if [[ -n "$INSTALL_DIR" && -f "$INSTALL_DIR/.env" ]]; then
             || true)
         printf '%s' "$val"
     }
-    _v=$(_read_env "WIFI_WATCHDOG_INTERVAL"); [[ -n "$_v" ]] && INTERVAL="$_v"
-    _v=$(_read_env "WIFI_WATCHDOG_SOFT_FAILURES"); [[ -n "$_v" ]] && SOFT_FAILURES="$_v"
-    _v=$(_read_env "WIFI_WATCHDOG_HARD_FAILURES"); [[ -n "$_v" ]] && HARD_FAILURES="$_v"
+    # Integer-validate the numeric knobs. A non-integer override (e.g.
+    # `WIFI_WATCHDOG_HARD_FAILURES=10s` from a typo or unsubstituted
+    # template variable) silently resolves to 0 inside `(( ))`, which
+    # makes `(( failures >= HARD_FAILURES ))` true on the first iteration
+    # and fires hard_recovery → reboot. A non-numeric INTERVAL crashes
+    # `sleep` under `set -e`. Both failure modes are far worse than
+    # falling back to the built-in defaults.
+    _v=$(_read_env "WIFI_WATCHDOG_INTERVAL")
+    [[ -n "$_v" && "$_v" =~ ^[0-9]+$ ]] && INTERVAL="$_v"
+    _v=$(_read_env "WIFI_WATCHDOG_SOFT_FAILURES")
+    [[ -n "$_v" && "$_v" =~ ^[0-9]+$ ]] && SOFT_FAILURES="$_v"
+    _v=$(_read_env "WIFI_WATCHDOG_HARD_FAILURES")
+    [[ -n "$_v" && "$_v" =~ ^[0-9]+$ ]] && HARD_FAILURES="$_v"
+    # TARGET / IFACE are strings, no integer constraint.
     _v=$(_read_env "WIFI_WATCHDOG_TARGET"); [[ -n "$_v" ]] && TARGET="$_v"
     _v=$(_read_env "WIFI_WATCHDOG_IFACE"); [[ -n "$_v" ]] && WIFI_IFACE="$_v"
 fi
