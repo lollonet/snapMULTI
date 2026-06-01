@@ -59,23 +59,31 @@ persist_overlayroot_disabled() {
     fi
 }
 
-# Rebuild initramfs for the running kernel so the overlay module is reachable
-# by modprobe at boot. Fixes the snapdigi-class failure where modules.dep in
-# the cached initramfs is stale (only ~200 bytes) and init-bottom/overlayroot
-# aborts with `[failure]: Unable to find a driver. searched: overlay overlayfs`.
+# Rebuild initramfs for every installed kernel so the overlay module is
+# reachable by modprobe at boot. Fixes the snapdigi-class failure where
+# modules.dep in the cached initramfs is stale (~200 bytes) and
+# init-bottom/overlayroot aborts with `[failure]: Unable to find a driver.
+# searched: overlay overlayfs`.
 #
-# PR #317 lesson — see system-tune.sh history — this used to be a silent
-# `update-initramfs -u -k all >/dev/null 2>&1`; the rebuild raced with
-# raspi-config's own rebuild and aborted with "failed to determine device for
-# /". Two fixes baked in here:
+# Why iterate over /lib/modules/* instead of `update-initramfs -u -k $(uname -r)`:
+# during snapMULTI firstboot finalize, `uname -r` is the kernel the image
+# booted with (e.g. 6.12.75) — but `apt full-upgrade` earlier in the same
+# firstboot installs a newer kernel (e.g. 6.18.29) which becomes the BOOT
+# target at next reboot. Rebuilding only the running kernel leaves the
+# next-boot kernel's initramfs stale → overlayroot still fails on first
+# reflash post-upgrade. Observed on snapdigi 2026-06-01: $(uname -r) was
+# 6.12.75, fix landed on 6.12.75's initramfs, device rebooted into 6.18.29
+# whose modules.dep was still the truncated 204-byte raspi-config artefact
+# → ext4 fallback persisted.
+#
+# PR #317 lesson — see system-tune.sh history — a silent
+# `update-initramfs -u -k all >/dev/null 2>&1` raced with raspi-config's own
+# rebuild and aborted with "failed to determine device for /". Two guards
+# baked in here:
 #   1. Run AFTER raspi-config has settled (caller's responsibility).
-#   2. Capture output to the unified install log so a future race is visible,
-#      and use `update-initramfs -u -k $(uname -r)` (running kernel only)
-#      instead of `-k all` to skip the cross-kernel paths.
+#   2. Capture output to the unified install log so a future race is visible
+#      (the original bug was the `>/dev/null 2>&1` that hid it).
 ensure_overlayroot_initramfs_ready() {
-    local kver
-    kver="$(uname -r)"
-
     local log_target="${UNIFIED_LOG:-/dev/null}"
 
     if ! command -v depmod >/dev/null 2>&1; then
@@ -87,17 +95,33 @@ ensure_overlayroot_initramfs_ready() {
         return 0
     fi
 
-    info "overlayroot: refreshing modules.dep + initramfs for $kver"
+    local kver_dir kver any_failed=0 any_done=0
+    for kver_dir in /lib/modules/*; do
+        [[ -d "$kver_dir" ]] || continue
+        kver="${kver_dir##*/}"
 
-    if ! depmod -a "$kver" >> "$log_target" 2>&1; then
-        warn "overlayroot: depmod -a $kver failed (see $log_target)"
+        info "overlayroot: refreshing modules.dep + initramfs for $kver"
+
+        if ! depmod -a "$kver" >> "$log_target" 2>&1; then
+            warn "overlayroot: depmod -a $kver failed (see $log_target)"
+            any_failed=1
+            continue
+        fi
+
+        if ! update-initramfs -u -k "$kver" >> "$log_target" 2>&1; then
+            warn "overlayroot: update-initramfs -u -k $kver failed (see $log_target)"
+            any_failed=1
+            continue
+        fi
+
+        ok "overlayroot: initramfs rebuilt for $kver (overlay module reachable)"
+        any_done=1
+    done
+
+    if (( any_done == 0 )); then
+        warn "overlayroot: no kernel directories found under /lib/modules — initramfs not refreshed"
         return 1
     fi
 
-    if ! update-initramfs -u -k "$kver" >> "$log_target" 2>&1; then
-        warn "overlayroot: update-initramfs -u -k $kver failed (see $log_target)"
-        return 1
-    fi
-
-    ok "overlayroot: initramfs rebuilt for $kver (overlay module reachable)"
+    return "$any_failed"
 }
