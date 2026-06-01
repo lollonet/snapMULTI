@@ -702,8 +702,17 @@ SYSDEOF
                         break
                     fi
                 done
-                install_initramfs_lzma_hook "$_hook_src" || \
-                    warn "overlayroot: lzma hook install failed — overlay may not load on first boot"
+                # Empty _hook_src means none of the candidates resolved — the
+                # library returns 0 (non-fatal by design), so the `||` branch
+                # would never fire. Branch on empty explicitly so the operator
+                # is told the source is missing, not just that the install
+                # silently produced an initramfs without liblzma.
+                if [[ -n "$_hook_src" ]]; then
+                    install_initramfs_lzma_hook "$_hook_src" || \
+                        warn "overlayroot: lzma hook install failed — overlay may not load on first boot"
+                else
+                    warn "overlayroot: snapmulti-lzma hook source not found — initramfs will lack liblzma, overlay may not load on first boot"
+                fi
 
                 ensure_overlayroot_initramfs_ready || \
                     warn "overlayroot: initramfs refresh failed — first boot may not activate overlay"

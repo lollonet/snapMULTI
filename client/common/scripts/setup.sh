@@ -1628,8 +1628,16 @@ SYSDEOF
                 break
             fi
         done
-        install_initramfs_lzma_hook "$_hook_src" || \
-            log_progress "WARNING: lzma hook install failed — overlay may not load on first boot"
+        # Empty _hook_src means none of the candidates resolved — the library
+        # returns 0 in that path (non-fatal by design for older installs), so
+        # the `||` branch would never fire. Branch on empty explicitly so the
+        # operator sees the skip on the TUI channel, not just the install log.
+        if [[ -n "$_hook_src" ]]; then
+            install_initramfs_lzma_hook "$_hook_src" || \
+                log_progress "WARNING: lzma hook install failed — overlay may not load on first boot"
+        else
+            log_progress "WARNING: snapmulti-lzma hook source not found — initramfs will lack liblzma, overlay may not load on first boot"
+        fi
         ensure_overlayroot_initramfs_ready || \
             log_progress "WARNING: initramfs refresh failed — first boot may not activate overlay"
 

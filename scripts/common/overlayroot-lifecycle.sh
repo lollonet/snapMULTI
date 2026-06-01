@@ -126,10 +126,11 @@ ensure_overlayroot_initramfs_ready() {
         return 0
     fi
 
-    local kver_dir kver any_failed=0 any_done=0
+    local kver_dir kver any_failed=0 any_attempted=0
     for kver_dir in /lib/modules/*; do
         [[ -d "$kver_dir" ]] || continue
         kver="${kver_dir##*/}"
+        any_attempted=1
 
         info "overlayroot: refreshing modules.dep + initramfs for $kver"
 
@@ -146,10 +147,9 @@ ensure_overlayroot_initramfs_ready() {
         fi
 
         ok "overlayroot: initramfs rebuilt for $kver (overlay module reachable)"
-        any_done=1
     done
 
-    if (( any_done == 0 )); then
+    if (( any_attempted == 0 )); then
         warn "overlayroot: no kernel directories found under /lib/modules — initramfs not refreshed"
         return 1
     fi

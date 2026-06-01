@@ -119,17 +119,23 @@ SYSDEOF
         # by `apt purge initramfs-tools-core` (or hand-removed the hook)
         # before re-enabling — without the hook, the next boot lands in
         # ext4 fallback with the snapdigi-class failure.
+        _found_hook=0
         for _hook_cand in \
             "$_RO_MODE_DIR/../../../scripts/common/initramfs-hooks/snapmulti-lzma" \
             "$_RO_MODE_DIR/../../scripts/common/initramfs-hooks/snapmulti-lzma" \
             "/opt/snapclient/scripts/common/initramfs-hooks/snapmulti-lzma" \
             "/opt/snapmulti/scripts/common/initramfs-hooks/snapmulti-lzma"; do
             if [[ -f "$_hook_cand" ]]; then
-                install_initramfs_lzma_hook "$_hook_cand" || true
+                install_initramfs_lzma_hook "$_hook_cand" || \
+                    echo "WARNING: lzma hook install failed — overlay may not activate"
+                _found_hook=1
                 break
             fi
         done
         unset _hook_cand
+        (( _found_hook )) || \
+            echo "WARNING: snapmulti-lzma hook source not found — initramfs rebuilt without liblzma, overlay may not activate"
+        unset _found_hook
         ensure_overlayroot_initramfs_ready || \
             echo "WARNING: initramfs refresh failed — next boot may not activate overlay"
 
