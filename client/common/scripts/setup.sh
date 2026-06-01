@@ -1611,6 +1611,28 @@ SYSDEOF
         echo "  - System will boot normally (writable root)"
         echo ""
     else
+        # Initramfs side: install snapmulti-lzma hook (so kmod can decompress
+        # .ko.xz inside initramfs) and rebuild for every installed kernel
+        # (apt full-upgrade may have installed a kernel newer than $(uname -r)
+        # that becomes the next-boot target). Without these two steps the Pi 4
+        # client path boots ext4 with `Unable to find driver` in
+        # /run/initramfs/overlayroot.log. See overlayroot-lifecycle.sh for the
+        # full PR #317 history and the snapdigi 2026-06-01 root-cause.
+        local _hook_src=""
+        for _cand in \
+            "$COMMON_MODULE_DIR/initramfs-hooks/snapmulti-lzma" \
+            "/opt/snapclient/scripts/common/initramfs-hooks/snapmulti-lzma" \
+            "/opt/snapmulti/scripts/common/initramfs-hooks/snapmulti-lzma"; do
+            if [[ -f "$_cand" ]]; then
+                _hook_src="$_cand"
+                break
+            fi
+        done
+        install_initramfs_lzma_hook "$_hook_src" || \
+            log_progress "WARNING: lzma hook install failed — overlay may not load on first boot"
+        ensure_overlayroot_initramfs_ready || \
+            log_progress "WARNING: initramfs refresh failed — first boot may not activate overlay"
+
         echo "Read-only filesystem configured"
         echo "  - Docker storage driver: reconciled at boot from actual root mount state"
         echo "  - SSH host keys: persisted"

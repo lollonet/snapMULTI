@@ -584,6 +584,12 @@ copy_client_files() {
     for _shared in install-deps.sh install-docker.sh system-tune.sh overlayroot-lifecycle.sh unified-log.sh logging.sh sanitize.sh systemd-snippets.sh; do
         [[ -f "$SCRIPT_DIR/common/$_shared" ]] && cp "$SCRIPT_DIR/common/$_shared" "$dest/scripts/common/"
     done
+    # initramfs-hooks/: shipped to client install so overlayroot-lifecycle's
+    # install_initramfs_lzma_hook can find snapmulti-lzma at finalize time.
+    if [[ -d "$SCRIPT_DIR/common/initramfs-hooks" ]]; then
+        mkdir -p "$dest/scripts/common/initramfs-hooks"
+        cp "$SCRIPT_DIR/common/initramfs-hooks/"* "$dest/scripts/common/initramfs-hooks/"
+    fi
     # boot-tune.sh is a server script but client also needs it for boot-time tuning
     [[ -f "$SCRIPT_DIR/boot-tune.sh" ]] && cp "$SCRIPT_DIR/boot-tune.sh" "$dest/scripts/"
     [[ -f "$SCRIPT_DIR/docker-driver-reconcile.sh" ]] && cp "$SCRIPT_DIR/docker-driver-reconcile.sh" "$dest/scripts/"

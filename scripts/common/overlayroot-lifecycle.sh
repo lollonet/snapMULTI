@@ -83,6 +83,37 @@ persist_overlayroot_disabled() {
 #   1. Run AFTER raspi-config has settled (caller's responsibility).
 #   2. Capture output to the unified install log so a future race is visible
 #      (the original bug was the `>/dev/null 2>&1` that hid it).
+# Install /etc/initramfs-tools/hooks/snapmulti-lzma so the next
+# update-initramfs bundles liblzma.so.5 into the generated image. Required
+# because kmod inside initramfs is linked against liblzma and needs it to
+# decompress .ko.xz modules — without it, `modprobe -qb overlay` fails with
+# "xz: can't load and resolve symbols" and init-bottom/overlayroot falls
+# back to ext4 on next boot. Observed live on snapdigi 2026-06-01.
+#
+# The hook file itself lives in scripts/common/initramfs-hooks/snapmulti-lzma
+# (shipped to both /opt/snapmulti/ and /opt/snapclient/ via prepare-sd.sh).
+# Caller passes the source path; missing-source is a non-fatal warning so an
+# operator running ro-mode on an older install doesn't get hard-blocked.
+install_initramfs_lzma_hook() {
+    local hook_src="${1:-}"
+    local hook_dst="/etc/initramfs-tools/hooks/snapmulti-lzma"
+
+    if [[ -z "$hook_src" ]]; then
+        warn "overlayroot: no initramfs lzma hook source provided — skipping"
+        return 0
+    fi
+    if [[ ! -f "$hook_src" ]]; then
+        warn "overlayroot: initramfs lzma hook source missing at $hook_src"
+        return 0
+    fi
+
+    install -m 755 "$hook_src" "$hook_dst" || {
+        warn "overlayroot: failed to install $hook_dst"
+        return 1
+    }
+    ok "overlayroot: initramfs lzma hook installed ($hook_dst)"
+}
+
 ensure_overlayroot_initramfs_ready() {
     local log_target="${UNIFIED_LOG:-/dev/null}"
 

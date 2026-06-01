@@ -112,6 +112,27 @@ SYSDEOF
             echo "ERROR: Failed to persist overlayroot configuration."
             exit 1
         fi
+        # Re-install the snapmulti-lzma initramfs hook and rebuild every
+        # installed kernel's initramfs. Idempotent: if the hook is already
+        # there with the same content, install -m 755 just overwrites it.
+        # Necessary because a user may have run `ro-mode disable` followed
+        # by `apt purge initramfs-tools-core` (or hand-removed the hook)
+        # before re-enabling — without the hook, the next boot lands in
+        # ext4 fallback with the snapdigi-class failure.
+        for _hook_cand in \
+            "$_RO_MODE_DIR/../../../scripts/common/initramfs-hooks/snapmulti-lzma" \
+            "$_RO_MODE_DIR/../../scripts/common/initramfs-hooks/snapmulti-lzma" \
+            "/opt/snapclient/scripts/common/initramfs-hooks/snapmulti-lzma" \
+            "/opt/snapmulti/scripts/common/initramfs-hooks/snapmulti-lzma"; do
+            if [[ -f "$_hook_cand" ]]; then
+                install_initramfs_lzma_hook "$_hook_cand" || true
+                break
+            fi
+        done
+        unset _hook_cand
+        ensure_overlayroot_initramfs_ready || \
+            echo "WARNING: initramfs refresh failed — next boot may not activate overlay"
+
         echo "Read-only mode enabled. Reboot to activate:"
         echo "  sudo reboot"
         ;;

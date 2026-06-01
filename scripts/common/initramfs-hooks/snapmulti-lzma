@@ -1,0 +1,27 @@
+#!/bin/sh
+# snapmulti-lzma — initramfs-tools hook
+#
+# Ensures liblzma.so.5 is bundled into the initramfs so kmod can decompress
+# .ko.xz modules at boot. On trixie Pi 4 client-only installs (e.g. snapdigi
+# 2026-06-01), the default mkinitramfs flow ships an initramfs WITHOUT
+# liblzma — `modprobe -qb overlay` then fails with
+#   "xz: can't load and resolve symbols (No such file or directory)"
+# and init-bottom/overlayroot falls back to ext4 silently. Server installs
+# (snapvideo) get liblzma by chance because their heavier finalize ceremony
+# triggers additional `update-initramfs` runs with overlay already loaded.
+#
+# This hook closes the gap so both server and client get a uniform
+# initramfs regardless of finalize ceremony length.
+
+set -e
+
+[ "$1" = prereqs ] && exit 0
+
+# shellcheck disable=SC1091
+. /usr/share/initramfs-tools/hook-functions
+
+for _so in /usr/lib/*/liblzma.so.5 /lib/*/liblzma.so.5; do
+    if [ -f "$_so" ]; then
+        copy_exec "$_so"
+    fi
+done

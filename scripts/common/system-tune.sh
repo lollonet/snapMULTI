@@ -673,18 +673,38 @@ SYSDEOF
     if command -v raspi-config &>/dev/null; then
         if raspi-config nonint do_overlayfs 0; then
             if persist_overlayroot_enabled; then
-                # raspi-config's own `update-initramfs -c -k all` runs as
-                # part of do_overlayfs 0, but on some image+kernel combos
-                # (observed 2026-06-01 on snapdigi, kernel 6.18.29) the
-                # resulting modules.dep in initramfs is stale/truncated
-                # (~204 bytes), so init-bottom/overlayroot's `modprobe
-                # overlay` fails at boot with `Unable to find a driver`
-                # and the rootfs falls back to ext4. Re-run depmod +
-                # update-initramfs for the running kernel only, with
-                # output captured (PR #317 history: silent extra rebuild
-                # caused "failed to determine device for /" races). See
-                # ensure_overlayroot_initramfs_ready in
-                # scripts/common/overlayroot-lifecycle.sh.
+                # Two known initramfs-side gaps on trixie + Pi 4 client paths:
+                #
+                # 1. liblzma missing — kmod inside initramfs can't decompress
+                #    .ko.xz modules ("xz: can't load and resolve symbols");
+                #    `modprobe -qb overlay` fails → ext4 fallback. Server
+                #    finalize gets it by accident, client doesn't. Hook
+                #    scripts/common/initramfs-hooks/snapmulti-lzma fixes it
+                #    explicitly. Must be installed BEFORE the rebuild below.
+                #
+                # 2. modules.dep stale/truncated on the NEXT-BOOT kernel
+                #    (apt full-upgrade installs a newer kernel during firstboot;
+                #    raspi-config's own `update-initramfs -c -k all` runs
+                #    with truncated modules.dep on it). Loop over every
+                #    /lib/modules/* and depmod + update-initramfs per kver.
+                #
+                # PR #317 history: a silent extra rebuild caused "failed to
+                # determine device for /" races. Output captured to
+                # UNIFIED_LOG instead of /dev/null. See
+                # scripts/common/overlayroot-lifecycle.sh for both helpers.
+                local _hook_src=""
+                for _cand in \
+                    "$TUNE_DIR/initramfs-hooks/snapmulti-lzma" \
+                    "/opt/snapmulti/scripts/common/initramfs-hooks/snapmulti-lzma" \
+                    "/opt/snapclient/scripts/common/initramfs-hooks/snapmulti-lzma"; do
+                    if [[ -f "$_cand" ]]; then
+                        _hook_src="$_cand"
+                        break
+                    fi
+                done
+                install_initramfs_lzma_hook "$_hook_src" || \
+                    warn "overlayroot: lzma hook install failed — overlay may not load on first boot"
+
                 ensure_overlayroot_initramfs_ready || \
                     warn "overlayroot: initramfs refresh failed — first boot may not activate overlay"
                 ok "Read-only filesystem enabled (activates after reboot)"
