@@ -491,54 +491,50 @@ copy_server_files() {
     echo "  Copying server files..."
     mkdir -p "$dest"
 
-    cp "$SCRIPT_DIR/deploy.sh" "$dest/"
-    cp "$SCRIPT_DIR/boot-tune.sh" "$dest/" 2>/dev/null || true
-    cp "$SCRIPT_DIR/status.sh" "$dest/" 2>/dev/null || true
-    cp "$SCRIPT_DIR/device-smoke.sh" "$dest/" 2>/dev/null || true
-    # diagnostic.sh — bundles runtime diagnostics into a tarball on the
-    # boot partition. Invoked by firstboot.sh's failure trap (so it must
-    # ship on the SD card) and on-demand from any device for issue reports.
-    cp "$SCRIPT_DIR/diagnostic.sh" "$dest/" 2>/dev/null || true
-    # Modular smoke checks (scripts/smoke/check_*.sh) — sourced by
-    # device-smoke.sh at runtime. v0.7.1 shipped device-smoke.sh aware
-    # of $SMOKE_MODULES_DIR but forgot to copy the dir itself, so the
-    # 6 new sections (Boot Health, Mounts content, QoS, System,
-    # Timers, Audio Modules) silently never ran. Without `-r` the
-    # subdirectory is missed.
-    [[ -d "$SCRIPT_DIR/smoke" ]] && cp -r "$SCRIPT_DIR/smoke" "$dest/" 2>/dev/null || true
-    cp "$SCRIPT_DIR/docker-driver-reconcile.sh" "$dest/" 2>/dev/null || true
-    # scripts/tidal/ contains bind-mounted runtime scripts used by
-    # docker-compose.yml. Keep it under server/scripts/ so firstboot copies
-    # it to /opt/snapmulti/scripts/tidal/.
+    # Required entries — abort prep if any are missing.
+    local i
+    for i in "${!STAGING_SERVER_REQUIRED[@]}"; do
+        stage_manifest_entry \
+            "${STAGING_SERVER_REQUIRED[$i]}" \
+            "$dest" \
+            "${STAGING_SERVER_REQUIRED_DESTS[$i]}" \
+            "true"
+    done
+
+    # Optional entries — silently skipped if absent in source tree.
+    for i in "${!STAGING_SERVER_OPTIONAL[@]}"; do
+        stage_manifest_entry \
+            "${STAGING_SERVER_OPTIONAL[$i]}" \
+            "$dest" \
+            "${STAGING_SERVER_OPTIONAL_DESTS[$i]}" \
+            "false"
+    done
+
+    # ─── Special-case inline copies ────────────────────────────────
+    # See STAGING_SERVER_SPECIAL_INLINE in staging-manifest.sh.
+
+    # scripts/tidal/ → server/scripts/tidal/ (subdir under scripts/,
+    # not the basename location stage_manifest_entry would compute).
+    # Contains bind-mounted runtime scripts used by docker-compose.yml.
     if [[ -d "$SCRIPT_DIR/tidal" ]]; then
         mkdir -p "$dest/scripts/tidal"
         cp -r "$SCRIPT_DIR/tidal/." "$dest/scripts/tidal/"
     fi
-    # ro-mode helper (client has its own copy, server needs one too)
-    [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/"
-    cp -r "$PROJECT_DIR/config" "$dest/"
-    # docker/ contains source files that the compose file bind-mounts
-    # into containers (currently metadata-service.py). Without this
-    # copy, Docker auto-creates an empty directory at the bind source
-    # and the container fails to start with `not a directory: Are you
-    # trying to mount a directory onto a file (or vice-versa)?`.
-    # See PR #319 (which added the bind-mount) and the post-merge
-    # install failure on pi-server that surfaced this gap.
-    # `cp -r src dst/` is NOT idempotent: when `dst/docker/` already
-    # exists from a prior run, the source directory is copied INTO it,
-    # creating `dst/docker/docker/`. macOS `cp` lacks the `-T` flag, so
-    # the portable idiom is `cp -r src/. dst/` which copies the
-    # *contents* of src into dst (no nesting on re-prep).
+
+    # docker/ → server/docker/ via `cp -r src/. dst/` idiom. macOS `cp`
+    # lacks `-T` so plain `cp -r src dst/` would nest as `dst/docker/
+    # docker/` on re-prep. The bind-mount targets (metadata-service.py
+    # etc.) require these files; without the copy Docker creates an
+    # empty dir and the container fails with "not a directory" on
+    # bind. See PR #319 + the post-merge install failure on pi-server.
     if [[ -d "$PROJECT_DIR/docker" ]]; then
         mkdir -p "$dest/docker"
         cp -r "$PROJECT_DIR/docker/." "$dest/docker/"
     fi
-    cp "$PROJECT_DIR/docker-compose.yml" "$dest/"
-    cp "$PROJECT_DIR/.env.example" "$dest/" 2>/dev/null || true
 
-    # Optional: pre-built MPD database. Only ship it when the target's music
-    # source is a network mount — for local USB/disk the db's path pointers
-    # likely don't match the new host's library. See #278.
+    # mpd/data/mpd.db → only when MUSIC_SOURCE is a network mount. Local
+    # USB/disk libraries have different path pointers in the db, so we
+    # ship a fresh-scan-on-first-boot instead. See #278.
     if [[ -f "$PROJECT_DIR/mpd/data/mpd.db" ]]; then
         case "${MUSIC_SOURCE:-}" in
             nfs|smb)
@@ -557,46 +553,50 @@ copy_server_files() {
 copy_client_files() {
     local dest="$1/client"
     echo "  Copying client files..."
-    mkdir -p "$dest"
+    mkdir -p "$dest" "$dest/scripts" "$dest/scripts/common"
 
-    # Core install files
-    cp "$CLIENT_DIR/install/snapclient.conf" "$dest/"
-
-    # Project files from common/
-    for item in docker-compose.yml .env.example audio-hats docker public; do
-        if [[ -e "$CLIENT_DIR/common/$item" ]]; then
-            cp -r "$CLIENT_DIR/common/$item" "$dest/"
-        fi
+    # Required entries.
+    local i
+    for i in "${!STAGING_CLIENT_REQUIRED[@]}"; do
+        stage_manifest_entry \
+            "${STAGING_CLIENT_REQUIRED[$i]}" \
+            "$dest" \
+            "${STAGING_CLIENT_REQUIRED_DESTS[$i]}" \
+            "true"
     done
 
-    # Setup scripts + shared modules
-    mkdir -p "$dest/scripts" "$dest/scripts/common"
-    cp "$CLIENT_DIR/common/scripts/setup.sh" "$dest/scripts/"
-    # Pi Zero 2W native snapclient install path (firstboot.sh selects
-    # this script when /proc/device-tree/model matches "Zero 2 W").
-    [[ -f "$CLIENT_DIR/common/scripts/setup-zero2w.sh" ]] && cp "$CLIENT_DIR/common/scripts/setup-zero2w.sh" "$dest/scripts/"
-    # Shared modules from server scripts/common/ that setup.sh needs.
-    #
-    # Note on the duplicate copy under /opt/snapclient/scripts/common/:
-    # in `both` mode the same library files (logging.sh, unified-log.sh,
-    # system-tune.sh, sanitize.sh, etc.) end up under BOTH
-    # /opt/snapmulti/scripts/common/ AND /opt/snapclient/scripts/common/.
-    # This is intentional: each install dir is independently reflashable
-    # and each install path (deploy.sh server-side, setup.sh client-side)
-    # must source its libs from its OWN dir without cross-dependency.
-    # Drift risk is bounded by snapMULTI's reflash-first update model
-    # (DEC-003): there is no in-place upgrade path that could touch one
-    # copy and leave the other stale. The multi-candidate `for _cand in
-    # /opt/snapmulti/... /opt/snapclient/... ; do source "$_cand"; done`
-    # idiom in ro-mode.sh / cmdline-manager.sh is resilience for ad-hoc
-    # operator invocations, not because the copies disagree.
-    for _shared in install-deps.sh install-docker.sh system-tune.sh overlayroot-lifecycle.sh unified-log.sh logging.sh sanitize.sh systemd-snippets.sh; do
-        [[ -f "$SCRIPT_DIR/common/$_shared" ]] && cp "$SCRIPT_DIR/common/$_shared" "$dest/scripts/common/"
+    # Optional entries.
+    for i in "${!STAGING_CLIENT_OPTIONAL[@]}"; do
+        stage_manifest_entry \
+            "${STAGING_CLIENT_OPTIONAL[$i]}" \
+            "$dest" \
+            "${STAGING_CLIENT_OPTIONAL_DESTS[$i]}" \
+            "false"
     done
-    # initramfs-hooks/: shipped to client install so overlayroot-lifecycle's
-    # install_initramfs_lzma_hook can find snapmulti-lzma at finalize time.
-    # Guarded against empty dir (unmatched glob under set -euo pipefail
-    # would otherwise abort the whole prepare-sd run).
+
+    # Shared common/ modules. Each goes to client/scripts/common/. The
+    # intentional duplication under /opt/snapclient/scripts/common/ vs
+    # /opt/snapmulti/scripts/common/ in `both` mode is bounded by
+    # DEC-003 reflash-first — no in-place upgrade path can touch one
+    # copy and leave the other stale.
+    for shared in "${STAGING_COMMON_SHARED_MODULES[@]}"; do
+        stage_manifest_entry \
+            "$shared" \
+            "$dest" \
+            "$STAGING_COMMON_SHARED_MODULES_DEST" \
+            "false"
+    done
+
+    # ─── Special-case inline copies ────────────────────────────────
+    # See STAGING_CLIENT_SPECIAL_INLINE in staging-manifest.sh.
+
+    # initramfs-hooks/ → client/scripts/common/initramfs-hooks/. Runtime
+    # glob `_hooks=("$SCRIPT_DIR/common/initramfs-hooks/"*)` with
+    # nullglob guard — unmatched glob under `set -euo pipefail` would
+    # otherwise abort the whole prepare-sd run. Required by
+    # overlayroot-lifecycle.sh:install_initramfs_lzma_hook at finalize
+    # time (without it the next boot lands in ext4 fallback —
+    # snapdigi 2026-06-01).
     if [[ -d "$SCRIPT_DIR/common/initramfs-hooks" ]]; then
         mkdir -p "$dest/scripts/common/initramfs-hooks"
         shopt -s nullglob
@@ -605,27 +605,6 @@ copy_client_files() {
         if (( ${#_hooks[@]} > 0 )); then
             cp "${_hooks[@]}" "$dest/scripts/common/initramfs-hooks/"
         fi
-    fi
-    # boot-tune.sh is a server script but client also needs it for boot-time tuning
-    [[ -f "$SCRIPT_DIR/boot-tune.sh" ]] && cp "$SCRIPT_DIR/boot-tune.sh" "$dest/scripts/"
-    [[ -f "$SCRIPT_DIR/docker-driver-reconcile.sh" ]] && cp "$SCRIPT_DIR/docker-driver-reconcile.sh" "$dest/scripts/"
-    [[ -f "$SCRIPT_DIR/device-smoke.sh" ]] && cp "$SCRIPT_DIR/device-smoke.sh" "$dest/scripts/"
-    # diagnostic.sh — see copy_server_files for context.
-    [[ -f "$SCRIPT_DIR/diagnostic.sh" ]] && cp "$SCRIPT_DIR/diagnostic.sh" "$dest/scripts/"
-    # Modular smoke checks (see copy_server_files for context). Client
-    # firstboot path does `cp -r .../client/*` recursively so once
-    # smoke/ lands in the boot/client/scripts/ tree it propagates
-    # automatically to /opt/snapclient/scripts/smoke/.
-    [[ -d "$SCRIPT_DIR/smoke" ]] && cp -r "$SCRIPT_DIR/smoke" "$dest/scripts/" 2>/dev/null || true
-    [[ -f "$CLIENT_DIR/common/scripts/audio-hat-detect.sh" ]] && cp "$CLIENT_DIR/common/scripts/audio-hat-detect.sh" "$dest/scripts/"
-    [[ -f "$CLIENT_DIR/common/scripts/ro-mode.sh" ]] && cp "$CLIENT_DIR/common/scripts/ro-mode.sh" "$dest/scripts/"
-    [[ -f "$CLIENT_DIR/common/scripts/discover-server.sh" ]] && cp "$CLIENT_DIR/common/scripts/discover-server.sh" "$dest/scripts/"
-    [[ -f "$CLIENT_DIR/common/scripts/display.sh" ]] && cp "$CLIENT_DIR/common/scripts/display.sh" "$dest/scripts/"
-    [[ -f "$CLIENT_DIR/common/scripts/display-detect.sh" ]] && cp "$CLIENT_DIR/common/scripts/display-detect.sh" "$dest/scripts/"
-
-    # Systemd service files (display detection boot service)
-    if [[ -d "$CLIENT_DIR/common/systemd" ]]; then
-        cp -r "$CLIENT_DIR/common/systemd" "$dest/"
     fi
 }
 
