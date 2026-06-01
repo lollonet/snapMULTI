@@ -581,7 +581,7 @@ copy_client_files() {
     # /opt/snapmulti/... /opt/snapclient/... ; do source "$_cand"; done`
     # idiom in ro-mode.sh / cmdline-manager.sh is resilience for ad-hoc
     # operator invocations, not because the copies disagree.
-    for _shared in install-deps.sh install-docker.sh system-tune.sh unified-log.sh logging.sh sanitize.sh systemd-snippets.sh; do
+    for _shared in install-deps.sh install-docker.sh system-tune.sh overlayroot-lifecycle.sh unified-log.sh logging.sh sanitize.sh systemd-snippets.sh; do
         [[ -f "$SCRIPT_DIR/common/$_shared" ]] && cp "$SCRIPT_DIR/common/$_shared" "$dest/scripts/common/"
     done
     # boot-tune.sh is a server script but client also needs it for boot-time tuning

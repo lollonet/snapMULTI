@@ -34,6 +34,11 @@ if ! declare -F is_pi_zero_2w &>/dev/null; then
     # shellcheck source=device-detect.sh
     source "$TUNE_DIR/device-detect.sh"
 fi
+if ! declare -F persist_overlayroot_enabled &>/dev/null; then
+    TUNE_DIR="${TUNE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+    # shellcheck source=overlayroot-lifecycle.sh
+    source "$TUNE_DIR/overlayroot-lifecycle.sh"
+fi
 
 # ── Overlayroot detection ─────────────────────────────────────────
 is_overlayroot() {
@@ -47,34 +52,8 @@ overlayroot_cmdline_file() {
     cmdline_path
 }
 
-persist_overlayroot_enabled() {
-    if ! cmdline_ensure_overlayroot; then
-        warn "overlayroot: failed to patch cmdline.txt (missing file or sed failed)"
-        return 1
-    fi
-
-    # recurse=0: overlay only `/`, leave NFS/USB fstab entries untouched (prevents systemd ordering cycles)
-    if ! cat > /etc/overlayroot.local.conf <<'OREOF'
-overlayroot="tmpfs:recurse=0"
-overlayroot_cfgdisk="disabled"
-OREOF
-    then
-        warn "overlayroot: failed to write /etc/overlayroot.local.conf"
-        return 1
-    fi
-
-    ok "overlayroot persisted for next boot"
-}
-
-persist_overlayroot_disabled() {
-    if ! cmdline_remove_overlayroot; then
-        warn "overlayroot: failed to unpatch cmdline.txt (missing file or sed failed)"
-        return 1
-    fi
-
-    rm -f /etc/overlayroot.local.conf
-    ok "overlayroot disabled for next boot"
-}
+# persist_overlayroot_enabled / persist_overlayroot_disabled live in
+# scripts/common/overlayroot-lifecycle.sh (SSOT for client + server).
 
 # ── CPU governor ──────────────────────────────────────────────────
 # Sets all CPUs to 'performance' and persists via cpufrequtils.
@@ -694,22 +673,20 @@ SYSDEOF
     if command -v raspi-config &>/dev/null; then
         if raspi-config nonint do_overlayfs 0; then
             if persist_overlayroot_enabled; then
-                # NOTE: an explicit `update-initramfs -u -k all` used to live
-                # here as "cheap insurance" (PR #317). It backfired:
-                # raspi-config has already installed the overlayroot package
-                # and its initramfs hooks are partially live by the time we
-                # get here, so `update-initramfs -u` calls into mkinitramfs
-                # which can no longer determine the underlying device for
-                # `/` and aborts with `failed to determine device for /`.
-                # The fail was silent (`>/dev/null 2>&1`), the on-disk
-                # initramfs from raspi-config's own `update-initramfs -c -k
-                # all` is fine, BUT the WARN message it printed was
-                # auto-realising: pi-server + pi-display both required a
-                # manual power-cycle at first boot post-2026-05-10 v0.7.0.
-                # Trusting raspi-config's internal rebuild fixes the
-                # symptom on both devices. If a future race re-emerges,
-                # the right fix is to capture output and apply MODULES=most
-                # — NOT to reintroduce a silent extra rebuild.
+                # raspi-config's own `update-initramfs -c -k all` runs as
+                # part of do_overlayfs 0, but on some image+kernel combos
+                # (observed 2026-06-01 on snapdigi, kernel 6.18.29) the
+                # resulting modules.dep in initramfs is stale/truncated
+                # (~204 bytes), so init-bottom/overlayroot's `modprobe
+                # overlay` fails at boot with `Unable to find a driver`
+                # and the rootfs falls back to ext4. Re-run depmod +
+                # update-initramfs for the running kernel only, with
+                # output captured (PR #317 history: silent extra rebuild
+                # caused "failed to determine device for /" races). See
+                # ensure_overlayroot_initramfs_ready in
+                # scripts/common/overlayroot-lifecycle.sh.
+                ensure_overlayroot_initramfs_ready || \
+                    warn "overlayroot: initramfs refresh failed — first boot may not activate overlay"
                 ok "Read-only filesystem enabled (activates after reboot)"
             else
                 rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
