@@ -45,6 +45,27 @@ echo "=== Migration completeness ==="
 # install_profile_needs_*_stack predicates.
 residual_server_both=$(grep -cE '"\$INSTALL_TYPE" == "server" \|\| "\$INSTALL_TYPE" == "both"' "$PREP" || true)
 residual_client_both=$(grep -cE '"\$INSTALL_TYPE" == "client" \|\| "\$INSTALL_TYPE" == "both"' "$PREP" || true)
+
+# Case statements with the same `server|both` / `client|both` branch
+# pattern are functionally equivalent to the `||` form and must also be
+# migrated. The remaining `case "$INSTALL_TYPE"` block at L822 is the
+# real 3-way copy_server / copy_client / copy_both dispatch and is OK.
+case_server_both=$(awk '/case "\$INSTALL_TYPE"/{f=NR; next} f && NR<=f+4 && /server\|both\)/ {print; f=0}' "$PREP" | wc -l | awk '{print $1}')
+case_client_both=$(awk '/case "\$INSTALL_TYPE"/{f=NR; next} f && NR<=f+4 && /client\|both\)/ {print; f=0}' "$PREP" | wc -l | awk '{print $1}')
+if [[ "$case_server_both" -eq 0 ]]; then
+    echo "  PASS: zero residual case \"server|both\" branches"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: $case_server_both residual case \"server|both\" branches still present"
+    fail=$((fail + 1))
+fi
+if [[ "$case_client_both" -eq 0 ]]; then
+    echo "  PASS: zero residual case \"client|both\" branches"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: $case_client_both residual case \"client|both\" branches still present"
+    fail=$((fail + 1))
+fi
 if [[ "$residual_server_both" -eq 0 ]]; then
     echo "  PASS: zero residual \"server || both\" literal gates"
     pass=$((pass + 1))
@@ -94,6 +115,20 @@ if [[ -n "$gate_line" && -n "$first_predicate_line" && "$gate_line" -lt "$first_
     pass=$((pass + 1))
 else
     echo "  FAIL: is_valid gate must precede first predicate use (gate=$gate_line, predicate=$first_predicate_line)"
+    fail=$((fail + 1))
+fi
+
+# Gate must explicitly reject `client-native` — install_profile_is_valid
+# alone accepts it (the predicate is shared with firstboot.sh's runtime
+# gate). prepare-sd.sh only accepts user-selectable types from the menu.
+assert 'grep -qE "client-native" "$PREP" | head -1' \
+       "gate has explicit client-native rejection (prevents drift from runtime-only profile name)"
+gate_body=$(sed -n "${gate_line},$((gate_line + 5))p" "$PREP" 2>/dev/null)
+if grep -qE 'client-native' <<<"$gate_body"; then
+    echo "  PASS: gate explicitly rejects client-native (runtime-only derivation)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: gate does not reject client-native — drift risk if future paths set it"
     fail=$((fail + 1))
 fi
 
