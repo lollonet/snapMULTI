@@ -93,7 +93,12 @@ echo "=== Functional: extract helper + drive standalone ==="
 # Extract run_checkpointed_phase + checkpoint_done + checkpoint_reached
 # into a temp file. Skip the rest of firstboot (it reads install.conf,
 # touches /boot/firmware, etc.).
-EXTRACT=$(mktemp /tmp/snapmulti-checkpoint-XXXXXX.sh)
+# BSD/macOS mktemp does NOT substitute X's unless they are the LAST
+# characters of the template — `/tmp/foo-XXXXXX.sh` literally creates
+# that file the first run and fails with `File exists` the next. Drop
+# the suffix; the file is sourced via `bash $EXTRACT`, extension is
+# cosmetic.
+EXTRACT=$(mktemp "${TMPDIR:-/tmp}/snapmulti-checkpoint-XXXXXX")
 # shellcheck disable=SC2064
 trap "rm -f '$EXTRACT'" EXIT
 
