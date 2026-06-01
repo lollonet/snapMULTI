@@ -217,7 +217,13 @@ source "$COMMON/install-profile.sh"
 # install.conf at the END of its run, leaving firstboot's in-process
 # $INSTALL_TYPE stale at "client" while disk said "client-native".
 _orig_install_type="$INSTALL_TYPE"
-INSTALL_TYPE=$(install_profile_resolve "$INSTALL_TYPE")
+# `|| true` swallows the rc=1 that install_profile_resolve returns on
+# invalid input — without it, `set -euo pipefail` would abort here and
+# the user would never see the explicit gate's "Unknown INSTALL_TYPE"
+# message. The resolved value is the input echoed verbatim in that
+# case, so install_profile_is_valid below catches the malformed type
+# and exits with the clear recovery hint.
+INSTALL_TYPE=$(install_profile_resolve "$INSTALL_TYPE" || true)
 if [[ "$INSTALL_TYPE" != "$_orig_install_type" ]]; then
     log_info "Pi Zero 2W detected — promoting profile: $_orig_install_type -> $INSTALL_TYPE"
 fi
