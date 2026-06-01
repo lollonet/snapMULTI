@@ -21,6 +21,18 @@
 # only `install_profile_resolve` consults hardware (via device-detect.sh).
 #
 # Valid types: client | client-native | server | both
+#
+# CONTRACT FOR CALLERS:
+#   Invalid type strings (typos, corrupt install.conf, empty value) make
+#   the `needs_*` predicates return FALSE silently — by design, so the
+#   library stays a pure function table. The caller MUST gate on
+#   `install_profile_is_valid "$INSTALL_TYPE"` BEFORE branching on any
+#   predicate, and fail loud (log_error + exit 1) on rejection. Otherwise
+#   a malformed INSTALL_TYPE leads to "needs_docker=false, needs_*_stack=
+#   false" silently, i.e. an install that does nothing and reports success.
+#   Today firstboot.sh:292-294 has the `*) log_error "Unknown INSTALL_TYPE"`
+#   case at the dispatch point — when PR2 migrates call sites, this guard
+#   must be preserved (gate FIRST, predicate SECOND).
 
 _install_profile_warn() {
     if declare -F warn >/dev/null 2>&1; then
