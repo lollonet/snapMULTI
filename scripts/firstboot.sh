@@ -198,6 +198,14 @@ source "$COMMON/cmdline-manager.sh"
 # shellcheck source=common/install-conf-mirror.sh
 source "$COMMON/install-conf-mirror.sh"
 
+# Source install-profile.sh — SSOT for INSTALL_TYPE-derived decisions
+# (Pi Zero 2W → client-native promotion, is_client / needs_server_stack /
+# needs_docker / configures_music_source / hardware_ok predicates).
+# device-detect.sh must be sourced first (above) so install_profile_resolve
+# can dispatch to is_pi_zero_2w.
+# shellcheck source=common/install-profile.sh
+source "$COMMON/install-profile.sh"
+
 # Promote profile based on hardware. The prepare-sd.sh menu offers
 # three user-facing choices (client / server / both) — `client-native`
 # is derived: it is what the user really gets on a Pi Zero 2W when they
@@ -208,19 +216,31 @@ source "$COMMON/install-conf-mirror.sh"
 # This replaces the older flow where setup-zero2w.sh rewrote
 # install.conf at the END of its run, leaving firstboot's in-process
 # $INSTALL_TYPE stale at "client" while disk said "client-native".
-if [[ "$INSTALL_TYPE" == "client" ]] && is_pi_zero_2w; then
-    log_info "Pi Zero 2W detected — promoting profile: client -> client-native"
-    INSTALL_TYPE="client-native"
+_orig_install_type="$INSTALL_TYPE"
+INSTALL_TYPE=$(install_profile_resolve "$INSTALL_TYPE")
+if [[ "$INSTALL_TYPE" != "$_orig_install_type" ]]; then
+    log_info "Pi Zero 2W detected — promoting profile: $_orig_install_type -> $INSTALL_TYPE"
+fi
+unset _orig_install_type
+
+# Fail loud on malformed install.conf BEFORE any irreversible work.
+# install-profile.sh predicates return false silently on invalid types
+# (pure function table by design); without this gate every needs_*
+# predicate would return false and the install would run to "completion"
+# doing nothing while reporting success. See contract block at the top
+# of install-profile.sh.
+if ! install_profile_is_valid "$INSTALL_TYPE"; then
+    log_error "Unknown INSTALL_TYPE=$INSTALL_TYPE — install.conf is malformed."
+    log_error "Valid types: client / client-native / server / both."
+    log_error "Reflash this SD with the prepare-sd.sh menu."
+    exit 1
 fi
 
-# is_client_install — true for any profile that brings up the audio
-# player (containerised on Pi 3/4/5, native on Pi Zero 2W, plus the
-# both-mode that has the client stack alongside the server stack).
+# Thin wrapper around install_profile_is_client to preserve existing
+# `is_client_install` call sites without churning every caller in the
+# same diff. Future PRs can inline the predicate call.
 is_client_install() {
-    case "$INSTALL_TYPE" in
-        client|client-native|both) return 0 ;;
-        *) return 1 ;;
-    esac
+    install_profile_is_client "$INSTALL_TYPE"
 }
 
 # Reject impossible hardware × profile combinations BEFORE doing any
@@ -229,22 +249,19 @@ is_client_install() {
 # server stack: dockerd + 7 server containers + the 200 MB OS baseline
 # overflow the RAM budget — verified out-of-memory kills on snapcaster
 # and snap-zero attempts before the rule was discovered. The native
-# snapclient path (INSTALL_TYPE=client) is the only viable mode.
-# Surfacing the error at the start saves a 60-90 min wasted install
-# that would otherwise OOM during `docker compose pull` with a cryptic
-# "container failed to start" message that points away from the cause.
+# snapclient path (INSTALL_TYPE=client-native after promote) is the
+# only viable mode. Surfacing the error at the start saves a 60-90 min
+# wasted install that would otherwise OOM during `docker compose pull`
+# with a cryptic "container failed to start" message that points away
+# from the cause.
 _validate_profile_hardware() {
-    if is_pi_zero_2w; then
-        case "$INSTALL_TYPE" in
-            server|both)
-                log_error "Pi Zero 2W (512 MB RAM) cannot host the snapMULTI server stack."
-                log_error "Detected model: $(device_model)"
-                log_error "INSTALL_TYPE=$INSTALL_TYPE requires a Pi 3B+, Pi 4, or Pi 5 (>=1 GB RAM)."
-                log_error "Reflash this SD with INSTALL_TYPE=client (Audio Player) for Pi Zero 2W."
-                log_error "See docs/HARDWARE.md for the supported hardware matrix."
-                exit 1
-                ;;
-        esac
+    if ! install_profile_hardware_ok "$INSTALL_TYPE"; then
+        log_error "Pi Zero 2W (512 MB RAM) cannot host the snapMULTI server stack."
+        log_error "Detected model: $(device_model)"
+        log_error "INSTALL_TYPE=$INSTALL_TYPE requires a Pi 3B+, Pi 4, or Pi 5 (>=1 GB RAM)."
+        log_error "Reflash this SD with INSTALL_TYPE=client (Audio Player) for Pi Zero 2W."
+        log_error "See docs/HARDWARE.md for the supported hardware matrix."
+        exit 1
     fi
 }
 _validate_profile_hardware
@@ -563,7 +580,7 @@ set_module "copy"
 next_step "Copying project files..."
 start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
-if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     mkdir -p "$SERVER_DIR/scripts"
     if [[ -d "$SNAP_BOOT/server" ]]; then
         cp "$SNAP_BOOT/server/docker-compose.yml" "$SERVER_DIR/"
@@ -665,7 +682,7 @@ start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(
 # predicate — used here to skip Docker orchestration and downstream
 # (search for `client-native`) to dispatch to setup-zero2w.sh.
 SKIP_DOCKER=false
-if [[ "$INSTALL_TYPE" == "client-native" ]]; then
+if ! install_profile_needs_docker "$INSTALL_TYPE"; then
     SKIP_DOCKER=true
     log_info "client-native install — skipping Docker repo, Docker daemon and fuse-overlayfs steps"
 fi
@@ -806,7 +823,7 @@ fi
 # ══════════════════════════════════════════════════════════════════
 # SERVER INSTALL
 # ══════════════════════════════════════════════════════════════════
-if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+if install_profile_needs_server_stack "$INSTALL_TYPE"; then
   if checkpoint_reached "deploy"; then
     set_module "deploy"
     log_info "Server deploy already complete (checkpoint), skipping"
@@ -1267,7 +1284,7 @@ fi
 
 # MPD database + snapserver/myMPD state backup to boot partition
 # (server installs only)
-if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     BACKUP_SCRIPT=""
     for _bk_candidate in \
         "$COMMON/backup-mpd.sh" \
@@ -1345,7 +1362,7 @@ fi
 # and metadata-service runs only in the server stack. Reads the JSON
 # snapshot from /opt/snapmulti/audio/system-status.json (volume already
 # bind-mounted into the metadata container).
-if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     STATUS_DIR=""
     for _stat_candidate in \
         "$COMMON" \
@@ -1400,7 +1417,7 @@ fi
 # /media/<src>-music ends up empty and MPD's bind-mount serves nothing).
 # Installed for server / both modes only — client-only installs do not run
 # the music stack.
-if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     if [[ "${MUSIC_SOURCE:-}" == "nfs" || "${MUSIC_SOURCE:-}" == "smb" ]]; then
         BIND_DIR=""
         for _bind_candidate in \

@@ -55,6 +55,35 @@ assert 'grep -qE "^_validate_profile_hardware\\(\\) \\{" "$FIRSTBOOT"' \
 assert 'grep -qE "^_validate_profile_hardware\$" "$FIRSTBOOT"' \
        "_validate_profile_hardware called (not just defined)"
 
+# install-profile.sh must be sourced so the validator + the
+# install_profile_resolve / install_profile_is_valid gate can run.
+assert 'grep -qE "source \"\\\$COMMON/install-profile.sh\"" "$FIRSTBOOT"' \
+       "firstboot.sh sources install-profile.sh"
+
+# Per the contract documented in scripts/common/install-profile.sh,
+# firstboot MUST: (a) resolve the type (apply Pi Zero promotion),
+# (b) gate on install_profile_is_valid + exit 1 on rejection,
+# (c) THEN branch on predicates. Predicates return false silently on
+# invalid types — without the gate a malformed install.conf silently
+# does nothing and reports success.
+resolve_line=$(grep -nE "install_profile_resolve" "$FIRSTBOOT" | head -1 | cut -d: -f1)
+gate_line=$(grep -nE "install_profile_is_valid" "$FIRSTBOOT" | head -1 | cut -d: -f1)
+validator_def_line=$(grep -nE "^_validate_profile_hardware\(\) \{" "$FIRSTBOOT" | head -1 | cut -d: -f1)
+if [[ -n "$resolve_line" && -n "$gate_line" && "$resolve_line" -lt "$gate_line" ]]; then
+    echo "  PASS: install_profile_resolve (line $resolve_line) runs BEFORE install_profile_is_valid gate (line $gate_line)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: resolve must precede is_valid gate (resolve=$resolve_line, gate=$gate_line)"
+    fail=$((fail + 1))
+fi
+if [[ -n "$gate_line" && -n "$validator_def_line" && "$gate_line" -lt "$validator_def_line" ]]; then
+    echo "  PASS: install_profile_is_valid gate (line $gate_line) runs BEFORE _validate_profile_hardware (line $validator_def_line)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: is_valid gate must precede validator (gate=$gate_line, validator=$validator_def_line)"
+    fail=$((fail + 1))
+fi
+
 # Validator MUST run before the case statement so we exit cheaply.
 validator_line=$(grep -nE "^_validate_profile_hardware\$" "$FIRSTBOOT" | head -1 | cut -d: -f1)
 case_line=$(grep -nE "^case \"\\\$INSTALL_TYPE\" in\$" "$FIRSTBOOT" | head -1 | cut -d: -f1)
@@ -75,8 +104,7 @@ validator_body=$(awk '
     f && /^\}/ {f=0}
 ' "$FIRSTBOOT")
 
-assert_contains "$validator_body" "is_pi_zero_2w" "validator calls is_pi_zero_2w (single-authority helper)"
-assert_contains "$validator_body" "server|both" "validator rejects server|both in case"
+assert_contains "$validator_body" "install_profile_hardware_ok" "validator delegates to install_profile_hardware_ok (SSOT from install-profile.sh)"
 assert_contains "$validator_body" "exit 1" "validator exits non-zero on reject"
 # Static gate: no inline /proc/device-tree/model read inside the
 # validator body (must route through device-detect.sh).
@@ -126,6 +154,11 @@ is_pi_zero_2w() {
 }
 device_model() { _read_mock_model; }
 EOF
+
+# Source install-profile.sh's predicate (the validator now delegates to
+# install_profile_hardware_ok) into the extract so the standalone test
+# exercises the real production code path, not a re-stub.
+cat "$SCRIPT_DIR/../scripts/common/install-profile.sh" >> "$EXTRACT"
 
 awk '
     /^_validate_profile_hardware\(\) \{/ {f=1}
