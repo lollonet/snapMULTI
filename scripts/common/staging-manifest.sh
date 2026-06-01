@@ -27,9 +27,12 @@
 #   2. Every `cp `/`cp -r ` source path in copy_server_files /
 #      copy_client_files corresponds to a manifest entry (so a new
 #      copy line cannot land without being declared)
-#   3. Every manifest entry is referenced by at least one cp/cp -r in
-#      the matching copy_* function (so an entry cannot drift to dead
-#      data)
+#   3. Every REQUIRED manifest entry is referenced by at least one cp/
+#      cp -r in the matching copy_* function (so a required entry cannot
+#      drift to dead data). OPTIONAL entries are NOT enforced — they
+#      may legitimately be present in the manifest without a current
+#      cp (e.g. forthcoming additions, or files only relevant on certain
+#      profiles where the cp is gated upstream).
 #
 # This PR is pure-additive: prepare-sd.sh is NOT refactored to read
 # from the manifest. The audit's PR5 will do that. The value here is
