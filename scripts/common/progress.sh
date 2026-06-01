@@ -141,10 +141,7 @@ render_progress() {
     (( pct < 0 )) && pct=0
     (( pct > 100 )) && pct=100
 
-    # ETA label needs to be computed BEFORE bar_width — its width eats into
-    # the bar's available space. PR #556 added the ETA without subtracting
-    # its length here, which pushed the bar past the right border and
-    # misaligned the elapsed row vs the header/step rows.
+    # ETA label must be computed BEFORE bar_width — its width eats into the bar's available space.
     local _eta_label=""
     if [[ -n "${EXPECTED_TOTAL_MIN:-}" ]]; then
         _eta_label=" / ~${EXPECTED_TOTAL_MIN} min"
