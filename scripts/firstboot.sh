@@ -46,6 +46,45 @@ checkpoint_done() {
 # Require non-empty: a zero-byte file means truncated mid-write, not "done".
 checkpoint_reached() { [[ -s "$INSTALLER_STATE/.done-$1" ]]; }
 
+# run_checkpointed_phase NAME SKIP_MSG FUNC
+#
+# Wraps the repeated firstboot pattern:
+#     if checkpoint_reached "X"; then
+#         log_info "X already done, skipping"
+#     else
+#         <body>
+#         checkpoint_done "X"
+#     fi
+#
+# Contract:
+#   - If checkpoint NAME exists: emit SKIP_MSG via log_info and return 0.
+#   - Else: invoke FUNC in the caller's shell context (variable mutations
+#     propagate). On success: write checkpoint NAME and return 0. On
+#     failure: do NOT write the checkpoint and propagate FUNC's exit
+#     code so `set -euo pipefail` aborts as before.
+#
+# Wraps the `deps` (L697) and `docker` (L733) blocks in v0.8 PR5. The
+# 4 remaining checkpoints (fuse-overlayfs-switched, deploy, setup,
+# music) have multi-exit-path bodies or nested checkpoints and are
+# deliberately left inline — see PR5 description for the rationale.
+# Bash 3.2 compatible (no namerefs, no mapfile).
+run_checkpointed_phase() {
+    local name="$1" skip_msg="$2" func="$3"
+    if checkpoint_reached "$name"; then
+        log_info "$skip_msg"
+        return 0
+    fi
+    # `|| rc=$?` swallows the set-e abort so we can capture FUNC's rc
+    # and skip checkpoint_done when it failed. `return "$rc"` then
+    # re-fires set-e in the caller, preserving the original semantics.
+    local rc=0
+    "$func" || rc=$?
+    if (( rc == 0 )); then
+        checkpoint_done "$name"
+    fi
+    return "$rc"
+}
+
 # Detect boot partition
 if [[ -d /boot/firmware ]]; then
     BOOT="/boot/firmware"
@@ -694,9 +733,11 @@ if ! install_profile_needs_docker "$INSTALL_TYPE"; then
 fi
 
 DOCKER_REPO_PRECONFIGURED=false
-if checkpoint_reached "deps"; then
-    log_info "Dependencies already installed (checkpoint), skipping"
-else
+# Body of the `deps` checkpoint. Defined as a function so
+# run_checkpointed_phase can dispatch to it; bash function scope is
+# the caller's by default, so the DOCKER_REPO_PRECONFIGURED mutation
+# below propagates to the docker checkpoint at L755.
+_phase_deps() {
     if [[ "$SKIP_DOCKER" == "false" ]]; then
         # Pre-add Docker apt repo so install-deps.sh's apt-get update covers
         # both Debian + Docker sources in one shot. The repo file write only
@@ -713,8 +754,8 @@ else
     # shellcheck source=common/install-deps.sh
     source "$COMMON/install-deps.sh"
     INSTALL_ROLE="$INSTALL_TYPE" install_dependencies
-    checkpoint_done "deps"
-fi
+}
+run_checkpointed_phase "deps" "Dependencies already installed (checkpoint), skipping" _phase_deps
 milestone "$CURRENT_STEP" "System dependencies installed" 2 2>/dev/null || true
 
 # ══════════════════════════════════════════════════════════════════
@@ -730,9 +771,9 @@ if [[ "$SKIP_DOCKER" == "true" ]]; then
 else
     next_step "Installing Docker..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-    if checkpoint_reached "docker"; then
-        log_info "Docker already installed (checkpoint), skipping"
-    else
+    # Body of the `docker` checkpoint. Function dispatch via
+    # run_checkpointed_phase, same scope semantics as _phase_deps.
+    _phase_docker() {
         # shellcheck source=common/setup-docker.sh
         source "$COMMON/setup-docker.sh"
         # Skip redundant apt-get update only when install-deps.sh's update already
@@ -743,8 +784,8 @@ else
         else
             setup_docker
         fi
-        checkpoint_done "docker"
-    fi
+    }
+    run_checkpointed_phase "docker" "Docker already installed (checkpoint), skipping" _phase_docker
     milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
 fi
 
