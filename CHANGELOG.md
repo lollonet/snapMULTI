@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Install TUI ETA misaligned the elapsed/bar row** — PR #556 added the `" / ~NN min"` ETA label to the elapsed row but kept `bar_width = _box_width - 12` (fixed overhead from before the ETA existed). The bar overflowed the right border whenever ETA was shown; header and step rows stayed aligned because their layout doesn't reference `bar_width`. Fix: compute the ETA label and its width BEFORE `bar_width`, subtract it from the bar's available space. The math now lands at `2 + 5 + eta + 2 + 1 + bar + 1 = box - 1` (consistent 1-col padding for both ETA-on and ETA-off cases).
+
 ## [0.7.9.7] — 2026-06-01
 
 > Script-only patch (image_set stays 0.7.7). Closes the production reboot loop on Ethernet+WiFi-off hosts (#566 — observed 4 reboots in 40 min on snapvideo), reconciles Avahi `allow-interfaces` at every boot to handle topology changes (#565), fixes the boot-tune eth0 DHCP race that left both interfaces active (#564). Adds the WiFi watchdog for BCM43455 firmware wedges (#563), nightly MPD-NFS rescan (#562), and the `/status` Resource Profile section (#561). All live-deployed and validated on the full fleet (snapvideo + snapdigi + pizero) before tag.
