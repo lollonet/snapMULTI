@@ -25,6 +25,15 @@ source "$SCRIPT_DIR/common/cmdline-manager.sh"
 
 # shellcheck source=common/release-manifest.sh
 source "$SCRIPT_DIR/common/release-manifest.sh"
+
+# shellcheck source=common/install-profile.sh
+source "$SCRIPT_DIR/common/install-profile.sh"
+# install-profile.sh — SSOT for INSTALL_TYPE-derived decisions
+# (install_profile_needs_server_stack / _needs_client_stack /
+# _configures_music_source / _is_valid). prepare-sd.sh runs on the host
+# (Mac/Linux), NOT on the Pi — install_profile_resolve falls through
+# unchanged (no is_pi_zero_2w defined here); Pi Zero promotion happens
+# on first boot in firstboot.sh:install_profile_resolve.
 # Populate MANIFEST_* globals so the advanced-menu default + install.conf
 # writer can pin to the manifest's image_set. Returns 0 always (set -e
 # safe) — missing manifest yields empty fields and the existing 'latest'
@@ -659,8 +668,19 @@ fi
 show_menu
 INSTALL_TYPE=$(get_install_type)
 
+# Defense-in-depth: get_install_type's menu currently restricts the
+# choice to client/server/both, so this gate is belt-and-suspenders. We
+# keep it for contract consistency with firstboot.sh:install_profile_is_valid
+# — predicates return false silently on invalid types (pure function
+# table by design), so future refactors that add a second INSTALL_TYPE
+# assignment path stay safe without re-deriving the gate logic.
+if ! install_profile_is_valid "$INSTALL_TYPE"; then
+    echo "ERROR: Unknown INSTALL_TYPE=$INSTALL_TYPE (valid: client / server / both)." >&2
+    exit 1
+fi
+
 # Check client directory if needed
-if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+if install_profile_needs_client_stack "$INSTALL_TYPE"; then
     check_client_dir
 fi
 
@@ -676,7 +696,7 @@ echo ""
 # manually-edited typos.
 AUDIO_HAT="auto"
 AUDIO_INTERNAL_OUTPUT=""
-if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+if install_profile_needs_client_stack "$INSTALL_TYPE"; then
     show_audio_menu
     audio_type=$(get_audio_type)
     case "$audio_type" in
@@ -707,7 +727,7 @@ SMB_SHARE=""
 SMB_USER=""
 SMB_PASS=""
 
-if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     show_music_menu
     MUSIC_SOURCE=$(get_music_source)
 
@@ -822,10 +842,10 @@ find "$DEST" -type d -name '__MACOSX' -exec rm -rf {} + 2>/dev/null || true
 # Format difference is intentional: server strips "v" (deploy.sh + metadata-service expect
 # Both use the same version tag from the monorepo (with "v" prefix).
 VERSION=$(git -C "$PROJECT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
-if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     echo "$VERSION" > "$DEST/server/.version"
 fi
-if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+if install_profile_needs_client_stack "$INSTALL_TYPE"; then
     echo "$VERSION" > "$DEST/client/VERSION"
 fi
 
@@ -1104,14 +1124,14 @@ echo "  install.conf -> TEST_TONE=$(grep '^TEST_TONE=' "$DEST/install.conf" | cu
 
 # Version files
 # Check version files (avoid ;;& which requires Bash 4+, macOS has 3.2)
-if [[ "$INSTALL_TYPE" == "server" || "$INSTALL_TYPE" == "both" ]]; then
+if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     if [[ -f "$DEST/server/.version" ]]; then
         echo "  [OK] Server version: $(cat "$DEST/server/.version")"
     else
         echo "  [WARN] server/.version missing (version will show as 'unknown')"
     fi
 fi
-if [[ "$INSTALL_TYPE" == "client" || "$INSTALL_TYPE" == "both" ]]; then
+if install_profile_needs_client_stack "$INSTALL_TYPE"; then
     if [[ -f "$DEST/client/VERSION" ]]; then
         echo "  [OK] Client version: $(cat "$DEST/client/VERSION")"
     else
