@@ -41,7 +41,8 @@ unset _common_root
 
 if ! declare -F persist_overlayroot_enabled >/dev/null 2>&1; then
     echo "ERROR: ro-mode could not locate scripts/common (cmdline-manager.sh + overlayroot-lifecycle.sh)." >&2
-    echo "       Searched /opt/snapmulti/scripts/common and /opt/snapclient/scripts/common." >&2
+    echo "       Searched: $_RO_MODE_DIR/../../../scripts/common, $_RO_MODE_DIR/../../scripts/common," >&2
+    echo "                 /opt/snapmulti/scripts/common, /opt/snapclient/scripts/common." >&2
     exit 1
 fi
 

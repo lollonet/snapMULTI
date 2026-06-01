@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Sourced as a function library; `set -euo pipefail` intentionally omitted
+# to avoid altering the calling shell's error mode. Every error path below
+# is covered with explicit `if !` guards.
+#
 # overlayroot-lifecycle.sh — SSOT for overlayroot enable/disable persistence.
 #
 # Sourced by:
