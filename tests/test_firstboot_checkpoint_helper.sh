@@ -132,20 +132,71 @@ else
 fi
 rm -rf "$state"
 
-# ── Case 2: checkpoint NOT reached + phase fails → no marker, non-zero rc
+# ── Case 2: checkpoint NOT reached + phase explicitly returns non-zero
 state=$(mktemp -d /tmp/snapmulti-state-XXXXXX)
 rc=0
 INSTALLER_STATE="$state" bash -c "
-set -uo pipefail
+set -euo pipefail
 $(< "$EXTRACT")
 _phase_fail() { return 42; }
 run_checkpointed_phase 'unit-fail' 'skip msg' _phase_fail
 " >/dev/null 2>&1 || rc=$?
 if [[ ! -e "$state/.done-unit-fail" && "$rc" -eq 42 ]]; then
-    echo "  PASS: failure → no checkpoint marker, helper propagates exit code (42)"
+    echo "  PASS: failure (explicit return) → no checkpoint marker, helper propagates exit code (42)"
     pass=$((pass + 1))
 else
-    echo "  FAIL: failure path (rc=$rc, marker exists: $([[ -e "$state/.done-unit-fail" ]] && echo yes || echo no))"
+    echo "  FAIL: failure path explicit (rc=$rc, marker exists: $([[ -e "$state/.done-unit-fail" ]] && echo yes || echo no))"
+    fail=$((fail + 1))
+fi
+rm -rf "$state"
+
+# ── Case 2b: MULTI-COMMAND failure under set -e — the canonical bug
+# the old `func || rc=\$?` wrapper hid. With errexit-suppression in the
+# OR-list, `false` would not abort the function, `later_cmd` would run
+# anyway, the function would return rc=0 (last command), and the helper
+# would write the checkpoint marker for a half-executed phase. Without
+# the OR list, `false` aborts the script BEFORE later_cmd runs, BEFORE
+# checkpoint_done, and the marker stays absent.
+state=$(mktemp -d /tmp/snapmulti-state-XXXXXX)
+canary="$state/should-not-exist"
+rc=0
+INSTALLER_STATE="$state" bash -c "
+set -euo pipefail
+$(< "$EXTRACT")
+_phase_multi_fail() {
+    false
+    touch '$canary'
+}
+run_checkpointed_phase 'unit-multi-fail' 'skip' _phase_multi_fail
+" >/dev/null 2>&1 || rc=$?
+if [[ ! -e "$state/.done-unit-multi-fail" && ! -e "$canary" && "$rc" -ne 0 ]]; then
+    echo "  PASS: multi-command failure → set -e aborts on false, later cmd NOT run, no checkpoint marker"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: multi-command failure (rc=$rc, canary: $([[ -e "$canary" ]] && echo created || echo absent), marker: $([[ -e "$state/.done-unit-multi-fail" ]] && echo yes || echo no))"
+    fail=$((fail + 1))
+fi
+rm -rf "$state"
+
+# ── Case 2c: no command after the wrapper call executes when phase fails
+# This is the operator-visible symptom of the old bug: if the wrapper
+# swallowed the failure, the post-wrapper line would run on a broken
+# system. Assert that the line AFTER run_checkpointed_phase never runs.
+state=$(mktemp -d /tmp/snapmulti-state-XXXXXX)
+post_canary="$state/post-wrapper-ran"
+rc=0
+INSTALLER_STATE="$state" bash -c "
+set -euo pipefail
+$(< "$EXTRACT")
+_phase_fail2() { return 7; }
+run_checkpointed_phase 'unit-post' 'skip' _phase_fail2
+touch '$post_canary'
+" >/dev/null 2>&1 || rc=$?
+if [[ ! -e "$post_canary" && "$rc" -eq 7 ]]; then
+    echo "  PASS: caller line AFTER wrapper call does NOT run when phase failed"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: post-wrapper line ran despite failure (rc=$rc, canary: $([[ -e "$post_canary" ]] && echo ran || echo skipped))"
     fail=$((fail + 1))
 fi
 rm -rf "$state"

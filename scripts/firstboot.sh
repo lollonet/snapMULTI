@@ -59,9 +59,21 @@ checkpoint_reached() { [[ -s "$INSTALLER_STATE/.done-$1" ]]; }
 # Contract:
 #   - If checkpoint NAME exists: emit SKIP_MSG via log_info and return 0.
 #   - Else: invoke FUNC in the caller's shell context (variable mutations
-#     propagate). On success: write checkpoint NAME and return 0. On
-#     failure: do NOT write the checkpoint and propagate FUNC's exit
-#     code so `set -euo pipefail` aborts as before.
+#     propagate, no subshell). `set -euo pipefail` from the caller still
+#     aborts the script on the FIRST failing command inside FUNC; the
+#     `checkpoint_done` line below is reached only when FUNC ran to
+#     completion successfully.
+#
+# CRITICAL — no `"$func" || rc=$?` wrapper. That well-known bash trap
+# suppresses errexit inside FUNC: when a function is part of an OR list,
+# every command in its body runs even after one fails, and the function
+# returns the LAST command's rc (often 0). A multi-command phase like:
+#     _phase() { failing_cmd; later_cmd_that_runs_anyway; }
+# would then write the checkpoint marker for a half-executed phase, and
+# a subsequent retry would skip the broken work entirely. The plain
+# `"$func"` form below preserves the original inline semantics: any
+# failure inside FUNC aborts the script BEFORE checkpoint_done, the
+# marker is never written, and retry redoes the phase from scratch.
 #
 # Wraps the `deps` (L697) and `docker` (L733) blocks in v0.8 PR5. The
 # 4 remaining checkpoints (fuse-overlayfs-switched, deploy, setup,
@@ -74,15 +86,8 @@ run_checkpointed_phase() {
         log_info "$skip_msg"
         return 0
     fi
-    # `|| rc=$?` swallows the set-e abort so we can capture FUNC's rc
-    # and skip checkpoint_done when it failed. `return "$rc"` then
-    # re-fires set-e in the caller, preserving the original semantics.
-    local rc=0
-    "$func" || rc=$?
-    if (( rc == 0 )); then
-        checkpoint_done "$name"
-    fi
-    return "$rc"
+    "$func"
+    checkpoint_done "$name"
 }
 
 # Detect boot partition
