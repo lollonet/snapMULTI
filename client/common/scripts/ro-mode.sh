@@ -13,22 +13,38 @@ set -euo pipefail
 #   ro-mode status   - Check current mode
 # ============================================
 
-# cmdline-manager.sh provides the idempotent cmdline.txt helpers
-# (cmdline_path, cmdline_ensure_overlayroot, cmdline_remove_overlayroot).
-# Probe both the dev tree path and the on-device install path.
+# Source the SSOT helpers from scripts/common (single point for both client
+# CLI and server/client firstboot finalize):
+#   - cmdline-manager.sh: cmdline.txt idempotent patch/unpatch
+#   - overlayroot-lifecycle.sh: persist_overlayroot_enabled/disabled +
+#     ensure_overlayroot_initramfs_ready
+# Probe both the dev tree path and the on-device install paths.
 _RO_MODE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for _cm_candidate in \
-    "$_RO_MODE_DIR/../../../scripts/common/cmdline-manager.sh" \
-    "$_RO_MODE_DIR/../../scripts/common/cmdline-manager.sh" \
-    "/opt/snapmulti/scripts/common/cmdline-manager.sh" \
-    "/opt/snapclient/scripts/common/cmdline-manager.sh"; do
-    # shellcheck disable=SC1090
-    if [[ -f "$_cm_candidate" ]]; then
-        source "$_cm_candidate"
+for _common_root in \
+    "$_RO_MODE_DIR/../../../scripts/common" \
+    "$_RO_MODE_DIR/../../scripts/common" \
+    "/opt/snapmulti/scripts/common" \
+    "/opt/snapclient/scripts/common"; do
+    # Both files must be present in the same install dir: sourcing only
+    # cmdline-manager.sh would leave persist_overlayroot_enabled undefined,
+    # and `ro-mode enable` would fail with "command not found" at runtime
+    # instead of failing cleanly at startup.
+    if [[ -f "$_common_root/cmdline-manager.sh" && -f "$_common_root/overlayroot-lifecycle.sh" ]]; then
+        # shellcheck disable=SC1091
+        source "$_common_root/cmdline-manager.sh"
+        # shellcheck disable=SC1091
+        source "$_common_root/overlayroot-lifecycle.sh"
         break
     fi
 done
-unset _cm_candidate
+unset _common_root
+
+if ! declare -F persist_overlayroot_enabled >/dev/null 2>&1; then
+    echo "ERROR: ro-mode could not locate scripts/common (cmdline-manager.sh + overlayroot-lifecycle.sh)." >&2
+    echo "       Searched: $_RO_MODE_DIR/../../../scripts/common, $_RO_MODE_DIR/../../scripts/common," >&2
+    echo "                 /opt/snapmulti/scripts/common, /opt/snapclient/scripts/common." >&2
+    exit 1
+fi
 
 usage() {
     cat << 'EOF'
@@ -70,30 +86,8 @@ cmdline_file() {
     cmdline_path
 }
 
-# Persist overlayroot=tmpfs for next boot:
-#   1. Add the token to cmdline.txt (cmdline-manager.sh helper)
-#   2. Write /etc/overlayroot.local.conf with `tmpfs:recurse=0`
-#      (recurse=0 overlays only `/`, leaving NFS/USB fstab entries
-#      writable — prevents systemd ordering cycles).
-# Mirrors scripts/common/system-tune.sh:persist_overlayroot_enabled
-# (server side) so client and server boot configs stay byte-identical.
-persist_overlayroot_enabled() {
-    cmdline_ensure_overlayroot || return 1
-    cat > /etc/overlayroot.local.conf <<'OREOF' || return 1
-overlayroot="tmpfs:recurse=0"
-overlayroot_cfgdisk="disabled"
-OREOF
-}
-
-# Reverse of persist_overlayroot_enabled. `root_prefix` lets the caller
-# point at a non-default rootfs (used by recovery / installer images
-# that mount a target rootfs under e.g. /mnt — irrelevant for the
-# default on-device invocation).
-persist_overlayroot_disabled() {
-    local root_prefix="${1:-}"
-    cmdline_remove_overlayroot || return 1
-    rm -f "${root_prefix}/etc/overlayroot.local.conf"
-}
+# persist_overlayroot_enabled / persist_overlayroot_disabled live in
+# scripts/common/overlayroot-lifecycle.sh (sourced above).
 
 case "${1:-}" in
     enable)
