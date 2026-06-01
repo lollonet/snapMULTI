@@ -141,9 +141,20 @@ render_progress() {
     (( pct < 0 )) && pct=0
     (( pct > 100 )) && pct=100
 
-    # Build progress bar (fills available width minus elapsed label)
-    # "  00:00  [####----]" = 12 chars overhead
-    local bar_width=$(( _box_width - 12 ))
+    # ETA label needs to be computed BEFORE bar_width — its width eats into
+    # the bar's available space. PR #556 added the ETA without subtracting
+    # its length here, which pushed the bar past the right border and
+    # misaligned the elapsed row vs the header/step rows.
+    local _eta_label=""
+    if [[ -n "${EXPECTED_TOTAL_MIN:-}" ]]; then
+        _eta_label=" / ~${EXPECTED_TOTAL_MIN} min"
+    fi
+    local _eta_width=${#_eta_label}
+
+    # Build progress bar (fills available width minus elapsed + eta label)
+    # "  00:00  [####----]" = 12 chars overhead (2 indent + 5 mm:ss + 2 gap
+    # + 1 '[' + 1 ']' + 1 trailing).  Plus the ETA label width when shown.
+    local bar_width=$(( _box_width - 12 - _eta_width ))
     (( bar_width < 20 )) && bar_width=20
     local filled=$(( pct * bar_width / 100 ))
     local empty=$(( bar_width - filled ))
@@ -173,10 +184,7 @@ render_progress() {
         printf '  | \033[1m%-*.*s\033[0m |\n' "$_inner_width" "$_inner_width" "$PROGRESS_TITLE"
         printf '  +%s+\n' "$hline"
         # \033[37m not \033[2m — framebuffer console lacks dim support.
-        local _eta_label=""
-        if [[ -n "${EXPECTED_TOTAL_MIN:-}" ]]; then
-            _eta_label=" / ~${EXPECTED_TOTAL_MIN} min"
-        fi
+        # _eta_label was computed above (before bar_width) so the bar fits.
         printf '  \033[36m%02d:%02d\033[0m\033[37m%s\033[0m  \033[33m[%s]\033[0m\n' \
             $((elapsed/60)) $((elapsed%60)) "$_eta_label" "$bar"
         printf '  %3d%% %s\n' "$pct" "$spinner"
