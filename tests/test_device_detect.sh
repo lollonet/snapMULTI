@@ -138,25 +138,30 @@ echo "=== firstboot.sh: promote client -> client-native ==="
 assert 'grep -qE "^source.*device-detect\\.sh" "$FIRSTBOOT"' \
     "firstboot.sh sources device-detect.sh"
 
-# Promote block must run BEFORE the case statement and BEFORE the
-# hardware guard validator.
-promote_line=$(grep -nE "INSTALL_TYPE=\"client-native\"" "$FIRSTBOOT" | head -1 | cut -d: -f1)
+# Promote is now done via install_profile_resolve (from
+# scripts/common/install-profile.sh, landed in v0.8 PR1 #573).
+# The inline `INSTALL_TYPE="client-native"` literal was removed in
+# v0.8 PR2 #574. Functional promotion behavior is covered by
+# tests/test_install_profile.sh (71 unit tests) + the contract
+# ordering checks in tests/test_firstboot_profile_hardware.sh.
+# Here we just assert the call site exists and runs before the case.
+promote_line=$(grep -nE "install_profile_resolve" "$FIRSTBOOT" | head -1 | cut -d: -f1)
 case_line=$(grep -nE "^case \"\\\$INSTALL_TYPE\" in$" "$FIRSTBOOT" | head -1 | cut -d: -f1)
 guard_line=$(grep -nE "^_validate_profile_hardware$" "$FIRSTBOOT" | head -1 | cut -d: -f1)
 
 if [[ -n "$promote_line" && -n "$case_line" && "$promote_line" -lt "$case_line" ]]; then
-    echo "  PASS: promote (line $promote_line) runs BEFORE case (line $case_line)"
+    echo "  PASS: install_profile_resolve (line $promote_line) runs BEFORE case (line $case_line)"
     pass=$((pass + 1))
 else
-    echo "  FAIL: promote not before case (promote=$promote_line, case=$case_line)"
+    echo "  FAIL: install_profile_resolve not before case (resolve=$promote_line, case=$case_line)"
     fail=$((fail + 1))
 fi
 
 if [[ -n "$promote_line" && -n "$guard_line" && "$promote_line" -lt "$guard_line" ]]; then
-    echo "  PASS: promote (line $promote_line) runs BEFORE hardware guard (line $guard_line)"
+    echo "  PASS: install_profile_resolve (line $promote_line) runs BEFORE hardware guard (line $guard_line)"
     pass=$((pass + 1))
 else
-    echo "  FAIL: promote not before hardware guard (promote=$promote_line, guard=$guard_line)"
+    echo "  FAIL: install_profile_resolve not before hardware guard (resolve=$promote_line, guard=$guard_line)"
     fail=$((fail + 1))
 fi
 
@@ -169,22 +174,24 @@ assert 'grep -qE "^[[:space:]]+client-native\\)" "$FIRSTBOOT"' \
 assert '! grep -qE "^_is_pi_zero_2w_native_path\\(\\) \\{" "$FIRSTBOOT"' \
     "legacy _is_pi_zero_2w_native_path() removed"
 
-# SKIP_DOCKER is now gated on INSTALL_TYPE=client-native. Check the
-# canonical pattern: `if [[ "$INSTALL_TYPE" == "client-native" ]];
-# then SKIP_DOCKER=true`. awk grabs the few lines containing the test.
+# SKIP_DOCKER is now gated on `! install_profile_needs_docker` (v0.8
+# PR2 #574 — the predicate returns false only for client-native, the
+# single non-Docker profile). Check the canonical pattern.
 gated=$(awk '
-    /INSTALL_TYPE.*==.*"client-native"/ {block=NR; next}
+    /! install_profile_needs_docker/ {block=NR; next}
     block && NR <= block + 3 && /SKIP_DOCKER=true/ {print "yes"; exit}
 ' "$FIRSTBOOT")
 if [[ "$gated" == "yes" ]]; then
-    echo "  PASS: SKIP_DOCKER=true is gated on INSTALL_TYPE=client-native"
+    echo "  PASS: SKIP_DOCKER=true is gated on ! install_profile_needs_docker"
     pass=$((pass + 1))
 else
-    echo "  FAIL: SKIP_DOCKER=true not gated by INSTALL_TYPE=client-native"
+    echo "  FAIL: SKIP_DOCKER=true not gated by ! install_profile_needs_docker"
     fail=$((fail + 1))
 fi
 
-# is_client_install helper covers all three client-family profiles.
+# is_client_install helper is now a thin wrapper around
+# install_profile_is_client (v0.8 PR2 #574). Profile coverage of the
+# predicate itself is asserted by tests/test_install_profile.sh.
 assert 'grep -qE "^is_client_install\\(\\) \\{" "$FIRSTBOOT"' \
     "is_client_install() helper defined"
 helper_body=$(awk '
@@ -192,15 +199,13 @@ helper_body=$(awk '
     f
     f && /^\}/ {exit}
 ' "$FIRSTBOOT")
-for profile in client client-native both; do
-    if grep -qE "\b${profile}\b" <<<"$helper_body"; then
-        echo "  PASS: is_client_install covers $profile"
-        pass=$((pass + 1))
-    else
-        echo "  FAIL: is_client_install does NOT cover $profile"
-        fail=$((fail + 1))
-    fi
-done
+if grep -qE "install_profile_is_client" <<<"$helper_body"; then
+    echo "  PASS: is_client_install delegates to install_profile_is_client (SSOT)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: is_client_install does NOT delegate to install_profile_is_client"
+    fail=$((fail + 1))
+fi
 
 echo
 echo "=== Functional: promote rule via extracted block ==="

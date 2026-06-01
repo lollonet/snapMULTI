@@ -83,7 +83,9 @@ check "firstboot installs the script as /usr/local/bin/mpd-nfs-update" "grep -qE
 check "firstboot installs the service file" "grep -q 'snapmulti-mpd-update.service.*etc/systemd/system' '$FIRSTBOOT'"
 check "firstboot installs the timer file" "grep -q 'snapmulti-mpd-update.timer.*etc/systemd/system' '$FIRSTBOOT'"
 check "firstboot enables the timer (not the service)" "grep -q 'systemctl enable snapmulti-mpd-update.timer' '$FIRSTBOOT'"
-check "install block is server-only / both-only (gated on INSTALL_TYPE)" "awk '/MPD nightly NFS-rescan|MPD_UPDATE_SCRIPT/{found=1} found && /INSTALL_TYPE.*server/{ok=1} END{exit !ok}' '$FIRSTBOOT' || grep -B 30 'MPD_UPDATE_SCRIPT=' '$FIRSTBOOT' | grep -q 'INSTALL_TYPE.*server.*both'"
+# v0.8 PR2 #574 replaced `[[ INSTALL_TYPE == "server" || == "both" ]]`
+# with `install_profile_needs_server_stack` (from install-profile.sh).
+check "install block is server-only / both-only (gated on install_profile_needs_server_stack)" "awk '/MPD nightly NFS-rescan|MPD_UPDATE_SCRIPT/{found=1} found && /install_profile_needs_server_stack/{ok=1} END{exit !ok}' '$FIRSTBOOT'"
 
 echo
 echo "Results: $pass passed, $fail failed"
