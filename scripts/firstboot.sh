@@ -46,6 +46,50 @@ checkpoint_done() {
 # Require non-empty: a zero-byte file means truncated mid-write, not "done".
 checkpoint_reached() { [[ -s "$INSTALLER_STATE/.done-$1" ]]; }
 
+# run_checkpointed_phase NAME SKIP_MSG FUNC
+#
+# Wraps the repeated firstboot pattern:
+#     if checkpoint_reached "X"; then
+#         log_info "X already done, skipping"
+#     else
+#         <body>
+#         checkpoint_done "X"
+#     fi
+#
+# Contract:
+#   - If checkpoint NAME exists: emit SKIP_MSG via log_info and return 0.
+#   - Else: invoke FUNC in the caller's shell context (variable mutations
+#     propagate, no subshell). `set -euo pipefail` from the caller still
+#     aborts the script on the FIRST failing command inside FUNC; the
+#     `checkpoint_done` line below is reached only when FUNC ran to
+#     completion successfully.
+#
+# CRITICAL — no `"$func" || rc=$?` wrapper. That well-known bash trap
+# suppresses errexit inside FUNC: when a function is part of an OR list,
+# every command in its body runs even after one fails, and the function
+# returns the LAST command's rc (often 0). A multi-command phase like:
+#     _phase() { failing_cmd; later_cmd_that_runs_anyway; }
+# would then write the checkpoint marker for a half-executed phase, and
+# a subsequent retry would skip the broken work entirely. The plain
+# `"$func"` form below preserves the original inline semantics: any
+# failure inside FUNC aborts the script BEFORE checkpoint_done, the
+# marker is never written, and retry redoes the phase from scratch.
+#
+# Wraps the `deps` (L697) and `docker` (L733) blocks in v0.8 PR5. The
+# 4 remaining checkpoints (fuse-overlayfs-switched, deploy, setup,
+# music) have multi-exit-path bodies or nested checkpoints and are
+# deliberately left inline — see PR5 description for the rationale.
+# Bash 3.2 compatible (no namerefs, no mapfile).
+run_checkpointed_phase() {
+    local name="$1" skip_msg="$2" func="$3"
+    if checkpoint_reached "$name"; then
+        log_info "$skip_msg"
+        return 0
+    fi
+    "$func"
+    checkpoint_done "$name"
+}
+
 # Detect boot partition
 if [[ -d /boot/firmware ]]; then
     BOOT="/boot/firmware"
@@ -694,9 +738,11 @@ if ! install_profile_needs_docker "$INSTALL_TYPE"; then
 fi
 
 DOCKER_REPO_PRECONFIGURED=false
-if checkpoint_reached "deps"; then
-    log_info "Dependencies already installed (checkpoint), skipping"
-else
+# Body of the `deps` checkpoint. Defined as a function so
+# run_checkpointed_phase can dispatch to it; bash function scope is
+# the caller's by default, so the DOCKER_REPO_PRECONFIGURED mutation
+# below propagates to the docker checkpoint at L755.
+_phase_deps() {
     if [[ "$SKIP_DOCKER" == "false" ]]; then
         # Pre-add Docker apt repo so install-deps.sh's apt-get update covers
         # both Debian + Docker sources in one shot. The repo file write only
@@ -713,8 +759,8 @@ else
     # shellcheck source=common/install-deps.sh
     source "$COMMON/install-deps.sh"
     INSTALL_ROLE="$INSTALL_TYPE" install_dependencies
-    checkpoint_done "deps"
-fi
+}
+run_checkpointed_phase "deps" "Dependencies already installed (checkpoint), skipping" _phase_deps
 milestone "$CURRENT_STEP" "System dependencies installed" 2 2>/dev/null || true
 
 # ══════════════════════════════════════════════════════════════════
@@ -730,9 +776,9 @@ if [[ "$SKIP_DOCKER" == "true" ]]; then
 else
     next_step "Installing Docker..."
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
-    if checkpoint_reached "docker"; then
-        log_info "Docker already installed (checkpoint), skipping"
-    else
+    # Body of the `docker` checkpoint. Function dispatch via
+    # run_checkpointed_phase, same scope semantics as _phase_deps.
+    _phase_docker() {
         # shellcheck source=common/setup-docker.sh
         source "$COMMON/setup-docker.sh"
         # Skip redundant apt-get update only when install-deps.sh's update already
@@ -743,8 +789,8 @@ else
         else
             setup_docker
         fi
-        checkpoint_done "docker"
-    fi
+    }
+    run_checkpointed_phase "docker" "Docker already installed (checkpoint), skipping" _phase_docker
     milestone "$CURRENT_STEP" "Docker installed" 2 2>/dev/null || true
 fi
 
