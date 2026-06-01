@@ -586,9 +586,16 @@ copy_client_files() {
     done
     # initramfs-hooks/: shipped to client install so overlayroot-lifecycle's
     # install_initramfs_lzma_hook can find snapmulti-lzma at finalize time.
+    # Guarded against empty dir (unmatched glob under set -euo pipefail
+    # would otherwise abort the whole prepare-sd run).
     if [[ -d "$SCRIPT_DIR/common/initramfs-hooks" ]]; then
         mkdir -p "$dest/scripts/common/initramfs-hooks"
-        cp "$SCRIPT_DIR/common/initramfs-hooks/"* "$dest/scripts/common/initramfs-hooks/"
+        shopt -s nullglob
+        local _hooks=("$SCRIPT_DIR/common/initramfs-hooks/"*)
+        shopt -u nullglob
+        if (( ${#_hooks[@]} > 0 )); then
+            cp "${_hooks[@]}" "$dest/scripts/common/initramfs-hooks/"
+        fi
     fi
     # boot-tune.sh is a server script but client also needs it for boot-time tuning
     [[ -f "$SCRIPT_DIR/boot-tune.sh" ]] && cp "$SCRIPT_DIR/boot-tune.sh" "$dest/scripts/"
