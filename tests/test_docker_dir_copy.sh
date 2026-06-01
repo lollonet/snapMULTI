@@ -74,7 +74,9 @@ echo "=== firstboot.sh — copy docker/ from boot to /opt/snapmulti ==="
 # already, and on Ubuntu mawk an early `head` close + `pipefail` would
 # SIGPIPE the substitution and silently kill the test (CI-only failure
 # mode, not reproducible on macOS gawk).
-fb_block=$(awk '/INSTALL_TYPE.*server.*both/,/^fi$/' "$FIRSTBOOT")
+# v0.8 PR2 #574 replaced `[[ INSTALL_TYPE == "server" || == "both" ]]`
+# with `install_profile_needs_server_stack` (from install-profile.sh).
+fb_block=$(awk '/install_profile_needs_server_stack/,/^fi$/' "$FIRSTBOOT")
 
 assert 'echo "$fb_block" | grep -qE "cp -rT \"\\\$SNAP_BOOT/server/docker\" \"\\\$SERVER_DIR/docker\""' \
        'firstboot copies docker/ to /opt/snapmulti via cp -rT (idempotent)'
