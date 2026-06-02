@@ -183,7 +183,7 @@ assert_iterates() {
     local fn_body_var="$1" arr_name="$2"
     local body="${!fn_body_var}"
     if grep -qE "for [a-zA-Z_]+ in \"\\\$\\{!${arr_name}\\[@\\]\\}\"" <<<"$body"; then
-        echo "  PASS: $fn_body_var iterates $arr_name via \${!$arr_name[@]}"
+        echo "  PASS: $fn_body_var iterates $arr_name via \${!${arr_name}[@]}"
         pass=$((pass + 1))
     else
         echo "  FAIL: $fn_body_var does NOT iterate $arr_name"
