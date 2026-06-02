@@ -701,10 +701,15 @@ function Copy-ClientFiles {
     # install_initramfs_lzma_hook (snapmulti-lzma copy_exec's liblzma.so.5
     # so kmod inside initramfs can decompress overlay.ko.xz). Mirror of
     # scripts/prepare-sd.sh copy_client_files lines 596-610.
+    # Idempotent pattern: pre-create dest + copy contents via `\*` glob.
+    # `Copy-Item $src -Destination $dest -Recurse` would nest the source
+    # dir inside dest on re-run, leaving the runtime glob in
+    # overlayroot-lifecycle.sh with nothing to find.
     $initramfsHooksSrc = Join-Path $ScriptDir 'common\initramfs-hooks'
     if (Test-Path $initramfsHooksSrc) {
         $initramfsHooksDest = Join-Path $commonDest 'initramfs-hooks'
-        Copy-Item $initramfsHooksSrc -Destination $initramfsHooksDest -Recurse
+        New-Item -ItemType Directory -Path $initramfsHooksDest -Force | Out-Null
+        Copy-Item (Join-Path $initramfsHooksSrc '*') -Destination $initramfsHooksDest -Recurse -Force
     }
 
     # boot-tune.sh and device-smoke.sh are server scripts but client also needs them
