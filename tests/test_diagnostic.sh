@@ -195,13 +195,34 @@ else
 fi
 
 echo
-echo "=== prepare-sd.sh ships diagnostic.sh ==="
-# copy_server_files copies into "$dest/" where $dest=$1/server, so the
-# literal line is `cp "$SCRIPT_DIR/diagnostic.sh" "$dest/"`.
-assert 'grep -qE "diagnostic\\.sh.*dest/" <<<"$(grep -A50 "^copy_server_files" "$PREPARE_SD")"' \
-    "copy_server_files() copies diagnostic.sh"
-assert 'grep -qE "diagnostic\\.sh.*dest/scripts" <<<"$(grep -A60 "^copy_client_files" "$PREPARE_SD")"' \
-    "copy_client_files() copies diagnostic.sh"
+echo "=== prepare-sd.sh ships diagnostic.sh (via staging-manifest.sh) ==="
+# v0.8 PR6 moved the literal `cp` lines out of copy_server_files /
+# copy_client_files into the declarative manifest at
+# scripts/common/staging-manifest.sh. The contract is now:
+#   (a) diagnostic.sh is declared in BOTH STAGING_SERVER_OPTIONAL and
+#       STAGING_CLIENT_OPTIONAL of the manifest, and
+#   (b) copy_server_files / copy_client_files iterate the manifest via
+#       stage_manifest_entry (so the declaration translates into a real
+#       cp at SD-prep time).
+# Checking these two invariants together is equivalent to the old
+# literal-cp grep, and survives the refactor.
+# shellcheck disable=SC2034  # MANIFEST used inside single-quoted eval'd asserts
+MANIFEST="$SCRIPT_DIR/../scripts/common/staging-manifest.sh"
+assert 'grep -qE "scripts/diagnostic\\.sh" <<<"$(awk "/^STAGING_SERVER_OPTIONAL=\\(/,/^\\)/" "$MANIFEST")"' \
+    "staging-manifest.sh declares diagnostic.sh in STAGING_SERVER_OPTIONAL"
+assert 'grep -qE "scripts/diagnostic\\.sh" <<<"$(awk "/^STAGING_CLIENT_OPTIONAL=\\(/,/^\\)/" "$MANIFEST")"' \
+    "staging-manifest.sh declares diagnostic.sh in STAGING_CLIENT_OPTIONAL"
+# The loop body spans multiple lines:
+#   for i in "${!STAGING_SERVER_OPTIONAL[@]}"; do
+#       stage_manifest_entry \
+#           "${STAGING_SERVER_OPTIONAL[$i]}" \
+#           ...
+# We assert (a) the for-loop iterates the array, and (b)
+# stage_manifest_entry appears in the same function body.
+assert 'grep -qE "\\$\\{!STAGING_SERVER_OPTIONAL\\[@\\]\\}" <<<"$(grep -A80 "^copy_server_files" "$PREPARE_SD")" && grep -qE "stage_manifest_entry" <<<"$(grep -A80 "^copy_server_files" "$PREPARE_SD")"' \
+    "copy_server_files() iterates STAGING_SERVER_OPTIONAL via stage_manifest_entry"
+assert 'grep -qE "\\$\\{!STAGING_CLIENT_OPTIONAL\\[@\\]\\}" <<<"$(grep -A120 "^copy_client_files" "$PREPARE_SD")" && grep -qE "stage_manifest_entry" <<<"$(grep -A120 "^copy_client_files" "$PREPARE_SD")"' \
+    "copy_client_files() iterates STAGING_CLIENT_OPTIONAL via stage_manifest_entry"
 
 echo
 echo "=== firstboot.sh path discovery covers prepare-sd.sh write targets ==="
