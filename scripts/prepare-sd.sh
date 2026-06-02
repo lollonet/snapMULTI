@@ -28,6 +28,9 @@ source "$SCRIPT_DIR/common/release-manifest.sh"
 
 # shellcheck source=common/install-profile.sh
 source "$SCRIPT_DIR/common/install-profile.sh"
+
+# shellcheck source=common/staging-manifest.sh
+source "$SCRIPT_DIR/common/staging-manifest.sh"
 # install-profile.sh — SSOT for INSTALL_TYPE-derived decisions
 # (install_profile_needs_server_stack / _needs_client_stack /
 # _configures_music_source / _is_valid). prepare-sd.sh runs on the host
