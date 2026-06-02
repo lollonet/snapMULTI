@@ -34,9 +34,12 @@
 #      cp (e.g. forthcoming additions, or files only relevant on certain
 #      profiles where the cp is gated upstream).
 #
-# This PR is pure-additive: prepare-sd.sh is NOT refactored to read
-# from the manifest. The audit's PR5 will do that. The value here is
-# the contract — the tests catch drift today, before the refactor.
+# v0.8 PR6 completed the wiring: copy_server_files / copy_client_files
+# now iterate STAGING_*_REQUIRED / STAGING_*_OPTIONAL via the
+# stage_manifest_entry() helper defined below, using the parallel
+# _DESTS arrays for the destination subdirectory. The special-case
+# entries (STAGING_*_SPECIAL_INLINE) stay inline in copy_*_files
+# because they have conditional logic the generic helper can't model.
 #
 # Path conventions:
 #   - All paths are RELATIVE to the repository root (PROJECT_DIR).
