@@ -52,9 +52,18 @@ assert_contains "$client_verify_block" "client/scripts/common/systemd-snippets.s
 # alongside the other shared modules — without it the file is not copied to
 # the client install dir and the previous client verify assertion would have
 # nothing to find.
-copy_block=$(sed -n '/for _shared in/,/done$/p' "$PREPARE_SD_SH" | head -10)
-assert_contains "$copy_block" "systemd-snippets.sh" \
-    "bash selective copy loop includes systemd-snippets.sh"
+#
+# v0.8 PR6: copy_client_files now iterates STAGING_COMMON_SHARED_MODULES from
+# scripts/common/staging-manifest.sh via stage_manifest_entry. Two-part check:
+#   (a) systemd-snippets.sh is declared in STAGING_COMMON_SHARED_MODULES
+#   (b) copy_client_files iterates that array via stage_manifest_entry
+MANIFEST="$SCRIPT_DIR/../scripts/common/staging-manifest.sh"
+manifest_block=$(awk '/^STAGING_COMMON_SHARED_MODULES=\(/,/^\)/' "$MANIFEST")
+assert_contains "$manifest_block" "systemd-snippets.sh" \
+    "staging-manifest.sh declares systemd-snippets.sh in STAGING_COMMON_SHARED_MODULES"
+copy_block=$(sed -n '/^copy_client_files/,/^}/p' "$PREPARE_SD_SH")
+assert_contains "$copy_block" 'STAGING_COMMON_SHARED_MODULES[@]' \
+    "copy_client_files() iterates STAGING_COMMON_SHARED_MODULES via stage_manifest_entry"
 
 server_verify_block=$(sed -n '/server\/docker-compose.yml/,/server\/ro-mode.sh/p' "$PREPARE_SD_SH")
 assert_contains "$server_verify_block" "server/scripts/tidal/tidal-meta-bridge.sh" \

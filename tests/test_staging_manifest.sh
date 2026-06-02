@@ -148,97 +148,105 @@ extract_cp_sources() {
 }
 
 echo
-echo "=== copy_server_files: every cp source is in the manifest ==="
-# Bash 3.2 (macOS default) lacks `mapfile`, and prepare-sd.sh is
-# host-side — the test must run there. Use a while-read loop instead.
-server_sources=()
-while IFS= read -r _line; do
-    [[ -n "$_line" ]] && server_sources+=("$_line")
-done < <(extract_cp_sources copy_server_files | sort -u)
-# Normalize $SCRIPT_DIR -> scripts/, $PROJECT_DIR -> "", $CLIENT_DIR -> client/.
-normalize_path() {
-    sed -E 's|^\$SCRIPT_DIR/|scripts/|; s|^\$PROJECT_DIR/||; s|^\$CLIENT_DIR/|client/|'
+echo "=== Parallel _DESTS arrays match _REQUIRED / _OPTIONAL ==="
+# Each entry array MUST have a matching _DESTS array of the same length.
+# A mismatch silently mis-routes the cp dest to the wrong subdir.
+check_lockstep() {
+    local name1="$1" name2="$2" len1="$3" len2="$4"
+    if [[ "$len1" -eq "$len2" ]]; then
+        echo "  PASS: $name1 ($len1) and $name2 ($len2) parallel"
+        pass=$((pass + 1))
+    else
+        echo "  FAIL: $name1 ($len1) and $name2 ($len2) length mismatch"
+        fail=$((fail + 1))
+    fi
 }
-all_server_entries=("${STAGING_SERVER_REQUIRED[@]}" "${STAGING_SERVER_OPTIONAL[@]}")
-for src in "${server_sources[@]}"; do
-    norm=$(echo "$src" | normalize_path)
-    found=0
-    for entry in "${all_server_entries[@]}"; do
-        if [[ "$norm" == "$entry" || "$norm" == "$entry/"* ]]; then
-            found=1; break
-        fi
-    done
-    if (( found )); then
-        echo "  PASS: declared in manifest: $norm"
-        pass=$((pass + 1))
-    else
-        echo "  FAIL: undeclared cp source: $norm  (raw: $src)"
-        fail=$((fail + 1))
-    fi
-done
+check_lockstep STAGING_SERVER_REQUIRED STAGING_SERVER_REQUIRED_DESTS \
+    "${#STAGING_SERVER_REQUIRED[@]}" "${#STAGING_SERVER_REQUIRED_DESTS[@]}"
+check_lockstep STAGING_SERVER_OPTIONAL STAGING_SERVER_OPTIONAL_DESTS \
+    "${#STAGING_SERVER_OPTIONAL[@]}" "${#STAGING_SERVER_OPTIONAL_DESTS[@]}"
+check_lockstep STAGING_CLIENT_REQUIRED STAGING_CLIENT_REQUIRED_DESTS \
+    "${#STAGING_CLIENT_REQUIRED[@]}" "${#STAGING_CLIENT_REQUIRED_DESTS[@]}"
+check_lockstep STAGING_CLIENT_OPTIONAL STAGING_CLIENT_OPTIONAL_DESTS \
+    "${#STAGING_CLIENT_OPTIONAL[@]}" "${#STAGING_CLIENT_OPTIONAL_DESTS[@]}"
 
 echo
-echo "=== copy_client_files: every cp source is in the manifest ==="
-client_sources=()
-while IFS= read -r _line; do
-    [[ -n "$_line" ]] && client_sources+=("$_line")
-done < <(extract_cp_sources copy_client_files | sort -u)
-all_client_entries=("${STAGING_CLIENT_REQUIRED[@]}" "${STAGING_CLIENT_OPTIONAL[@]}" "${STAGING_COMMON_SHARED_MODULES[@]}")
-for src in "${client_sources[@]}"; do
-    norm=$(echo "$src" | normalize_path)
-    found=0
-    for entry in "${all_client_entries[@]}"; do
-        if [[ "$norm" == "$entry" || "$norm" == "$entry/"* ]]; then
-            found=1; break
-        fi
-    done
-    if (( found )); then
-        echo "  PASS: declared in manifest: $norm"
-        pass=$((pass + 1))
-    else
-        echo "  FAIL: undeclared cp source: $norm  (raw: $src)"
-        fail=$((fail + 1))
-    fi
-done
-
-echo
-echo "=== copy_server_files references every required server entry ==="
+echo "=== Wiring: copy_*_files iterate the manifest ==="
+# v0.8 PR6 — copy_server_files / copy_client_files iterate the manifest
+# via stage_manifest_entry instead of inline cp lines. Replaced the
+# previous `cp source in manifest` check (now there are no literal cp
+# sources in the loop body) with checks on the loop structure.
 copy_server_body=$(awk '/^copy_server_files\(\)/{f=1; next} f && /^\}/{exit} f' "$PREP")
-for entry in "${STAGING_SERVER_REQUIRED[@]}"; do
-    # Convert the entry (relative path) back to a $VAR-prefixed form for grep.
+copy_client_body=$(awk '/^copy_client_files\(\)/{f=1; next} f && /^\}/{exit} f' "$PREP")
+
+assert_iterates() {
+    local fn_body_var="$1" arr_name="$2"
+    local body="${!fn_body_var}"
+    if grep -qE "for [a-zA-Z_]+ in \"\\\$\\{!${arr_name}\\[@\\]\\}\"" <<<"$body"; then
+        echo "  PASS: $fn_body_var iterates $arr_name via \${!${arr_name}[@]}"
+        pass=$((pass + 1))
+    else
+        echo "  FAIL: $fn_body_var does NOT iterate $arr_name"
+        fail=$((fail + 1))
+    fi
+}
+assert_iterates copy_server_body STAGING_SERVER_REQUIRED
+assert_iterates copy_server_body STAGING_SERVER_OPTIONAL
+assert_iterates copy_client_body STAGING_CLIENT_REQUIRED
+assert_iterates copy_client_body STAGING_CLIENT_OPTIONAL
+
+# stage_manifest_entry called by both copy_*_files.
+for fn in server client; do
+    body_var="copy_${fn}_body"
+    body="${!body_var}"
+    if grep -qE "stage_manifest_entry " <<<"$body"; then
+        echo "  PASS: copy_${fn}_files calls stage_manifest_entry"
+        pass=$((pass + 1))
+    else
+        echo "  FAIL: copy_${fn}_files does NOT call stage_manifest_entry"
+        fail=$((fail + 1))
+    fi
+done
+
+# Shared common modules wired in copy_client_files (server has its
+# scripts/common/ shipped via the recursive top-level copy at L811).
+if grep -qE 'for [a-z_]+ in "\$\{STAGING_COMMON_SHARED_MODULES\[@\]\}"' <<<"$copy_client_body"; then
+    echo "  PASS: copy_client_files iterates STAGING_COMMON_SHARED_MODULES"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: copy_client_files does NOT iterate STAGING_COMMON_SHARED_MODULES"
+    fail=$((fail + 1))
+fi
+
+echo
+echo "=== Special-case inline copies still present and declared ==="
+# Items in STAGING_*_SPECIAL_INLINE are kept inline because they have
+# conditional logic stage_manifest_entry doesn't model (mpd.db
+# MUSIC_SOURCE gate, tidal/ subdir copy, docker/ idempotent idiom,
+# initramfs-hooks/ nullglob).
+for entry in "${STAGING_SERVER_SPECIAL_INLINE[@]}"; do
     case "$entry" in
         scripts/*) pattern="\\\$SCRIPT_DIR/${entry#scripts/}" ;;
-        client/*)  pattern="\\\$CLIENT_DIR/${entry#client/}" ;;
         *)         pattern="\\\$PROJECT_DIR/$entry" ;;
     esac
     if grep -qE "$pattern" <<<"$copy_server_body"; then
-        echo "  PASS: copy_server_files references required: $entry"
+        echo "  PASS: server special-case '$entry' has inline cp"
         pass=$((pass + 1))
     else
-        echo "  FAIL: copy_server_files does NOT reference required: $entry"
+        echo "  FAIL: server special-case '$entry' has NO inline cp"
         fail=$((fail + 1))
     fi
 done
-
-echo
-echo "=== copy_client_files references every required client entry ==="
-copy_client_body=$(awk '/^copy_client_files\(\)/{f=1; next} f && /^\}/{exit} f' "$PREP")
-for entry in "${STAGING_CLIENT_REQUIRED[@]}"; do
+for entry in "${STAGING_CLIENT_SPECIAL_INLINE[@]}"; do
     case "$entry" in
         scripts/*) pattern="\\\$SCRIPT_DIR/${entry#scripts/}" ;;
-        client/*)  pattern="\\\$CLIENT_DIR/${entry#client/}" ;;
         *)         pattern="\\\$PROJECT_DIR/$entry" ;;
     esac
-    # Match literal cp source, OR the basename in a `for item in ...`
-    # line (the `for item in docker-compose.yml ...` loop covers the
-    # CLIENT_DIR/common/* top-level files).
-    basename="${entry##*/}"
-    if grep -qE "$pattern" <<<"$copy_client_body" || \
-       grep -qE "for [a-z_]+ in [^;]*${basename}" <<<"$copy_client_body"; then
-        echo "  PASS: copy_client_files references required: $entry"
+    if grep -qE "$pattern" <<<"$copy_client_body"; then
+        echo "  PASS: client special-case '$entry' has inline cp"
         pass=$((pass + 1))
     else
-        echo "  FAIL: copy_client_files does NOT reference required: $entry"
+        echo "  FAIL: client special-case '$entry' has NO inline cp"
         fail=$((fail + 1))
     fi
 done
