@@ -114,6 +114,36 @@ install_initramfs_lzma_hook() {
     ok "overlayroot: initramfs lzma hook installed ($hook_dst)"
 }
 
+# Map kernel version → deployed initramfs path under /boot/firmware/.
+# Returns the path on stdout; empty string when the suffix is unknown
+# (caller treats empty as "cannot verify idempotently — proceed with
+# rebuild as the safe default").
+_initramfs_target_for_kver() {
+    local kver="$1"
+    case "$kver" in
+        *+rpt-rpi-v8)    echo "/boot/firmware/initramfs8" ;;
+        *+rpt-rpi-2712)  echo "/boot/firmware/initramfs_2712" ;;
+        *+rpt-rpi-v7l)   echo "/boot/firmware/initramfs7l" ;;
+        *+rpt-rpi-v7+)   echo "/boot/firmware/initramfs7" ;;
+        *+rpt-rpi-v6+)   echo "/boot/firmware/initramfs" ;;
+        *)               echo "" ;;
+    esac
+}
+
+# True iff the deployed initramfs at $target already includes
+# liblzma.so.5. Used to skip the rebuild when the kernel package's
+# own post-install update-initramfs (which runs earlier in firstboot,
+# while /boot/firmware is still rw) has already produced a usable
+# initramfs — automatic on distros where kmod is linked against
+# liblzma (trixie+). Conservative: missing target file or missing
+# lsinitramfs tool both return false → caller proceeds with rebuild.
+_initramfs_already_has_liblzma() {
+    local target="$1"
+    [[ -f "$target" ]] || return 1
+    command -v lsinitramfs >/dev/null 2>&1 || return 1
+    lsinitramfs "$target" 2>/dev/null | grep -qF "liblzma.so.5"
+}
+
 ensure_overlayroot_initramfs_ready() {
     local log_target="${UNIFIED_LOG:-/dev/null}"
 
@@ -126,20 +156,39 @@ ensure_overlayroot_initramfs_ready() {
         return 0
     fi
 
-    local kver_dir kver any_failed=0 any_attempted=0
+    local kver_dir kver any_failed=0 any_attempted=0 target
     for kver_dir in /lib/modules/*; do
         [[ -d "$kver_dir" ]] || continue
         kver="${kver_dir##*/}"
         any_attempted=1
 
-        info "overlayroot: refreshing modules.dep + initramfs for $kver"
-
+        # Always refresh modules.dep — cheap, writes under /lib/modules
+        # which is on rootfs (overlayroot's upper layer is rw even after
+        # /boot/firmware has been remounted ro).
         if ! depmod -a "$kver" >> "$log_target" 2>&1; then
             warn "overlayroot: depmod -a $kver failed (see $log_target)"
             any_failed=1
             continue
         fi
 
+        # Idempotent skip: if the deployed initramfs at the kernel's
+        # /boot/firmware target already includes liblzma.so.5, the
+        # rebuild is a no-op AND would fail anyway when /boot/firmware
+        # is read-only at finalize time (the cp-back step). The kernel
+        # package's own post-install update-initramfs ran earlier in
+        # firstboot, while /boot/firmware was still rw, and on trixie
+        # kmod pulls liblzma via its linker dependency so the resulting
+        # initramfs already has what overlay's xz-compressed module
+        # needs. On bookworm — or any distro where the auto-rebuild
+        # produced an initramfs WITHOUT liblzma — the check returns
+        # false and the rebuild runs as before.
+        target="$(_initramfs_target_for_kver "$kver")"
+        if [[ -n "$target" ]] && _initramfs_already_has_liblzma "$target"; then
+            info "overlayroot: initramfs for $kver already includes liblzma at $target — skip rebuild (idempotent)"
+            continue
+        fi
+
+        info "overlayroot: refreshing initramfs for $kver"
         if ! update-initramfs -u -k "$kver" >> "$log_target" 2>&1; then
             warn "overlayroot: update-initramfs -u -k $kver failed (see $log_target)"
             any_failed=1
