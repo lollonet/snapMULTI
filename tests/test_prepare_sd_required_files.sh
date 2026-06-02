@@ -93,6 +93,30 @@ if [[ -f "$PREPARE_SD_PS1" ]]; then
     ps1_copy_foreach=$(sed -n '/foreach (\$shared in @(/,/))/p' "$PREPARE_SD_PS1")
     assert_contains "$ps1_copy_foreach" "systemd-snippets.sh" \
         "ps1 selective copy foreach includes systemd-snippets.sh"
+
+    # v0.8 drift sync: ps1 requiredBase verify list must include the
+    # v0.8 hardening track files that bash prepare-sd.sh sources at
+    # lines 24, 30, 33 + the overlayroot SSOT module.
+    for new_entry in cmdline-manager.sh install-profile.sh staging-manifest.sh overlayroot-lifecycle.sh; do
+        assert_contains "$ps1_required_base" "common/$new_entry" \
+            "ps1 \$requiredBase includes common/$new_entry"
+    done
+
+    # overlayroot-lifecycle.sh must also ship to client/ (sourced by
+    # ro-mode.sh + system-tune.sh on client install).
+    assert_contains "$ps1_client_required" "client/scripts/common/overlayroot-lifecycle.sh" \
+        "ps1 client-required list includes overlayroot-lifecycle.sh"
+
+    # Selective copy foreach must enumerate overlayroot-lifecycle.sh —
+    # mirrors STAGING_COMMON_SHARED_MODULES in scripts/common/staging-manifest.sh.
+    assert_contains "$ps1_copy_foreach" "overlayroot-lifecycle.sh" \
+        "ps1 selective copy foreach includes overlayroot-lifecycle.sh"
+
+    # initramfs-hooks/ must be explicitly copied to client/scripts/common/
+    # (mirrors bash copy_client_files lines 596-610). The Copy-Item -Recurse
+    # at the top level lands it under common/ root but not under client/.
+    assert_contains "$(cat "$PREPARE_SD_PS1")" "common\\initramfs-hooks" \
+        "ps1 copies initramfs-hooks/ to client/scripts/common/"
 fi
 
 echo ""

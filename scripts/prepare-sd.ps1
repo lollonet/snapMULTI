@@ -136,6 +136,16 @@ function Assert-PreparedSdCard {
         'common/mount-music.sh',
         'common/systemd-snippets.sh',
         'common/release-manifest.sh',
+        # v0.8 hardening track additions (mirror bash prepare-sd.sh
+        # sources at lines 24, 30, 33 + overlayroot-lifecycle helper
+        # sourced by system-tune.sh and ro-mode.sh). The actual file
+        # copy already lands these via the top-level `Copy-Item
+        # 'common' -Recurse` further down; this verify list catches
+        # missing-from-repo regressions before flash.
+        'common/cmdline-manager.sh',
+        'common/install-profile.sh',
+        'common/staging-manifest.sh',
+        'common/overlayroot-lifecycle.sh',
         'common/play-smoke-tone.sh',
         'common/auto-boot-smoke.sh',
         'common/restore-snapmulti-state.sh',
@@ -190,6 +200,9 @@ function Assert-PreparedSdCard {
             'client/scripts/common/install-deps.sh',
             'client/scripts/common/install-docker.sh',
             'client/scripts/common/systemd-snippets.sh',
+            # v0.8: overlayroot-lifecycle.sh is sourced by client's
+            # ro-mode.sh + system-tune.sh — must ship to client/.
+            'client/scripts/common/overlayroot-lifecycle.sh',
             'client/snapclient.conf'
         )) {
             $path = Join-Path $Dest $file
@@ -677,11 +690,21 @@ function Copy-ClientFiles {
     # Shared modules from server scripts/common/
     $commonDest = Join-Path $scriptsDest 'common'
     New-Item -ItemType Directory -Path $commonDest -Force | Out-Null
-    foreach ($shared in @('install-deps.sh', 'install-docker.sh', 'system-tune.sh', 'unified-log.sh', 'logging.sh', 'sanitize.sh', 'systemd-snippets.sh')) {
+    foreach ($shared in @('install-deps.sh', 'install-docker.sh', 'system-tune.sh', 'overlayroot-lifecycle.sh', 'unified-log.sh', 'logging.sh', 'sanitize.sh', 'systemd-snippets.sh')) {
         $sharedPath = Join-Path $ScriptDir "common\$shared"
         if (Test-Path $sharedPath) {
             Copy-Item $sharedPath -Destination $commonDest
         }
+    }
+
+    # initramfs-hooks/ — required by overlayroot-lifecycle.sh's
+    # install_initramfs_lzma_hook (snapmulti-lzma copy_exec's liblzma.so.5
+    # so kmod inside initramfs can decompress overlay.ko.xz). Mirror of
+    # scripts/prepare-sd.sh copy_client_files lines 596-610.
+    $initramfsHooksSrc = Join-Path $ScriptDir 'common\initramfs-hooks'
+    if (Test-Path $initramfsHooksSrc) {
+        $initramfsHooksDest = Join-Path $commonDest 'initramfs-hooks'
+        Copy-Item $initramfsHooksSrc -Destination $initramfsHooksDest -Recurse
     }
 
     # boot-tune.sh and device-smoke.sh are server scripts but client also needs them
