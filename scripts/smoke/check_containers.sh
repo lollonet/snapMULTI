@@ -174,6 +174,22 @@ check_containers() {
             no_limit+=("$name")
         fi
 
+        # Format the limit for the health row's `desc` column on the
+        # /status page. Source of truth: Docker engine state via
+        # HostConfig.Memory (bytes). Same `docker inspect` for both
+        # server and client containers, so both-mode hosts surface
+        # snapclient + audio-visualizer + fb-display limits alongside
+        # the server ones without any .env propagation between the two
+        # /opt installs. Falls back silently to no suffix if numfmt is
+        # missing or the value is not a positive integer — the parent
+        # row still renders, the page just omits the limit column.
+        local mem_suffix=""
+        if [[ "$mem" =~ ^[0-9]+$ ]] && (( mem > 0 )) && command -v numfmt >/dev/null 2>&1; then
+            local mem_h
+            mem_h=$(numfmt --to=iec --format='%.0f' "$mem" 2>/dev/null || true)
+            [[ -n "$mem_h" ]] && mem_suffix=" (limit=$mem_h)"
+        fi
+
         # 3. Healthcheck (only for containers that declare one). Output
         # is empty string if no healthcheck. After start_period grace
         # the status stabilises at `healthy` or `unhealthy`.
@@ -181,10 +197,10 @@ check_containers() {
         if [[ -n "$health" ]]; then
             case "$health" in
                 healthy)
-                    pass_check "$name: healthy"
+                    pass_check "$name: healthy$mem_suffix"
                     ;;
                 unhealthy)
-                    fail_check "$name: unhealthy — service is failing its healthcheck probe"
+                    fail_check "$name: unhealthy — service is failing its healthcheck probe$mem_suffix"
                     ;;
                 starting)
                     # If container has been up more than 5 min and still
@@ -196,9 +212,9 @@ check_containers() {
                         uptime_s=$(( $(date +%s) - $(date -d "$started_at" +%s 2>/dev/null || echo 0) ))
                     fi
                     if (( uptime_s > 300 )); then
-                        warn "$name: healthcheck stuck on 'starting' after $((uptime_s/60)) min — probe never settled"
+                        warn "$name: healthcheck stuck on 'starting' after $((uptime_s/60)) min — probe never settled$mem_suffix"
                     else
-                        info "$name: healthcheck warming up (${uptime_s}s, still within the grace period)"
+                        info "$name: healthcheck warming up (${uptime_s}s, still within the grace period)$mem_suffix"
                     fi
                     ;;
                 *)

@@ -2489,10 +2489,40 @@ _SYSTEMD_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 _CONTAINER_PATTERN = re.compile(
-    r"^([a-z0-9][a-z0-9_-]+): (healthy|unhealthy|starting|restarting|exited|created|paused|removing|dead)$"
+    # Optional trailing description: ` — <text>` (unhealthy fail reason) and/or
+    # ` (limit=<value>)` (HostConfig.Memory rendered by check_containers.sh).
+    # Both are independent — `healthy (limit=64M)`, `unhealthy — probe failed`,
+    # `unhealthy — probe failed (limit=128M)`, and plain `healthy` all match.
+    # The state vocabulary is unchanged; only the trailing context is parsed
+    # so the existing /status renderer can populate the `desc` column.
+    r"^([a-z0-9][a-z0-9_-]+): "
+    r"(healthy|unhealthy|starting|restarting|exited|created|paused|removing|dead)"
+    r"(?:\s+—\s+(.+?))?"
+    r"(?:\s+\(limit=([^)]+)\))?$"
 )
 
 _COMPOSE_NESTED_PATTERN = re.compile(r"^\s+(\w+)/(\S+) -> (\w+)$")
+
+# Container-name → role mapping. Used to group rows in the Containers
+# section under "server" / "client" sub-headers. Mirrors the
+# `_SNAPMULTI_CONTAINERS` list in scripts/smoke/check_containers.sh
+# but split by role (the smoke side only cares about "is this ours");
+# the renderer additionally separates server- from client-side. Drift
+# class: when a new container is added to docker-compose.yml, append
+# it here so it groups correctly — otherwise it falls through to the
+# unclassified bucket and renders below the client group.
+_CONTAINER_ROLE: dict[str, str] = {
+    "snapserver": "server",
+    "mpd": "server",
+    "mympd": "server",
+    "metadata": "server",
+    "shairport-sync": "server",
+    "librespot": "server",
+    "tidal-connect": "server",
+    "snapclient": "client",
+    "audio-visualizer": "client",
+    "fb-display": "client",
+}
 
 
 _NOISE_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -2572,7 +2602,18 @@ def _structured_systemd_row(section: str, msg: str) -> tuple[str, str, str, str]
                 "removing": "warn",
                 "created": "warn",
             }.get(state, "fail")
-            return unit, state, state_class, ""
+            extra = (m.group(3) or "").strip()
+            limit = (m.group(4) or "").strip()
+            # Join the fail reason and the limit value into a single desc
+            # column so the renderer doesn't need two cells. "limit 64M"
+            # uses the same dot-prefix the systemd unit rows use for
+            # auxiliary context.
+            parts = []
+            if extra:
+                parts.append(extra)
+            if limit:
+                parts.append(f"limit {limit}")
+            return unit, state, state_class, " · ".join(parts)
         return None
     if section == "Compose":
         m = _COMPOSE_NESTED_PATTERN.match(msg)
@@ -2671,6 +2712,19 @@ def _status_to_html(
     for r in records:
         sections.setdefault(r.get("section", "other"), []).append(r)
 
+    # Resource profile is folded into the Containers section as a single
+    # header row. The per-service limit sub-list that used to live in its
+    # own bottom section is now redundant — each container row already
+    # carries its own `limit XYZ` badge from check_containers.sh.
+    profile = _get_resource_profile()
+    profile_row = ""
+    if profile is not None:
+        profile_row = (
+            '<li class="r-pass"><span class="icon">✓</span>'
+            f"Active profile: <strong>{html.escape(profile['name'])}</strong>"
+            "</li>"
+        )
+
     sec_html_parts = []
     for sec_name, recs in sections.items():
         # Skip noise-only sections: when a section has nothing but
@@ -2681,8 +2735,61 @@ def _status_to_html(
         # the reader doesn't scroll past silent positive confirmations.
         if _is_noise_only_section(recs):
             continue
+
+        # Compose section: drop the per-service nested rows ("  server/X
+        # -> healthy") — the Containers section is now the authoritative
+        # per-container view and the duplication adds scroll without
+        # information. Keep the aggregate count rows and the avahi-socket
+        # mount confirmations, which are not container-health and stay
+        # only in Compose.
+        if sec_name == "Compose":
+            recs = [
+                r for r in recs if not _COMPOSE_NESTED_PATTERN.match(r.get("msg", ""))
+            ]
+            if not recs:
+                continue
+
+        # Containers section: pre-scan to group per-container rows by
+        # role (server / client) under sub-headers. Aggregate rows ("No
+        # active restart failures", "All N have memory limit applied",
+        # "Metadata plugins inside snapserver") stay below at the end.
+        if sec_name == "Containers":
+            server_rows: list[dict] = []
+            client_rows: list[dict] = []
+            other_rows: list[dict] = []
+            for r in recs:
+                m = _CONTAINER_PATTERN.match(r.get("msg", ""))
+                if m and m.group(1) in _CONTAINER_ROLE:
+                    if _CONTAINER_ROLE[m.group(1)] == "server":
+                        server_rows.append(r)
+                    else:
+                        client_rows.append(r)
+                else:
+                    other_rows.append(r)
+            ordered: list[dict] = []
+            if server_rows:
+                ordered.append({"_group_header": "server", "_count": len(server_rows)})
+                ordered.extend(server_rows)
+            if client_rows:
+                ordered.append({"_group_header": "client", "_count": len(client_rows)})
+                ordered.extend(client_rows)
+            ordered.extend(other_rows)
+            recs = ordered
+
         rows = []
+        if sec_name == "Containers" and profile_row:
+            rows.append(profile_row)
         for r in recs:
+            # Synthetic group header injected above for the Containers
+            # section. Rendered as an info-class row with a chevron icon.
+            if "_group_header" in r:
+                rows.append(
+                    '<li class="r-info row-group-header">'
+                    '<span class="icon">▸</span>'
+                    f"<strong>{html.escape(r['_group_header'])}</strong>"
+                    f" ({r['_count']})</li>"
+                )
+                continue
             status = r.get("status", "info")
             raw_msg = r.get("msg", "")
             # Decode systemd-escape `\xNN` sequences so unit names like
@@ -2727,12 +2834,10 @@ def _status_to_html(
     if show_snapclients:
         sec_html_parts.append(_render_snapcast_clients_section(snapclients))
 
-    # Resource profile — env-driven, no I/O. Section hides itself on dev
-    # clones where SNAPMULTI_PROFILE isn't set, so the page stays clean on
-    # manual `docker compose up` without deploy.sh.
-    profile_html = _render_resource_profile_section(_get_resource_profile())
-    if profile_html:
-        sec_html_parts.append(profile_html)
+    # NOTE: the Resource Profile section was folded into Containers above —
+    # _render_resource_profile_section() is still exported for the unit test
+    # but no longer called from the rendering path. Container rows already
+    # carry the per-service limit value from check_containers.sh.
 
     if age_s is not None:
         if age_s < 60:
