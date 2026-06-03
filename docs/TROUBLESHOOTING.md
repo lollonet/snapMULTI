@@ -64,9 +64,9 @@ The cues also fire automatically after every boot (`snapmulti-auto-boot-smoke.se
 **Likely cause.** First boot is downloading container images over the network (the slow part, 2–6 minutes on typical home WiFi). Cheap / counterfeit SD cards also cause apparent "hangs" — the install is actually waiting on SD write throughput.
 
 **Try this.**
-1. Wait the full 15-20 minutes on a Pi 4/5 before assuming a problem — longer on Pi 3 or Pi Zero 2 W. The install runs `cloud-init` → `snapmulti-firstboot.service`, both headless.
+1. Wait the full 15-20 minutes on a Pi 4/5 before assuming a problem — longer on Pi 3 or Pi Zero 2 W. The install runs as `cloud-init` `runcmd` → `firstboot.sh`, both headless.
 2. From your laptop: `ping <hostname>.local`. If it answers, the network side is up.
-3. If SSH works: `ssh <username>@<hostname>.local`, then `sudo journalctl -u snapmulti-firstboot.service -f` to watch the install in real time.
+3. If SSH works: `ssh <username>@<hostname>.local`, then `sudo tail -f /var/log/snapmulti-install.log` to watch the install in real time (or `sudo journalctl -u cloud-final.service -f` for the cloud-init unit view).
 
 **If still broken.** Pull the SD card and check for `snapmulti-diag-install-failed-*.tar.gz` on the boot partition — that means the install gave up. Attach it to a GitHub issue. If no bundle exists and the Pi is fully unreachable after 20 minutes, the SD card is the most common culprit (use a SanDisk / Samsung A1 or better — see [HARDWARE.md](HARDWARE.md#if-unsure-buyuse-this)).
 

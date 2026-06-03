@@ -64,9 +64,9 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 **Causa probabile.** Il primo boot sta scaricando le immagini container dalla rete (la parte lenta, 2–6 minuti su WiFi domestico tipico). Anche le SD economiche / contraffatte sembrano "appendersi" — in realtà l'install sta aspettando il throughput in scrittura della SD.
 
 **Cosa provare.**
-1. Aspetta tutti i 15-20 minuti su Pi 4/5 prima di sospettare un problema — di più su Pi 3 o Pi Zero 2 W. L'install gira come `cloud-init` → `snapmulti-firstboot.service`, entrambi headless.
+1. Aspetta tutti i 15-20 minuti su Pi 4/5 prima di sospettare un problema — di più su Pi 3 o Pi Zero 2 W. L'install gira come `cloud-init` `runcmd` → `firstboot.sh`, entrambi headless.
 2. Dal laptop: `ping <hostname>.local`. Se risponde, la rete è OK.
-3. Se SSH funziona: `ssh <username>@<hostname>.local`, poi `sudo journalctl -u snapmulti-firstboot.service -f` per vedere l'install in tempo reale.
+3. Se SSH funziona: `ssh <username>@<hostname>.local`, poi `sudo tail -f /var/log/snapmulti-install.log` per vedere l'install in tempo reale (oppure `sudo journalctl -u cloud-final.service -f` per la vista dall'unit di cloud-init).
 
 **Se è ancora bloccato.** Estrai la SD e cerca `snapmulti-diag-install-failed-*.tar.gz` sulla partizione boot — significa che l'install si è arreso. Allegalo a una issue GitHub. Se non esiste nessun pacchetto diagnostico e il Pi è completamente irraggiungibile dopo 20 minuti, la SD è la causa più comune (usa SanDisk / Samsung A1 o migliore — vedi [HARDWARE.it.md](HARDWARE.it.md#se-non-sai-cosa-comprareusare)).
 
