@@ -180,7 +180,10 @@ fi
 # Source line must precede the first install_conf_get call (otherwise
 # bash errors with "command not found" — line-by-line interpreter).
 src_line=$(grep -nE 'source "\$SNAP_BOOT/common/install-conf-reader\.sh"' "$FIRSTBOOT" | head -1 | cut -d: -f1)
-first_call_line=$(grep -nE 'install_conf_get\b' "$FIRSTBOOT" | grep -vE '^\s*#' | head -1 | cut -d: -f1)
+# `grep -n` prefixes lines with `NNN:` so the filter anchors after
+# the colon: `:[[:space:]]*#` strips lines whose content starts with
+# `#`. The previous `^\s*#` would never match (verified by PR #585 review).
+first_call_line=$(grep -nE 'install_conf_get\b' "$FIRSTBOOT" | grep -vE ':[[:space:]]*#' | head -1 | cut -d: -f1)
 if [[ -n "$src_line" && -n "$first_call_line" && "$src_line" -lt "$first_call_line" ]]; then
     note_pass "source line ($src_line) precedes first install_conf_get call ($first_call_line)"
 else
