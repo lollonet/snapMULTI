@@ -953,9 +953,12 @@ Get-ChildItem -Path $Dest -Recurse -Force -File -Filter '*.pyc' -ErrorAction Sil
     Remove-Item -Force -ErrorAction SilentlyContinue
 
 # ── Write version files ──────────────────────────────────────────
-# Both use the same version tag from the monorepo (with "v" prefix)
+# Both use the same version tag from the monorepo (with "v" prefix).
+# NB: NO `--abbrev=0` — keep the `-<N>-g<sha>` suffix from `git describe` so a
+# flash from a main HEAD past the latest tag bakes the disambiguated version
+# instead of the bare tag. See the matching comment in prepare-sd.sh:829.
 try {
-    $gitVersion = & git -C $ProjectDir describe --tags --abbrev=0 2>$null
+    $gitVersion = & git -C $ProjectDir describe --tags 2>$null
     if (-not $gitVersion) { $gitVersion = 'dev' }
 } catch {
     $gitVersion = 'dev'
