@@ -250,6 +250,13 @@ source "$COMMON/install-conf-mirror.sh"
 # shellcheck source=common/install-profile.sh
 source "$COMMON/install-profile.sh"
 
+# Source systemd-units.sh — SSOT for static systemd-unit installation.
+# Provides install_systemd_unit_files BASE SRC_DIR helper used by the
+# diagnostics / backup / mpd-update / state-backup / status /
+# wifi-watchdog / music-bind blocks below.
+# shellcheck source=common/systemd-units.sh
+source "$COMMON/systemd-units.sh"
+
 # Promote profile based on hardware. The prepare-sd.sh menu offers
 # three user-facing choices (client / server / both) — `client-native`
 # is derived: it is what the user really gets on a Pi Zero 2W when they
@@ -1324,10 +1331,7 @@ done
 if [[ -n "$DIAG_SCRIPT" ]]; then
     install -m 755 "$DIAG_SCRIPT" /usr/local/bin/save-diagnostics
     DIAG_DIR="$(dirname "$DIAG_SCRIPT")"
-    if [[ -f "$DIAG_DIR/snapmulti-diagnostics.service" && \
-          -f "$DIAG_DIR/snapmulti-diagnostics.timer" ]]; then
-        install -m 0644 "$DIAG_DIR/snapmulti-diagnostics.service" /etc/systemd/system/
-        install -m 0644 "$DIAG_DIR/snapmulti-diagnostics.timer" /etc/systemd/system/
+    if install_systemd_unit_files "snapmulti-diagnostics" "$DIAG_DIR"; then
         systemctl daemon-reload
         systemctl enable snapmulti-diagnostics.timer
     fi
@@ -1346,10 +1350,7 @@ if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     if [[ -n "$BACKUP_SCRIPT" ]]; then
         install -m 755 "$BACKUP_SCRIPT" /usr/local/bin/backup-mpd
         bk_dir="$(dirname "$BACKUP_SCRIPT")"
-        if [[ -f "$bk_dir/snapmulti-backup.service" && \
-              -f "$bk_dir/snapmulti-backup.timer" ]]; then
-            install -m 0644 "$bk_dir/snapmulti-backup.service" /etc/systemd/system/
-            install -m 0644 "$bk_dir/snapmulti-backup.timer" /etc/systemd/system/
+        if install_systemd_unit_files "snapmulti-backup" "$bk_dir"; then
             systemctl daemon-reload
             systemctl enable snapmulti-backup.timer
         fi
@@ -1368,10 +1369,7 @@ if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     if [[ -n "$MPD_UPDATE_SCRIPT" ]]; then
         install -m 755 "$MPD_UPDATE_SCRIPT" /usr/local/bin/mpd-nfs-update
         mpd_upd_dir="$(dirname "$MPD_UPDATE_SCRIPT")"
-        if [[ -f "$mpd_upd_dir/snapmulti-mpd-update.service" && \
-              -f "$mpd_upd_dir/snapmulti-mpd-update.timer" ]]; then
-            install -m 0644 "$mpd_upd_dir/snapmulti-mpd-update.service" /etc/systemd/system/
-            install -m 0644 "$mpd_upd_dir/snapmulti-mpd-update.timer" /etc/systemd/system/
+        if install_systemd_unit_files "snapmulti-mpd-update" "$mpd_upd_dir"; then
             systemctl daemon-reload
             systemctl enable snapmulti-mpd-update.timer
             log_info "MPD nightly NFS-rescan timer installed (no-op on local libraries)"
@@ -1389,12 +1387,15 @@ if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     if [[ -n "$STATE_BACKUP_SCRIPT" ]]; then
         install -m 755 "$STATE_BACKUP_SCRIPT" /usr/local/bin/backup-snapmulti-state
         state_bk_dir="$(dirname "$STATE_BACKUP_SCRIPT")"
+        # snapmulti-state-backup is the only 3-unit group (.service +
+        # .path + .timer). The helper's "install whatever you find"
+        # contract is too permissive here — if .path or .timer is
+        # missing the `enable --now` calls below would fail. Keep the
+        # all-or-nothing source-tree check the pre-PR8 code had.
         if [[ -f "$state_bk_dir/snapmulti-state-backup.service" && \
               -f "$state_bk_dir/snapmulti-state-backup.path" && \
-              -f "$state_bk_dir/snapmulti-state-backup.timer" ]]; then
-            install -m 0644 "$state_bk_dir/snapmulti-state-backup.service" /etc/systemd/system/
-            install -m 0644 "$state_bk_dir/snapmulti-state-backup.path" /etc/systemd/system/
-            install -m 0644 "$state_bk_dir/snapmulti-state-backup.timer" /etc/systemd/system/
+              -f "$state_bk_dir/snapmulti-state-backup.timer" ]] && \
+           install_systemd_unit_files "snapmulti-state-backup" "$state_bk_dir"; then
             systemctl daemon-reload
             # .path = event-driven (low-latency on direct watched-path writes)
             # .timer = safety net every 10 min for nested writes that .path misses
@@ -1424,9 +1425,7 @@ if install_profile_needs_server_stack "$INSTALL_TYPE"; then
             STATUS_DIR="$_stat_candidate"; break
         fi
     done
-    if [[ -n "$STATUS_DIR" ]]; then
-        install -m 0644 "$STATUS_DIR/snapmulti-status.service" /etc/systemd/system/
-        install -m 0644 "$STATUS_DIR/snapmulti-status.timer"   /etc/systemd/system/
+    if [[ -n "$STATUS_DIR" ]] && install_systemd_unit_files "snapmulti-status" "$STATUS_DIR"; then
         systemctl daemon-reload
         systemctl enable snapmulti-status.timer
         log_info "System-status snapshot timer installed (5-min snapshot interval)"
@@ -1452,8 +1451,7 @@ done
 if [[ -n "$WIFI_WD_SCRIPT" ]]; then
     install -m 755 "$WIFI_WD_SCRIPT" /usr/local/bin/snapmulti-wifi-watchdog
     wifi_wd_dir="$(dirname "$WIFI_WD_SCRIPT")"
-    if [[ -f "$wifi_wd_dir/snapmulti-wifi-watchdog.service" ]]; then
-        install -m 0644 "$wifi_wd_dir/snapmulti-wifi-watchdog.service" /etc/systemd/system/
+    if install_systemd_unit_files "snapmulti-wifi-watchdog" "$wifi_wd_dir"; then
         systemctl daemon-reload
         # `enable --now` on an already-enabled unit is idempotent — safe
         # on `both` installs where this block runs once for the host.
@@ -1482,10 +1480,11 @@ if install_profile_needs_server_stack "$INSTALL_TYPE"; then
         done
         if [[ -n "$BIND_DIR" ]]; then
             install -m 0755 "$BIND_DIR/snapmulti-music-bind.sh" /usr/local/bin/snapmulti-music-bind
-            install -m 0644 "$BIND_DIR/snapmulti-music-bind.service" /etc/systemd/system/
-            systemctl daemon-reload
-            systemctl enable snapmulti-music-bind.service
-            log_info "Music-bind unit installed (overlayroot $MUSIC_SOURCE workaround)"
+            if install_systemd_unit_files "snapmulti-music-bind" "$BIND_DIR"; then
+                systemctl daemon-reload
+                systemctl enable snapmulti-music-bind.service
+                log_info "Music-bind unit installed (overlayroot $MUSIC_SOURCE workaround)"
+            fi
         fi
         unset BIND_DIR _bind_candidate
     fi

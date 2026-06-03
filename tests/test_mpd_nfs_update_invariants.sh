@@ -80,8 +80,13 @@ check "WantedBy=timers.target" "grep -q 'WantedBy=timers.target' '$TIMER'"
 echo
 echo "== firstboot.sh integration =="
 check "firstboot installs the script as /usr/local/bin/mpd-nfs-update" "grep -qE 'install -m 755.*MPD_UPDATE_SCRIPT.*/usr/local/bin/mpd-nfs-update' '$FIRSTBOOT'"
-check "firstboot installs the service file" "grep -q 'snapmulti-mpd-update.service.*etc/systemd/system' '$FIRSTBOOT'"
-check "firstboot installs the timer file" "grep -q 'snapmulti-mpd-update.timer.*etc/systemd/system' '$FIRSTBOOT'"
+# v0.8 PR8 — inline install lines were migrated to the
+# install_systemd_unit_files helper. The unit dest
+# (/etc/systemd/system/) is now hardcoded in the helper; firstboot.sh
+# references the base name only. The .service + .timer file existence
+# is verified by tests/test_systemd_units.sh (Invariant 1).
+check "firstboot calls install_systemd_unit_files for snapmulti-mpd-update" \
+      "grep -qE 'install_systemd_unit_files.+\"snapmulti-mpd-update\"' '$FIRSTBOOT'"
 check "firstboot enables the timer (not the service)" "grep -q 'systemctl enable snapmulti-mpd-update.timer' '$FIRSTBOOT'"
 # v0.8 PR2 #574 replaced `[[ INSTALL_TYPE == "server" || == "both" ]]`
 # with `install_profile_needs_server_stack` (from install-profile.sh).
