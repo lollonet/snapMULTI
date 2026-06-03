@@ -117,6 +117,16 @@ assert_eq \
     "Connection refused -> connection-failed"
 
 assert_eq \
+    "$(_classify_ssh_stderr 'ssh: connect to host pizero port 22: Host is down')" \
+    "connection-failed" \
+    "Host is down -> connection-failed (live-observed on offline LAN host)"
+
+assert_eq \
+    "$(_classify_ssh_stderr 'ssh: connect to host snapvideo port 22: No route to host')" \
+    "connection-failed" \
+    "No route to host -> connection-failed"
+
+assert_eq \
     "$(_classify_ssh_stderr 'something unrecognised about ssh')" \
     "ssh-failed" \
     "unrecognised stderr -> ssh-failed (fallback)"
@@ -156,6 +166,86 @@ assert_eq \
     "$(_ssh_failure_note 'Permission denied (publickey)' 'snapvideo')" \
     "" \
     "auth-failed has no note (operator already knows how to fix)"
+
+echo
+echo "== regression: rc capture propagates from \$(...) subshell =="
+# PR #589 claude-review HIGH: the original patch wrote
+#   `payload=$(... <<'REMOTE' || rc=$? ... REMOTE )`
+# which put `|| rc=$?` INSIDE the command substitution. Bash runs
+# command substitution in a subshell, so `rc` was set there and the
+# outer scope always saw 0 — the classification path was never
+# entered and every SSH failure still rendered as the legacy
+# `ssh-failed` / empty payload. This regression test stubs ssh + the
+# timeout binary to simulate a real failure and asserts the resulting
+# JSON carries a non-default `error` field (i.e. the rc != 0 branch
+# was reached).
+SANDBOX=$(mktemp -d -t fleet-smoke-rc-XXXXXX)
+trap 'rm -rf "$SANDBOX"' EXIT
+
+mkdir -p "$SANDBOX/bin" "$SANDBOX/tmp"
+
+# Stub ssh: emit a host-key-changed stderr and exit 255 (canonical
+# ssh-failure exit code). The script's `payload=$(... ssh ... )` should
+# capture an empty stdout and the outer rc must become 255.
+cat > "$SANDBOX/bin/ssh" <<'STUB'
+#!/usr/bin/env bash
+cat >&2 <<'ERR'
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+Host key for 192.0.2.99 has changed and you have requested strict checking.
+Host key verification failed.
+ERR
+exit 255
+STUB
+chmod +x "$SANDBOX/bin/ssh"
+
+# Stub the test harness so probe_host runs in isolation: TIMEOUT_CMD=(),
+# TMP=$SANDBOX/tmp, ROLES/HOSTS one entry.
+rc_test_out=$(
+    SNAPMULTI_CONTAINER_MANIFEST="$SCRIPT_DIR/../scripts/common/container-manifest.txt" \
+    bash <<EOF
+set -euo pipefail
+# Provide the symbols probe_host expects from the parent script.
+SSH_OPTS=(-o BatchMode=yes)
+SSH_USER=tester
+TIMEOUT_CMD=()
+TMP="$SANDBOX/tmp"
+declare -a ROLES=(server) HOSTS=(snapvideo)
+PATH="$SANDBOX/bin:\$PATH"
+export PATH
+__FLEET_SMOKE_LIB_ONLY=1
+export __FLEET_SMOKE_LIB_ONLY
+# shellcheck source=/dev/null
+source "$FS"
+probe_host "snapvideo" "server"
+# Print the JSON payload the renderer would consume.
+cat "$SANDBOX/tmp/snapvideo.json"
+EOF
+)
+
+# The outer rc must have propagated, the classifier must have been
+# invoked, and the JSON must carry the host-key-changed code +
+# actionable note. Without the fix this assertion fails because the
+# `if (( rc != 0 ))` branch is never entered and the file either is
+# missing or carries an empty/parse-error record.
+if printf '%s\n' "$rc_test_out" | grep -q '"error":"host-key-changed"'; then
+    echo "  PASS: rc propagation works — probe_host emits host-key-changed JSON"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: rc propagation broken — payload missing host-key-changed error"
+    echo "        got: '$rc_test_out'"
+    fail=$((fail + 1))
+fi
+
+if printf '%s\n' "$rc_test_out" | grep -q 'ssh-keygen -R snapvideo'; then
+    echo "  PASS: actionable note threaded through to JSON"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: actionable note missing in JSON"
+    echo "        got: '$rc_test_out'"
+    fail=$((fail + 1))
+fi
 
 echo
 echo "Results: $pass passed, $fail failed"

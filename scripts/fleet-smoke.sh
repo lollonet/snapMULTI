@@ -54,7 +54,7 @@ _classify_ssh_stderr() {
         *"REMOTE HOST IDENTIFICATION HAS CHANGED"*) printf 'host-key-changed' ;;
         *"unix_listener"*|*"mux_client_request_session"*|*"ControlPath"*|*"ControlSocket"*|*"multiplexing"*) printf 'ssh-controlpath-error' ;;
         *"Permission denied"*|*"publickey"*) printf 'auth-failed' ;;
-        *"Connection timed out"*|*"No route to host"*|*"Could not resolve hostname"*|*"Network is unreachable"*|*"Name or service not known"*|*"Connection refused"*) printf 'connection-failed' ;;
+        *"Connection timed out"*|*"No route to host"*|*"Could not resolve hostname"*|*"Network is unreachable"*|*"Name or service not known"*|*"Connection refused"*|*"Host is down"*|*"Host is unreachable"*) printf 'connection-failed' ;;
         *) printf 'ssh-failed' ;;
     esac
 }
@@ -80,9 +80,106 @@ _ssh_failure_note() {
     esac
 }
 
+# probe_host is defined HERE (above the library-mode guard, despite the
+# main parallel loop calling it ~400 lines below) so the regression test
+# can source the script + drive a real failure path with a stubbed ssh.
+# Bash defers variable resolution to invocation time, so referencing
+# TIMEOUT_CMD / SSH_OPTS / SSH_USER / TMP — all set further down — is
+# safe as long as the test sets them itself before calling probe_host.
+probe_host() {
+    local host="$1"
+    local role="$2"
+    local out="$TMP/${host//[^a-zA-Z0-9_-]/_}.json"
+    # Capture SSH stderr so a failure surfaces with a specific cause
+    # instead of the legacy generic "ssh-timeout-or-fail" blob. The
+    # exit code distinguishes `timeout(1)` (124) from a true SSH error.
+    local stderr_file="$TMP/${host//[^a-zA-Z0-9_-]/_}.stderr"
+    # On the device: read VERSION files, run smoke --json. Both best-effort.
+    # The smoke wrapper exits 0/1; --no-fail-on-warn keeps us non-fatal on WARN.
+    # Script piped via stdin to avoid quoting hell with -c '...'.
+    local payload
+    local rc=0
+    # NB: `|| rc=$?` MUST sit outside the `$(...)` — inside the command
+    # substitution it runs in a subshell and the assignment to `rc` never
+    # propagates to the caller, so `if (( rc != 0 ))` below would always
+    # see 0 and the classification path would be silently bypassed.
+    # Reviewed in PR #589 (claude-review HIGH).
+    payload=$("${TIMEOUT_CMD[@]}" \
+            ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' 2>"$stderr_file" <<'REMOTE'
+srv=$(cat /opt/snapmulti/VERSION 2>/dev/null || echo "")
+cli=$(cat /opt/snapclient/VERSION 2>/dev/null || echo "")
+smoke_script=""
+if [ -x /opt/snapmulti/scripts/device-smoke.sh ]; then
+    smoke_script=/opt/snapmulti/scripts/device-smoke.sh
+elif [ -x /opt/snapclient/scripts/device-smoke.sh ]; then
+    smoke_script=/opt/snapclient/scripts/device-smoke.sh
+fi
+if [ -n "$smoke_script" ]; then
+    smoke_json=$(sudo -n "$smoke_script" --json --no-fail-on-warn 2>/dev/null || true)
+else
+    smoke_json=""
+fi
+[ -z "$smoke_json" ] && smoke_json="{}"
+SMOKE_JSON="$smoke_json" python3 -c '
+import json
+import os
+import sys
+
+srv = sys.argv[1]
+cli = sys.argv[2]
+raw = os.environ.get("SMOKE_JSON", "").strip()
+smoke = {}
+if raw:
+    try:
+        smoke, _ = json.JSONDecoder().raw_decode(raw)
+    except json.JSONDecodeError:
+        smoke = {}
+print(json.dumps({"srv": srv, "cli": cli, "smoke": smoke}, separators=(",", ":")))
+' "$srv" "$cli"
+REMOTE
+    ) || rc=$?
+    if (( rc != 0 )); then
+        # `timeout(1)` sends SIGTERM and exits 124 on its own timeout —
+        # distinguish from a true SSH error so the operator does not chase
+        # a host-key / auth issue when the actual problem was a stuck
+        # remote shell.
+        local err note stderr_content
+        stderr_content=$(cat "$stderr_file" 2>/dev/null || true)
+        if (( rc == 124 )); then
+            err="smoke-timeout"
+            note=""
+        else
+            err=$(_classify_ssh_stderr "$stderr_content")
+            note=$(_ssh_failure_note "$stderr_content" "$host")
+        fi
+        jq -nc --arg h "$host" --arg r "$role" \
+                --arg err "$err" --arg note "$note" \
+            '{host:$h, role:$r, reachable:false, error:$err, note:$note}' >"$out"
+        return
+    fi
+    # Sanitize: some hosts ship a stdout-echoing login banner (motd, last
+    # login, PAM echo) ahead of `bash -s`. The remote python3 prints the
+    # JSON as a SINGLE LINE (separators=(",",":")), so picking the line
+    # that starts with `{` and ends with `}` after the banner is robust
+    # and avoids breaking the subsequent jq parse.
+    payload=$(printf '%s\n' "$payload" | awk '/^\{.*\}$/' | tail -n 1)
+    # Validate JSON; if smoke returned non-JSON (older snapMULTI?), mark partial.
+    if ! jq -e . <<<"$payload" >/dev/null 2>&1; then
+        jq -nc --arg h "$host" --arg r "$role" --arg raw "$payload" \
+            '{host:$h, role:$r, reachable:true, parse_error:true, raw:$raw}' >"$out"
+        return
+    fi
+    # Compose final per-host record.
+    jq --arg h "$host" --arg r "$role" \
+        '{host:$h, role:$r, reachable:true,
+          versions:{server:.srv, client:.cli},
+          non_snapmulti: ((.srv == "" and .cli == "") and ((.smoke.schema_version // null) == null)),
+          smoke:.smoke}' <<<"$payload" >"$out"
+}
+
 # Library mode — when sourced for tests, stop here so the test can call
-# the classification helpers without triggering arg parsing, mDNS probes,
-# or SSH against real hosts.
+# the classification helpers + probe_host without triggering arg parsing,
+# mDNS probes, or SSH against real hosts.
 if [[ "${__FLEET_SMOKE_LIB_ONLY:-}" == "1" ]]; then
     return 0 2>/dev/null || exit 0
 fi
@@ -352,107 +449,13 @@ fi
 
 # ── Per-host probe ────────────────────────────────────────────────
 # Each host writes its own JSON line to a tmp file (parallel-safe).
+# probe_host() is defined ~370 lines above this point so the regression
+# test in tests/test_fleet_smoke_ssh_classification.sh can source the
+# script and drive a real failure path with a stubbed ssh. TMP / TIMEOUT_CMD
+# / SSH_OPTS / SSH_USER are referenced inside the function body — bash
+# resolves them at call time, so the forward reference is safe.
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-
-probe_host() {
-    local host="$1"
-    local role="$2"
-    local out="$TMP/${host//[^a-zA-Z0-9_-]/_}.json"
-    # Capture SSH stderr so a failure surfaces with a specific cause
-    # instead of the legacy generic "ssh-timeout-or-fail" blob. The
-    # exit code distinguishes `timeout(1)` (124) from a true SSH error.
-    local stderr_file="$TMP/${host//[^a-zA-Z0-9_-]/_}.stderr"
-    # On the device: read VERSION files, run smoke --json. Both best-effort.
-    # The smoke wrapper exits 0/1; --no-fail-on-warn keeps us non-fatal on WARN.
-    # Script piped via stdin to avoid quoting hell with -c '...'.
-    local payload
-    local rc=0
-    payload=$("${TIMEOUT_CMD[@]}" \
-            ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' 2>"$stderr_file" <<'REMOTE' || rc=$?
-srv=$(cat /opt/snapmulti/VERSION 2>/dev/null || echo "")
-cli=$(cat /opt/snapclient/VERSION 2>/dev/null || echo "")
-smoke_script=""
-if [ -x /opt/snapmulti/scripts/device-smoke.sh ]; then
-    smoke_script=/opt/snapmulti/scripts/device-smoke.sh
-elif [ -x /opt/snapclient/scripts/device-smoke.sh ]; then
-    smoke_script=/opt/snapclient/scripts/device-smoke.sh
-fi
-if [ -n "$smoke_script" ]; then
-    # device-smoke.sh --json prints a complete JSON document and exits 1
-    # when records fail. The previous `|| echo "{}"` appended a second
-    # JSON object on failure, producing `{...real...}{}` — jq's input
-    # reader stopped at the first document, but the python3 parser
-    # below raises JSONDecodeError("Extra data") and silently falls
-    # back to {} so the host's failure records would be lost and the
-    # fleet would report PASS. Capture stdout regardless of exit code;
-    # fall back to {} only when truly empty.
-    smoke_json=$(sudo -n "$smoke_script" --json --no-fail-on-warn 2>/dev/null || true)
-else
-    smoke_json=""
-fi
-[ -z "$smoke_json" ] && smoke_json="{}"
-# Use python3 instead of jq on the device: Pi Zero native installs are
-# intentionally lean and may not have jq, while python3 is part of the
-# snapMULTI dependency baseline. raw_decode is also a belt-and-suspenders
-# against the historic concat bug: it stops at the first valid JSON
-# document so any trailing garbage cannot mask real smoke failures.
-SMOKE_JSON="$smoke_json" python3 -c '
-import json
-import os
-import sys
-
-srv = sys.argv[1]
-cli = sys.argv[2]
-raw = os.environ.get("SMOKE_JSON", "").strip()
-smoke = {}
-if raw:
-    try:
-        smoke, _ = json.JSONDecoder().raw_decode(raw)
-    except json.JSONDecodeError:
-        smoke = {}
-print(json.dumps({"srv": srv, "cli": cli, "smoke": smoke}, separators=(",", ":")))
-' "$srv" "$cli"
-REMOTE
-)
-    if (( rc != 0 )); then
-        # `timeout(1)` sends SIGTERM and exits 124 on its own timeout —
-        # distinguish from a true SSH error so the operator does not chase
-        # a host-key / auth issue when the actual problem was a stuck
-        # remote shell.
-        local err note stderr_content
-        stderr_content=$(cat "$stderr_file" 2>/dev/null || true)
-        if (( rc == 124 )); then
-            err="smoke-timeout"
-            note=""
-        else
-            err=$(_classify_ssh_stderr "$stderr_content")
-            note=$(_ssh_failure_note "$stderr_content" "$host")
-        fi
-        jq -nc --arg h "$host" --arg r "$role" \
-                --arg err "$err" --arg note "$note" \
-            '{host:$h, role:$r, reachable:false, error:$err, note:$note}' >"$out"
-        return
-    fi
-    # Sanitize: some hosts ship a stdout-echoing login banner (motd, last
-    # login, PAM echo) ahead of `bash -s`. The remote python3 prints the
-    # JSON as a SINGLE LINE (separators=(",",":")), so picking the line
-    # that starts with `{` and ends with `}` after the banner is robust
-    # and avoids breaking the subsequent jq parse.
-    payload=$(printf '%s\n' "$payload" | awk '/^\{.*\}$/' | tail -n 1)
-    # Validate JSON; if smoke returned non-JSON (older snapMULTI?), mark partial.
-    if ! jq -e . <<<"$payload" >/dev/null 2>&1; then
-        jq -nc --arg h "$host" --arg r "$role" --arg raw "$payload" \
-            '{host:$h, role:$r, reachable:true, parse_error:true, raw:$raw}' >"$out"
-        return
-    fi
-    # Compose final per-host record.
-    jq --arg h "$host" --arg r "$role" \
-        '{host:$h, role:$r, reachable:true,
-          versions:{server:.srv, client:.cli},
-          non_snapmulti: ((.srv == "" and .cli == "") and ((.smoke.schema_version // null) == null)),
-          smoke:.smoke}' <<<"$payload" >"$out"
-}
 
 echo "Probing ${#HOSTS[@]} host(s) in parallel..." >&2
 declare -a PIDS=()
