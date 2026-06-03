@@ -35,6 +35,30 @@ fail=0
 note_pass() { echo "  PASS: $1"; pass=$((pass + 1)); }
 note_fail() { echo "  FAIL: $1"; fail=$((fail + 1)); }
 
+# Resolve a role ("server"/"client") to the matching manifest array.
+# Caller receives the array contents in $manifest_local. Bash 3.2
+# compatible — no namerefs (the macOS-default /bin/bash is 3.2 and
+# rejects `declare -n`). Sets manifest_array_name and manifest_local
+# in the caller's scope.
+resolve_manifest_for_role() {
+    local role="$1"
+    case "$role" in
+        server)
+            manifest_array_name="SYSTEMD_UNITS_SERVER"
+            manifest_local=("${SYSTEMD_UNITS_SERVER[@]}")
+            ;;
+        client)
+            manifest_array_name="SYSTEMD_UNITS_CLIENT"
+            manifest_local=("${SYSTEMD_UNITS_CLIENT[@]}")
+            ;;
+        *)
+            note_fail "resolve_manifest_for_role: unknown role '$role' (expected server|client)"
+            manifest_array_name=""
+            manifest_local=()
+            ;;
+    esac
+}
+
 # ─── Invariant 1: every base has at least one file ─────────────────
 echo "=== Invariant 1: every manifest base has matching unit file(s) ==="
 check_base_has_files() {
@@ -67,8 +91,10 @@ echo "=== Invariant 2: every inline install references a declared base ==="
 # base; assert the base is in the appropriate manifest array.
 
 check_install_lines() {
-    local source_file="$1" name="$2" manifest_name="$3"
-    declare -n manifest_ref="$manifest_name"
+    local source_file="$1" name="$2" role="$3"
+    local manifest_array_name=""
+    local -a manifest_local=()
+    resolve_manifest_for_role "$role"
 
     # grep for the install lines, extract the unit basename
     local install_lines unit_path unit_file base ext
@@ -95,14 +121,14 @@ check_install_lines() {
 
         local found=0
         local m
-        for m in "${manifest_ref[@]}"; do
+        for m in "${manifest_local[@]}"; do
             if [[ "$m" == "$base" ]]; then
                 found=1
                 break
             fi
         done
         if (( found == 0 )); then
-            note_fail "$name:$line_num references '$unit_file' but base '$base' is not in $manifest_name"
+            note_fail "$name:$line_num references '$unit_file' but base '$base' is not in $manifest_array_name"
             missing=$((missing + 1))
         fi
     done <<< "$install_lines"
@@ -110,8 +136,8 @@ check_install_lines() {
         note_pass "$name: all $total install lines reference declared bases"
     fi
 }
-check_install_lines "$FIRSTBOOT" "firstboot.sh" "SYSTEMD_UNITS_SERVER"
-check_install_lines "$SETUP"     "setup.sh"     "SYSTEMD_UNITS_CLIENT"
+check_install_lines "$FIRSTBOOT" "firstboot.sh" "server"
+check_install_lines "$SETUP"     "setup.sh"     "client"
 
 # ─── Invariant 2b: helper is called for every manifest base ────────
 # After PR8 migration, every base in the manifest must be reachable
@@ -119,12 +145,14 @@ check_install_lines "$SETUP"     "setup.sh"     "SYSTEMD_UNITS_CLIENT"
 # the appropriate script. Pins the migration so a future refactor
 # can't silently drop a base.
 check_helper_usage() {
-    local script="$1" name="$2" manifest_name="$3"
-    declare -n manifest_ref="$manifest_name"
+    local script="$1" name="$2" role="$3"
+    local manifest_array_name=""
+    local -a manifest_local=()
+    resolve_manifest_for_role "$role"
     local body
     body=$(cat "$script")
     local base
-    for base in "${manifest_ref[@]}"; do
+    for base in "${manifest_local[@]}"; do
         if grep -qE "install_systemd_unit_files\\b.+\"$base\"" <<< "$body"; then
             note_pass "$name: install_systemd_unit_files called for '$base'"
         else
@@ -134,8 +162,8 @@ check_helper_usage() {
 }
 echo
 echo "=== Invariant 2b: helper called for every manifest base (post-PR8) ==="
-check_helper_usage "$FIRSTBOOT" "firstboot.sh" "SYSTEMD_UNITS_SERVER"
-check_helper_usage "$SETUP"     "setup.sh"     "SYSTEMD_UNITS_CLIENT"
+check_helper_usage "$FIRSTBOOT" "firstboot.sh" "server"
+check_helper_usage "$SETUP"     "setup.sh"     "client"
 
 # ─── Invariant 2c: state-backup keeps the all-or-nothing guard ─────
 # snapmulti-state-backup is the only 3-unit group; the helper's
@@ -158,8 +186,10 @@ fi
 echo
 echo "=== Invariant 3: no orphan unit files (every static file is declared) ==="
 check_orphans() {
-    local dir_rel="$1" prefix="$2" manifest_name="$3" name="$4"
-    declare -n manifest_ref="$manifest_name"
+    local dir_rel="$1" prefix="$2" role="$3" name="$4"
+    local manifest_array_name=""
+    local -a manifest_local=()
+    resolve_manifest_for_role "$role"
     local dir_abs="$REPO_ROOT/$dir_rel"
     [[ -d "$dir_abs" ]] || { note_fail "$name unit dir missing: $dir_rel"; return; }
 
@@ -174,14 +204,14 @@ check_orphans() {
 
         local found=0
         local m
-        for m in "${manifest_ref[@]}"; do
+        for m in "${manifest_local[@]}"; do
             if [[ "$m" == "$base" ]]; then
                 found=1
                 break
             fi
         done
         if (( found == 0 )); then
-            note_fail "$name orphan: $dir_rel/$(basename "$f") (base '$base' not in $manifest_name)"
+            note_fail "$name orphan: $dir_rel/$(basename "$f") (base '$base' not in $manifest_array_name)"
             orphan_count=$((orphan_count + 1))
         fi
     done < <(find "$dir_abs" -maxdepth 1 -name "${prefix}*.service" -o -name "${prefix}*.timer" -o -name "${prefix}*.path" 2>/dev/null)
@@ -192,8 +222,8 @@ check_orphans() {
         note_fail "$name: no files found under $dir_rel matching ${prefix}*"
     fi
 }
-check_orphans "$SYSTEMD_UNITS_SERVER_DIR" "snapmulti-" "SYSTEMD_UNITS_SERVER" "server"
-check_orphans "$SYSTEMD_UNITS_CLIENT_DIR" ""           "SYSTEMD_UNITS_CLIENT" "client"
+check_orphans "$SYSTEMD_UNITS_SERVER_DIR" "snapmulti-" "server" "server"
+check_orphans "$SYSTEMD_UNITS_CLIENT_DIR" ""           "client" "client"
 
 echo
 echo "Results: $pass passed, $fail failed"
