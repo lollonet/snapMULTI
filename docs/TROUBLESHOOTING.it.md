@@ -2,7 +2,7 @@
 
 # Risoluzione problemi
 
-Guida per sintomi quando qualcosa di snapMULTI non funziona. Per l'installazione da zero vedi [INSTALL.it.md](INSTALL.it.md); per operazioni e personalizzazioni vedi [ADVANCED.it.md](ADVANCED.it.md).
+Guida per sintomi quando qualcosa di snapMULTI non funziona. Per l'installazione da zero vedi [INSTALL.it.md](INSTALL.it.md); per la pipeline tecnica dietro l'installazione (utile quando vuoi capire *dove* nel flusso si è rotto) vedi [INSTALL-FLOW.it.md](INSTALL-FLOW.it.md); per operazioni e personalizzazioni vedi [ADVANCED.it.md](ADVANCED.it.md).
 
 ## In caso di dubbio — prendi il pacchetto diagnostico
 

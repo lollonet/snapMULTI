@@ -2,7 +2,7 @@
 
 # Troubleshooting
 
-Symptom-driven guide for when something on snapMULTI isn't working. For first-time install see [INSTALL.md](INSTALL.md); for ops and customisation see [ADVANCED.md](ADVANCED.md).
+Symptom-driven guide for when something on snapMULTI isn't working. For first-time install see [INSTALL.md](INSTALL.md); for the technical pipeline behind the install (useful when you want to know *where* in the flow it broke) see [INSTALL-FLOW.md](INSTALL-FLOW.md); for ops and customisation see [ADVANCED.md](ADVANCED.md).
 
 ## When in doubt — grab the diagnostic bundle
 
