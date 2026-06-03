@@ -1691,6 +1691,14 @@ SYSDEOF
         log_progress "WARNING: snapmulti-lzma hook source not found — initramfs will lack liblzma, overlay may not load on first boot"
     fi
 
+    # Refresh modules.dep for every installed kernel BEFORE raspi-config
+    # — apt full-upgrade earlier in firstboot installs a newer kernel
+    # which becomes the next-boot target; without a depmod pass on it,
+    # raspi-config's internal `update-initramfs -c -k all` runs against
+    # a stale modules.dep and the overlay module is unloadable at boot.
+    refresh_overlayroot_modules_dep || \
+        log_progress "WARNING: modules.dep refresh failed — first boot may not activate overlay"
+
     # Enable overlayfs (takes effect after reboot). raspi-config internally
     # apt-installs overlayroot/cryptsetup which triggers update-initramfs
     # to rebuild BOTH kernels (rpi-v8 + rpi-2712) — ~20s of progress output

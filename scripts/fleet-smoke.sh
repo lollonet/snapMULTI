@@ -54,7 +54,7 @@ _classify_ssh_stderr() {
         *"REMOTE HOST IDENTIFICATION HAS CHANGED"*) printf 'host-key-changed' ;;
         *"unix_listener"*|*"mux_client_request_session"*|*"ControlPath"*|*"ControlSocket"*|*"multiplexing"*) printf 'ssh-controlpath-error' ;;
         *"Permission denied"*|*"publickey"*) printf 'auth-failed' ;;
-        *"Connection timed out"*|*"No route to host"*|*"Could not resolve hostname"*|*"Network is unreachable"*|*"Name or service not known"*|*"Connection refused"*|*"Host is down"*|*"Host is unreachable"*) printf 'connection-failed' ;;
+        *"Connection timed out"*|*"Operation timed out"*|*"No route to host"*|*"Could not resolve hostname"*|*"Network is unreachable"*|*"Name or service not known"*|*"Connection refused"*|*"Host is down"*|*"Host is unreachable"*) printf 'connection-failed' ;;
         *) printf 'ssh-failed' ;;
     esac
 }
@@ -104,8 +104,18 @@ probe_host() {
     # propagates to the caller, so `if (( rc != 0 ))` below would always
     # see 0 and the classification path would be silently bypassed.
     # Reviewed in PR #589 (claude-review HIGH).
-    payload=$("${TIMEOUT_CMD[@]}" \
-            ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' 2>"$stderr_file" <<'REMOTE'
+    #
+    # Split the timeout-prefixed vs bare-ssh forms because bash 3.2
+    # expands `"${TIMEOUT_CMD[@]}"` under `set -u` to an unbound-variable
+    # error when TIMEOUT_CMD=() (macOS dev box without timeout/gtimeout,
+    # or library-mode test). Bash 5 silently treats empty-array `[@]` as
+    # zero words, so the script "worked" in CI but bombed on real dev
+    # macs. The branch keeps the timeout wrapper when present, drops it
+    # cleanly when absent — same observable behaviour as a 4-arg vs
+    # 3-arg invocation, no empty-array expansion under `set -u`.
+    if (( ${#TIMEOUT_CMD[@]} > 0 )); then
+        payload=$("${TIMEOUT_CMD[@]}" \
+                ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' 2>"$stderr_file" <<'REMOTE'
 srv=$(cat /opt/snapmulti/VERSION 2>/dev/null || echo "")
 cli=$(cat /opt/snapclient/VERSION 2>/dev/null || echo "")
 smoke_script=""
@@ -137,7 +147,42 @@ if raw:
 print(json.dumps({"srv": srv, "cli": cli, "smoke": smoke}, separators=(",", ":")))
 ' "$srv" "$cli"
 REMOTE
-    ) || rc=$?
+        ) || rc=$?
+    else
+        payload=$(ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' 2>"$stderr_file" <<'REMOTE'
+srv=$(cat /opt/snapmulti/VERSION 2>/dev/null || echo "")
+cli=$(cat /opt/snapclient/VERSION 2>/dev/null || echo "")
+smoke_script=""
+if [ -x /opt/snapmulti/scripts/device-smoke.sh ]; then
+    smoke_script=/opt/snapmulti/scripts/device-smoke.sh
+elif [ -x /opt/snapclient/scripts/device-smoke.sh ]; then
+    smoke_script=/opt/snapclient/scripts/device-smoke.sh
+fi
+if [ -n "$smoke_script" ]; then
+    smoke_json=$(sudo -n "$smoke_script" --json --no-fail-on-warn 2>/dev/null || true)
+else
+    smoke_json=""
+fi
+[ -z "$smoke_json" ] && smoke_json="{}"
+SMOKE_JSON="$smoke_json" python3 -c '
+import json
+import os
+import sys
+
+srv = sys.argv[1]
+cli = sys.argv[2]
+raw = os.environ.get("SMOKE_JSON", "").strip()
+smoke = {}
+if raw:
+    try:
+        smoke, _ = json.JSONDecoder().raw_decode(raw)
+    except json.JSONDecodeError:
+        smoke = {}
+print(json.dumps({"srv": srv, "cli": cli, "smoke": smoke}, separators=(",", ":")))
+' "$srv" "$cli"
+REMOTE
+        ) || rc=$?
+    fi
     if (( rc != 0 )); then
         # `timeout(1)` sends SIGTERM and exits 124 on its own timeout —
         # distinguish from a true SSH error so the operator does not chase

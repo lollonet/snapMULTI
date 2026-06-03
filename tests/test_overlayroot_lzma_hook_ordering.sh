@@ -77,6 +77,26 @@ assert 'grep -qE "^install_initramfs_lzma_hook\\(\\)" "$LIB"' \
     "install_initramfs_lzma_hook retained (still the contract)"
 
 echo
+echo "== library: post-fixup hardening helpers =="
+
+# Hook install must defensively mkdir the hook directory — minimal/
+# stripped staging may not have initramfs-tools installed.
+assert 'grep -qE "mkdir -p .*hook_dst|mkdir -p .*\\\$\\(dirname" "$LIB"' \
+    "install_initramfs_lzma_hook ensures hook directory exists (mkdir -p)"
+
+# refresh_overlayroot_modules_dep replaces the depmod loop that
+# ensure_overlayroot_initramfs_ready used to drive. Without it, the
+# snapdigi-class failure (overlay module unloadable with 204-byte
+# truncated modules.dep on next-boot kernel) is no longer covered.
+assert 'grep -qE "^refresh_overlayroot_modules_dep\\(\\)" "$LIB"' \
+    "refresh_overlayroot_modules_dep helper exists (depmod safety net retained)"
+assert 'grep -qE "depmod -a \"\\\$kver\"" "$LIB"' \
+    "refresh_overlayroot_modules_dep loops depmod -a per kver"
+# Must NOT re-introduce update-initramfs in the library.
+assert '! grep -qE "^[[:space:]]+update-initramfs -u -k" "$LIB"' \
+    "no update-initramfs second-pass resurrection in library"
+
+echo
 echo "== callers: install_initramfs_lzma_hook BEFORE raspi-config =="
 
 # Regex anchors on the actual CALL syntax (`install_initramfs_lzma_hook "$VAR"`)
@@ -97,6 +117,27 @@ assert_order "$RO_MODE" \
     '^[[:space:]]+install_initramfs_lzma_hook[[:space:]]+"' \
     'raspi-config nonint do_overlayfs 0' \
     "client/common/scripts/ro-mode.sh CALLS hook before raspi-config"
+
+echo
+echo "== callers: refresh_overlayroot_modules_dep BEFORE raspi-config =="
+
+# The depmod safety net must run before raspi-config's update-initramfs
+# in every caller. Tests anchor on the actual call, not the function
+# name in comments, so a comment-rearrange revert is caught.
+assert_order "$TUNE" \
+    '^[[:space:]]+refresh_overlayroot_modules_dep' \
+    'raspi-config nonint do_overlayfs 0' \
+    "scripts/common/system-tune.sh CALLS depmod helper before raspi-config"
+
+assert_order "$CLIENT_SETUP" \
+    '^[[:space:]]+refresh_overlayroot_modules_dep' \
+    'raspi-config nonint do_overlayfs 0' \
+    "client/common/scripts/setup.sh CALLS depmod helper before raspi-config"
+
+assert_order "$RO_MODE" \
+    '^[[:space:]]+refresh_overlayroot_modules_dep' \
+    'raspi-config nonint do_overlayfs 0' \
+    "client/common/scripts/ro-mode.sh CALLS depmod helper before raspi-config"
 
 echo
 echo "== callers: no residual ensure_overlayroot_initramfs_ready =="

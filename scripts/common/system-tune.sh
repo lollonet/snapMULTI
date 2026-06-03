@@ -703,9 +703,19 @@ SYSDEOF
         warn "overlayroot: snapmulti-lzma hook source not found — initramfs will lack liblzma, overlay may not load on first boot"
     fi
 
+    # Refresh modules.dep for every installed kernel BEFORE raspi-config
+    # runs its own update-initramfs. The snapdigi-class failure
+    # (overlay module unloadable with a 204-byte truncated modules.dep)
+    # is recoverable only by re-running depmod -a per kver. Cheap (~50 ms
+    # per kernel), writes only under /lib/modules — no /boot/firmware
+    # ro collision because this runs before raspi-config touches the
+    # boot partition.
+    refresh_overlayroot_modules_dep || \
+        warn "overlayroot: modules.dep refresh failed — first boot may not activate overlay"
+
     # Enable overlayfs via raspi-config (takes effect after reboot). The
     # internal update-initramfs run now picks up the snapmulti-lzma hook
-    # installed above.
+    # installed above + the refreshed modules.dep.
     if ! raspi-config nonint do_overlayfs 0; then
         rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
         warn "raspi-config do_overlayfs failed — workaround rolled back"

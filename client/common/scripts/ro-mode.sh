@@ -127,6 +127,14 @@ SYSDEOF
             echo "WARNING: snapmulti-lzma hook source not found — initramfs rebuilt without liblzma, overlay may not activate"
         unset _found_hook
 
+        # Refresh modules.dep for every installed kernel BEFORE
+        # raspi-config — if the operator ran `apt full-upgrade`
+        # between `ro-mode disable` and re-enable, a newer kernel may
+        # have landed with a stale modules.dep that would otherwise
+        # prevent the overlay module from loading at next boot.
+        refresh_overlayroot_modules_dep || \
+            echo "WARNING: modules.dep refresh failed — next boot may not activate overlay"
+
         if ! raspi-config nonint do_overlayfs 0; then
             # Roll back: remove override since overlayroot won't be active
             rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf

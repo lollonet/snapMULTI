@@ -96,11 +96,65 @@ install_initramfs_lzma_hook() {
         return 0
     fi
 
+    # Defensive: the hook directory is created by the initramfs-tools
+    # package on every supported snapMULTI target (Pi OS bookworm /
+    # trixie), but a stripped staging or a minimal container image may
+    # not have it. `install -m 755` would fail with "No such file or
+    # directory" in that case; `mkdir -p` is a no-op when the dir
+    # already exists.
+    mkdir -p "$(dirname "$hook_dst")" 2>/dev/null || true
+
     install -m 755 "$hook_src" "$hook_dst" || {
         warn "overlayroot: failed to install $hook_dst"
         return 1
     }
     ok "overlayroot: initramfs lzma hook installed ($hook_dst)"
+}
+
+# Refresh modules.dep for every installed kernel. Standalone from any
+# update-initramfs run because depmod ONLY writes under /lib/modules
+# (rootfs / overlayroot upper layer) — there is no /boot/firmware ro
+# collision and the cost is ~50 ms per kernel.
+#
+# Why this exists: snapdigi was observed on 2026-06-01 with a stale
+# 204-byte modules.dep on the next-boot kernel (apt full-upgrade had
+# installed it during firstboot but raspi-config's `update-initramfs
+# -c -k all` had run with the truncated artefact). The pre-PR helper
+# `ensure_overlayroot_initramfs_ready` did TWO jobs — depmod + a
+# second-pass update-initramfs — and only the second job collided with
+# /boot/firmware ro. Keeping just the depmod loop preserves the safety
+# net without re-introducing the rebuild round.
+#
+# Returns the worst exit-code seen (0 on full success, non-zero if
+# any depmod call failed). Callers warn but do not abort — a missing
+# modules.dep is recoverable on next reboot.
+refresh_overlayroot_modules_dep() {
+    if ! command -v depmod >/dev/null 2>&1; then
+        warn "overlayroot: depmod not found — skipping modules.dep refresh"
+        return 0
+    fi
+
+    local log_target="${UNIFIED_LOG:-/dev/null}"
+    local kver_dir kver any_failed=0 any_attempted=0
+    for kver_dir in /lib/modules/*; do
+        [[ -d "$kver_dir" ]] || continue
+        kver="${kver_dir##*/}"
+        any_attempted=1
+        if ! depmod -a "$kver" >> "$log_target" 2>&1; then
+            warn "overlayroot: depmod -a $kver failed (see $log_target)"
+            any_failed=1
+        fi
+    done
+
+    if (( any_attempted == 0 )); then
+        warn "overlayroot: no kernel directories found under /lib/modules — modules.dep not refreshed"
+        return 1
+    fi
+
+    if (( any_failed == 0 )); then
+        ok "overlayroot: modules.dep refreshed for every installed kernel"
+    fi
+    return "$any_failed"
 }
 
 # ensure_overlayroot_initramfs_ready was dropped after PR #592. The function
