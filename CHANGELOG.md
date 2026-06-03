@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-03
+
+> **v0.8 hardening track** — 13 PRs of SSOT extraction, drift-class invariants, and
+> Bash 3.2 dev-loop compatibility. Image set unchanged (`0.7.7`), no Docker rebuild;
+> all changes are in the installer chain (`firstboot.sh`, `setup.sh`, `prepare-sd.{sh,ps1}`)
+> and their newly-extracted helpers under `scripts/common/`. Validated runtime on
+> snapdigi (client), snapvideo (both), and pizero (client-native) prior to tag.
+
 ### Added
 - **`scripts/common/install-conf-reader.sh` + wire firstboot (v0.8 PR10)**. The install.conf field-read pattern `VAR=$(grep -m1 '^FIELD=' install.conf | cut -d= -f2 | tr -d '[:space:]' || true)` repeated 12 times in `firstboot.sh` with two variants (10 strip-all, 2 strip-cr-only for SMB_USER/SMB_PASS), plus an inline `_rc()` local function at line 156 wrapping the same idiom for ENABLE_READONLY/SKIP_UPGRADE/VERBOSE_INSTALL. Drift classes hidden by the inline form: (1) new field added to install.conf.template but firstboot.sh never reads it — operator picks the value in prepare-sd's menu but firstboot silently uses the hardcoded default; (2) field read with the wrong strip mode — a SMB password with trailing whitespace or `=` corrupts; (3) per-field grep/cut/tr expressions drift apart (`cut -d= -f2` vs `-f2-`). Helper: `install_conf_get FIELD CONF_FILE [STRIP_MODE]` with three modes (`all` default, `cr` for password-style, `none` raw). Always uses `cut -d= -f2-` so values containing `=` survive. Sourced unconditionally at firstboot.sh line ~115 (early, BEFORE the install.conf parse block at line 122; bash is line-by-line so the helper must be defined before first use). Migration: 12 inline sites + the `_rc()` local replaced; 0 residual. Staged in all 6 places per the PR9 lesson: `STAGING_COMMON_SHARED_MODULES`, `prepare-sd.sh` top-level verify list, `prepare-sd.sh` client verify list, `prepare-sd.ps1` `$requiredBase`, `prepare-sd.ps1` client `$requiredFiles`, `prepare-sd.ps1` `$shared` foreach. New `tests/test_install_conf_reader.sh` (15 checks, bash 3.2 + bash 5): present/absent field, missing file, duplicate keys (first wins via `grep -m1`), values with `=`, all 3 strip modes, unknown mode → rc 1, ordering invariant (source line precedes first call), no residual inline parses, `_rc()` removed. Pre-existing `test_firstboot_install_conf_tolerance.sh` updated to stage the helper in its sandbox + source it explicitly in the extracted reader block (13 checks still green). `test_prepare_sd_required_files.sh` extended 29 → 34 checks for the 6-site staging. Behaviour unchanged on valid install.conf.
 
