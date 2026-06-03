@@ -257,6 +257,12 @@ source "$COMMON/install-profile.sh"
 # shellcheck source=common/systemd-units.sh
 source "$COMMON/systemd-units.sh"
 
+# Source path-resolve.sh — SSOT for the "first existing candidate"
+# pattern (resolve_first_existing_file / _dir). Collapses the 9
+# inline candidate-loop blocks below to single-line calls.
+# shellcheck source=common/path-resolve.sh
+source "$COMMON/path-resolve.sh"
+
 # Promote profile based on hardware. The prepare-sd.sh menu offers
 # three user-facing choices (client / server / both) — `client-native`
 # is derived: it is what the user really gets on a Pi Zero 2W when they
@@ -561,16 +567,10 @@ source "$COMMON/verify-compose.sh"
 # client/common/scripts/display.sh (HDMI/DSI/DPI/DP/eDP). Source it from
 # the staging copy on the SD card so firstboot agrees with setup.sh and
 # display-detect.sh on what counts as a connected display.
-_DISPLAY_LIB=""
-for _candidate in \
-    "$SNAP_BOOT/client/scripts/display.sh" \
-    "$CLIENT_DIR/scripts/display.sh" \
-    "$CLIENT_DIR/common/scripts/display.sh"; do
-    if [[ -f "$_candidate" ]]; then
-        _DISPLAY_LIB="$_candidate"
-        break
-    fi
-done
+resolve_first_existing_file _DISPLAY_LIB "display.sh" \
+    "$SNAP_BOOT/client/scripts" \
+    "$CLIENT_DIR/scripts" \
+    "$CLIENT_DIR/common/scripts" || true
 if [[ -n "$_DISPLAY_LIB" ]]; then
     # shellcheck source=../client/common/scripts/display.sh
     source "$_DISPLAY_LIB"
@@ -1321,13 +1321,10 @@ else
 fi
 
 # Diagnostic log persistence
-DIAG_SCRIPT=""
-for _diag_candidate in \
-    "$COMMON/save-diagnostics.sh" \
-    "$SERVER_DIR/scripts/common/save-diagnostics.sh" \
-    "$CLIENT_DIR/scripts/common/save-diagnostics.sh"; do
-    [[ -f "$_diag_candidate" ]] && DIAG_SCRIPT="$_diag_candidate" && break
-done
+resolve_first_existing_file DIAG_SCRIPT "save-diagnostics.sh" \
+    "$COMMON" \
+    "$SERVER_DIR/scripts/common" \
+    "$CLIENT_DIR/scripts/common" || true
 if [[ -n "$DIAG_SCRIPT" ]]; then
     install -m 755 "$DIAG_SCRIPT" /usr/local/bin/save-diagnostics
     DIAG_DIR="$(dirname "$DIAG_SCRIPT")"
@@ -1341,12 +1338,9 @@ fi
 # MPD database + snapserver/myMPD state backup to boot partition
 # (server installs only)
 if install_profile_needs_server_stack "$INSTALL_TYPE"; then
-    BACKUP_SCRIPT=""
-    for _bk_candidate in \
-        "$COMMON/backup-mpd.sh" \
-        "$SERVER_DIR/scripts/common/backup-mpd.sh"; do
-        [[ -f "$_bk_candidate" ]] && BACKUP_SCRIPT="$_bk_candidate" && break
-    done
+    resolve_first_existing_file BACKUP_SCRIPT "backup-mpd.sh" \
+        "$COMMON" \
+        "$SERVER_DIR/scripts/common" || true
     if [[ -n "$BACKUP_SCRIPT" ]]; then
         install -m 755 "$BACKUP_SCRIPT" /usr/local/bin/backup-mpd
         bk_dir="$(dirname "$BACKUP_SCRIPT")"
@@ -1360,12 +1354,9 @@ if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     # MPD incremental rescan trigger — nightly, only fires on NFS/SMB
     # libraries where inotify (and therefore MPD's `auto_update yes`)
     # silently does NOT detect new files added on the NAS.
-    MPD_UPDATE_SCRIPT=""
-    for _mpd_upd_candidate in \
-        "$COMMON/mpd-nfs-update.sh" \
-        "$SERVER_DIR/scripts/common/mpd-nfs-update.sh"; do
-        [[ -f "$_mpd_upd_candidate" ]] && MPD_UPDATE_SCRIPT="$_mpd_upd_candidate" && break
-    done
+    resolve_first_existing_file MPD_UPDATE_SCRIPT "mpd-nfs-update.sh" \
+        "$COMMON" \
+        "$SERVER_DIR/scripts/common" || true
     if [[ -n "$MPD_UPDATE_SCRIPT" ]]; then
         install -m 755 "$MPD_UPDATE_SCRIPT" /usr/local/bin/mpd-nfs-update
         mpd_upd_dir="$(dirname "$MPD_UPDATE_SCRIPT")"
@@ -1378,12 +1369,9 @@ if install_profile_needs_server_stack "$INSTALL_TYPE"; then
         fi
     fi
 
-    STATE_BACKUP_SCRIPT=""
-    for _state_bk_candidate in \
-        "$COMMON/backup-snapmulti-state.sh" \
-        "$SERVER_DIR/scripts/common/backup-snapmulti-state.sh"; do
-        [[ -f "$_state_bk_candidate" ]] && STATE_BACKUP_SCRIPT="$_state_bk_candidate" && break
-    done
+    resolve_first_existing_file STATE_BACKUP_SCRIPT "backup-snapmulti-state.sh" \
+        "$COMMON" \
+        "$SERVER_DIR/scripts/common" || true
     if [[ -n "$STATE_BACKUP_SCRIPT" ]]; then
         install -m 755 "$STATE_BACKUP_SCRIPT" /usr/local/bin/backup-snapmulti-state
         state_bk_dir="$(dirname "$STATE_BACKUP_SCRIPT")"
@@ -1441,13 +1429,10 @@ fi
 # host is exposed: pure audio players (`client`, `client-native`) running
 # on Pi 4 WiFi are equally vulnerable to the firmware lockup, not just
 # servers. The script's own startup probe handles the wired-host case.
-WIFI_WD_SCRIPT=""
-for _wifi_wd_candidate in \
-    "$COMMON/wifi-watchdog.sh" \
-    "$SERVER_DIR/scripts/common/wifi-watchdog.sh" \
-    "$CLIENT_DIR/scripts/common/wifi-watchdog.sh"; do
-    [[ -f "$_wifi_wd_candidate" ]] && WIFI_WD_SCRIPT="$_wifi_wd_candidate" && break
-done
+resolve_first_existing_file WIFI_WD_SCRIPT "wifi-watchdog.sh" \
+    "$COMMON" \
+    "$SERVER_DIR/scripts/common" \
+    "$CLIENT_DIR/scripts/common" || true
 if [[ -n "$WIFI_WD_SCRIPT" ]]; then
     install -m 755 "$WIFI_WD_SCRIPT" /usr/local/bin/snapmulti-wifi-watchdog
     wifi_wd_dir="$(dirname "$WIFI_WD_SCRIPT")"
@@ -1493,14 +1478,11 @@ fi
 # Read-only filesystem
 if [[ "${ENABLE_READONLY}" == "true" ]]; then
     log_info "Configuring read-only filesystem..."
-    RO_MODE_SCRIPT=""
-    for _ro_candidate in \
-        "$SERVER_DIR/scripts/ro-mode.sh" \
-        "$CLIENT_DIR/scripts/ro-mode.sh" \
-        "$SNAP_BOOT/server/ro-mode.sh" \
-        "$SNAP_BOOT/common/ro-mode.sh"; do
-        [[ -f "$_ro_candidate" ]] && RO_MODE_SCRIPT="$_ro_candidate" && break
-    done
+    resolve_first_existing_file RO_MODE_SCRIPT "ro-mode.sh" \
+        "$SERVER_DIR/scripts" \
+        "$CLIENT_DIR/scripts" \
+        "$SNAP_BOOT/server" \
+        "$SNAP_BOOT/common" || true
     setup_readonly_fs "$RO_MODE_SCRIPT"
     log_info "Read-only filesystem configured"
 else

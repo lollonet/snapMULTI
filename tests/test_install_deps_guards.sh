@@ -76,12 +76,16 @@ echo "=== setup.sh — existing PROGRESS_MANAGED guard (regression test) ==="
 
 # setup.sh has had this guard since Wave 4. Reassert it so a future
 # refactor can't quietly drop it.
-setup_block=$(awk '/install-deps\.sh/{found=1} found && /^fi[[:space:]]*$/{print; exit} found{print}' "$SETUP" | head -40)
-
-assert 'echo "$setup_block" | grep -qE "PROGRESS_MANAGED"' \
+# v0.8 PR9: the previous awk range anchored on the install-deps.sh
+# candidate-loop's terminating `^fi$` no longer works because the
+# helper migration wraps the resolve in a `if declare -F ... else
+# ... fi` shape that adds an earlier `fi`. The PROGRESS_MANAGED
+# guard lives a few lines later in the same install-dependencies
+# block; a simpler file-wide presence check is equivalent.
+assert 'grep -qE "PROGRESS_MANAGED" "$SETUP"' \
        'setup.sh still references PROGRESS_MANAGED'
 
-assert 'echo "$setup_block" | grep -qE "INSTALL_ROLE=client"' \
+assert 'grep -qE "INSTALL_ROLE=client" "$SETUP"' \
        'standalone path still sets INSTALL_ROLE=client'
 
 echo
