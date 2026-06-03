@@ -22,9 +22,11 @@ HOST (Mac / Linux / Windows)
 PI (boot 1 — cloud-init esegue l'hook installato)
 └─ firstboot.sh (root)
    ├─ wait-network                            (fix WiFi DFS regdom)
-   ├─ install-deps + install-docker           (Docker CE: docker-ce,
-   │                                           docker-ce-cli, containerd.io,
-   │                                           docker-compose-plugin)
+   ├─ install-deps + Docker quando il profilo lo richiede
+   │   (Docker CE: docker-ce, docker-ce-cli, containerd.io,
+   │   docker-compose-plugin — SALTATO sul path client-native /
+   │   Pi Zero 2 W, che esegue snapclient direttamente come unit
+   │   systemd)
    ├─ install-profile resolve                 (server / client / both)
    ├─ esegue deploy.sh   (stack server)       ┐ gira solo il path
    ├─ esegue setup.sh    (stack client)       │ rilevante per la
@@ -112,7 +114,7 @@ Solo Pi Zero 2 W (il budget RAM esclude Docker). Step:
 
 ## Modalità di errore e recupero
 
-`firstboot.sh` scrive `/var/lib/snapmulti-installer/.install-failed` se una fase aborta (NON sulla partizione boot — `/boot/firmware/` ospita gli artefatti diagnostici e di backup, non il marker). Il dispositivo si avvia, i container partono (`snapmulti-server.service` ha il suo `Restart=on-failure`), ma overlayroot NON è attivo e l'install è marcato incompleto. Le due cause comuni:
+`firstboot.sh` scrive `/var/lib/snapmulti-installer/.install-failed` se una fase aborta (NON sulla partizione boot — `/boot/firmware/` ospita gli artefatti diagnostici e di backup, non il marker). Cosa si avvia dopo dipende da **dove** nella pipeline è abortito: un fallimento PRIMA di `deploy.sh` / `setup.sh` (es. wait-network, install-deps, install Docker) lascia un dispositivo senza servizi snapMULTI installati e overlayroot disattivo — il dispositivo è raggiungibile via SSH ma non fa nulla. Un fallimento tardivo DOPO che `deploy.sh` ha wired lo stack server (es. timeout di `verify_services`, abort di finalize) lascia `snapmulti-server.service` già installato: il `Restart=on-failure` di systemd porta su i container in modo autonomo dopo che l'install si è arreso, mascherando il finalize mancato — un dispositivo che sembra sano sulla LAN ma in realtà ha overlayroot DISATTIVO. Le due cause comuni di fallimento tardivo:
 
 - **Libreria NFS / SMB grande eccede la finestra di healthcheck di `verify_services`** — `deploy.sh` deriva `MPD_START_PERIOD` da `MUSIC_SOURCE` (300 s per `nfs`/`smb`/`network`, 30 s altrimenti) e lo scrive in `.env`, ignorando qualsiasi valore pre-impostato in `install.conf`. Una volta che `firstboot.sh` aborta e `.install-failed` è settato, modifica `/opt/snapmulti/.env` direttamente per alzare il valore (`sudo sed -i 's/^MPD_START_PERIOD=.*/MPD_START_PERIOD=3600s/' /opt/snapmulti/.env`), poi re-triggera lo step deploy — il checkpointer di firstboot riprende dalla fase fallita, non riparte da zero. Vedi [TROUBLESHOOTING.it.md — Install marcato fallito ma i container girano](TROUBLESHOOTING.it.md#install-marcato-fallito-ma-i-container-girano) per la procedura di recupero completa.
 - **Rate limit di Docker Hub** — `docker login` sul Pi prima del prossimo retry di firstboot.

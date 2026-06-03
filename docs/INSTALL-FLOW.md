@@ -22,9 +22,11 @@ HOST (Mac / Linux / Windows)
 PI (boot 1 — cloud-init runs the staged hook)
 └─ firstboot.sh (root)
    ├─ wait-network                            (WiFi DFS regdom fix)
-   ├─ install-deps + install-docker           (Docker CE: docker-ce,
-   │                                           docker-ce-cli, containerd.io,
-   │                                           docker-compose-plugin)
+   ├─ install-deps + Docker when profile needs it
+   │   (Docker CE: docker-ce, docker-ce-cli, containerd.io,
+   │   docker-compose-plugin — SKIPPED on the client-native /
+   │   Pi Zero 2 W path, which runs snapclient as a systemd unit
+   │   directly)
    ├─ install-profile resolve                 (server / client / both)
    ├─ run deploy.sh   (server stack)          ┐ runs only the path
    ├─ run setup.sh    (client stack)          │ relevant to the
@@ -112,7 +114,7 @@ Pi Zero 2 W only (RAM budget excludes Docker). Steps:
 
 ## Failure modes & recovery
 
-`firstboot.sh` writes `/var/lib/snapmulti-installer/.install-failed` if any phase aborts (NOT on the boot partition — `/boot/firmware/` holds diagnostic + backup artefacts, not the marker). The device boots, containers come up (`snapmulti-server.service` has its own systemd `Restart=on-failure`), but overlayroot is NOT activated and the install is marked incomplete. The two common causes:
+`firstboot.sh` writes `/var/lib/snapmulti-installer/.install-failed` if any phase aborts (NOT on the boot partition — `/boot/firmware/` holds diagnostic + backup artefacts, not the marker). What boots afterwards depends on **where** in the pipeline it aborted: a failure BEFORE `deploy.sh` / `setup.sh` (e.g. wait-network, install-deps, Docker install) leaves a device with no snapMULTI services installed and overlayroot off — the device is reachable via SSH but does nothing. A late-phase failure AFTER `deploy.sh` has wired the server stack (e.g. `verify_services` timeout, finalize abort) leaves `snapmulti-server.service` already installed: systemd's `Restart=on-failure` then brings the containers up autonomously after the install gave up, masking the missing finalize — a device that looks healthy on the LAN but actually has overlayroot OFF. The two common late-phase causes:
 
 - **Large NFS / SMB library exceeds `verify_services` healthcheck window** — `deploy.sh` derives `MPD_START_PERIOD` from `MUSIC_SOURCE` (300 s for `nfs`/`smb`/`network`, 30 s otherwise) and writes it to `.env`, ignoring any value pre-set in `install.conf`. Once `firstboot.sh` aborts and `.install-failed` is set, edit `/opt/snapmulti/.env` directly to raise the value (`sudo sed -i 's/^MPD_START_PERIOD=.*/MPD_START_PERIOD=3600s/' /opt/snapmulti/.env`), then re-trigger the deploy step — the firstboot checkpointer resumes from the failed phase, it does not restart from scratch. See [TROUBLESHOOTING.md — Install marked failed but containers run](TROUBLESHOOTING.md#install-marked-failed-but-containers-run) for the full recovery procedure.
 - **Docker Hub rate limit** — `docker login` on the Pi before the next firstboot retry.
