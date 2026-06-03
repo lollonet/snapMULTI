@@ -183,16 +183,7 @@ ls /boot/firmware/snapmulti-diag-install-failed-*.tar.gz 2>/dev/null
 
 Se tutti e quattro segnalano "non fatto", l'install genuinamente non è stato completato.
 
-**Cosa provare.** Riflashare è il percorso supportato. Prima di flashare, alza la finestra healthcheck di MPD così l'install sopravvive alla prima scansione a freddo:
-
-```ini
-# install.conf sulla partizione boot della SD (lo scrive prepare-sd.sh)
-MPD_START_PERIOD=3600s
-```
-
-Il budget di 1 ora basta empiricamente per scan NFS a freddo fino a ~100 k tracce su Pi 4. Estrai prima il pacchetto diagnostico dalla SD fallita (`/boot/firmware/snapmulti-diag-install-failed-*.tar.gz`) per la issue GitHub.
-
-**Retry manuale senza reflash** (non ufficialmente supportato — riflashare è il percorso supportato). L'installer salta le operazioni una volta che `.install-failed` esiste; rimuovilo e rilancia direttamente lo script (`firstboot.sh` è idempotente — salta gli step già fatti e riprende dal punto di fallimento):
+**Cosa provare — retry manuale senza reflash (è l'unico path che davvero cambia la finestra healthcheck MPD).** `deploy.sh` deriva `MPD_START_PERIOD` puramente da `MUSIC_SOURCE` (300 s per `nfs`/`smb`/`network`, 30 s altrimenti) e NON legge `install.conf` per questo valore — mettere `MPD_START_PERIOD=3600s` in `install.conf` PRIMA del flash viene silenziosamente ignorato. L'unico modo per alzare davvero il budget è modificare `.env` DOPO il primo boot fallito, cancellare il failure marker e rilanciare `firstboot.sh`. Il valore di 1 ora basta empiricamente per scan NFS a freddo fino a ~100 k tracce su Pi 4. Estrai prima il pacchetto diagnostico dalla SD fallita (`/boot/firmware/snapmulti-diag-install-failed-*.tar.gz`) per la issue GitHub. L'installer salta le operazioni una volta che `.install-failed` esiste; rimuovilo e rilancia direttamente lo script (`firstboot.sh` è idempotente — salta gli step già fatti e riprende dal punto di fallimento):
 
 ```bash
 # Alza prima la finestra healthcheck di MPD se la causa era una scansione NFS lenta

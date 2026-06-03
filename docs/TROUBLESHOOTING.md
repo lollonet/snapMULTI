@@ -183,16 +183,7 @@ ls /boot/firmware/snapmulti-diag-install-failed-*.tar.gz 2>/dev/null
 
 If all four signal "not done", the install genuinely did not complete.
 
-**Try this.** Re-reflash is the supported path. Before flashing, bump the MPD healthcheck window so the install survives the first cold scan:
-
-```ini
-# install.conf on the SD card boot partition (prepare-sd.sh writes this file)
-MPD_START_PERIOD=3600s
-```
-
-The 1-hour budget is empirically enough for cold NFS scans up to ~100 k tracks on Pi 4. Pull the diagnostic bundle off the failed SD first (`/boot/firmware/snapmulti-diag-install-failed-*.tar.gz`) for the GitHub issue.
-
-**Manual retry without reflash** (not officially supported — re-reflash is the supported path). The installer skips work once `.install-failed` exists; clear it and rerun the script directly (`firstboot.sh` is idempotent — it skips steps already done and resumes from the failure point):
+**Try this — manual retry without reflash (this is the only path that actually changes the MPD healthcheck window).** `deploy.sh` derives `MPD_START_PERIOD` purely from `MUSIC_SOURCE` (300 s for `nfs`/`smb`/`network`, 30 s otherwise) and does NOT read `install.conf` for this value — putting `MPD_START_PERIOD=3600s` in `install.conf` BEFORE flashing is silently ignored. The only way to actually raise the budget is to edit `.env` AFTER the first failed boot, clear the failure marker, and rerun `firstboot.sh`. The 1-hour value is empirically enough for cold NFS scans up to ~100 k tracks on Pi 4. Pull the diagnostic bundle off the failed SD first (`/boot/firmware/snapmulti-diag-install-failed-*.tar.gz`) for the GitHub issue. The installer skips work once `.install-failed` exists; clear it and rerun the script directly (`firstboot.sh` is idempotent — it skips steps already done and resumes from the failure point):
 
 ```bash
 # Bump the MPD healthcheck window first if a slow NFS scan was the cause

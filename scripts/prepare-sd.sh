@@ -1234,7 +1234,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Remove the SD card"
 echo "  2. Insert into Raspberry Pi"
-echo "  3. Power on -- installation takes ~10-15 minutes, then auto-reboots"
+echo "  3. Power on -- installation takes ~15-20 minutes on Pi 4/5 (longer on Pi 3 or Pi Zero 2 W), then auto-reboots"
 if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     echo "  4. Open this URL in a browser (replace <hostname> with the one you set in Imager):"
     echo "       http://<hostname>.local:8083/         <-- start here: lists every server endpoint"
