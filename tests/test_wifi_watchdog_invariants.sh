@@ -96,7 +96,11 @@ check "WantedBy=multi-user.target" "grep -q 'WantedBy=multi-user.target' '$SERVI
 echo
 echo "== firstboot.sh integration =="
 check "firstboot installs the script to /usr/local/bin/snapmulti-wifi-watchdog" "grep -qE 'install -m 755.*WIFI_WD_SCRIPT.*/usr/local/bin/snapmulti-wifi-watchdog' '$FIRSTBOOT'"
-check "firstboot install candidates include CLIENT_DIR path (client-only installs)" "grep -qE 'CLIENT_DIR/scripts/common/wifi-watchdog.sh' '$FIRSTBOOT'"
+# v0.8 PR9 — candidate paths migrated to the resolve_first_existing_file
+# helper. The filename (wifi-watchdog.sh) is the helper arg; the
+# candidate DIRS appear unquoted as `$CLIENT_DIR/scripts/common` etc.
+check "firstboot resolves wifi-watchdog.sh from CLIENT_DIR (client-only installs)" \
+      "awk '/resolve_first_existing_file WIFI_WD_SCRIPT/,/\\\$CLIENT_DIR\\/scripts\\/common/' '$FIRSTBOOT' | grep -qE 'CLIENT_DIR/scripts/common'"
 check "firstboot WiFi watchdog comment confirms it covers ALL install types" "grep -qE 'WiFi.*ALL install types|all.*install.*type|client.*client-native|client.*equally vulnerable' '$FIRSTBOOT'"
 # v0.8 PR8 — inline install lines were migrated to the
 # install_systemd_unit_files helper. The unit dest

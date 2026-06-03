@@ -146,6 +146,10 @@ function Assert-PreparedSdCard {
         'common/install-profile.sh',
         'common/staging-manifest.sh',
         'common/overlayroot-lifecycle.sh',
+        # v0.8 PR9 — sourced unconditionally by firstboot.sh and
+        # (guarded) by setup.sh. Missing from SD = immediate firstboot
+        # abort under set -euo pipefail.
+        'common/path-resolve.sh',
         'common/play-smoke-tone.sh',
         'common/auto-boot-smoke.sh',
         'common/restore-snapmulti-state.sh',
@@ -203,6 +207,11 @@ function Assert-PreparedSdCard {
             # v0.8: overlayroot-lifecycle.sh is sourced by client's
             # ro-mode.sh + system-tune.sh — must ship to client/.
             'client/scripts/common/overlayroot-lifecycle.sh',
+            # v0.8 PR9 — setup.sh sources path-resolve.sh from
+            # $COMMON_MODULE_DIR/path-resolve.sh (= /opt/snapclient/
+            # scripts/common/ on a real install). Must ship under
+            # client/.
+            'client/scripts/common/path-resolve.sh',
             'client/snapclient.conf'
         )) {
             $path = Join-Path $Dest $file
@@ -690,7 +699,7 @@ function Copy-ClientFiles {
     # Shared modules from server scripts/common/
     $commonDest = Join-Path $scriptsDest 'common'
     New-Item -ItemType Directory -Path $commonDest -Force | Out-Null
-    foreach ($shared in @('install-deps.sh', 'install-docker.sh', 'system-tune.sh', 'overlayroot-lifecycle.sh', 'unified-log.sh', 'logging.sh', 'sanitize.sh', 'systemd-snippets.sh')) {
+    foreach ($shared in @('install-deps.sh', 'install-docker.sh', 'system-tune.sh', 'overlayroot-lifecycle.sh', 'unified-log.sh', 'logging.sh', 'sanitize.sh', 'systemd-snippets.sh', 'path-resolve.sh')) {
         $sharedPath = Join-Path $ScriptDir "common\$shared"
         if (Test-Path $sharedPath) {
             Copy-Item $sharedPath -Destination $commonDest

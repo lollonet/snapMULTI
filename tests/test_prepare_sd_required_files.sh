@@ -39,6 +39,10 @@ assert_contains "$verify_block" "common/mount-music.sh" "mount-music.sh is requi
 # service files. The verify gate must catch this before the operator
 # inserts the card into the Pi.
 assert_contains "$verify_block" "common/systemd-snippets.sh" "systemd-snippets.sh is required (server+client unit generator helper)"
+# v0.8 PR9 — firstboot.sh sources path-resolve.sh unconditionally
+# (set -euo pipefail aborts if missing). Verify list must catch a
+# stripped staging that drops the file.
+assert_contains "$verify_block" "common/path-resolve.sh" "path-resolve.sh is required (sourced unconditionally by firstboot.sh)"
 
 # Client-mode verify list — client/scripts/common/ is a selective copy of
 # the server's scripts/common/. systemd-snippets.sh must be in BOTH places
@@ -47,6 +51,10 @@ assert_contains "$verify_block" "common/systemd-snippets.sh" "systemd-snippets.s
 client_verify_block=$(sed -n '/client\/scripts\/common\/install-deps.sh/,/^[[:space:]]*done$/p' "$PREPARE_SD_SH")
 assert_contains "$client_verify_block" "client/scripts/common/systemd-snippets.sh" \
     "client-mode verify list includes systemd-snippets.sh"
+# v0.8 PR9 — setup.sh sources path-resolve.sh from
+# $COMMON_MODULE_DIR/path-resolve.sh = /opt/snapclient/scripts/common/.
+assert_contains "$client_verify_block" "client/scripts/common/path-resolve.sh" \
+    "client-mode verify list includes path-resolve.sh"
 
 # Bash selective copy loop (copy_client_files) must enumerate systemd-snippets.sh
 # alongside the other shared modules — without it the file is not copied to
@@ -117,6 +125,17 @@ if [[ -f "$PREPARE_SD_PS1" ]]; then
     # at the top level lands it under common/ root but not under client/.
     assert_contains "$(cat "$PREPARE_SD_PS1")" "common\\initramfs-hooks" \
         "ps1 copies initramfs-hooks/ to client/scripts/common/"
+
+    # v0.8 PR9 — path-resolve.sh wired in all 4 ps1 sites:
+    #   $requiredBase (verify list under common/)
+    #   client requiredFiles list
+    #   $shared selective copy foreach (client/scripts/common)
+    assert_contains "$ps1_required_base" "common/path-resolve.sh" \
+        "ps1 \$requiredBase includes common/path-resolve.sh"
+    assert_contains "$ps1_client_required" "client/scripts/common/path-resolve.sh" \
+        "ps1 client-required list includes path-resolve.sh"
+    assert_contains "$ps1_copy_foreach" "path-resolve.sh" \
+        "ps1 selective copy foreach includes path-resolve.sh"
 fi
 
 echo ""

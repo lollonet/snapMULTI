@@ -147,6 +147,12 @@ if [[ -n "$COMMON_MODULE_DIR" ]]; then
     # are kept as the fallback (see _setup_systemd_services).
     # shellcheck source=common/systemd-units.sh
     [[ -f "$COMMON_MODULE_DIR/systemd-units.sh" ]] && source "$COMMON_MODULE_DIR/systemd-units.sh"
+    # path-resolve.sh provides resolve_first_existing_file / _dir helpers
+    # that collapse the 5 remaining candidate-resolve loops below. Missing
+    # only on stripped bundles; those keep the inline loops via the fallback
+    # pattern (`if declare -F resolve_first_existing_file ...`).
+    # shellcheck source=common/path-resolve.sh
+    [[ -f "$COMMON_MODULE_DIR/path-resolve.sh" ]] && source "$COMMON_MODULE_DIR/path-resolve.sh"
 fi
 
 echo "========================================="
@@ -195,23 +201,29 @@ if [[ "$AUTO_MODE" == true ]]; then
     # animation, progress, progress_complete, milestone, log_progress).
     # When PROGRESS_MANAGED=1, the shared library's render_progress writes
     # to the parent's PROGRESS_LOG only (tty1 is owned by firstboot.sh).
-    _progress_sourced=false
-    for _progress_candidate in \
-        "$SCRIPT_DIR/common/progress.sh" \
-        "$SCRIPT_DIR/../scripts/common/progress.sh" \
-        "$(dirname "$0")/common/progress.sh"; do
+    _progress_src=""
+    if declare -F resolve_first_existing_file >/dev/null 2>&1; then
+        resolve_first_existing_file _progress_src "progress.sh" \
+            "$SCRIPT_DIR/common" \
+            "$SCRIPT_DIR/../scripts/common" \
+            "$(dirname "$0")/common" || true
+    else
+        for _progress_candidate in \
+            "$SCRIPT_DIR/common/progress.sh" \
+            "$SCRIPT_DIR/../scripts/common/progress.sh" \
+            "$(dirname "$0")/common/progress.sh"; do
+            [[ -f "$_progress_candidate" ]] && _progress_src="$_progress_candidate" && break
+        done
+        unset _progress_candidate
+    fi
+    if [[ -n "$_progress_src" ]]; then
         # shellcheck source=common/progress.sh
-        if [[ -f "$_progress_candidate" ]]; then
-            source "$_progress_candidate"
-            progress_init 2>/dev/null || true
-            _progress_sourced=true
-            break
-        fi
-    done
-    if [[ "$_progress_sourced" != true ]]; then
+        source "$_progress_src"
+        progress_init 2>/dev/null || true
+    else
         echo "WARNING: progress.sh not found — TUI disabled"
     fi
-    unset _progress_sourced _progress_candidate
+    unset _progress_src
 fi
 
 # Define no-op stubs for any functions not yet defined (interactive mode,
@@ -255,13 +267,24 @@ CONFIG_MARKER_END="# --- SNAPCLIENT SETUP END ---"
 # Step 1: Select Audio HAT
 # ============================================
 # Source HAT detection module
-for _hat_candidate in \
-    "$SCRIPT_DIR/audio-hat-detect.sh" \
-    "$SCRIPT_DIR/common/audio-hat-detect.sh" \
-    "$COMMON_DIR/scripts/audio-hat-detect.sh"; do
-    # shellcheck source=audio-hat-detect.sh
-    [[ -f "$_hat_candidate" ]] && source "$_hat_candidate" && break
-done
+_hat_src=""
+if declare -F resolve_first_existing_file >/dev/null 2>&1; then
+    resolve_first_existing_file _hat_src "audio-hat-detect.sh" \
+        "$SCRIPT_DIR" \
+        "$SCRIPT_DIR/common" \
+        "$COMMON_DIR/scripts" || true
+else
+    for _hat_candidate in \
+        "$SCRIPT_DIR/audio-hat-detect.sh" \
+        "$SCRIPT_DIR/common/audio-hat-detect.sh" \
+        "$COMMON_DIR/scripts/audio-hat-detect.sh"; do
+        [[ -f "$_hat_candidate" ]] && _hat_src="$_hat_candidate" && break
+    done
+    unset _hat_candidate
+fi
+# shellcheck source=audio-hat-detect.sh
+[[ -n "$_hat_src" ]] && source "$_hat_src"
+unset _hat_src
 if ! declare -F detect_hat &>/dev/null; then
     echo "FATAL: audio-hat-detect.sh not found" >&2
     exit 1
@@ -274,16 +297,30 @@ fi
 # firstboot SD-card mount, and rare standalone re-run from /opt.
 # Hard-fail on miss — silently generating units without the helpers
 # would produce service files missing critical ExecStartPre lines.
-for _snippets_candidate in \
-    "$SCRIPT_DIR/systemd-snippets.sh" \
-    "$SCRIPT_DIR/common/systemd-snippets.sh" \
-    "$SCRIPT_DIR/../../../scripts/common/systemd-snippets.sh" \
-    "$COMMON_DIR/../scripts/common/systemd-snippets.sh" \
-    "/boot/firmware/snapmulti/common/systemd-snippets.sh" \
-    "/boot/snapmulti/common/systemd-snippets.sh"; do
-    # shellcheck source=../../../scripts/common/systemd-snippets.sh
-    [[ -f "$_snippets_candidate" ]] && source "$_snippets_candidate" && break
-done
+_snippets_src=""
+if declare -F resolve_first_existing_file >/dev/null 2>&1; then
+    resolve_first_existing_file _snippets_src "systemd-snippets.sh" \
+        "$SCRIPT_DIR" \
+        "$SCRIPT_DIR/common" \
+        "$SCRIPT_DIR/../../../scripts/common" \
+        "$COMMON_DIR/../scripts/common" \
+        "/boot/firmware/snapmulti/common" \
+        "/boot/snapmulti/common" || true
+else
+    for _snippets_candidate in \
+        "$SCRIPT_DIR/systemd-snippets.sh" \
+        "$SCRIPT_DIR/common/systemd-snippets.sh" \
+        "$SCRIPT_DIR/../../../scripts/common/systemd-snippets.sh" \
+        "$COMMON_DIR/../scripts/common/systemd-snippets.sh" \
+        "/boot/firmware/snapmulti/common/systemd-snippets.sh" \
+        "/boot/snapmulti/common/systemd-snippets.sh"; do
+        [[ -f "$_snippets_candidate" ]] && _snippets_src="$_snippets_candidate" && break
+    done
+    unset _snippets_candidate
+fi
+# shellcheck source=../../../scripts/common/systemd-snippets.sh
+[[ -n "$_snippets_src" ]] && source "$_snippets_src"
+unset _snippets_src
 if ! declare -F compose_stop_5s_execstop &>/dev/null; then
     echo "FATAL: systemd-snippets.sh not found in any candidate path" >&2
     exit 1
@@ -526,13 +563,24 @@ progress 1 "Installing system dependencies..."
 start_progress_animation 1 0 12  # Animate during apt-get
 
 # Shared host bootstrap — packages, locale, avahi, monitoring
-for _deps_candidate in \
-    "$SCRIPT_DIR/common/install-deps.sh" \
-    "$SCRIPT_DIR/../scripts/common/install-deps.sh" \
-    "$(dirname "$0")/common/install-deps.sh"; do
-    # shellcheck source=common/install-deps.sh
-    [[ -f "$_deps_candidate" ]] && source "$_deps_candidate" && break
-done
+_deps_src=""
+if declare -F resolve_first_existing_file >/dev/null 2>&1; then
+    resolve_first_existing_file _deps_src "install-deps.sh" \
+        "$SCRIPT_DIR/common" \
+        "$SCRIPT_DIR/../scripts/common" \
+        "$(dirname "$0")/common" || true
+else
+    for _deps_candidate in \
+        "$SCRIPT_DIR/common/install-deps.sh" \
+        "$SCRIPT_DIR/../scripts/common/install-deps.sh" \
+        "$(dirname "$0")/common/install-deps.sh"; do
+        [[ -f "$_deps_candidate" ]] && _deps_src="$_deps_candidate" && break
+    done
+    unset _deps_candidate
+fi
+# shellcheck source=common/install-deps.sh
+[[ -n "$_deps_src" ]] && source "$_deps_src"
+unset _deps_src
 
 # Skip the full install_dependencies pass when firstboot has already
 # provisioned the host (PROGRESS_MANAGED=1). install-deps.sh is
@@ -572,13 +620,24 @@ else
     log_progress "Removing conflicting packages..."
     apt-get remove -y docker.io docker-compose docker-buildx containerd runc 2>/dev/null || true
 
-    for _docker_candidate in \
-        "$SCRIPT_DIR/common/install-docker.sh" \
-        "$SCRIPT_DIR/../scripts/common/install-docker.sh" \
-        "$(dirname "$0")/common/install-docker.sh"; do
-        # shellcheck source=common/install-docker.sh
-        [[ -f "$_docker_candidate" ]] && source "$_docker_candidate" && break
-    done
+    _docker_src=""
+    if declare -F resolve_first_existing_file >/dev/null 2>&1; then
+        resolve_first_existing_file _docker_src "install-docker.sh" \
+            "$SCRIPT_DIR/common" \
+            "$SCRIPT_DIR/../scripts/common" \
+            "$(dirname "$0")/common" || true
+    else
+        for _docker_candidate in \
+            "$SCRIPT_DIR/common/install-docker.sh" \
+            "$SCRIPT_DIR/../scripts/common/install-docker.sh" \
+            "$(dirname "$0")/common/install-docker.sh"; do
+            [[ -f "$_docker_candidate" ]] && _docker_src="$_docker_candidate" && break
+        done
+        unset _docker_candidate
+    fi
+    # shellcheck source=common/install-docker.sh
+    [[ -n "$_docker_src" ]] && source "$_docker_src"
+    unset _docker_src
 
     if command -v install_docker_apt &>/dev/null; then
         log_progress "Installing Docker CE via shared installer..."
@@ -1640,15 +1699,20 @@ SYSDEOF
         # /run/initramfs/overlayroot.log. See overlayroot-lifecycle.sh for the
         # full PR #317 history and the snapdigi 2026-06-01 root-cause.
         local _hook_src=""
-        for _cand in \
-            "$COMMON_MODULE_DIR/initramfs-hooks/snapmulti-lzma" \
-            "/opt/snapclient/scripts/common/initramfs-hooks/snapmulti-lzma" \
-            "/opt/snapmulti/scripts/common/initramfs-hooks/snapmulti-lzma"; do
-            if [[ -f "$_cand" ]]; then
-                _hook_src="$_cand"
-                break
-            fi
-        done
+        if declare -F resolve_first_existing_file >/dev/null 2>&1; then
+            resolve_first_existing_file _hook_src "snapmulti-lzma" \
+                "$COMMON_MODULE_DIR/initramfs-hooks" \
+                "/opt/snapclient/scripts/common/initramfs-hooks" \
+                "/opt/snapmulti/scripts/common/initramfs-hooks" || true
+        else
+            local _cand
+            for _cand in \
+                "$COMMON_MODULE_DIR/initramfs-hooks/snapmulti-lzma" \
+                "/opt/snapclient/scripts/common/initramfs-hooks/snapmulti-lzma" \
+                "/opt/snapmulti/scripts/common/initramfs-hooks/snapmulti-lzma"; do
+                [[ -f "$_cand" ]] && _hook_src="$_cand" && break
+            done
+        fi
         # Empty _hook_src means none of the candidates resolved — the library
         # returns 0 in that path (non-fatal by design for older installs), so
         # the `||` branch would never fire. Branch on empty explicitly so the
