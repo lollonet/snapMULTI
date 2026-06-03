@@ -102,19 +102,14 @@ echo
 echo "== callers: no residual ensure_overlayroot_initramfs_ready =="
 
 # Whole-tree sweep: no production code path may still call the deleted
-# helper. tests/ are exempt (this test would self-trip).
-residual=$(grep -lE "ensure_overlayroot_initramfs_ready" \
-    "$TUNE" "$CLIENT_SETUP" "$RO_MODE" "$LIB" 2>/dev/null \
-    | grep -vE "(^|/)tests/" \
-    | grep -vE "^[[:space:]]*#" \
-    || true)
-# The library file still mentions the name in its top-of-file "removed"
-# documentation block — that's the only allowed grep match. Distinguish
-# by checking the lines that match are all comments.
+# helper. The library file (overlayroot-lifecycle.sh) still mentions
+# the name in its top-of-file "removed" documentation block — that's
+# the only allowed match. Distinguish by checking that every grep hit
+# is on a comment line (`^[[:space:]]*#`). PR #592 claude-review LOW:
+# the earlier `residual=…` variable was assigned and never read; the
+# real check is this loop. Inlined the loop to keep the intent obvious.
 fail_residual=0
 for f in "$TUNE" "$CLIENT_SETUP" "$RO_MODE" "$LIB"; do
-    # Skip header docs (lines starting with `#`); if any uncommented line
-    # still names the helper, that's a true residual.
     if grep -nE "ensure_overlayroot_initramfs_ready" "$f" \
         | grep -vE "^[0-9]+:[[:space:]]*#" >/dev/null 2>&1; then
         echo "  FAIL: residual uncommented ensure_overlayroot_initramfs_ready in $f"
