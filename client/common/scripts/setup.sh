@@ -1659,6 +1659,40 @@ DefaultEnvironment="LIBMOUNT_FORCE_MOUNT2=always"
 SYSDEOF
     log_progress "systemd overlayfs workaround installed (trixie remount fix)"
 
+    # Install the snapmulti-lzma hook BEFORE raspi-config so the
+    # internal `update-initramfs -c -k all` raspi-config runs picks the
+    # hook up on its first pass. PR #592 dropped the post-raspi-config
+    # rebuild round (and its `ensure_overlayroot_initramfs_ready`
+    # driver) because that second pass collided with /boot/firmware ro
+    # at finalize time — see overlayroot-lifecycle.sh for the full
+    # history. Without these two steps the Pi 4 client path boots ext4
+    # with `Unable to find driver` in /run/initramfs/overlayroot.log.
+    local _hook_src=""
+    if declare -F resolve_first_existing_file >/dev/null 2>&1; then
+        resolve_first_existing_file _hook_src "snapmulti-lzma" \
+            "$COMMON_MODULE_DIR/initramfs-hooks" \
+            "/opt/snapclient/scripts/common/initramfs-hooks" \
+            "/opt/snapmulti/scripts/common/initramfs-hooks" || true
+    else
+        local _cand
+        for _cand in \
+            "$COMMON_MODULE_DIR/initramfs-hooks/snapmulti-lzma" \
+            "/opt/snapclient/scripts/common/initramfs-hooks/snapmulti-lzma" \
+            "/opt/snapmulti/scripts/common/initramfs-hooks/snapmulti-lzma"; do
+            [[ -f "$_cand" ]] && _hook_src="$_cand" && break
+        done
+    fi
+    # Empty _hook_src means none of the candidates resolved — the library
+    # returns 0 in that path (non-fatal by design for older installs), so
+    # the `||` branch would never fire. Branch on empty explicitly so the
+    # operator sees the skip on the TUI channel, not just the install log.
+    if [[ -n "$_hook_src" ]]; then
+        install_initramfs_lzma_hook "$_hook_src" || \
+            log_progress "WARNING: lzma hook install failed — overlay may not load on first boot"
+    else
+        log_progress "WARNING: snapmulti-lzma hook source not found — initramfs will lack liblzma, overlay may not load on first boot"
+    fi
+
     # Enable overlayfs (takes effect after reboot). raspi-config internally
     # apt-installs overlayroot/cryptsetup which triggers update-initramfs
     # to rebuild BOTH kernels (rpi-v8 + rpi-2712) — ~20s of progress output
@@ -1691,41 +1725,6 @@ SYSDEOF
         echo "  - System will boot normally (writable root)"
         echo ""
     else
-        # Initramfs side: install snapmulti-lzma hook (so kmod can decompress
-        # .ko.xz inside initramfs) and rebuild for every installed kernel
-        # (apt full-upgrade may have installed a kernel newer than $(uname -r)
-        # that becomes the next-boot target). Without these two steps the Pi 4
-        # client path boots ext4 with `Unable to find driver` in
-        # /run/initramfs/overlayroot.log. See overlayroot-lifecycle.sh for the
-        # full PR #317 history and the snapdigi 2026-06-01 root-cause.
-        local _hook_src=""
-        if declare -F resolve_first_existing_file >/dev/null 2>&1; then
-            resolve_first_existing_file _hook_src "snapmulti-lzma" \
-                "$COMMON_MODULE_DIR/initramfs-hooks" \
-                "/opt/snapclient/scripts/common/initramfs-hooks" \
-                "/opt/snapmulti/scripts/common/initramfs-hooks" || true
-        else
-            local _cand
-            for _cand in \
-                "$COMMON_MODULE_DIR/initramfs-hooks/snapmulti-lzma" \
-                "/opt/snapclient/scripts/common/initramfs-hooks/snapmulti-lzma" \
-                "/opt/snapmulti/scripts/common/initramfs-hooks/snapmulti-lzma"; do
-                [[ -f "$_cand" ]] && _hook_src="$_cand" && break
-            done
-        fi
-        # Empty _hook_src means none of the candidates resolved — the library
-        # returns 0 in that path (non-fatal by design for older installs), so
-        # the `||` branch would never fire. Branch on empty explicitly so the
-        # operator sees the skip on the TUI channel, not just the install log.
-        if [[ -n "$_hook_src" ]]; then
-            install_initramfs_lzma_hook "$_hook_src" || \
-                log_progress "WARNING: lzma hook install failed — overlay may not load on first boot"
-        else
-            log_progress "WARNING: snapmulti-lzma hook source not found — initramfs will lack liblzma, overlay may not load on first boot"
-        fi
-        ensure_overlayroot_initramfs_ready || \
-            log_progress "WARNING: initramfs refresh failed — first boot may not activate overlay"
-
         echo "Read-only filesystem configured"
         echo "  - Docker storage driver: reconciled at boot from actual root mount state"
         echo "  - SSH host keys: persisted"

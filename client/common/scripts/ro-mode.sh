@@ -17,7 +17,7 @@ set -euo pipefail
 # CLI and server/client firstboot finalize):
 #   - cmdline-manager.sh: cmdline.txt idempotent patch/unpatch
 #   - overlayroot-lifecycle.sh: persist_overlayroot_enabled/disabled +
-#     ensure_overlayroot_initramfs_ready
+#     install_initramfs_lzma_hook
 # Probe both the dev tree path and the on-device install paths.
 _RO_MODE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for _common_root in \
@@ -99,26 +99,16 @@ case "${1:-}" in
 [Manager]
 DefaultEnvironment="LIBMOUNT_FORCE_MOUNT2=always"
 SYSDEOF
-        if ! raspi-config nonint do_overlayfs 0; then
-            # Roll back: remove override since overlayroot won't be active
-            rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
-            echo "ERROR: Failed to enable read-only mode."
-            echo "Check that raspi-config is installed and has proper permissions."
-            exit 1
-        fi
-        if ! persist_overlayroot_enabled; then
-            rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
-            rm -f /etc/overlayroot.local.conf
-            echo "ERROR: Failed to persist overlayroot configuration."
-            exit 1
-        fi
-        # Re-install the snapmulti-lzma initramfs hook and rebuild every
-        # installed kernel's initramfs. Idempotent: if the hook is already
-        # there with the same content, install -m 755 just overwrites it.
-        # Necessary because a user may have run `ro-mode disable` followed
-        # by `apt purge initramfs-tools-core` (or hand-removed the hook)
-        # before re-enabling — without the hook, the next boot lands in
-        # ext4 fallback with the snapdigi-class failure.
+        # Re-install the snapmulti-lzma initramfs hook BEFORE raspi-config
+        # so its internal update-initramfs picks the hook up on its first
+        # pass. PR #592 dropped the post-raspi-config second-rebuild round
+        # — see overlayroot-lifecycle.sh. Idempotent: if the hook is
+        # already there with the same content, `install -m 755` just
+        # overwrites it. Necessary because a user may have run `ro-mode
+        # disable` followed by `apt purge initramfs-tools-core` (or
+        # hand-removed the hook) before re-enabling — without the hook,
+        # the next boot lands in ext4 fallback with the snapdigi-class
+        # failure.
         _found_hook=0
         for _hook_cand in \
             "$_RO_MODE_DIR/../../../scripts/common/initramfs-hooks/snapmulti-lzma" \
@@ -136,8 +126,20 @@ SYSDEOF
         (( _found_hook )) || \
             echo "WARNING: snapmulti-lzma hook source not found — initramfs rebuilt without liblzma, overlay may not activate"
         unset _found_hook
-        ensure_overlayroot_initramfs_ready || \
-            echo "WARNING: initramfs refresh failed — next boot may not activate overlay"
+
+        if ! raspi-config nonint do_overlayfs 0; then
+            # Roll back: remove override since overlayroot won't be active
+            rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+            echo "ERROR: Failed to enable read-only mode."
+            echo "Check that raspi-config is installed and has proper permissions."
+            exit 1
+        fi
+        if ! persist_overlayroot_enabled; then
+            rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+            rm -f /etc/overlayroot.local.conf
+            echo "ERROR: Failed to persist overlayroot configuration."
+            exit 1
+        fi
 
         echo "Read-only mode enabled. Reboot to activate:"
         echo "  sudo reboot"

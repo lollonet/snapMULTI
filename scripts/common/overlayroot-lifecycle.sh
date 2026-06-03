@@ -59,36 +59,25 @@ persist_overlayroot_disabled() {
     fi
 }
 
-# Rebuild initramfs for every installed kernel so the overlay module is
-# reachable by modprobe at boot. Fixes the snapdigi-class failure where
-# modules.dep in the cached initramfs is stale (~200 bytes) and
-# init-bottom/overlayroot aborts with `[failure]: Unable to find a driver.
-# searched: overlay overlayfs`.
-#
-# Why iterate over /lib/modules/* instead of `update-initramfs -u -k $(uname -r)`:
-# during snapMULTI firstboot finalize, `uname -r` is the kernel the image
-# booted with (e.g. 6.12.75) — but `apt full-upgrade` earlier in the same
-# firstboot installs a newer kernel (e.g. 6.18.29) which becomes the BOOT
-# target at next reboot. Rebuilding only the running kernel leaves the
-# next-boot kernel's initramfs stale → overlayroot still fails on first
-# reflash post-upgrade. Observed on snapdigi 2026-06-01: $(uname -r) was
-# 6.12.75, fix landed on 6.12.75's initramfs, device rebooted into 6.18.29
-# whose modules.dep was still the truncated 204-byte raspi-config artefact
-# → ext4 fallback persisted.
-#
-# PR #317 lesson — see system-tune.sh history — a silent
-# `update-initramfs -u -k all >/dev/null 2>&1` raced with raspi-config's own
-# rebuild and aborted with "failed to determine device for /". Two guards
-# baked in here:
-#   1. Run AFTER raspi-config has settled (caller's responsibility).
-#   2. Capture output to the unified install log so a future race is visible
-#      (the original bug was the `>/dev/null 2>&1` that hid it).
 # Install /etc/initramfs-tools/hooks/snapmulti-lzma so the next
 # update-initramfs bundles liblzma.so.5 into the generated image. Required
 # because kmod inside initramfs is linked against liblzma and needs it to
 # decompress .ko.xz modules — without it, `modprobe -qb overlay` fails with
 # "xz: can't load and resolve symbols" and init-bottom/overlayroot falls
 # back to ext4 on next boot. Observed live on snapdigi 2026-06-01.
+#
+# Call sequence — see PR #592:
+#   1. install_initramfs_lzma_hook  (this function — installs the hook)
+#   2. raspi-config nonint do_overlayfs 0  (caller — internally runs
+#      `update-initramfs -c -k all` which picks up the hook on its first
+#      pass; this is the ONLY initramfs rebuild on this path)
+#   3. persist_overlayroot_enabled  (caller — writes cmdline.txt + the
+#      /etc/overlayroot.local.conf tmpfs marker)
+#
+# Reorder the call BEFORE raspi-config — running it after means the
+# hook only matters on the SECOND rebuild round, which is exactly what
+# `ensure_overlayroot_initramfs_ready` used to do and which broke under
+# /boot/firmware ro at finalize time (PR #586 / #592 historical).
 #
 # The hook file itself lives in scripts/common/initramfs-hooks/snapmulti-lzma
 # (shipped to both /opt/snapmulti/ and /opt/snapclient/ via prepare-sd.sh).
@@ -114,100 +103,24 @@ install_initramfs_lzma_hook() {
     ok "overlayroot: initramfs lzma hook installed ($hook_dst)"
 }
 
-# Map kernel version → deployed initramfs path under /boot/firmware/.
-# Returns the path on stdout; empty string when the suffix is unknown
-# (caller treats empty as "cannot verify idempotently — proceed with
-# rebuild as the safe default").
-_initramfs_target_for_kver() {
-    local kver="$1"
-    case "$kver" in
-        *+rpt-rpi-v8)    echo "/boot/firmware/initramfs8" ;;
-        *+rpt-rpi-2712)  echo "/boot/firmware/initramfs_2712" ;;
-        *+rpt-rpi-v7l)   echo "/boot/firmware/initramfs7l" ;;
-        *+rpt-rpi-v7+)   echo "/boot/firmware/initramfs7" ;;
-        *+rpt-rpi-v6+)   echo "/boot/firmware/initramfs" ;;
-        *)               echo "" ;;
-    esac
-}
-
-# True iff the deployed initramfs at $target already includes
-# liblzma.so.5. Used to skip the rebuild when the kernel package's
-# own post-install update-initramfs (which runs earlier in firstboot,
-# while /boot/firmware is still rw) has already produced a usable
-# initramfs — automatic on distros where kmod is linked against
-# liblzma (trixie+). Conservative: missing target file or missing
-# lsinitramfs tool both return false → caller proceeds with rebuild.
-_initramfs_already_has_liblzma() {
-    local target="$1"
-    [[ -f "$target" ]] || return 1
-    command -v lsinitramfs >/dev/null 2>&1 || return 1
-    # NB: grep -F ... >/dev/null (NOT grep -qF). With `set -euo pipefail`
-    # grep -q exits at first match, which sends SIGPIPE upstream to
-    # lsinitramfs (lsinitramfs streams ~10k entries from a 12 MB cpio
-    # archive). pipefail then propagates the 141 from lsinitramfs and
-    # the check appears to fail even when liblzma IS present. The non-q
-    # form consumes the entire stream, so lsinitramfs exits 0 cleanly.
-    lsinitramfs "$target" 2>/dev/null | grep -F "liblzma.so.5" >/dev/null
-}
-
-ensure_overlayroot_initramfs_ready() {
-    local log_target="${UNIFIED_LOG:-/dev/null}"
-
-    if ! command -v depmod >/dev/null 2>&1; then
-        warn "overlayroot: depmod not found — skipping modules.dep refresh"
-        return 0
-    fi
-    if ! command -v update-initramfs >/dev/null 2>&1; then
-        warn "overlayroot: update-initramfs not found — skipping initramfs rebuild"
-        return 0
-    fi
-
-    local kver_dir kver any_failed=0 any_attempted=0 target
-    for kver_dir in /lib/modules/*; do
-        [[ -d "$kver_dir" ]] || continue
-        kver="${kver_dir##*/}"
-        any_attempted=1
-
-        # Always refresh modules.dep — cheap, writes under /lib/modules
-        # which is on rootfs (overlayroot's upper layer is rw even after
-        # /boot/firmware has been remounted ro).
-        if ! depmod -a "$kver" >> "$log_target" 2>&1; then
-            warn "overlayroot: depmod -a $kver failed (see $log_target)"
-            any_failed=1
-            continue
-        fi
-
-        # Idempotent skip: if the deployed initramfs at the kernel's
-        # /boot/firmware target already includes liblzma.so.5, the
-        # rebuild is a no-op AND would fail anyway when /boot/firmware
-        # is read-only at finalize time (the cp-back step). The kernel
-        # package's own post-install update-initramfs ran earlier in
-        # firstboot, while /boot/firmware was still rw, and on trixie
-        # kmod pulls liblzma via its linker dependency so the resulting
-        # initramfs already has what overlay's xz-compressed module
-        # needs. On bookworm — or any distro where the auto-rebuild
-        # produced an initramfs WITHOUT liblzma — the check returns
-        # false and the rebuild runs as before.
-        target="$(_initramfs_target_for_kver "$kver")"
-        if [[ -n "$target" ]] && _initramfs_already_has_liblzma "$target"; then
-            info "overlayroot: initramfs for $kver already includes liblzma at $target - skip rebuild (idempotent)"
-            continue
-        fi
-
-        info "overlayroot: refreshing initramfs for $kver"
-        if ! update-initramfs -u -k "$kver" >> "$log_target" 2>&1; then
-            warn "overlayroot: update-initramfs -u -k $kver failed (see $log_target)"
-            any_failed=1
-            continue
-        fi
-
-        ok "overlayroot: initramfs rebuilt for $kver (overlay module reachable)"
-    done
-
-    if (( any_attempted == 0 )); then
-        warn "overlayroot: no kernel directories found under /lib/modules — initramfs not refreshed"
-        return 1
-    fi
-
-    return "$any_failed"
-}
+# ensure_overlayroot_initramfs_ready was dropped after PR #592. The function
+# ran AFTER `raspi-config nonint do_overlayfs 0` to (1) refresh modules.dep
+# per kver and (2) re-run `update-initramfs -u -k all` so the snapmulti-lzma
+# hook (installed in the prior step) would actually land in /boot/firmware/
+# initramfs*. This was load-bearing because the hook was installed AFTER
+# raspi-config's own internal `update-initramfs -c -k all`. The second
+# rebuild then collided with /boot/firmware being remounted ro by the
+# read-only setup step, producing the cosmetic `cp: cannot create regular
+# file '/boot/firmware/initramfs8': Read-only file system` warnings that
+# claude-review surfaced as the overlay-may-not-activate failure mode.
+#
+# PR #592 reorders the install flow so install_initramfs_lzma_hook runs
+# BEFORE raspi-config. raspi-config's own update-initramfs then picks up
+# the hook on its first pass — liblzma lands in initramfs without a second
+# rebuild round, the rc-out-of-subshell pipefail bug fixed in PR #586
+# becomes moot, and /boot/firmware ro at finalize is harmless because the
+# only update-initramfs call already happened while it was rw.
+#
+# Removed alongside this function: `_initramfs_target_for_kver`,
+# `_initramfs_already_has_liblzma`. They existed only to drive the
+# idempotency skip in this function and have no other callers.
