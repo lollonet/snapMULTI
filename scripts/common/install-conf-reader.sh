@@ -53,6 +53,18 @@
 # Returns 1 only on an unknown STRIP_MODE argument (programming error).
 install_conf_get() {
     local field="$1" conf="$2" strip="${3:-all}"
+    # Defensive: the FIELD name is interpolated into a `grep` regex.
+    # We CANNOT use `grep -F` because it would also treat the leading
+    # `^` as literal (verified: `grep -F "^FOO=" file` matches the
+    # literal-caret line, NOT the start-of-line). So instead we
+    # constrain FIELD to a shell-style identifier — the same shape
+    # every legitimate caller already uses. This forecloses on regex
+    # injection via crafted field names while preserving the start-of-
+    # line anchor. PR #585 review caught the latent regex risk.
+    if [[ ! "$field" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        echo "install_conf_get: invalid field name '$field' (must match [A-Za-z_][A-Za-z0-9_]*)" >&2
+        return 1
+    fi
     local raw
     raw=$(grep -m1 "^${field}=" "$conf" 2>/dev/null | cut -d= -f2- || true)
     case "$strip" in

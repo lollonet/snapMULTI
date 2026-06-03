@@ -107,6 +107,34 @@ else
 fi
 
 echo
+echo "=== install_conf_get — invalid field name rejected (no regex injection) ==="
+# Reviewer suggested `grep -F` to make the pattern literal, but `-F`
+# also treats the leading `^` as literal — losing the start-of-line
+# anchor. Verified: `printf '^FOO=x\nFOO=y\n' | grep -F '^FOO='` matches
+# the literal-caret line, not FOO=y. Instead we input-validate the
+# FIELD as a shell-style identifier so the regex stays intact.
+for bad in "FOO.BAR" "FOO BAR" "FOO/BAR" "" "1FOO" "FOO[BAR]" "FOO|BAR"; do
+    rc=0
+    install_conf_get "$bad" "$sandbox/install.conf" >/dev/null 2>&1 || rc=$?
+    if [[ "$rc" == "1" ]]; then
+        note_pass "invalid field name '$bad' → rc=1 (regex injection blocked)"
+    else
+        note_fail "invalid field name '$bad' → rc=$rc (expected 1)"
+    fi
+done
+
+# Valid identifiers still work
+for good in "FOO" "FOO_BAR" "Foo" "_underscore_start" "F1" "X_2_Y"; do
+    rc=0
+    install_conf_get "$good" "$sandbox/install.conf" >/dev/null 2>&1 || rc=$?
+    if [[ "$rc" == "0" ]]; then
+        note_pass "valid identifier '$good' accepted"
+    else
+        note_fail "valid identifier '$good' → rc=$rc (expected 0)"
+    fi
+done
+
+echo
 echo "=== install_conf_get — empty value ==="
 assert_eq "$(install_conf_get EMPTY_VALUE "$sandbox/install.conf")" \
           "" "EMPTY_VALUE (just '=' then nothing) returns empty"
