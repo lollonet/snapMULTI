@@ -22,16 +22,20 @@ HOST (Mac / Linux / Windows)
 PI (boot 1 — cloud-init runs the staged hook)
 └─ firstboot.sh (root)
    ├─ wait-network                            (WiFi DFS regdom fix)
-   ├─ install-deps + install-docker           (apt + docker.io)
+   ├─ install-deps + install-docker           (Docker CE: docker-ce,
+   │                                           docker-ce-cli, containerd.io,
+   │                                           docker-compose-plugin)
    ├─ install-profile resolve                 (server / client / both)
-   ├─ install_initramfs_lzma_hook             (for overlayroot)
-   ├─ refresh_overlayroot_modules_dep         (depmod per kver)
-   ├─ raspi-config nonint do_overlayfs 0      (enable RO root)
    ├─ run deploy.sh   (server stack)          ┐ runs only the path
    ├─ run setup.sh    (client stack)          │ relevant to the
-   ├─ run setup-zero2w.sh (native client)     │ install mode
-   ├─ /boot/firmware backup writers wired     │
-   ├─ snapmulti-firstboot.complete marker     ┘
+   ├─ run setup-zero2w.sh (native client)     ┘ install mode
+   ├─ readonly/finalize phase                 ┐ ENABLE_READONLY=true:
+   │   ├─ install_initramfs_lzma_hook         │  server path runs in
+   │   ├─ refresh_overlayroot_modules_dep     │  firstboot finalize;
+   │   └─ raspi-config nonint do_overlayfs 0  │  client/both path runs
+   │                                          ┘  inside setup.sh
+   ├─ /boot/firmware backup writers wired
+   ├─ /var/lib/snapmulti-installer/.auto-installed marker
    └─ reboot
 
 PI (boot 2 — systemd owns the runtime)
@@ -70,7 +74,7 @@ The four install modes share the same `firstboot.sh` framework; what differs is 
 
 - cloud-init's `runcmd` executes `/boot/firmware/snapmulti/firstboot.sh` as root.
 - Progress is rendered to `/dev/tty1` (HDMI console) via `scripts/common/progress.sh` — full-screen TUI, ASCII-only, no-op when SSH-launched.
-- Resilient against partial failures: every phase writes a checkpoint marker in `/var/lib/snapmulti/` so an interrupted firstboot resumes instead of restarting from zero on reboot.
+- Resilient against partial failures: every phase writes a checkpoint marker (`.done-<phase>`) in `/var/lib/snapmulti-installer/` so an interrupted firstboot resumes instead of restarting from zero on reboot. Successful completion flips `/var/lib/snapmulti-installer/.auto-installed`; a partial failure flips `.install-failed` instead — both in the same directory, NOT on the boot partition.
 
 ### 3. Pi: server path — `deploy.sh`
 
@@ -88,7 +92,7 @@ Client / both mode (Pi 3 / 4 / 5). Steps:
 - Audio HAT detection (EEPROM → I²C scan → USB fallback).
 - ALSA `/etc/asound.conf` written from the detected HAT.
 - mDNS server discovery (or `SNAPSERVER_HOST` override).
-- `docker compose up -d` for snapclient + visualizer + fb-display (last two only when an HDMI display is connected).
+- During firstboot, `docker compose up -d` starts ONLY `snapclient` with `COMPOSE_PROFILES=""`. The `framebuffer` profile (audio-visualizer + fb-display) is deferred to the post-reboot `snapclient.service`, so the install TUI on `/dev/tty3` is not stomped by fb-display drawing on `/dev/fb0`. After the reboot, `snapclient.service` reads `.env` with `COMPOSE_PROFILES=framebuffer` and the full client stack comes up.
 
 ### 5. Pi: native-client path — `setup-zero2w.sh`
 
@@ -108,7 +112,7 @@ Pi Zero 2 W only (RAM budget excludes Docker). Steps:
 
 ## Failure modes & recovery
 
-`firstboot.sh` writes `.install-failed` to `/boot/firmware/` if any phase aborts. The device boots, containers come up (`snapmulti-server.service` has its own systemd `Restart=on-failure`), but overlayroot is NOT activated and the install is marked incomplete. The two common causes:
+`firstboot.sh` writes `/var/lib/snapmulti-installer/.install-failed` if any phase aborts (NOT on the boot partition — `/boot/firmware/` holds diagnostic + backup artefacts, not the marker). The device boots, containers come up (`snapmulti-server.service` has its own systemd `Restart=on-failure`), but overlayroot is NOT activated and the install is marked incomplete. The two common causes:
 
 - **Large NFS / SMB library exceeds `verify_services` healthcheck window** — pre-set `MPD_START_PERIOD=3600s` in `install.conf` before flashing. See [TROUBLESHOOTING.md — Install marked failed but containers run](TROUBLESHOOTING.md#install-marked-failed-but-containers-run).
 - **Docker Hub rate limit** — `docker login` on the Pi before the next firstboot retry.
