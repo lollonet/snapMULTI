@@ -35,16 +35,6 @@
 
 set -euo pipefail
 
-# Source the env_get helper for the release-identity .env reads in the
-# meta.txt collector below. Guarded so a stripped/legacy diagnostic.sh
-# (e.g. operator-extracted from an old SD) still runs without it.
-_DIAG_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "$_DIAG_SELF_DIR/common/env-reader.sh" ]]; then
-    # shellcheck source=common/env-reader.sh
-    source "$_DIAG_SELF_DIR/common/env-reader.sh"
-fi
-unset _DIAG_SELF_DIR
-
 # ─── Args ────────────────────────────────────────────────────────────
 # diagnostic.sh [--reason <tag>] [--out-dir <path>]
 #
@@ -70,6 +60,20 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Source the env_get helper for the release-identity reads in the
+# meta.txt collector below. Guarded so a stripped/legacy diagnostic.sh
+# (e.g. operator-extracted from an old SD) still runs without it. Lives
+# AFTER the args-parse block on purpose — `--help` prints the file's
+# leading comment range via `sed -n '2,40p'`, so any source-block must
+# stay outside that range to keep `--reason` / `--out-dir` discoverable
+# in the help output.
+_DIAG_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$_DIAG_SELF_DIR/common/env-reader.sh" ]]; then
+    # shellcheck source=common/env-reader.sh
+    source "$_DIAG_SELF_DIR/common/env-reader.sh"
+fi
+unset _DIAG_SELF_DIR
 
 # Resolve OUT_DIR: try to create the requested path, fall back to /boot
 # then $TMPDIR. The boot partition is the right primary target — FAT32
