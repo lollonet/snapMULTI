@@ -2,7 +2,7 @@
 
 🇬🇧 [English](INSTALL.md) | 🇮🇹 **Italiano**
 
-Questa guida ti porta da una scheda SD vuota a un sistema audio multiroom funzionante, passo dopo passo.
+Questa guida ti porta da una scheda SD vuota a un sistema audio multiroom funzionante, passo dopo passo. Per una panoramica tecnica di *cosa* succede sotto il cofano tra flash e riavvio finale, vedi [INSTALL-FLOW.it.md](INSTALL-FLOW.it.md).
 
 ---
 

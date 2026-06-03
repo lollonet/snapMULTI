@@ -2,7 +2,7 @@
 
 # Advanced Guide
 
-Operational reference and customisation for users who already have a running snapMULTI. For first-time install see [INSTALL.md](INSTALL.md); for failures see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+Operational reference and customisation for users who already have a running snapMULTI. For first-time install see [INSTALL.md](INSTALL.md); for the technical pipeline that runs between flash and reboot see [INSTALL-FLOW.md](INSTALL-FLOW.md); for failures see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 Contents:
 

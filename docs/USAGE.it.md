@@ -2,7 +2,7 @@
 
 # Riferimento architettura
 
-Il riferimento "come è fatto" — servizi, porte, sorgenti audio, modello di sicurezza, mDNS, unit systemd. Questo file **non è un how-to**. Per le procedure operative (multi-room, NFS, `.env` personalizzato, deploy manuale, MPD CLI, JSON-RPC) vedi [ADVANCED.it.md](ADVANCED.it.md). Per la prima installazione vedi [INSTALL.it.md](INSTALL.it.md). Per i fallimenti vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md). Per la compatibilità hardware vedi [HARDWARE.it.md](HARDWARE.it.md).
+Il riferimento "come è fatto" — servizi, porte, sorgenti audio, modello di sicurezza, mDNS, unit systemd. Questo file **non è un how-to**. Per le procedure operative (multi-room, NFS, `.env` personalizzato, deploy manuale, MPD CLI, JSON-RPC) vedi [ADVANCED.it.md](ADVANCED.it.md). Per la prima installazione vedi [INSTALL.it.md](INSTALL.it.md). Per la pipeline tecnica dietro l'installazione (host `prepare-sd.sh` → cloud-init → `firstboot.sh` → riavvio) vedi [INSTALL-FLOW.it.md](INSTALL-FLOW.it.md). Per i fallimenti vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md). Per la compatibilità hardware vedi [HARDWARE.it.md](HARDWARE.it.md).
 
 ## Architettura
 

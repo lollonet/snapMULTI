@@ -2,7 +2,7 @@
 
 # Guida avanzata
 
-Riferimento operativo e personalizzazioni per chi ha già una snapMULTI funzionante. Per l'installazione da zero vedi [INSTALL.it.md](INSTALL.it.md); per i fallimenti vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md).
+Riferimento operativo e personalizzazioni per chi ha già una snapMULTI funzionante. Per l'installazione da zero vedi [INSTALL.it.md](INSTALL.it.md); per la pipeline tecnica che gira tra flash e riavvio vedi [INSTALL-FLOW.it.md](INSTALL-FLOW.it.md); per i fallimenti vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md).
 
 Indice:
 

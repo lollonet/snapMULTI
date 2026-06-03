@@ -2,7 +2,7 @@
 
 # Architecture Reference
 
-The "how it's put together" reference — services, ports, audio sources, security model, mDNS, systemd units. This file is **not a how-to**. For operational procedures (multi-room, NFS, custom `.env`, manual deploy, MPD CLI, JSON-RPC) see [ADVANCED.md](ADVANCED.md). For first-time install see [INSTALL.md](INSTALL.md). For failures see [TROUBLESHOOTING.md](TROUBLESHOOTING.md). For hardware compatibility see [HARDWARE.md](HARDWARE.md).
+The "how it's put together" reference — services, ports, audio sources, security model, mDNS, systemd units. This file is **not a how-to**. For operational procedures (multi-room, NFS, custom `.env`, manual deploy, MPD CLI, JSON-RPC) see [ADVANCED.md](ADVANCED.md). For first-time install see [INSTALL.md](INSTALL.md). For the technical pipeline behind the install (host `prepare-sd.sh` → cloud-init → `firstboot.sh` → reboot) see [INSTALL-FLOW.md](INSTALL-FLOW.md). For failures see [TROUBLESHOOTING.md](TROUBLESHOOTING.md). For hardware compatibility see [HARDWARE.md](HARDWARE.md).
 
 ## Architecture
 

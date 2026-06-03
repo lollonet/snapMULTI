@@ -2,7 +2,7 @@
 
 🇬🇧 **English** | 🇮🇹 [Italiano](INSTALL.it.md)
 
-This guide takes you from a blank SD card to a working multiroom audio system, step by step.
+This guide takes you from a blank SD card to a working multiroom audio system, step by step. For a technical overview of *what* happens under the hood between flash and final reboot, see [INSTALL-FLOW.md](INSTALL-FLOW.md).
 
 ---
 
