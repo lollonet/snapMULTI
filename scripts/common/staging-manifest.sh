@@ -173,6 +173,13 @@ STAGING_COMMON_SHARED_MODULES=(
     "scripts/common/logging.sh"
     "scripts/common/sanitize.sh"
     "scripts/common/systemd-snippets.sh"
+    # v0.8 PR9 — setup.sh sources path-resolve.sh from
+    # $COMMON_MODULE_DIR/path-resolve.sh which on a real install
+    # resolves to /opt/snapclient/scripts/common/. Without this
+    # entry the source is a silent no-op and every helper call in
+    # setup.sh falls through to the legacy inline `for _candidate`
+    # fallback, defeating the migration's purpose.
+    "scripts/common/path-resolve.sh"
 )
 STAGING_COMMON_SHARED_MODULES_DEST="scripts/common"
 
