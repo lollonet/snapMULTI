@@ -17,6 +17,17 @@
 
 # shellcheck disable=SC2154
 
+# Source the env_get helper for the SNAPSERVER_RPC_PORT .env read below.
+# Guarded so re-sourcing across smoke modules is idempotent.
+if ! declare -F env_get >/dev/null 2>&1; then
+    _CQ_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -f "$_CQ_DIR/../common/env-reader.sh" ]]; then
+        # shellcheck source=../common/env-reader.sh
+        source "$_CQ_DIR/../common/env-reader.sh"
+    fi
+    unset _CQ_DIR
+fi
+
 check_qos() {
     [[ "$MODE" == "server" || "$MODE" == "both" ]] || return 0
 
@@ -56,7 +67,13 @@ check_qos() {
     rpc_port=1705
     if [[ -f "$server_env" ]]; then
         local override
-        override=$(grep '^SNAPSERVER_RPC_PORT=' "$server_env" 2>/dev/null | cut -d= -f2- | tr -d '"' | sed 's/[[:space:]]*$//' || true)
+        # env_get strip=trim matches the pre-helper quote-and-trailing-
+        # space strip behaviour. Inline fallback for stripped bundles.
+        if declare -F env_get >/dev/null 2>&1; then
+            override=$(env_get SNAPSERVER_RPC_PORT "$server_env" trim)
+        else
+            override=$(grep '^SNAPSERVER_RPC_PORT=' "$server_env" 2>/dev/null | cut -d= -f2- | tr -d '"' | sed 's/[[:space:]]*$//' || true)
+        fi
         [[ -n "$override" ]] && rpc_port="$override"
     fi
 

@@ -157,6 +157,10 @@ function Assert-PreparedSdCard {
         # via docker-compose.yml AND sourced by check_containers.sh on
         # every device. Must ship to both server/ and client/ stages.
         'common/container-manifest.txt',
+        # env_get helper SSOT — sourced (guarded) by smoke check_*
+        # modules + play-smoke-tone.sh + diagnostic.sh. Same all-
+        # stages ship rationale as the manifests above.
+        'common/env-reader.sh',
         'common/play-smoke-tone.sh',
         'common/auto-boot-smoke.sh',
         'common/restore-snapmulti-state.sh',
@@ -226,6 +230,9 @@ function Assert-PreparedSdCard {
             # Container manifest SSOT — consumed by client-side
             # check_containers.sh too. Must ship with the bundle.
             'client/scripts/common/container-manifest.txt',
+            # env_get helper SSOT — same client-side staging requirement
+            # as the manifests above.
+            'client/scripts/common/env-reader.sh',
             'client/snapclient.conf'
         )) {
             $path = Join-Path $Dest $file
@@ -713,7 +720,7 @@ function Copy-ClientFiles {
     # Shared modules from server scripts/common/
     $commonDest = Join-Path $scriptsDest 'common'
     New-Item -ItemType Directory -Path $commonDest -Force | Out-Null
-    foreach ($shared in @('install-deps.sh', 'install-docker.sh', 'system-tune.sh', 'overlayroot-lifecycle.sh', 'unified-log.sh', 'logging.sh', 'sanitize.sh', 'systemd-snippets.sh', 'path-resolve.sh', 'install-conf-reader.sh', 'container-manifest.txt')) {
+    foreach ($shared in @('install-deps.sh', 'install-docker.sh', 'system-tune.sh', 'overlayroot-lifecycle.sh', 'unified-log.sh', 'logging.sh', 'sanitize.sh', 'systemd-snippets.sh', 'path-resolve.sh', 'install-conf-reader.sh', 'container-manifest.txt', 'env-reader.sh')) {
         $sharedPath = Join-Path $ScriptDir "common\$shared"
         if (Test-Path $sharedPath) {
             Copy-Item $sharedPath -Destination $commonDest

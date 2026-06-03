@@ -23,6 +23,17 @@
 
 # shellcheck disable=SC2154
 
+# Source the env_get helper for the MUSIC_SOURCE / MUSIC_PATH .env reads
+# in check_mounts. Guarded so re-sourcing across smoke modules is idempotent.
+if ! declare -F env_get >/dev/null 2>&1; then
+    _CM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -f "$_CM_DIR/../common/env-reader.sh" ]]; then
+        # shellcheck source=../common/env-reader.sh
+        source "$_CM_DIR/../common/env-reader.sh"
+    fi
+    unset _CM_DIR
+fi
+
 check_mounts() {
     [[ "$MODE" == "server" || "$MODE" == "both" ]] || return 0
 
@@ -37,14 +48,21 @@ check_mounts() {
         info "Music mount checks: skipped (server .env not found — N/A on client-only install)"
         return 0
     fi
-    # Strip surrounding quotes — `.env` may store values as
-    # `MUSIC_SOURCE="nfs"` (a sibling .env writer quotes by default).
-    # Without `tr -d '"'` the case match below silently misses and the
-    # entire mount-unit section returns "not network-backed" with no
-    # signal — same pattern used in check_audio_modules.sh and check_qos.sh.
-    # `cut -d= -f2-` (not `-f2`) preserves any '=' inside the value.
-    music_source=$(grep '^MUSIC_SOURCE=' "$server_env" 2>/dev/null | cut -d= -f2- | tr -d '"' | sed 's/[[:space:]]*$//' || true)
-    music_path=$(grep '^MUSIC_PATH=' "$server_env" 2>/dev/null | cut -d= -f2- | tr -d '"' | sed 's/[[:space:]]*$//' || true)
+    # env_get with strip=trim removes surrounding quotes + trailing
+    # whitespace — matches the pre-helper `tr -d '"' | sed 's/
+    # [[:space:]]*$//'` behaviour for the common case. `.env` may store
+    # values as `MUSIC_SOURCE="nfs"` (a sibling .env writer quotes by
+    # default); without trim the case match below would silently miss
+    # and the entire mount-unit section would return "not network-
+    # backed" with no signal. Inline fallback preserves behaviour on
+    # stripped bundles.
+    if declare -F env_get >/dev/null 2>&1; then
+        music_source=$(env_get MUSIC_SOURCE "$server_env" trim)
+        music_path=$(env_get MUSIC_PATH "$server_env" trim)
+    else
+        music_source=$(grep '^MUSIC_SOURCE=' "$server_env" 2>/dev/null | cut -d= -f2- | tr -d '"' | sed 's/[[:space:]]*$//' || true)
+        music_path=$(grep '^MUSIC_PATH=' "$server_env" 2>/dev/null | cut -d= -f2- | tr -d '"' | sed 's/[[:space:]]*$//' || true)
+    fi
 
     case "$music_source" in
         nfs|smb|network)
