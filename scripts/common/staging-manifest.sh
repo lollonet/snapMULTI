@@ -191,6 +191,11 @@ STAGING_COMMON_SHARED_MODULES=(
     # Must ship to client/scripts/common/ too because the client bundle
     # includes its own copy of check_containers.sh on both-mode hosts.
     "scripts/common/container-manifest.txt"
+    # env_get helper SSOT — sourced (guarded) by play-smoke-tone.sh,
+    # check_system.sh, check_mounts.sh, check_qos.sh, and diagnostic.sh.
+    # The client bundle runs the smoke chain too on both-mode hosts;
+    # must ship there for the helper-based read to work.
+    "scripts/common/env-reader.sh"
 )
 STAGING_COMMON_SHARED_MODULES_DEST="scripts/common"
 

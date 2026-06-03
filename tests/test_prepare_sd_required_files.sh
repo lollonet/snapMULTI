@@ -50,6 +50,11 @@ assert_contains "$verify_block" "common/install-conf-reader.sh" "install-conf-re
 # = silent fallback to hardcoded defaults on both sides.
 assert_contains "$verify_block" "common/container-manifest.txt" \
     "container-manifest.txt is required (SSOT for smoke + /status)"
+# env_get helper SSOT — sourced (guarded) by play-smoke-tone.sh, smoke
+# check_*, diagnostic.sh. Stripped staging = silent fallback to legacy
+# inline grep|cut|tr|sed in each consumer.
+assert_contains "$verify_block" "common/env-reader.sh" \
+    "env-reader.sh is required (SSOT for runtime .env reads)"
 
 # Client-mode verify list — client/scripts/common/ is a selective copy of
 # the server's scripts/common/. systemd-snippets.sh must be in BOTH places
@@ -68,6 +73,10 @@ assert_contains "$client_verify_block" "client/scripts/common/install-conf-reade
 # Container manifest SSOT — same client-side staging requirement.
 assert_contains "$client_verify_block" "client/scripts/common/container-manifest.txt" \
     "client-mode verify list includes container-manifest.txt"
+# env_get helper SSOT — same client-side requirement (smoke chain runs
+# on both-mode hosts; client bundle must ship the helper).
+assert_contains "$client_verify_block" "client/scripts/common/env-reader.sh" \
+    "client-mode verify list includes env-reader.sh"
 
 # Bash selective copy loop (copy_client_files) must enumerate systemd-snippets.sh
 # alongside the other shared modules — without it the file is not copied to
@@ -165,6 +174,14 @@ if [[ -f "$PREPARE_SD_PS1" ]]; then
         "ps1 client-required list includes container-manifest.txt"
     assert_contains "$ps1_copy_foreach" "container-manifest.txt" \
         "ps1 selective copy foreach includes container-manifest.txt"
+
+    # env_get helper SSOT — same 3 ps1 sites.
+    assert_contains "$ps1_required_base" "common/env-reader.sh" \
+        "ps1 \$requiredBase includes common/env-reader.sh"
+    assert_contains "$ps1_client_required" "client/scripts/common/env-reader.sh" \
+        "ps1 client-required list includes env-reader.sh"
+    assert_contains "$ps1_copy_foreach" "env-reader.sh" \
+        "ps1 selective copy foreach includes env-reader.sh"
 fi
 
 echo ""

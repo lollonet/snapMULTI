@@ -28,6 +28,17 @@
 
 # shellcheck disable=SC2154
 
+# Source the env_get helper for the release-identity .env read below.
+# Guarded so re-sourcing from multiple smoke modules is idempotent.
+if ! declare -F env_get >/dev/null 2>&1; then
+    _CS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -f "$_CS_DIR/../common/env-reader.sh" ]]; then
+        # shellcheck source=../common/env-reader.sh
+        source "$_CS_DIR/../common/env-reader.sh"
+    fi
+    unset _CS_DIR
+fi
+
 check_system() {
     section "System"
 
@@ -45,8 +56,17 @@ check_system() {
     done
     if [[ -n "$_env_file" ]]; then
         local _release _image_set
-        _release=$(grep -m1 '^SNAPMULTI_RELEASE=' "$_env_file" 2>/dev/null | cut -d= -f2- || true)
-        _image_set=$(grep -m1 '^SNAPMULTI_IMAGE_SET=' "$_env_file" 2>/dev/null | cut -d= -f2- || true)
+        # env_get with strip=none preserves the exact bytes after `KEY=` —
+        # matches the pre-helper raw `grep | cut -f2-` behaviour for
+        # release identifiers (which never contain whitespace or quotes
+        # but are written verbatim by deploy.sh).
+        if declare -F env_get >/dev/null 2>&1; then
+            _release=$(env_get SNAPMULTI_RELEASE "$_env_file" none)
+            _image_set=$(env_get SNAPMULTI_IMAGE_SET "$_env_file" none)
+        else
+            _release=$(grep -m1 '^SNAPMULTI_RELEASE=' "$_env_file" 2>/dev/null | cut -d= -f2- || true)
+            _image_set=$(grep -m1 '^SNAPMULTI_IMAGE_SET=' "$_env_file" 2>/dev/null | cut -d= -f2- || true)
+        fi
         if [[ -n "$_release" && -n "$_image_set" ]]; then
             info "Release $_release (images $_image_set)"
         elif [[ -n "$_release" ]]; then

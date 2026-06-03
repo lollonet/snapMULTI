@@ -35,8 +35,21 @@ esac
 [[ -f "$WAV" ]] || exit 0
 command -v aplay >/dev/null 2>&1 || exit 0
 
+# Source the env_get helper for the .env opt-out read below. The path
+# resolves relative to this script — when deployed under /usr/local/sbin
+# (server) or /opt/snapclient/scripts/common (client), the sibling
+# common/env-reader.sh is staged alongside. Fallback inline read keeps
+# the script functional on stripped bundles without the helper.
+_PST_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$_PST_SELF/env-reader.sh" ]]; then
+    # shellcheck source=common/env-reader.sh
+    source "$_PST_SELF/env-reader.sh"
+fi
+
 # TEST_TONE=false in install.conf (same flag that controls the install-time
-# 1 s test tone) silences us too.
+# 1 s test tone) silences us too. install.conf has its own helper
+# (install_conf_get); this script does NOT depend on it because
+# install-conf-reader.sh is not always staged with play-smoke-tone.sh.
 for conf in /opt/snapmulti/install.conf /opt/snapclient/install.conf /boot/firmware/snapmulti/install.conf; do
     if [[ -f "$conf" ]]; then
         val=$(grep -m1 '^TEST_TONE=' "$conf" 2>/dev/null | cut -d= -f2- | tr -d '\r[:space:]' || true)
@@ -45,10 +58,16 @@ for conf in /opt/snapmulti/install.conf /opt/snapclient/install.conf /boot/firmw
     fi
 done
 
-# Per-deployment opt-out for multi-room setups.
+# Per-deployment opt-out for multi-room setups. Uses env_get when the
+# helper is loaded; falls back to the legacy inline grep+cut+tr form so
+# legacy/stripped bundles still honour the opt-out.
 for env_file in /opt/snapmulti/.env /opt/snapclient/.env; do
     if [[ -f "$env_file" ]]; then
-        val=$(grep -m1 '^SNAPMULTI_BOOT_SMOKE_TONES=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '\r[:space:]' || true)
+        if declare -F env_get >/dev/null 2>&1; then
+            val=$(env_get SNAPMULTI_BOOT_SMOKE_TONES "$env_file" all)
+        else
+            val=$(grep -m1 '^SNAPMULTI_BOOT_SMOKE_TONES=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '\r[:space:]' || true)
+        fi
         if [[ "$val" == "off" ]]; then exit 0; fi
         break
     fi

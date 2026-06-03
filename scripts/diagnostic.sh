@@ -61,6 +61,20 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Source the env_get helper for the release-identity reads in the
+# meta.txt collector below. Guarded so a stripped/legacy diagnostic.sh
+# (e.g. operator-extracted from an old SD) still runs without it. Lives
+# AFTER the args-parse block on purpose — `--help` prints the file's
+# leading comment range via `sed -n '2,40p'`, so any source-block must
+# stay outside that range to keep `--reason` / `--out-dir` discoverable
+# in the help output.
+_DIAG_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$_DIAG_SELF_DIR/common/env-reader.sh" ]]; then
+    # shellcheck source=common/env-reader.sh
+    source "$_DIAG_SELF_DIR/common/env-reader.sh"
+fi
+unset _DIAG_SELF_DIR
+
 # Resolve OUT_DIR: try to create the requested path, fall back to /boot
 # then $TMPDIR. The boot partition is the right primary target — FAT32
 # survives reboot and is reachable from a removed SD card — but on a
@@ -175,18 +189,31 @@ log "Collecting snapMULTI diagnostics (reason=$REASON, out=$BUNDLE_PATH)"
                           || echo unknown)"
     # Release identity (manifest-aware). Reads SNAPMULTI_RELEASE /
     # SNAPMULTI_IMAGE_SET from the .env file that deploy.sh writes;
-    # falls through to the manifest at the boot-partition staging
-    # path; finally "unknown" so the diagnostic bundle has consistent
-    # shape across all installs (legacy + new).
-    # cut -d= -f2- strips the KEY= prefix that grep -m1 includes
-    echo "snapmulti_release=$( \
-        (grep -m1 '^SNAPMULTI_RELEASE=' /opt/snapmulti/.env  2>/dev/null | cut -d= -f2-) \
-        || (grep -m1 '^SNAPMULTI_RELEASE=' /opt/snapclient/.env 2>/dev/null | cut -d= -f2-) \
-        || echo unknown)"
-    echo "snapmulti_image_set=$( \
-        (grep -m1 '^SNAPMULTI_IMAGE_SET=' /opt/snapmulti/.env  2>/dev/null | cut -d= -f2-) \
-        || (grep -m1 '^SNAPMULTI_IMAGE_SET=' /opt/snapclient/.env 2>/dev/null | cut -d= -f2-) \
-        || echo unknown)"
+    # falls through to "unknown" so the diagnostic bundle has consistent
+    # shape across all installs (legacy + new). Helper-based read with
+    # strip=none preserves the raw verbatim value the legacy grep|cut
+    # form produced; inline fallback (no env_get) keeps diagnostic.sh
+    # usable on stripped/legacy bundles where env-reader.sh did not ship.
+    if declare -F env_get >/dev/null 2>&1; then
+        _diag_release=$(env_get SNAPMULTI_RELEASE /opt/snapmulti/.env  none)
+        [[ -z "$_diag_release" ]] && _diag_release=$(env_get SNAPMULTI_RELEASE /opt/snapclient/.env none)
+        [[ -z "$_diag_release" ]] && _diag_release="unknown"
+        _diag_image_set=$(env_get SNAPMULTI_IMAGE_SET /opt/snapmulti/.env  none)
+        [[ -z "$_diag_image_set" ]] && _diag_image_set=$(env_get SNAPMULTI_IMAGE_SET /opt/snapclient/.env none)
+        [[ -z "$_diag_image_set" ]] && _diag_image_set="unknown"
+        echo "snapmulti_release=$_diag_release"
+        echo "snapmulti_image_set=$_diag_image_set"
+        unset _diag_release _diag_image_set
+    else
+        echo "snapmulti_release=$( \
+            (grep -m1 '^SNAPMULTI_RELEASE=' /opt/snapmulti/.env  2>/dev/null | cut -d= -f2-) \
+            || (grep -m1 '^SNAPMULTI_RELEASE=' /opt/snapclient/.env 2>/dev/null | cut -d= -f2-) \
+            || echo unknown)"
+        echo "snapmulti_image_set=$( \
+            (grep -m1 '^SNAPMULTI_IMAGE_SET=' /opt/snapmulti/.env  2>/dev/null | cut -d= -f2-) \
+            || (grep -m1 '^SNAPMULTI_IMAGE_SET=' /opt/snapclient/.env 2>/dev/null | cut -d= -f2-) \
+            || echo unknown)"
+    fi
 } > "$STAGE_DIR/meta.txt"
 
 # release-manifest.json from the boot partition (no secrets, no
