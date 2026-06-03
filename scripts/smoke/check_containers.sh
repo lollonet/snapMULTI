@@ -84,6 +84,20 @@ _load_container_manifest() {
         [[ -n "$_role" ]] || continue
         _SNAPMULTI_CONTAINERS+=("$_name")
     done < "$_manifest_path"
+
+    # Empty-parse guard: a manifest that exists but parses to zero
+    # entries (truncated file, header-only stub, etc.) would silently
+    # bypass every container check. Fall back to the hardcoded list so
+    # smoke still verifies the expected fleet. Mirrors the Python
+    # loader's `if mapping: return mapping` shape — PR #590 review
+    # MEDIUM.
+    if (( ${#_SNAPMULTI_CONTAINERS[@]} == 0 )); then
+        _SNAPMULTI_CONTAINERS=(
+            "snapserver" "mpd" "mympd" "metadata" "shairport-sync"
+            "librespot" "tidal-connect"
+            "snapclient" "audio-visualizer" "fb-display"
+        )
+    fi
 }
 
 _load_container_manifest

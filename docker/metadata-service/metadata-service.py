@@ -2544,7 +2544,9 @@ def _load_container_role_manifest() -> dict[str, str]:
     candidates.append("/app/container-manifest.txt")
     candidates.append(
         os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            ),
             "scripts",
             "common",
             "container-manifest.txt",
@@ -2556,7 +2558,15 @@ def _load_container_role_manifest() -> dict[str, str]:
             continue
         try:
             mapping: dict[str, str] = {}
-            with open(path) as f:
+            # encoding='utf-8' explicit: the manifest contains non-ASCII
+            # characters in comments (em-dash, set-membership glyph). A
+            # container started under POSIX/C locale defaults `open()` to
+            # ASCII and raises UnicodeDecodeError BEFORE the `startswith
+            # ("#")` skip — and the exception is a ValueError, not
+            # OSError, so the loop's `except OSError: continue` would not
+            # catch it and the metadata service would fail to import.
+            # PR #590 review LOW.
+            with open(path, encoding="utf-8") as f:
                 for line in f:
                     stripped = line.strip()
                     if not stripped or stripped.startswith("#"):

@@ -189,6 +189,60 @@ else
     echo "  SKIP: python3 not available — Python loader check skipped"
 fi
 
+# ── (3b) Empty-parse guard (PR #590 review MEDIUM) ──────────────
+# A manifest that exists but parses to zero entries (truncated file,
+# header-only stub) must fall back to the hardcoded list — silent
+# zero-container smoke would defeat every check the smoke is built to
+# run. Mirrors the Python loader's `if mapping: return mapping`.
+echo
+echo "== bash loader empty-parse guard =="
+
+EMPTY_FIXTURE=$(mktemp -t container-empty-manifest-XXXXXX)
+trap 'rm -f "$EMPTY_FIXTURE"' EXIT
+cat > "$EMPTY_FIXTURE" <<'TXT'
+# Manifest exists but parses to zero entries — every meaningful row
+# stripped (simulating a truncated SD-card write or header-only stub).
+# Loader MUST fall back to the hardcoded list, not silently produce
+# zero containers.
+TXT
+
+empty_loader_test=$(SNAPMULTI_CONTAINER_MANIFEST="$EMPTY_FIXTURE" bash <<EOF
+set -euo pipefail
+section() { :; }
+pass_check() { :; }
+fail_check() { :; }
+warn() { :; }
+info() { :; }
+is_pi_zero_2w() { return 1; }
+# shellcheck source=/dev/null
+source "$SMOKE"
+echo "\${#_SNAPMULTI_CONTAINERS[@]}"
+EOF
+)
+if [[ "$empty_loader_test" =~ ^[0-9]+$ ]] && (( empty_loader_test >= 10 )); then
+    echo "  PASS: empty-parse manifest falls back to hardcoded list ($empty_loader_test entries)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: empty-parse manifest did not fall back (got '$empty_loader_test')"
+    fail=$((fail + 1))
+fi
+
+# Pin source-level shape — a future "drop the guard" regression surfaces here.
+assert 'grep -qE "\\\$\\{#_SNAPMULTI_CONTAINERS\\[@\\]\\} == 0" "$SMOKE"' \
+    "check_containers.sh has empty-parse guard after the while-read loop"
+
+# ── (3c) Python loader: UTF-8 encoding pin (PR #590 review LOW) ──
+# Manifest contains non-ASCII in comments (em-dash). On a POSIX/C
+# locale container, default `open()` decodes ASCII and raises
+# UnicodeDecodeError BEFORE the `startswith("#")` skip. The exception
+# is a ValueError (not OSError), so `except OSError: continue` does
+# not catch it and the metadata service fails to import.
+echo
+echo "== python loader UTF-8 encoding pin =="
+
+assert 'grep -qE "open\\(path, encoding=.utf-8.\\)" "$META_PY"' \
+    "metadata-service.py opens manifest with explicit encoding='utf-8'"
+
 # ── (4) No duplicate hardcoded full list survives ───────────────
 echo
 echo "== no duplicate full-list hardcoded =="
