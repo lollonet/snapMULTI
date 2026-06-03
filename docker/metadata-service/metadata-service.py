@@ -2744,9 +2744,7 @@ def _status_to_html(
         # only in Compose.
         if sec_name == "Compose":
             recs = [
-                r
-                for r in recs
-                if not _COMPOSE_NESTED_PATTERN.match(r.get("msg", ""))
+                r for r in recs if not _COMPOSE_NESTED_PATTERN.match(r.get("msg", ""))
             ]
             if not recs:
                 continue
