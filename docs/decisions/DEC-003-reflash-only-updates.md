@@ -32,7 +32,7 @@ Reflash is the only supported update method. `update.sh` decommissioned (PR #259
 
 ### Why reflash is better than it sounds
 - All config is auto-detected at install time (HAT, network, display, music source)
-- Install takes ~10 minutes on Pi 4
+- Install takes ~10 minutes on Pi 4 (original measurement, against the v0.7-era install footprint; the current user-facing estimate documented in [INSTALL.md](../INSTALL.md) is ~15-20 minutes on Pi 4/5 — longer on Pi 3 or Pi Zero 2 W — and the reflash-as-update rationale still holds)
 - MPD database can be backed up to boot partition and restored automatically — no library rescan
 - The SD card IS the appliance. Reflash = factory reset + upgrade in one step
 
