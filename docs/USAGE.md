@@ -127,7 +127,7 @@ When discovery fails, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — the relev
 
 systemd owns container lifecycle after install (ADR-005). Docker `restart: unless-stopped` handles crashes, systemd handles boot.
 
-- Server: `snapmulti-server.service` (with `ExecStartPre=restore-snapmulti-state` for snapcast group + myMPD state restore from `/boot/firmware/snapmulti-backup/` — see [ADVANCED.md](ADVANCED.md#read-only-filesystem)), `snapmulti-status.timer`, `snapmulti-backup.timer` (MPD database backup), `snapmulti-state-backup.path` (event-driven myMPD state backup), `snapmulti-state-backup.timer` (5-min interval for snapserver `server.json` — its `lastSeen` heartbeats every ~3 s rule out an event-driven trigger)
+- Server: `snapmulti-server.service` (with `ExecStartPre=restore-snapmulti-state` for snapcast group + myMPD state restore from `/boot/firmware/snapmulti-backup/` — see [ADVANCED.md](ADVANCED.md#read-only-filesystem)), `snapmulti-status.timer`, `snapmulti-backup.timer` (MPD database backup), `snapmulti-state-backup.path` (event-driven backup of the whole myMPD workdir), `snapmulti-state-backup.timer` (5-min safety net — captures snapserver `server.json` periodically; the `lastSeen` heartbeats every ~3 s rule out an event-driven trigger on that file)
 - Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (HDMI clients only)
 - All: `snapmulti-boot-tune.service`, `snapmulti-auto-boot-smoke.service` (acoustic post-boot health cue — see [TROUBLESHOOTING.md](TROUBLESHOOTING.md#health-check-tones) for cue vocabulary and opt-out)
 
