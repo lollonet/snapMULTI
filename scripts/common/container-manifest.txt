@@ -1,0 +1,29 @@
+# snapMULTI container manifest — SSOT for smoke + /status rendering
+#
+# Format:  <container_name> <role>
+# role ∈ {server, client}
+#
+# Consumers:
+#   - scripts/smoke/check_containers.sh   — builds _SNAPMULTI_CONTAINERS
+#   - docker/metadata-service/metadata-service.py — builds _CONTAINER_ROLE
+#
+# Edit this file when adding or removing a snapMULTI container in
+# docker-compose.yml. tests/test_container_manifest.sh enforces that the
+# bash and Python sides both consume this file, and that no duplicate
+# hardcoded list shadows it in either consumer.
+#
+# Blank lines and `#` comments are ignored. Whitespace separator. Names
+# must be POSIX-portable identifiers (`[A-Za-z0-9_-]+`); roles are case-
+# sensitive. Duplicate names are rejected by the test.
+
+snapserver       server
+mpd              server
+mympd            server
+metadata         server
+shairport-sync   server
+librespot        server
+tidal-connect    server
+
+snapclient       client
+audio-visualizer client
+fb-display       client

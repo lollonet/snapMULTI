@@ -2504,14 +2504,15 @@ _CONTAINER_PATTERN = re.compile(
 _COMPOSE_NESTED_PATTERN = re.compile(r"^\s+(\w+)/(\S+) -> (\w+)$")
 
 # Container-name → role mapping. Used to group rows in the Containers
-# section under "server" / "client" sub-headers. Mirrors the
-# `_SNAPMULTI_CONTAINERS` list in scripts/smoke/check_containers.sh
-# but split by role (the smoke side only cares about "is this ours");
-# the renderer additionally separates server- from client-side. Drift
-# class: when a new container is added to docker-compose.yml, append
-# it here so it groups correctly — otherwise it falls through to the
-# unclassified bucket and renders below the client group.
-_CONTAINER_ROLE: dict[str, str] = {
+# section under "server" / "client" sub-headers.
+#
+# Loaded from scripts/common/container-manifest.txt — the SSOT shared
+# with scripts/smoke/check_containers.sh. Bind-mounted into the metadata
+# container at /app/container-manifest.txt via docker-compose.yml. The
+# hardcoded fallback below preserves rendering on dev clones or older
+# deployments that did not stage the manifest; the invariant test
+# tests/test_container_manifest.sh keeps the two sides aligned.
+_CONTAINER_ROLE_FALLBACK: dict[str, str] = {
     "snapserver": "server",
     "mpd": "server",
     "mympd": "server",
@@ -2523,6 +2524,60 @@ _CONTAINER_ROLE: dict[str, str] = {
     "audio-visualizer": "client",
     "fb-display": "client",
 }
+
+
+def _load_container_role_manifest() -> dict[str, str]:
+    """Parse `scripts/common/container-manifest.txt` (SSOT shared with smoke).
+
+    Format: whitespace-separated `<name> <role>` rows, `#` comments + blank
+    lines ignored. Honours `SNAPMULTI_CONTAINER_MANIFEST` env override so
+    tests can point at sandboxed fixtures. Returns the hardcoded fallback
+    when the file is missing or unparseable so /status keeps rendering on
+    stripped/legacy deploys — the invariant test catches drift at CI time.
+    """
+    candidates: list[str] = []
+    override = os.environ.get("SNAPMULTI_CONTAINER_MANIFEST", "").strip()
+    if override:
+        candidates.append(override)
+    # /app/container-manifest.txt = bind-mount target in docker-compose.yml.
+    # The repo-relative path covers dev clones running outside the container.
+    candidates.append("/app/container-manifest.txt")
+    candidates.append(
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "scripts",
+            "common",
+            "container-manifest.txt",
+        )
+    )
+
+    for path in candidates:
+        if not path or not os.path.isfile(path):
+            continue
+        try:
+            mapping: dict[str, str] = {}
+            with open(path) as f:
+                for line in f:
+                    stripped = line.strip()
+                    if not stripped or stripped.startswith("#"):
+                        continue
+                    parts = stripped.split()
+                    if len(parts) < 2:
+                        continue
+                    name, role = parts[0], parts[1]
+                    if role not in ("server", "client"):
+                        # Malformed file at runtime = partial deploy.
+                        # Better to fall back than render garbage.
+                        return dict(_CONTAINER_ROLE_FALLBACK)
+                    mapping[name] = role
+            if mapping:
+                return mapping
+        except OSError:
+            continue
+    return dict(_CONTAINER_ROLE_FALLBACK)
+
+
+_CONTAINER_ROLE: dict[str, str] = _load_container_role_manifest()
 
 
 _NOISE_PATTERNS: tuple[re.Pattern[str], ...] = (

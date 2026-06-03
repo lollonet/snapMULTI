@@ -185,6 +185,12 @@ STAGING_COMMON_SHARED_MODULES=(
     # defined). Same "must ship to client/" rationale as the other
     # shared modules.
     "scripts/common/install-conf-reader.sh"
+    # Container manifest SSOT — shared with metadata-service.py via
+    # docker-compose bind-mount AND with scripts/smoke/check_containers.sh
+    # which sources `../common/container-manifest.txt` at module load.
+    # Must ship to client/scripts/common/ too because the client bundle
+    # includes its own copy of check_containers.sh on both-mode hosts.
+    "scripts/common/container-manifest.txt"
 )
 STAGING_COMMON_SHARED_MODULES_DEST="scripts/common"
 
