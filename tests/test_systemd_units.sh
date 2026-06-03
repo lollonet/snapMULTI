@@ -137,6 +137,23 @@ echo "=== Invariant 2b: helper called for every manifest base (post-PR8) ==="
 check_helper_usage "$FIRSTBOOT" "firstboot.sh" "SYSTEMD_UNITS_SERVER"
 check_helper_usage "$SETUP"     "setup.sh"     "SYSTEMD_UNITS_CLIENT"
 
+# ─── Invariant 2c: state-backup keeps the all-or-nothing guard ─────
+# snapmulti-state-backup is the only 3-unit group; the helper's
+# "install whatever you find, return success if anything installed"
+# is too permissive — a missing .path or .timer would let the caller
+# proceed to `enable --now snapmulti-state-backup.path` which fails.
+# Caller MUST gate the helper call on all three source files existing.
+echo
+echo "=== Invariant 2c: state-backup keeps all-or-nothing source guard ==="
+sb_guard=$(awk '/STATE_BACKUP_SCRIPT/,/install_systemd_unit_files .+snapmulti-state-backup/' "$FIRSTBOOT")
+if grep -qE 'snapmulti-state-backup\.service.* &&' <<<"$sb_guard" && \
+   grep -qE 'snapmulti-state-backup\.path.* &&'    <<<"$sb_guard" && \
+   grep -qE 'snapmulti-state-backup\.timer'        <<<"$sb_guard"; then
+    note_pass "firstboot.sh keeps all-or-nothing .service && .path && .timer guard for snapmulti-state-backup"
+else
+    note_fail "firstboot.sh missing 3-file source guard for snapmulti-state-backup — helper alone could let .path/.timer enable fire on a partial bundle"
+fi
+
 # ─── Invariant 3: no orphan unit files in the unit dirs ────────────
 echo
 echo "=== Invariant 3: no orphan unit files (every static file is declared) ==="

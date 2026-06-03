@@ -1387,7 +1387,15 @@ if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     if [[ -n "$STATE_BACKUP_SCRIPT" ]]; then
         install -m 755 "$STATE_BACKUP_SCRIPT" /usr/local/bin/backup-snapmulti-state
         state_bk_dir="$(dirname "$STATE_BACKUP_SCRIPT")"
-        if install_systemd_unit_files "snapmulti-state-backup" "$state_bk_dir"; then
+        # snapmulti-state-backup is the only 3-unit group (.service +
+        # .path + .timer). The helper's "install whatever you find"
+        # contract is too permissive here — if .path or .timer is
+        # missing the `enable --now` calls below would fail. Keep the
+        # all-or-nothing source-tree check the pre-PR8 code had.
+        if [[ -f "$state_bk_dir/snapmulti-state-backup.service" && \
+              -f "$state_bk_dir/snapmulti-state-backup.path" && \
+              -f "$state_bk_dir/snapmulti-state-backup.timer" ]] && \
+           install_systemd_unit_files "snapmulti-state-backup" "$state_bk_dir"; then
             systemctl daemon-reload
             # .path = event-driven (low-latency on direct watched-path writes)
             # .timer = safety net every 10 min for nested writes that .path misses
