@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **overlayroot: `_initramfs_already_has_liblzma` SIGPIPE-pipefail false-negative** — the helper used `lsinitramfs "$target" | grep -qF "liblzma.so.5"`; with `set -euo pipefail`, `grep -q` exits at the first match, the upstream `lsinitramfs` (streaming ~10k entries from a ~12 MB cpio archive) receives SIGPIPE and exits 141, pipefail propagates the 141 to the helper, and the check always returned false. Result: `ensure_overlayroot_initramfs_ready` always took the "refreshing" branch on every kernel, the second-and-later kernels ran `update-initramfs` after `/boot/firmware` had already been remounted ro by the read-only setup step, and firstboot logged the cosmetic `update-initramfs -u -k 6.18.33+rpt-rpi-… failed` + `first boot may not activate overlay` WARN trio on every fresh install. Overlay still came up because the dpkg trigger had already produced a usable initramfs into `/boot/firmware` (kmod on trixie pulls liblzma via its linker dependency), so the WARN was load-bearing only as noise — but it did make `/var/log/snapmulti-install.log` look broken. Fix: switch to `grep -F "liblzma.so.5" >/dev/null` so the consumer drains the entire stream and `lsinitramfs` exits 0. Regression test added in `tests/test_initramfs_idempotent_skip.sh` (fake `lsinitramfs` producing 10k+ lines around the match, asserting helper succeeds under `set -euo pipefail`).
+
 ## [0.8.0] — 2026-06-03
 
 > **v0.8 hardening track** — 13 PRs of SSOT extraction, drift-class invariants, and
