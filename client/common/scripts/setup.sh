@@ -1660,13 +1660,11 @@ SYSDEOF
     log_progress "systemd overlayfs workaround installed (trixie remount fix)"
 
     # Install the snapmulti-lzma hook BEFORE raspi-config so the
-    # internal `update-initramfs -c -k all` raspi-config runs picks the
-    # hook up on its first pass. PR #592 dropped the post-raspi-config
-    # rebuild round (and its `ensure_overlayroot_initramfs_ready`
-    # driver) because that second pass collided with /boot/firmware ro
-    # at finalize time — see overlayroot-lifecycle.sh for the full
-    # history. Without these two steps the Pi 4 client path boots ext4
-    # with `Unable to find driver` in /run/initramfs/overlayroot.log.
+    # internal `update-initramfs -c -k all` that raspi-config runs picks
+    # the hook up on its first pass — no second rebuild round needed.
+    # Without the hook, the Pi 4 client path boots ext4 with `Unable to
+    # find driver` in /run/initramfs/overlayroot.log because kmod inside
+    # initramfs cannot decompress overlay.ko.xz (liblzma is missing).
     local _hook_src=""
     if declare -F resolve_first_existing_file >/dev/null 2>&1; then
         resolve_first_existing_file _hook_src "snapmulti-lzma" \

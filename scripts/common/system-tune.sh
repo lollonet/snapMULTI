@@ -678,13 +678,10 @@ SYSDEOF
     # Install the snapmulti-lzma initramfs hook BEFORE raspi-config so
     # raspi-config's own internal `update-initramfs -c -k all` picks it
     # up on its first pass — liblzma lands in /boot/firmware/initramfs*
-    # without a second rebuild. Pre-PR #592 the order was inverted, which
-    # required `ensure_overlayroot_initramfs_ready` to re-run the rebuild
-    # AFTER the hook landed; that second pass collided with /boot/firmware
-    # being remounted ro at finalize time (cosmetic "cp: Read-only file
-    # system" warnings, real activation succeeded only because the dpkg
-    # trigger had already produced a usable initramfs). Moving the install
-    # here removes the second pass + the helper that drove it.
+    # without a second rebuild round. Without the hook, kmod inside
+    # initramfs cannot decompress overlay.ko.xz at boot and overlayroot
+    # falls back to ext4 silently (see overlayroot-lifecycle.sh for the
+    # full xz / kmod failure trace).
     local _hook_src=""
     for _cand in \
         "$TUNE_DIR/initramfs-hooks/snapmulti-lzma" \

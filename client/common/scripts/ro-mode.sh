@@ -101,14 +101,14 @@ DefaultEnvironment="LIBMOUNT_FORCE_MOUNT2=always"
 SYSDEOF
         # Re-install the snapmulti-lzma initramfs hook BEFORE raspi-config
         # so its internal update-initramfs picks the hook up on its first
-        # pass. PR #592 dropped the post-raspi-config second-rebuild round
-        # — see overlayroot-lifecycle.sh. Idempotent: if the hook is
-        # already there with the same content, `install -m 755` just
+        # pass — no second rebuild round needed. Idempotent: if the hook
+        # is already there with the same content, `install -m 755` just
         # overwrites it. Necessary because a user may have run `ro-mode
         # disable` followed by `apt purge initramfs-tools-core` (or
         # hand-removed the hook) before re-enabling — without the hook,
         # the next boot lands in ext4 fallback with the snapdigi-class
-        # failure.
+        # failure (overlay module unloadable because liblzma is missing
+        # from initramfs and kmod cannot decompress the .ko.xz file).
         _found_hook=0
         for _hook_cand in \
             "$_RO_MODE_DIR/../../../scripts/common/initramfs-hooks/snapmulti-lzma" \
