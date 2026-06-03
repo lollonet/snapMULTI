@@ -2691,6 +2691,19 @@ def _status_to_html(
     for r in records:
         sections.setdefault(r.get("section", "other"), []).append(r)
 
+    # Resource profile is folded into the Containers section as a single
+    # header row. The per-service limit sub-list that used to live in its
+    # own bottom section is now redundant — each container row already
+    # carries its own `limit XYZ` badge from check_containers.sh.
+    profile = _get_resource_profile()
+    profile_row = ""
+    if profile is not None:
+        profile_row = (
+            '<li class="r-pass"><span class="icon">✓</span>'
+            f"Active profile: <strong>{html.escape(profile['name'])}</strong>"
+            "</li>"
+        )
+
     sec_html_parts = []
     for sec_name, recs in sections.items():
         # Skip noise-only sections: when a section has nothing but
@@ -2702,6 +2715,8 @@ def _status_to_html(
         if _is_noise_only_section(recs):
             continue
         rows = []
+        if sec_name == "Containers" and profile_row:
+            rows.append(profile_row)
         for r in recs:
             status = r.get("status", "info")
             raw_msg = r.get("msg", "")
@@ -2747,12 +2762,10 @@ def _status_to_html(
     if show_snapclients:
         sec_html_parts.append(_render_snapcast_clients_section(snapclients))
 
-    # Resource profile — env-driven, no I/O. Section hides itself on dev
-    # clones where SNAPMULTI_PROFILE isn't set, so the page stays clean on
-    # manual `docker compose up` without deploy.sh.
-    profile_html = _render_resource_profile_section(_get_resource_profile())
-    if profile_html:
-        sec_html_parts.append(profile_html)
+    # NOTE: the Resource Profile section was folded into Containers above —
+    # _render_resource_profile_section() is still exported for the unit test
+    # but no longer called from the rendering path. Container rows already
+    # carry the per-service limit value from check_containers.sh.
 
     if age_s is not None:
         if age_s < 60:
