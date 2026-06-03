@@ -109,6 +109,31 @@ exec "$@"
 MOCK
 chmod +x "$MOCK_BIN/sudo"
 
+# numfmt stub — macOS dev hosts without coreutils don't have numfmt in PATH.
+# Implements just the `--to=iec --format='%.0f' <bytes>` form check_containers
+# uses for the limit suffix. 128 MiB → "128M". The check is conservative when
+# numfmt is missing, so this stub keeps the assertion stable across hosts.
+cat > "$MOCK_BIN/numfmt" <<'MOCK'
+#!/usr/bin/env bash
+bytes=""
+for arg in "$@"; do
+    case "$arg" in
+        --to=*|--format=*) ;;
+        *[0-9]*) bytes="$arg" ;;
+    esac
+done
+[[ -z "$bytes" ]] && exit 0
+units=("" K M G T)
+i=0
+val="$bytes"
+while (( val >= 1024 && i < 4 )); do
+    val=$(( val / 1024 ))
+    i=$(( i + 1 ))
+done
+printf '%s%s\n' "$val" "${units[$i]}"
+MOCK
+chmod +x "$MOCK_BIN/numfmt"
+
 echo "Testing smoke runtime classification..."
 
 snapcast_output="$(
@@ -132,6 +157,10 @@ assert_rc "$rc" "0" "historical restart on healthy container does not fail"
 assert_contains "$container_output" "[OK] No active container restart failures among 1 snapMULTI container(s)" "healthy restart history is classified as OK"
 assert_contains "$container_output" "[INFO] Container(s) restarted in the past but stable now: mympd(RC=1)" "historical restart is still reported"
 assert_not_contains "$container_output" "crash-loop" "historical restart is not called crash-loop"
+# The new HostConfig.Memory passthrough — 128 MiB shown in the health row so
+# the /status page can surface it without env propagation. Works the same for
+# server and client containers (the same docker inspect, the same suffix).
+assert_contains "$container_output" "[OK] mympd: healthy (limit=128M)" "container health row includes runtime mem limit"
 
 unhealthy_output="$(
     PATH="$MOCK_BIN:$PATH" \
@@ -140,6 +169,13 @@ unhealthy_output="$(
     bash -c "section() { printf 'SECTION %s\\n' \"\$*\"; }; pass_check() { printf '[OK] %s\\n' \"\$*\"; }; fail_check() { printf '[ERROR] %s\\n' \"\$*\"; }; warn() { printf '[WARN] %s\\n' \"\$*\"; }; info() { printf '[INFO] %s\\n' \"\$*\"; }; is_pi_zero_2w() { return 1; }; source '$CHECK_CONTAINERS'; check_containers"
 )"
 assert_contains "$unhealthy_output" "[ERROR] Container(s) with active restart failure: mympd(RC=1,status=running,health=unhealthy)" "unhealthy restarted container remains an active failure"
+assert_contains "$unhealthy_output" "[ERROR] mympd: unhealthy — service is failing its healthcheck probe (limit=128M)" "unhealthy row also carries mem limit"
+
+# Pinning the source-level behaviour: the helper that builds mem_suffix must
+# guard on numfmt presence (so dev hosts without coreutils don't break) and
+# the suffix must be the documented `(limit=…)` shape the renderer parses.
+assert_contains "$(cat "$CHECK_CONTAINERS")" 'command -v numfmt' "check_containers gates on numfmt availability"
+assert_contains "$(cat "$CHECK_CONTAINERS")" '(limit=$mem_h)' "check_containers emits the documented (limit=…) suffix"
 
 echo ""
 if [[ "$fail" -gt 0 ]]; then

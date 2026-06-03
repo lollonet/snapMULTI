@@ -813,6 +813,55 @@ class TestStructuredSystemdRow:
         )
         assert result is None
 
+    def test_container_healthy_with_limit(self, metadata_service_module):
+        """check_containers.sh appends `(limit=<value>)` from
+        HostConfig.Memory. The renderer surfaces it in the desc column
+        so the operator sees the actual enforced limit per container."""
+        result = metadata_service_module._structured_systemd_row(
+            "Containers", "snapclient: healthy (limit=64M)"
+        )
+        assert result == ("snapclient", "healthy", "", "limit 64M")
+
+    def test_container_unhealthy_with_reason_and_limit(self, metadata_service_module):
+        """Both the dash-separated fail reason and the `(limit=…)` suffix
+        can co-exist; the renderer joins them with a middle dot."""
+        result = metadata_service_module._structured_systemd_row(
+            "Containers",
+            "mympd: unhealthy — service is failing its healthcheck probe (limit=32M)",
+        )
+        assert result == (
+            "mympd",
+            "unhealthy",
+            "fail",
+            "service is failing its healthcheck probe · limit 32M",
+        )
+
+    def test_container_unhealthy_with_reason_only(self, metadata_service_module):
+        """Backwards-compat: when numfmt is missing or HostConfig.Memory
+        is 0, check_containers.sh omits the `(limit=…)` suffix. The row
+        still classifies correctly and surfaces only the reason."""
+        result = metadata_service_module._structured_systemd_row(
+            "Containers",
+            "mympd: unhealthy — service is failing its healthcheck probe",
+        )
+        assert result == (
+            "mympd",
+            "unhealthy",
+            "fail",
+            "service is failing its healthcheck probe",
+        )
+
+    def test_container_healthy_without_limit_still_classifies(
+        self, metadata_service_module
+    ):
+        """Regression: existing snapshots without the limit suffix MUST
+        keep returning the same 4-tuple shape (desc is empty string,
+        not None). Pins the pre-#586-follow-up status quo."""
+        result = metadata_service_module._structured_systemd_row(
+            "Containers", "fb-display: healthy"
+        )
+        assert result == ("fb-display", "healthy", "", "")
+
     def test_compose_nested_healthy(self, metadata_service_module):
         result = metadata_service_module._structured_systemd_row(
             "Compose", "  server/snapserver -> healthy"

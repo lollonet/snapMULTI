@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **`/status` Containers section: per-row memory limit (client + server)** — `check_containers.sh` now reads `HostConfig.Memory` from the running container (already done for the drift-detection check) and appends `(limit=64M)` to the smoke message. `metadata-service.py`'s `_CONTAINER_PATTERN` parses the optional suffix into the `desc` column so each row on the /status page surfaces the actually enforced limit next to the health badge. Runtime-driven — the source of truth is Docker engine state via `docker inspect`, NOT propagated env vars. Net effect on a both-mode host: snapclient / audio-visualizer / fb-display rows now show their limits alongside snapserver / mpd / mympd / metadata etc., without any cross-`/opt` `.env` propagation, Docker socket bind-mount, or new env var pass-through in `docker-compose.yml`. Backward-compat: snapshots without the suffix still render exactly as before (regex `(limit=…)?` is optional; classification + `desc=""` unchanged for legacy rows). Conservative: missing `numfmt`, `HostConfig.Memory==0`, or a non-integer value all leave the suffix off — the row still renders, only the limit column is omitted.
+
 ## [0.8.0] — 2026-06-03
 
 > **v0.8 hardening track** — 13 PRs of SSOT extraction, drift-class invariants, and

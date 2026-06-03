@@ -2489,7 +2489,16 @@ _SYSTEMD_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 _CONTAINER_PATTERN = re.compile(
-    r"^([a-z0-9][a-z0-9_-]+): (healthy|unhealthy|starting|restarting|exited|created|paused|removing|dead)$"
+    # Optional trailing description: ` — <text>` (unhealthy fail reason) and/or
+    # ` (limit=<value>)` (HostConfig.Memory rendered by check_containers.sh).
+    # Both are independent — `healthy (limit=64M)`, `unhealthy — probe failed`,
+    # `unhealthy — probe failed (limit=128M)`, and plain `healthy` all match.
+    # The state vocabulary is unchanged; only the trailing context is parsed
+    # so the existing /status renderer can populate the `desc` column.
+    r"^([a-z0-9][a-z0-9_-]+): "
+    r"(healthy|unhealthy|starting|restarting|exited|created|paused|removing|dead)"
+    r"(?:\s+—\s+(.+?))?"
+    r"(?:\s+\(limit=([^)]+)\))?$"
 )
 
 _COMPOSE_NESTED_PATTERN = re.compile(r"^\s+(\w+)/(\S+) -> (\w+)$")
@@ -2572,7 +2581,18 @@ def _structured_systemd_row(section: str, msg: str) -> tuple[str, str, str, str]
                 "removing": "warn",
                 "created": "warn",
             }.get(state, "fail")
-            return unit, state, state_class, ""
+            extra = (m.group(3) or "").strip()
+            limit = (m.group(4) or "").strip()
+            # Join the fail reason and the limit value into a single desc
+            # column so the renderer doesn't need two cells. "limit 64M"
+            # uses the same dot-prefix the systemd unit rows use for
+            # auxiliary context.
+            parts = []
+            if extra:
+                parts.append(extra)
+            if limit:
+                parts.append(f"limit {limit}")
+            return unit, state, state_class, " · ".join(parts)
         return None
     if section == "Compose":
         m = _COMPOSE_NESTED_PATTERN.match(msg)
