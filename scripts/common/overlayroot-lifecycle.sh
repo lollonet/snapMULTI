@@ -184,7 +184,7 @@ ensure_overlayroot_initramfs_ready() {
         # false and the rebuild runs as before.
         target="$(_initramfs_target_for_kver "$kver")"
         if [[ -n "$target" ]] && _initramfs_already_has_liblzma "$target"; then
-            info "overlayroot: initramfs for $kver already includes liblzma at $target — skip rebuild (idempotent)"
+            info "overlayroot: initramfs for $kver already includes liblzma at $target - skip rebuild (idempotent)"
             continue
         fi
 

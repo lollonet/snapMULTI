@@ -64,10 +64,16 @@ assert_eq "$(_initramfs_target_for_kver '6.12.75+rpt-rpi-v8')" \
           "different kver, same v8 suffix → same path"
 assert_eq "$(_initramfs_target_for_kver '6.18.33+rpt-rpi-v7l')" \
           "/boot/firmware/initramfs7l" \
-          "v7l suffix → initramfs7l (Pi 3)"
+          "v7l suffix -> initramfs7l (Pi 3)"
+assert_eq "$(_initramfs_target_for_kver '6.1.21+rpt-rpi-v7+')" \
+          "/boot/firmware/initramfs7" \
+          "v7+ suffix -> initramfs7 (Pi 2/3 32-bit)"
+assert_eq "$(_initramfs_target_for_kver '6.1.21+rpt-rpi-v6+')" \
+          "/boot/firmware/initramfs" \
+          "v6+ suffix -> initramfs (Pi 1/Zero)"
 assert_eq "$(_initramfs_target_for_kver 'totally-foreign-kver')" \
           "" \
-          "unknown suffix → empty (caller falls back to rebuild)"
+          "unknown suffix -> empty (caller falls back to rebuild)"
 
 echo
 echo "=== _initramfs_already_has_liblzma — missing file ==="
