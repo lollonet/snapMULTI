@@ -54,7 +54,7 @@ _classify_ssh_stderr() {
         *"REMOTE HOST IDENTIFICATION HAS CHANGED"*) printf 'host-key-changed' ;;
         *"unix_listener"*|*"mux_client_request_session"*|*"ControlPath"*|*"ControlSocket"*|*"multiplexing"*) printf 'ssh-controlpath-error' ;;
         *"Permission denied"*|*"publickey"*) printf 'auth-failed' ;;
-        *"Connection timed out"*|*"No route to host"*|*"Could not resolve hostname"*|*"Network is unreachable"*|*"Name or service not known"*|*"Connection refused"*|*"Host is down"*|*"Host is unreachable"*) printf 'connection-failed' ;;
+        *"Connection timed out"*|*"Operation timed out"*|*"No route to host"*|*"Could not resolve hostname"*|*"Network is unreachable"*|*"Name or service not known"*|*"Connection refused"*|*"Host is down"*|*"Host is unreachable"*) printf 'connection-failed' ;;
         *) printf 'ssh-failed' ;;
     esac
 }
@@ -86,26 +86,17 @@ _ssh_failure_note() {
 # Bash defers variable resolution to invocation time, so referencing
 # TIMEOUT_CMD / SSH_OPTS / SSH_USER / TMP — all set further down — is
 # safe as long as the test sets them itself before calling probe_host.
-probe_host() {
-    local host="$1"
-    local role="$2"
-    local out="$TMP/${host//[^a-zA-Z0-9_-]/_}.json"
-    # Capture SSH stderr so a failure surfaces with a specific cause
-    # instead of the legacy generic "ssh-timeout-or-fail" blob. The
-    # exit code distinguishes `timeout(1)` (124) from a true SSH error.
-    local stderr_file="$TMP/${host//[^a-zA-Z0-9_-]/_}.stderr"
-    # On the device: read VERSION files, run smoke --json. Both best-effort.
-    # The smoke wrapper exits 0/1; --no-fail-on-warn keeps us non-fatal on WARN.
-    # Script piped via stdin to avoid quoting hell with -c '...'.
-    local payload
-    local rc=0
-    # NB: `|| rc=$?` MUST sit outside the `$(...)` — inside the command
-    # substitution it runs in a subshell and the assignment to `rc` never
-    # propagates to the caller, so `if (( rc != 0 ))` below would always
-    # see 0 and the classification path would be silently bypassed.
-    # Reviewed in PR #589 (claude-review HIGH).
-    payload=$("${TIMEOUT_CMD[@]}" \
-            ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' 2>"$stderr_file" <<'REMOTE'
+
+# Single source of truth for the remote ~30-line bash payload that
+# probe_host streams over ssh. Lives as a here-doc-captured variable
+# instead of two inlined heredocs (one per timeout-wrapped vs bare-ssh
+# branch) so a future change to the payload is impossible to apply to
+# only half of probe_host. The script runs on every snapMULTI host the
+# operator points fleet-smoke at — `/opt/snapmulti/.../device-smoke.sh
+# --json` is the source of truth for the smoke verdict that drives the
+# fleet aggregate. NB: single-quoted heredoc delimiter (`<<'PAYLOAD'`)
+# disables variable expansion so the payload reaches the device verbatim.
+_FLEET_SMOKE_REMOTE_PAYLOAD=$(cat <<'PAYLOAD'
 srv=$(cat /opt/snapmulti/VERSION 2>/dev/null || echo "")
 cli=$(cat /opt/snapclient/VERSION 2>/dev/null || echo "")
 smoke_script=""
@@ -136,8 +127,49 @@ if raw:
         smoke = {}
 print(json.dumps({"srv": srv, "cli": cli, "smoke": smoke}, separators=(",", ":")))
 ' "$srv" "$cli"
-REMOTE
-    ) || rc=$?
+PAYLOAD
+)
+
+probe_host() {
+    local host="$1"
+    local role="$2"
+    local out="$TMP/${host//[^a-zA-Z0-9_-]/_}.json"
+    # Capture SSH stderr so a failure surfaces with a specific cause
+    # instead of the legacy generic "ssh-timeout-or-fail" blob. The
+    # exit code distinguishes `timeout(1)` (124) from a true SSH error.
+    local stderr_file="$TMP/${host//[^a-zA-Z0-9_-]/_}.stderr"
+    # On the device: read VERSION files, run smoke --json. Both best-effort.
+    # The smoke wrapper exits 0/1; --no-fail-on-warn keeps us non-fatal on WARN.
+    # Script piped via stdin to avoid quoting hell with -c '...'.
+    local payload
+    local rc=0
+    # NB: `|| rc=$?` MUST sit outside the `$(...)` — inside the command
+    # substitution it runs in a subshell and the assignment to `rc` never
+    # propagates to the caller, so `if (( rc != 0 ))` below would always
+    # see 0 and the classification path would be silently bypassed.
+    # Reviewed in PR #589 (claude-review HIGH).
+    #
+    # Split the timeout-prefixed vs bare-ssh forms because bash 3.2
+    # expands `"${TIMEOUT_CMD[@]}"` under `set -u` to an unbound-variable
+    # error when TIMEOUT_CMD=() (macOS dev box without timeout/gtimeout,
+    # or library-mode test). Bash 5 silently treats empty-array `[@]` as
+    # zero words, so the script "worked" in CI but bombed on real dev
+    # macs. The branch keeps the timeout wrapper when present, drops it
+    # cleanly when absent — same observable behaviour as a 4-arg vs
+    # 3-arg invocation, no empty-array expansion under `set -u`.
+    # The remote payload lives in $_FLEET_SMOKE_REMOTE_PAYLOAD above —
+    # single source of truth so a future change can't be applied to only
+    # one of the timeout-wrapped / bare-ssh branches. `<<<` pipes the
+    # variable to the ssh remote shell as stdin (equivalent to the
+    # previous inline heredoc, no quoting overhead).
+    if (( ${#TIMEOUT_CMD[@]} > 0 )); then
+        payload=$("${TIMEOUT_CMD[@]}" \
+                ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' \
+                2>"$stderr_file" <<<"$_FLEET_SMOKE_REMOTE_PAYLOAD") || rc=$?
+    else
+        payload=$(ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' \
+                2>"$stderr_file" <<<"$_FLEET_SMOKE_REMOTE_PAYLOAD") || rc=$?
+    fi
     if (( rc != 0 )); then
         # `timeout(1)` sends SIGTERM and exits 124 on its own timeout —
         # distinguish from a true SSH error so the operator does not chase

@@ -127,6 +127,11 @@ assert_eq \
     "No route to host -> connection-failed"
 
 assert_eq \
+    "$(_classify_ssh_stderr 'ssh: connect to host snapvideo port 22: Operation timed out')" \
+    "connection-failed" \
+    "Operation timed out -> connection-failed (macOS BSD ssh phrasing)"
+
+assert_eq \
     "$(_classify_ssh_stderr 'something unrecognised about ssh')" \
     "ssh-failed" \
     "unrecognised stderr -> ssh-failed (fallback)"

@@ -669,69 +669,73 @@ SYSDEOF
         fi
     fi
 
-    # Enable overlayfs via raspi-config (takes effect after reboot)
-    if command -v raspi-config &>/dev/null; then
-        if raspi-config nonint do_overlayfs 0; then
-            if persist_overlayroot_enabled; then
-                # Two known initramfs-side gaps on trixie + Pi 4 client paths:
-                #
-                # 1. liblzma missing — kmod inside initramfs can't decompress
-                #    .ko.xz modules ("xz: can't load and resolve symbols");
-                #    `modprobe -qb overlay` fails → ext4 fallback. Server
-                #    finalize gets it by accident, client doesn't. Hook
-                #    scripts/common/initramfs-hooks/snapmulti-lzma fixes it
-                #    explicitly. Must be installed BEFORE the rebuild below.
-                #
-                # 2. modules.dep stale/truncated on the NEXT-BOOT kernel
-                #    (apt full-upgrade installs a newer kernel during firstboot;
-                #    raspi-config's own `update-initramfs -c -k all` runs
-                #    with truncated modules.dep on it). Loop over every
-                #    /lib/modules/* and depmod + update-initramfs per kver.
-                #
-                # PR #317 history: a silent extra rebuild caused "failed to
-                # determine device for /" races. Output captured to
-                # UNIFIED_LOG instead of /dev/null. See
-                # scripts/common/overlayroot-lifecycle.sh for both helpers.
-                local _hook_src=""
-                for _cand in \
-                    "$TUNE_DIR/initramfs-hooks/snapmulti-lzma" \
-                    "/opt/snapmulti/scripts/common/initramfs-hooks/snapmulti-lzma" \
-                    "/opt/snapclient/scripts/common/initramfs-hooks/snapmulti-lzma"; do
-                    if [[ -f "$_cand" ]]; then
-                        _hook_src="$_cand"
-                        break
-                    fi
-                done
-                # Empty _hook_src means none of the candidates resolved — the
-                # library returns 0 (non-fatal by design), so the `||` branch
-                # would never fire. Branch on empty explicitly so the operator
-                # is told the source is missing, not just that the install
-                # silently produced an initramfs without liblzma.
-                if [[ -n "$_hook_src" ]]; then
-                    install_initramfs_lzma_hook "$_hook_src" || \
-                        warn "overlayroot: lzma hook install failed — overlay may not load on first boot"
-                else
-                    warn "overlayroot: snapmulti-lzma hook source not found — initramfs will lack liblzma, overlay may not load on first boot"
-                fi
-
-                ensure_overlayroot_initramfs_ready || \
-                    warn "overlayroot: initramfs refresh failed — first boot may not activate overlay"
-                ok "Read-only filesystem enabled (activates after reboot)"
-            else
-                rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
-                warn "overlayroot persistence failed — workaround rolled back"
-                return 1
-            fi
-        else
-            rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
-            warn "raspi-config do_overlayfs failed — workaround rolled back"
-            return 1
-        fi
-    else
+    if ! command -v raspi-config &>/dev/null; then
         rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
         warn "raspi-config not found — overlayroot not enabled"
         return 1
     fi
+
+    # Install the snapmulti-lzma initramfs hook BEFORE raspi-config so
+    # raspi-config's own internal `update-initramfs -c -k all` picks it
+    # up on its first pass — liblzma lands in /boot/firmware/initramfs*
+    # without a second rebuild round. Without the hook, kmod inside
+    # initramfs cannot decompress overlay.ko.xz at boot and overlayroot
+    # falls back to ext4 silently (see overlayroot-lifecycle.sh for the
+    # full xz / kmod failure trace).
+    local _hook_src=""
+    for _cand in \
+        "$TUNE_DIR/initramfs-hooks/snapmulti-lzma" \
+        "/opt/snapmulti/scripts/common/initramfs-hooks/snapmulti-lzma" \
+        "/opt/snapclient/scripts/common/initramfs-hooks/snapmulti-lzma"; do
+        if [[ -f "$_cand" ]]; then
+            _hook_src="$_cand"
+            break
+        fi
+    done
+    # Empty _hook_src means none of the candidates resolved — branch on
+    # empty explicitly so the operator is told the source is missing,
+    # not just that the install silently produced an initramfs without
+    # liblzma.
+    if [[ -n "$_hook_src" ]]; then
+        install_initramfs_lzma_hook "$_hook_src" || \
+            warn "overlayroot: lzma hook install failed — overlay may not load on first boot"
+    else
+        warn "overlayroot: snapmulti-lzma hook source not found — initramfs will lack liblzma, overlay may not load on first boot"
+    fi
+
+    # Refresh modules.dep for every installed kernel BEFORE raspi-config
+    # runs its own update-initramfs. The snapdigi-class failure
+    # (overlay module unloadable with a 204-byte truncated modules.dep)
+    # is recoverable only by re-running depmod -a per kver. Cheap (~50 ms
+    # per kernel), writes only under /lib/modules — no /boot/firmware
+    # ro collision because this runs before raspi-config touches the
+    # boot partition.
+    refresh_overlayroot_modules_dep || \
+        warn "overlayroot: modules.dep refresh failed — first boot may not activate overlay"
+
+    # Enable overlayfs via raspi-config (takes effect after reboot). The
+    # internal update-initramfs run now picks up the snapmulti-lzma hook
+    # installed above + the refreshed modules.dep.
+    if ! raspi-config nonint do_overlayfs 0; then
+        # Roll back EVERYTHING we installed above — the systemd workaround
+        # serves no purpose without overlayroot, and the lzma hook would
+        # leak otherwise (raspi-config never ran successfully so /etc/
+        # initramfs-tools/hooks/snapmulti-lzma sits on a system that will
+        # boot ext4).
+        rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+        rm -f /etc/initramfs-tools/hooks/snapmulti-lzma
+        warn "raspi-config do_overlayfs failed — workaround rolled back"
+        return 1
+    fi
+
+    if ! persist_overlayroot_enabled; then
+        rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+        rm -f /etc/initramfs-tools/hooks/snapmulti-lzma
+        warn "overlayroot persistence failed — workaround rolled back"
+        return 1
+    fi
+
+    ok "Read-only filesystem enabled (activates after reboot)"
 }
 
 # ── Boot tuning service ─────────────────────────────────────────

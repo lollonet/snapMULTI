@@ -1659,6 +1659,46 @@ DefaultEnvironment="LIBMOUNT_FORCE_MOUNT2=always"
 SYSDEOF
     log_progress "systemd overlayfs workaround installed (trixie remount fix)"
 
+    # Install the snapmulti-lzma hook BEFORE raspi-config so the
+    # internal `update-initramfs -c -k all` that raspi-config runs picks
+    # the hook up on its first pass — no second rebuild round needed.
+    # Without the hook, the Pi 4 client path boots ext4 with `Unable to
+    # find driver` in /run/initramfs/overlayroot.log because kmod inside
+    # initramfs cannot decompress overlay.ko.xz (liblzma is missing).
+    local _hook_src=""
+    if declare -F resolve_first_existing_file >/dev/null 2>&1; then
+        resolve_first_existing_file _hook_src "snapmulti-lzma" \
+            "$COMMON_MODULE_DIR/initramfs-hooks" \
+            "/opt/snapclient/scripts/common/initramfs-hooks" \
+            "/opt/snapmulti/scripts/common/initramfs-hooks" || true
+    else
+        local _cand
+        for _cand in \
+            "$COMMON_MODULE_DIR/initramfs-hooks/snapmulti-lzma" \
+            "/opt/snapclient/scripts/common/initramfs-hooks/snapmulti-lzma" \
+            "/opt/snapmulti/scripts/common/initramfs-hooks/snapmulti-lzma"; do
+            [[ -f "$_cand" ]] && _hook_src="$_cand" && break
+        done
+    fi
+    # Empty _hook_src means none of the candidates resolved — the library
+    # returns 0 in that path (non-fatal by design for older installs), so
+    # the `||` branch would never fire. Branch on empty explicitly so the
+    # operator sees the skip on the TUI channel, not just the install log.
+    if [[ -n "$_hook_src" ]]; then
+        install_initramfs_lzma_hook "$_hook_src" || \
+            log_progress "WARNING: lzma hook install failed — overlay may not load on first boot"
+    else
+        log_progress "WARNING: snapmulti-lzma hook source not found — initramfs will lack liblzma, overlay may not load on first boot"
+    fi
+
+    # Refresh modules.dep for every installed kernel BEFORE raspi-config
+    # — apt full-upgrade earlier in firstboot installs a newer kernel
+    # which becomes the next-boot target; without a depmod pass on it,
+    # raspi-config's internal `update-initramfs -c -k all` runs against
+    # a stale modules.dep and the overlay module is unloadable at boot.
+    refresh_overlayroot_modules_dep || \
+        log_progress "WARNING: modules.dep refresh failed — first boot may not activate overlay"
+
     # Enable overlayfs (takes effect after reboot). raspi-config internally
     # apt-installs overlayroot/cryptsetup which triggers update-initramfs
     # to rebuild BOTH kernels (rpi-v8 + rpi-2712) — ~20s of progress output
@@ -1668,8 +1708,13 @@ SYSDEOF
     # keeps the TUI clean.
     if ! raspi-config nonint do_overlayfs 0 >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
         log_progress "WARNING: raspi-config failed to enable overlayfs"
-        log_progress "         Reverting systemd workaround"
+        log_progress "         Reverting systemd workaround + lzma hook"
+        # Roll back the lzma hook installed above too — leaving it on
+        # a system that will boot ext4 serves no purpose and would
+        # otherwise leak across the failed-install / future-re-install
+        # cycle.
         rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+        rm -f /etc/initramfs-tools/hooks/snapmulti-lzma
         ENABLE_READONLY=false
         echo ""
         echo "Read-only filesystem: FAILED"
@@ -1679,10 +1724,11 @@ SYSDEOF
         echo ""
     elif ! persist_overlayroot_enabled; then
         log_progress "WARNING: overlayroot persistence verification failed"
-        log_progress "         Reverting Docker config and systemd workaround"
+        log_progress "         Reverting Docker config + systemd workaround + lzma hook"
         tune_docker_daemon --live-restore
         rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
         rm -f /etc/overlayroot.local.conf
+        rm -f /etc/initramfs-tools/hooks/snapmulti-lzma
         ENABLE_READONLY=false
         echo ""
         echo "Read-only filesystem: FAILED"
@@ -1691,41 +1737,6 @@ SYSDEOF
         echo "  - System will boot normally (writable root)"
         echo ""
     else
-        # Initramfs side: install snapmulti-lzma hook (so kmod can decompress
-        # .ko.xz inside initramfs) and rebuild for every installed kernel
-        # (apt full-upgrade may have installed a kernel newer than $(uname -r)
-        # that becomes the next-boot target). Without these two steps the Pi 4
-        # client path boots ext4 with `Unable to find driver` in
-        # /run/initramfs/overlayroot.log. See overlayroot-lifecycle.sh for the
-        # full PR #317 history and the snapdigi 2026-06-01 root-cause.
-        local _hook_src=""
-        if declare -F resolve_first_existing_file >/dev/null 2>&1; then
-            resolve_first_existing_file _hook_src "snapmulti-lzma" \
-                "$COMMON_MODULE_DIR/initramfs-hooks" \
-                "/opt/snapclient/scripts/common/initramfs-hooks" \
-                "/opt/snapmulti/scripts/common/initramfs-hooks" || true
-        else
-            local _cand
-            for _cand in \
-                "$COMMON_MODULE_DIR/initramfs-hooks/snapmulti-lzma" \
-                "/opt/snapclient/scripts/common/initramfs-hooks/snapmulti-lzma" \
-                "/opt/snapmulti/scripts/common/initramfs-hooks/snapmulti-lzma"; do
-                [[ -f "$_cand" ]] && _hook_src="$_cand" && break
-            done
-        fi
-        # Empty _hook_src means none of the candidates resolved — the library
-        # returns 0 in that path (non-fatal by design for older installs), so
-        # the `||` branch would never fire. Branch on empty explicitly so the
-        # operator sees the skip on the TUI channel, not just the install log.
-        if [[ -n "$_hook_src" ]]; then
-            install_initramfs_lzma_hook "$_hook_src" || \
-                log_progress "WARNING: lzma hook install failed — overlay may not load on first boot"
-        else
-            log_progress "WARNING: snapmulti-lzma hook source not found — initramfs will lack liblzma, overlay may not load on first boot"
-        fi
-        ensure_overlayroot_initramfs_ready || \
-            log_progress "WARNING: initramfs refresh failed — first boot may not activate overlay"
-
         echo "Read-only filesystem configured"
         echo "  - Docker storage driver: reconciled at boot from actual root mount state"
         echo "  - SSH host keys: persisted"

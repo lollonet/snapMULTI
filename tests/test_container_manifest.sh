@@ -141,8 +141,22 @@ assert_eq "$loader_sorted" "$manifest_sorted" \
 echo
 echo "== python metadata-service.py loader =="
 
-if command -v python3 >/dev/null 2>&1; then
-    py_dump=$(SNAPMULTI_CONTAINER_MANIFEST="$MANIFEST" python3 - <<EOF
+# Honour ${PYTHON:-python3} so CI / dev hosts can point at the venv
+# interpreter when system python3 is stale. metadata-service.py uses
+# PEP-604 union syntax (`str | None`, `dict | None`) which requires
+# Python ≥ 3.10. macOS stock python3 on older releases is 3.9 — skip
+# the Python subtest there instead of failing the whole shell test;
+# pytest tests/test_metadata_service.py is the real Python gate.
+PYTHON="${PYTHON:-python3}"
+if command -v "$PYTHON" >/dev/null 2>&1; then
+    py_version=$("$PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
+    py_major=${py_version%%.*}
+    py_minor=${py_version##*.}
+    if [[ "$py_major" -lt 3 || ( "$py_major" -eq 3 && "$py_minor" -lt 10 ) ]]; then
+        echo "  SKIP: $PYTHON is $py_version (<3.10) — pytest is the real Python gate"
+        py_dump=""
+    else
+    py_dump=$(SNAPMULTI_CONTAINER_MANIFEST="$MANIFEST" "$PYTHON" - <<EOF
 import importlib.util
 import json
 import sys
@@ -176,17 +190,20 @@ spec.loader.exec_module(m)
 print(json.dumps(m._CONTAINER_ROLE, sort_keys=True))
 EOF
 )
-    # Build the expected JSON shape from the manifest and compare.
-    manifest_json=$(python3 -c "
+    fi
+    if [[ -n "$py_dump" ]]; then
+        # Build the expected JSON shape from the manifest and compare.
+        manifest_json=$("$PYTHON" -c "
 import json, sys
 names = '''$(printf '%s\n' "${manifest_names[@]}")'''.strip().splitlines()
 roles = '''$(printf '%s\n' "${manifest_roles[@]}")'''.strip().splitlines()
 print(json.dumps(dict(zip(names, roles)), sort_keys=True))
 ")
-    assert_eq "$py_dump" "$manifest_json" \
-        "metadata-service.py _CONTAINER_ROLE (via loader) equals manifest"
+        assert_eq "$py_dump" "$manifest_json" \
+            "metadata-service.py _CONTAINER_ROLE (via loader) equals manifest"
+    fi
 else
-    echo "  SKIP: python3 not available — Python loader check skipped"
+    echo "  SKIP: $PYTHON not available — Python loader check skipped"
 fi
 
 # ── (3b) Empty-parse guard (PR #590 review MEDIUM) ──────────────
@@ -231,7 +248,94 @@ fi
 assert 'grep -qE "\\\$\\{#_SNAPMULTI_CONTAINERS\\[@\\]\\} == 0" "$SMOKE"' \
     "check_containers.sh has empty-parse guard after the while-read loop"
 
-# ── (3c) Python loader: UTF-8 encoding pin (PR #590 review LOW) ──
+# ── (3d) Malformed-row guard (Python parity) ────────────────────
+# The Python loader validates role ∈ {server, client} (PR #590 LOW).
+# Pre-fix Bash side accepted any role, so a malformed manifest like
+# `not-a-real-container banana` loaded the bogus name as the only
+# expected container and smoke silently bypassed the entire real
+# fleet. Both name (Docker identifier shape) and role must validate.
+echo
+echo "== bash loader malformed-row fallback (Python parity) =="
+
+# Malformed role.
+BAD_ROLE_FIXTURE=$(mktemp -t container-bad-role-XXXXXX)
+cat > "$BAD_ROLE_FIXTURE" <<'TXT'
+fb-display banana
+snapserver server
+TXT
+bad_role_out=$(SNAPMULTI_CONTAINER_MANIFEST="$BAD_ROLE_FIXTURE" bash <<EOF
+set -euo pipefail
+section() { :; }; pass_check() { :; }; fail_check() { :; }; warn() { :; }; info() { :; }
+is_pi_zero_2w() { return 1; }
+# shellcheck source=/dev/null
+source "$SMOKE"
+echo "\${#_SNAPMULTI_CONTAINERS[@]}"
+EOF
+)
+rm -f "$BAD_ROLE_FIXTURE"
+if [[ "$bad_role_out" =~ ^[0-9]+$ ]] && (( bad_role_out >= 10 )); then
+    echo "  PASS: manifest with malformed role falls back to hardcoded list ($bad_role_out entries)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: malformed role manifest did not fall back (got '$bad_role_out')"
+    fail=$((fail + 1))
+fi
+
+# Malformed name (illegal first character).
+BAD_NAME_FIXTURE=$(mktemp -t container-bad-name-XXXXXX)
+cat > "$BAD_NAME_FIXTURE" <<'TXT'
+-leading-dash client
+fb-display client
+TXT
+bad_name_out=$(SNAPMULTI_CONTAINER_MANIFEST="$BAD_NAME_FIXTURE" bash <<EOF
+set -euo pipefail
+section() { :; }; pass_check() { :; }; fail_check() { :; }; warn() { :; }; info() { :; }
+is_pi_zero_2w() { return 1; }
+# shellcheck source=/dev/null
+source "$SMOKE"
+echo "\${#_SNAPMULTI_CONTAINERS[@]}"
+EOF
+)
+rm -f "$BAD_NAME_FIXTURE"
+if [[ "$bad_name_out" =~ ^[0-9]+$ ]] && (( bad_name_out >= 10 )); then
+    echo "  PASS: manifest with malformed name falls back to hardcoded list ($bad_name_out entries)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: malformed name manifest did not fall back (got '$bad_name_out')"
+    fail=$((fail + 1))
+fi
+
+# Valid manifest still loads exactly the manifest entries (regression
+# guard: the validation MUST NOT reject legitimate names like
+# `audio-visualizer` with the dash in the middle, or `shairport-sync`).
+VALID_FIXTURE=$(mktemp -t container-valid-XXXXXX)
+cat > "$VALID_FIXTURE" <<'TXT'
+# Comment row — skipped.
+foo-bar.baz server
+qux_quux client
+TXT
+valid_out=$(SNAPMULTI_CONTAINER_MANIFEST="$VALID_FIXTURE" bash <<EOF
+set -euo pipefail
+section() { :; }; pass_check() { :; }; fail_check() { :; }; warn() { :; }; info() { :; }
+is_pi_zero_2w() { return 1; }
+# shellcheck source=/dev/null
+source "$SMOKE"
+echo "\${#_SNAPMULTI_CONTAINERS[@]}"
+echo "\${_SNAPMULTI_CONTAINERS[*]}"
+EOF
+)
+rm -f "$VALID_FIXTURE"
+valid_count=$(printf '%s\n' "$valid_out" | head -1)
+valid_names=$(printf '%s\n' "$valid_out" | tail -1)
+if [[ "$valid_count" == "2" && "$valid_names" == "foo-bar.baz qux_quux" ]]; then
+    echo "  PASS: valid manifest loads exactly the declared entries (no fallback)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: valid manifest loaded wrong entries (count=$valid_count, names='$valid_names')"
+    fail=$((fail + 1))
+fi
+
+# ── (3e) Python loader: UTF-8 encoding pin (PR #590 review LOW) ──
 # Manifest contains non-ASCII in comments (em-dash). On a POSIX/C
 # locale container, default `open()` decodes ASCII and raises
 # UnicodeDecodeError BEFORE the `startswith("#")` skip. The exception

@@ -79,19 +79,36 @@ _load_container_manifest() {
         return 0
     fi
 
+    local _malformed=0
     while read -r _name _role; do
         [[ -z "$_name" || "$_name" == \#* ]] && continue
-        [[ -n "$_role" ]] || continue
+        [[ -n "$_role" ]] || { _malformed=1; break; }
+        # Validate: name must be a sane Docker identifier (Docker
+        # itself enforces [a-zA-Z0-9][a-zA-Z0-9_.-]*) and role must be
+        # exactly `server` or `client`. The Python loader has the same
+        # check; without it here the Bash side silently accepts garbage
+        # rows like `not-a-real-container banana` and loads the bogus
+        # name as the only expected container — every real container
+        # then fails the `_is_snapmulti_container` filter and smoke
+        # bypasses the fleet entirely.
+        if ! [[ "$_name" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+            _malformed=1
+            break
+        fi
+        if [[ "$_role" != "server" && "$_role" != "client" ]]; then
+            _malformed=1
+            break
+        fi
         _SNAPMULTI_CONTAINERS+=("$_name")
     done < "$_manifest_path"
 
-    # Empty-parse guard: a manifest that exists but parses to zero
-    # entries (truncated file, header-only stub, etc.) would silently
-    # bypass every container check. Fall back to the hardcoded list so
-    # smoke still verifies the expected fleet. Mirrors the Python
-    # loader's `if mapping: return mapping` shape — PR #590 review
-    # MEDIUM.
-    if (( ${#_SNAPMULTI_CONTAINERS[@]} == 0 )); then
+    # Empty-parse / malformed-row guard: any input that doesn't produce
+    # a fully-valid array falls back to the hardcoded list. Mirrors the
+    # Python loader's `if mapping: return mapping` + role-validation
+    # shape. The fallback is the single source of truth for "default
+    # fleet" — keep aligned with scripts/common/container-manifest.txt
+    # (the SSOT); the invariant test catches drift.
+    if (( _malformed )) || (( ${#_SNAPMULTI_CONTAINERS[@]} == 0 )); then
         _SNAPMULTI_CONTAINERS=(
             "snapserver" "mpd" "mympd" "metadata" "shairport-sync"
             "librespot" "tidal-connect"
