@@ -2,7 +2,7 @@
 
 🇬🇧 [English](INSTALL.md) | 🇮🇹 **Italiano**
 
-Questa guida ti porta da una scheda SD vuota a un sistema audio multiroom funzionante, passo dopo passo.
+Questa guida ti porta da una scheda SD vuota a un sistema audio multiroom funzionante, passo dopo passo. Per una panoramica tecnica di *cosa* succede sotto il cofano tra flash e riavvio finale, vedi [INSTALL-FLOW.it.md](INSTALL-FLOW.it.md).
 
 ---
 
@@ -347,7 +347,7 @@ snapMULTI Auto-Install
 
 Il Pi **si riavvia automaticamente** quando l'installazione è completa. Dopo il riavvio, il display diventa scuro (normale — nessun desktop su Lite OS).
 
-> Se l'HDMI rimane nero per tutto il tempo: l'installazione continua comunque in background — `firstboot.sh` gira come servizio systemd e non ha bisogno del display. **Il LED verde ACT del Pi lampeggerà in modo irregolare durante la finestra di 15-20 minuti su Pi 4/5 — è attività sulla scheda SD, il tuo segnale che l'install sta procedendo.** Aspetta tutta la finestra; per controllare lo stato senza schermo, fai `ssh <username>@<hostname>.local` ed esegui `sudo journalctl -u snapmulti-firstboot.service -f`.
+> Se l'HDMI rimane nero per tutto il tempo: l'installazione continua comunque in background — `firstboot.sh` è lanciato da `cloud-init` `runcmd` e non ha bisogno del display. **Il LED verde ACT del Pi lampeggerà in modo irregolare durante la finestra di 15-20 minuti su Pi 4/5 — è attività sulla scheda SD, il tuo segnale che l'install sta procedendo.** Aspetta tutta la finestra; per controllare lo stato senza schermo, fai `ssh <username>@<hostname>.local` e segui uno dei due log: `sudo tail -f /var/log/snapmulti-install.log` (il log strutturato di snapMULTI) oppure `sudo journalctl -u cloud-final.service -f` (l'unit cloud-init che lancia `firstboot.sh`).
 
 ### Cosa sentirai
 

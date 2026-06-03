@@ -169,6 +169,7 @@ Quick definitions of terms you'll see in this README and the docs.
 | Guide | When to open it |
 |-------|-----------------|
 | [Install](docs/INSTALL.md) | First-time setup — flash, boot, listen. The basic path |
+| [Install flow](docs/INSTALL-FLOW.md) | What happens under the hood between flash and reboot — for technical users + contributors |
 | [Advanced](docs/ADVANCED.md) | Multi-room, NFS / SMB library, custom `.env`, manual deploy, read-only fs, MPD CLI, JSON-RPC |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Something failed — install, mDNS, audio, container restart loops |
 | [Hardware](docs/HARDWARE.md) | Pi models, DAC HATs, network requirements, Pi Zero 2 W details |

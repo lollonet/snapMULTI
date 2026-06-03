@@ -1122,7 +1122,7 @@ Write-Host ''
 Write-Host 'Next steps:'
 Write-Host '  1. Remove the SD card'
 Write-Host '  2. Insert into Raspberry Pi'
-Write-Host '  3. Power on -- installation takes ~10-15 minutes, then auto-reboots'
+Write-Host '  3. Power on -- installation takes ~15-20 minutes on Pi 4/5 (longer on Pi 3 or Pi Zero 2 W), then auto-reboots'
 switch ($InstallType) {
     { $_ -in 'server', 'both' } {
         Write-Host '  4. Open this URL in a browser (replace <hostname> with the one you set in Imager):'

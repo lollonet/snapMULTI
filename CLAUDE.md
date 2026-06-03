@@ -11,6 +11,7 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 | Source config + parameter reference (inline comments) | `config/snapserver.conf` |
 | Hardware, network, recommended setups | `docs/HARDWARE.md` |
 | First-time install — flash → boot → listen, basic path only | `docs/INSTALL.md` |
+| Install pipeline overview (host → cloud-init → firstboot → reboot) — for technical users / contributors | `docs/INSTALL-FLOW.md` |
 | Multi-room, NFS/SMB library, custom `.env`, manual deploy, read-only fs, MPD CLI, JSON-RPC, update strategy | `docs/ADVANCED.md` |
 | First-boot failures, mDNS troubleshooting, audio issues, container restart loops, diagnostic bundle recovery | `docs/TROUBLESHOOTING.md` |
 | Value prop + quick start | `README.md` |
@@ -25,6 +26,7 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 - Services/ports/security-model/architecture changes → `docs/USAGE.md` only
 - Hardware/network changes → `docs/HARDWARE.md` only
 - Install procedure (basic path) changes → `docs/INSTALL.md` only
+- Internal install-pipeline changes (firstboot phase order, marker paths, deploy/setup wiring) → `docs/INSTALL-FLOW.md` only
 - Operations / customisation / power-user how-tos → `docs/ADVANCED.md` only
 - Failure-mode tables, recovery procedures → `docs/TROUBLESHOOTING.md` only
 - README links to docs/ for anything technical — never inline technical details
