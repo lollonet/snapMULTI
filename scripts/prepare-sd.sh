@@ -826,7 +826,14 @@ find "$DEST" -type d -name '__MACOSX' -exec rm -rf {} + 2>/dev/null || true
 # Bake version files so installer scripts can set version vars without a git repo on device.
 # Format difference is intentional: server strips "v" (deploy.sh + metadata-service expect
 # Both use the same version tag from the monorepo (with "v" prefix).
-VERSION=$(git -C "$PROJECT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "dev")
+#
+# NB: NO `--abbrev=0`. The abbreviated form strips the distance + sha suffix, so a
+# flash from a main HEAD that is N commits past the tag would still bake the bare
+# tag (`v0.8.0`), masking those N commits in /status, fb-display footer, and the
+# diagnostic bundle. `git describe --tags` without `--abbrev=0` adds `-<N>-g<sha>`
+# automatically when HEAD is not exactly on a tag, which is the disambiguation we
+# want for both reflash debug and post-release device-state forensics.
+VERSION=$(git -C "$PROJECT_DIR" describe --tags 2>/dev/null || echo "dev")
 if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     echo "$VERSION" > "$DEST/server/.version"
 fi
