@@ -180,6 +180,11 @@ STAGING_COMMON_SHARED_MODULES=(
     # setup.sh falls through to the legacy inline `for _candidate`
     # fallback, defeating the migration's purpose.
     "scripts/common/path-resolve.sh"
+    # v0.8 PR10 — firstboot.sh sources install-conf-reader.sh
+    # unconditionally at line ~115 (right after SNAP_BOOT is
+    # defined). Same "must ship to client/" rationale as the other
+    # shared modules.
+    "scripts/common/install-conf-reader.sh"
 )
 STAGING_COMMON_SHARED_MODULES_DEST="scripts/common"
 

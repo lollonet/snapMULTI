@@ -107,11 +107,19 @@ if [[ ! -d "$SNAP_BOOT" ]]; then
     exit 1
 fi
 
+# Early source: install-conf-reader.sh is needed for the install.conf
+# parse block below, which runs BEFORE the bulk-source block at line
+# ~260. The helper has no dependencies. Unconditional: the staging
+# manifest pins this file at SD-prep time (added to
+# STAGING_COMMON_SHARED_MODULES + prepare-sd verify lists in PR10).
+# shellcheck source=common/install-conf-reader.sh
+source "$SNAP_BOOT/common/install-conf-reader.sh"
+
 # ── Read install.conf ────────────────────────────────────────────
 # `|| true` neutralises grep's exit-1 when a key is missing — otherwise pipefail kills firstboot before the TUI/logger are up.
 INSTALL_TYPE="server"
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
-    INSTALL_TYPE=$(grep -m1 '^INSTALL_TYPE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]' || true)
+    INSTALL_TYPE=$(install_conf_get INSTALL_TYPE "$SNAP_BOOT/install.conf")
     INSTALL_TYPE="${INSTALL_TYPE:-server}"
 fi
 
@@ -130,7 +138,7 @@ SMB_PASS=""
 # shellcheck disable=SC2034
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     # Same `|| true` pattern as INSTALL_TYPE above; sanitize_* handles empty values.
-    MUSIC_SOURCE=$(grep -m1 '^MUSIC_SOURCE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]' || true)
+    MUSIC_SOURCE=$(install_conf_get MUSIC_SOURCE "$SNAP_BOOT/install.conf")
     # Source sanitize.sh for re-validation
     if [[ -f "$SNAP_BOOT/common/sanitize.sh" ]]; then
         # shellcheck source=common/sanitize.sh
@@ -139,12 +147,12 @@ if [[ -f "$SNAP_BOOT/install.conf" ]]; then
         # shellcheck source=common/sanitize.sh
         source "$SCRIPT_DIR/common/sanitize.sh"
     fi
-    NFS_SERVER=$(sanitize_hostname "$(grep -m1 '^NFS_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]' || true)")
-    NFS_EXPORT=$(sanitize_nfs_export "$(grep -m1 '^NFS_EXPORT=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]' || true)")
-    SMB_SERVER=$(sanitize_hostname "$(grep -m1 '^SMB_SERVER=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]' || true)")
-    SMB_SHARE=$(sanitize_smb_share "$(grep -m1 '^SMB_SHARE=' "$SNAP_BOOT/install.conf" | cut -d= -f2 | tr -d '[:space:]' || true)")
-    SMB_USER=$(sanitize_smb_user "$(grep -m1 '^SMB_USER=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '\r' || true)")
-    SMB_PASS=$(grep -m1 '^SMB_PASS=' "$SNAP_BOOT/install.conf" | cut -d= -f2- | tr -d '\r' || true)
+    NFS_SERVER=$(sanitize_hostname "$(install_conf_get NFS_SERVER "$SNAP_BOOT/install.conf")")
+    NFS_EXPORT=$(sanitize_nfs_export "$(install_conf_get NFS_EXPORT "$SNAP_BOOT/install.conf")")
+    SMB_SERVER=$(sanitize_hostname "$(install_conf_get SMB_SERVER "$SNAP_BOOT/install.conf")")
+    SMB_SHARE=$(sanitize_smb_share "$(install_conf_get SMB_SHARE "$SNAP_BOOT/install.conf")")
+    SMB_USER=$(sanitize_smb_user "$(install_conf_get SMB_USER "$SNAP_BOOT/install.conf" cr)")
+    SMB_PASS=$(install_conf_get SMB_PASS "$SNAP_BOOT/install.conf" cr)
 fi
 
 # Read advanced options
@@ -153,11 +161,9 @@ SKIP_UPGRADE="false"
 IMAGE_TAG="latest"
 VERBOSE_INSTALL="false"
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
-    _rc() { grep -m1 "^$1=" "$SNAP_BOOT/install.conf" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true; }
-    local_val=$(_rc ENABLE_READONLY); [[ -n "$local_val" ]] && ENABLE_READONLY="$local_val"
-    local_val=$(_rc SKIP_UPGRADE);    [[ -n "$local_val" ]] && SKIP_UPGRADE="$local_val"
-    local_val=$(_rc VERBOSE_INSTALL); [[ -n "$local_val" ]] && VERBOSE_INSTALL="$local_val"
-    unset -f _rc
+    local_val=$(install_conf_get ENABLE_READONLY "$SNAP_BOOT/install.conf"); [[ -n "$local_val" ]] && ENABLE_READONLY="$local_val"
+    local_val=$(install_conf_get SKIP_UPGRADE    "$SNAP_BOOT/install.conf"); [[ -n "$local_val" ]] && SKIP_UPGRADE="$local_val"
+    local_val=$(install_conf_get VERBOSE_INSTALL "$SNAP_BOOT/install.conf"); [[ -n "$local_val" ]] && VERBOSE_INSTALL="$local_val"
     unset local_val
 fi
 
@@ -186,7 +192,7 @@ if [[ -f "$SNAP_BOOT/common/release-manifest.sh" ]]; then
 else
     # Inline fallback — legacy IMAGE_TAG path only.
     if [[ -f "$SNAP_BOOT/install.conf" ]]; then
-        _legacy=$(grep -m1 '^IMAGE_TAG=' "$SNAP_BOOT/install.conf" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true)
+        _legacy=$(install_conf_get IMAGE_TAG "$SNAP_BOOT/install.conf")
         [[ -n "$_legacy" ]] && IMAGE_TAG="$_legacy"
         unset _legacy
     fi
@@ -262,6 +268,10 @@ source "$COMMON/systemd-units.sh"
 # inline candidate-loop blocks below to single-line calls.
 # shellcheck source=common/path-resolve.sh
 source "$COMMON/path-resolve.sh"
+
+# install-conf-reader.sh is sourced early (right after SNAP_BOOT is
+# defined) because the install.conf parse block runs before this
+# point. See the early-source comment near line 110.
 
 # Promote profile based on hardware. The prepare-sd.sh menu offers
 # three user-facing choices (client / server / both) — `client-native`
@@ -1055,8 +1065,8 @@ if is_client_install; then
     AUDIO_HAT=""
     AUDIO_INTERNAL_OUTPUT=""
     if [[ -f "$SNAP_BOOT/install.conf" ]]; then
-        AUDIO_HAT=$(grep -m1 '^AUDIO_HAT=' "$SNAP_BOOT/install.conf" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true)
-        AUDIO_INTERNAL_OUTPUT=$(grep -m1 '^AUDIO_INTERNAL_OUTPUT=' "$SNAP_BOOT/install.conf" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true)
+        AUDIO_HAT=$(install_conf_get AUDIO_HAT "$SNAP_BOOT/install.conf")
+        AUDIO_INTERNAL_OUTPUT=$(install_conf_get AUDIO_INTERNAL_OUTPUT "$SNAP_BOOT/install.conf")
     fi
 
     CONFIG_FILE=""

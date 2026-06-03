@@ -67,6 +67,10 @@ run_reader_with_conf() {
     trap 'rm -rf "$tmpdir"' RETURN
     mkdir -p "$tmpdir/common"
     cp "$conf_path" "$tmpdir/install.conf"
+    # v0.8 PR10 — the extracted reader block now sources
+    # install-conf-reader.sh from $SNAP_BOOT/common/. Stage the helper
+    # in the sandbox so the source resolves.
+    cp "$SCRIPT_DIR/../scripts/common/install-conf-reader.sh" "$tmpdir/common/"
     # Run the extracted reader block with set -euo pipefail. If the block
     # aborts because of the bug, the subshell exits non-zero and we capture
     # that via $? — assertion logic below handles the comparison.
@@ -76,6 +80,11 @@ run_reader_with_conf() {
         set -euo pipefail
         SNAP_BOOT='$tmpdir'
         SCRIPT_DIR='$tmpdir'  # sanitize.sh fallback path; we've stubbed
+        # v0.8 PR10 — the reader block in firstboot.sh calls
+        # install_conf_get, sourced earlier (above the extracted
+        # range). Source it here so the standalone sandbox has the
+        # helper too.
+        source '$tmpdir/common/install-conf-reader.sh'
         $SANITIZE_STUBS
         $block
         # Echo all vars on success so the caller can assert

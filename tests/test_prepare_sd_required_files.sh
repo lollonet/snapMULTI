@@ -43,6 +43,8 @@ assert_contains "$verify_block" "common/systemd-snippets.sh" "systemd-snippets.s
 # (set -euo pipefail aborts if missing). Verify list must catch a
 # stripped staging that drops the file.
 assert_contains "$verify_block" "common/path-resolve.sh" "path-resolve.sh is required (sourced unconditionally by firstboot.sh)"
+# v0.8 PR10 — firstboot.sh sources install-conf-reader.sh early (line ~115)
+assert_contains "$verify_block" "common/install-conf-reader.sh" "install-conf-reader.sh is required (sourced early by firstboot.sh)"
 
 # Client-mode verify list — client/scripts/common/ is a selective copy of
 # the server's scripts/common/. systemd-snippets.sh must be in BOTH places
@@ -55,6 +57,9 @@ assert_contains "$client_verify_block" "client/scripts/common/systemd-snippets.s
 # $COMMON_MODULE_DIR/path-resolve.sh = /opt/snapclient/scripts/common/.
 assert_contains "$client_verify_block" "client/scripts/common/path-resolve.sh" \
     "client-mode verify list includes path-resolve.sh"
+# v0.8 PR10 — install-conf-reader.sh same staging treatment
+assert_contains "$client_verify_block" "client/scripts/common/install-conf-reader.sh" \
+    "client-mode verify list includes install-conf-reader.sh"
 
 # Bash selective copy loop (copy_client_files) must enumerate systemd-snippets.sh
 # alongside the other shared modules — without it the file is not copied to
@@ -136,6 +141,14 @@ if [[ -f "$PREPARE_SD_PS1" ]]; then
         "ps1 client-required list includes path-resolve.sh"
     assert_contains "$ps1_copy_foreach" "path-resolve.sh" \
         "ps1 selective copy foreach includes path-resolve.sh"
+
+    # v0.8 PR10 — same 3 ps1 sites for install-conf-reader.sh
+    assert_contains "$ps1_required_base" "common/install-conf-reader.sh" \
+        "ps1 \$requiredBase includes common/install-conf-reader.sh"
+    assert_contains "$ps1_client_required" "client/scripts/common/install-conf-reader.sh" \
+        "ps1 client-required list includes install-conf-reader.sh"
+    assert_contains "$ps1_copy_foreach" "install-conf-reader.sh" \
+        "ps1 selective copy foreach includes install-conf-reader.sh"
 fi
 
 echo ""
