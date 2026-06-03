@@ -28,11 +28,64 @@ SSH_USER="${USER}"
 # fleet probe. The external `timeout` binary set up below is the
 # primary kill switch, but macOS dev boxes routinely lack it; this
 # keeps the worst-case bounded regardless.
+#
+# ControlMaster=no + ControlPath=none: ignore the operator's local SSH
+# multiplexing config. On dev/sandbox boxes the user's `ControlPath`
+# (~/.ssh/sockets/...) can point at a path that the script process
+# cannot bind, surfacing as `unix_listener: cannot bind to path` and
+# collapsing every host into a generic "ssh-timeout-or-fail". Forcing
+# no-mux per-invocation keeps the probe independent of the operator's
+# global SSH state.
 SSH_OPTS=(-o ConnectTimeout=8 -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-          -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+          -o ControlMaster=no -o ControlPath=none)
 OUTPUT="text"
 CLIENT_ONLY=false
 TIMEOUT_SMOKE=120
+
+# ── SSH error classification ─────────────────────────────────────
+# Sort SSH stderr into actionable error codes consumed by the renderer
+# and by --json output. Order matters: more specific patterns first so
+# `Permission denied` does not eat e.g. a future "Permission denied (gss)"
+# we want classified separately.
+_classify_ssh_stderr() {
+    local stderr="$1"
+    case "$stderr" in
+        *"REMOTE HOST IDENTIFICATION HAS CHANGED"*) printf 'host-key-changed' ;;
+        *"unix_listener"*|*"mux_client_request_session"*|*"ControlPath"*|*"ControlSocket"*|*"multiplexing"*) printf 'ssh-controlpath-error' ;;
+        *"Permission denied"*|*"publickey"*) printf 'auth-failed' ;;
+        *"Connection timed out"*|*"No route to host"*|*"Could not resolve hostname"*|*"Network is unreachable"*|*"Name or service not known"*|*"Connection refused"*) printf 'connection-failed' ;;
+        *) printf 'ssh-failed' ;;
+    esac
+}
+
+# Build an actionable note for the operator when stderr names a fix.
+# Today: just host-key-changed. Extend as new actionable cases land.
+_ssh_failure_note() {
+    local stderr="$1" host="$2"
+    case "$stderr" in
+        *"REMOTE HOST IDENTIFICATION HAS CHANGED"*)
+            # ssh prints "Offending [ECDSA|ED25519|...] key in <path>:<line>"
+            # plus sometimes the IP. Suggest cleaning both name + IP from
+            # known_hosts so the next probe reconciles cleanly.
+            local ip
+            ip=$(printf '%s' "$stderr" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -1 || true)
+            if [[ -n "$ip" ]]; then
+                printf 'run: ssh-keygen -R %s && ssh-keygen -R %s' "$host" "$ip"
+            else
+                printf 'run: ssh-keygen -R %s' "$host"
+            fi
+            ;;
+        *) printf '' ;;
+    esac
+}
+
+# Library mode — when sourced for tests, stop here so the test can call
+# the classification helpers without triggering arg parsing, mDNS probes,
+# or SSH against real hosts.
+if [[ "${__FLEET_SMOKE_LIB_ONLY:-}" == "1" ]]; then
+    return 0 2>/dev/null || exit 0
+fi
 
 # ── Usage ────────────────────────────────────────────────────────
 usage() {
@@ -306,12 +359,17 @@ probe_host() {
     local host="$1"
     local role="$2"
     local out="$TMP/${host//[^a-zA-Z0-9_-]/_}.json"
+    # Capture SSH stderr so a failure surfaces with a specific cause
+    # instead of the legacy generic "ssh-timeout-or-fail" blob. The
+    # exit code distinguishes `timeout(1)` (124) from a true SSH error.
+    local stderr_file="$TMP/${host//[^a-zA-Z0-9_-]/_}.stderr"
     # On the device: read VERSION files, run smoke --json. Both best-effort.
     # The smoke wrapper exits 0/1; --no-fail-on-warn keeps us non-fatal on WARN.
     # Script piped via stdin to avoid quoting hell with -c '...'.
     local payload
-    if ! payload=$("${TIMEOUT_CMD[@]}" \
-            ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' 2>/dev/null <<'REMOTE'
+    local rc=0
+    payload=$("${TIMEOUT_CMD[@]}" \
+            ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' 2>"$stderr_file" <<'REMOTE' || rc=$?
 srv=$(cat /opt/snapmulti/VERSION 2>/dev/null || echo "")
 cli=$(cat /opt/snapclient/VERSION 2>/dev/null || echo "")
 smoke_script=""
@@ -356,10 +414,24 @@ if raw:
 print(json.dumps({"srv": srv, "cli": cli, "smoke": smoke}, separators=(",", ":")))
 ' "$srv" "$cli"
 REMOTE
-    ); then
-        # SSH or smoke timed out / failed
+)
+    if (( rc != 0 )); then
+        # `timeout(1)` sends SIGTERM and exits 124 on its own timeout —
+        # distinguish from a true SSH error so the operator does not chase
+        # a host-key / auth issue when the actual problem was a stuck
+        # remote shell.
+        local err note stderr_content
+        stderr_content=$(cat "$stderr_file" 2>/dev/null || true)
+        if (( rc == 124 )); then
+            err="smoke-timeout"
+            note=""
+        else
+            err=$(_classify_ssh_stderr "$stderr_content")
+            note=$(_ssh_failure_note "$stderr_content" "$host")
+        fi
         jq -nc --arg h "$host" --arg r "$role" \
-            '{host:$h, role:$r, reachable:false, error:"ssh-timeout-or-fail"}' >"$out"
+                --arg err "$err" --arg note "$note" \
+            '{host:$h, role:$r, reachable:false, error:$err, note:$note}' >"$out"
         return
     fi
     # Sanitize: some hosts ship a stdout-echoing login banner (motd, last
@@ -452,8 +524,19 @@ else
         role=$(jq -r '.role' <<<"$rec")
         reachable=$(jq -r '.reachable' <<<"$rec")
         if [[ "$reachable" != "true" ]]; then
-            printf '%-20s %-7s %-15s %-7s %-6s %-30s\n' \
-                "$host" "$role" "—" "UNREACH" "—" "$(jq -r '.error // .parse_error // "?"' <<<"$rec")"
+            err=$(jq -r '.error // .parse_error // "?"' <<<"$rec")
+            note=$(jq -r '.note // ""' <<<"$rec")
+            # Combine error + actionable note. NOTES column dropped its
+            # %-30s truncation because suggestions like
+            # `run: ssh-keygen -R hostname && ssh-keygen -R 192.168.1.4`
+            # do not fit and the operator needs the full command verbatim.
+            if [[ -n "$note" ]]; then
+                printf '%-20s %-7s %-15s %-7s %-6s %s — %s\n' \
+                    "$host" "$role" "—" "UNREACH" "—" "$err" "$note"
+            else
+                printf '%-20s %-7s %-15s %-7s %-6s %s\n' \
+                    "$host" "$role" "—" "UNREACH" "—" "$err"
+            fi
             continue
         fi
         non_snapmulti=$(jq -r '.non_snapmulti // false' <<<"$rec")
