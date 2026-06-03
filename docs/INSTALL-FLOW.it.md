@@ -53,8 +53,8 @@ Le quattro modalità di installazione condividono lo stesso framework `firstboot
 | Modalità | Quando | Cosa gira al primo boot | Stack finale |
 |---------|--------|--------------------------|--------------|
 | **server** | Pi 3 / 4 / 5 cablato o WiFi, senza speaker locali | `deploy.sh` (solo server) | 7 container server (snapserver, mpd, mympd, metadata, shairport-sync, librespot, tidal-connect su ARM) |
-| **client** | Pi 3 / 4 / 5 con speaker / DAC collegato, server altrove sulla LAN | `setup.sh` (stack Docker) | 3 container client (snapclient, audio-visualizer, fb-display) |
-| **both** | Singolo Pi 4 / 5 come server + speaker locale | `deploy.sh` poi `setup.sh` | Tutti 10 i container sullo stesso host (server in host networking + client in bridge networking) |
+| **client** | Pi 3 / 4 / 5 con speaker / DAC collegato, server altrove sulla LAN | `setup.sh` (stack Docker) | 1–3 container client: `snapclient` sempre; `audio-visualizer` + `fb-display` solo quando `/dev/fb0` è presente (gli install headless saltano il profilo `framebuffer`) |
+| **both** | Singolo Pi 4 / 5 come server + speaker locale | `deploy.sh` poi `setup.sh` | 7 server + 1–3 client container sullo stesso host (server in host networking + client in bridge networking; il numero di client dipende dal rilevamento del display) |
 | **client-native** | Pi Zero 2 W (risorse insufficienti per Docker) | `setup-zero2w.sh` — installazione apt diretta di snapclient + unit systemd | 1 servizio nativo (`snapclient.service`) — niente Docker |
 
 `install-profile.sh` risolve la modalità da `install.conf` (scritto da `prepare-sd.sh`) e dalla device detection `is_pi_zero_2w`. La promozione a `client-native` avviene in modo trasparente: un operatore che ha scelto `client` per un Pi Zero 2 W ottiene il path nativo perché `client/Docker` eccederebbe il budget di 512 MB di RAM.
@@ -114,7 +114,7 @@ Solo Pi Zero 2 W (il budget RAM esclude Docker). Step:
 
 `firstboot.sh` scrive `/var/lib/snapmulti-installer/.install-failed` se una fase aborta (NON sulla partizione boot — `/boot/firmware/` ospita gli artefatti diagnostici e di backup, non il marker). Il dispositivo si avvia, i container partono (`snapmulti-server.service` ha il suo `Restart=on-failure`), ma overlayroot NON è attivo e l'install è marcato incompleto. Le due cause comuni:
 
-- **Libreria NFS / SMB grande eccede la finestra di healthcheck di `verify_services`** — pre-imposta `MPD_START_PERIOD=3600s` in `install.conf` prima del flash. Vedi [TROUBLESHOOTING.it.md — Install marcata come fallita ma i container girano](TROUBLESHOOTING.it.md#installazione-marcata-come-fallita-ma-i-container-girano).
+- **Libreria NFS / SMB grande eccede la finestra di healthcheck di `verify_services`** — `deploy.sh` deriva `MPD_START_PERIOD` da `MUSIC_SOURCE` (300 s per `nfs`/`smb`/`network`, 30 s altrimenti) e lo scrive in `.env`, ignorando qualsiasi valore pre-impostato in `install.conf`. Una volta che `firstboot.sh` aborta e `.install-failed` è settato, modifica `/opt/snapmulti/.env` direttamente per alzare il valore (`sudo sed -i 's/^MPD_START_PERIOD=.*/MPD_START_PERIOD=3600s/' /opt/snapmulti/.env`), poi re-triggera lo step deploy — il checkpointer di firstboot riprende dalla fase fallita, non riparte da zero. Vedi [TROUBLESHOOTING.it.md — Install marcato fallito ma i container girano](TROUBLESHOOTING.it.md#install-marcato-fallito-ma-i-container-girano) per la procedura di recupero completa.
 - **Rate limit di Docker Hub** — `docker login` sul Pi prima del prossimo retry di firstboot.
 
 La pagina HTTP `/status` sul server (`http://<server>.local:8083/status`) e il pacchetto diagnostico (`/usr/local/bin/save-diagnostics`) sono le due superfici di debug per l'operatore. Vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md) per la tabella completa delle modalità di errore.
