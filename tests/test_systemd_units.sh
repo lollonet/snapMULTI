@@ -82,7 +82,11 @@ check_install_lines() {
     while IFS= read -r line; do
         line_num="${line%%:*}"
         # Extract the second arg (source path) — match the .service/.timer/.path
-        unit_path=$(echo "$line" | grep -oE "[^[:space:]\"]+\.(service|timer|path)" | head -1)
+        # `|| true` defensively guards against an install line with a
+        # quoting style the inner pattern doesn't match — `pipefail`
+        # would otherwise abort the test before the empty-guard below
+        # can demote to `continue`.
+        unit_path=$(echo "$line" | grep -oE "[^[:space:]\"]+\.(service|timer|path)" | head -1 || true)
         [[ -z "$unit_path" ]] && continue
         unit_file="${unit_path##*/}"
         ext="${unit_file##*.}"
