@@ -82,6 +82,76 @@ _initramfs_already_has_liblzma "/nonexistent/initramfs" || _rc=$?
 assert_rc "$_rc" 1 "missing target → false (conservative — rebuild)"
 
 echo
+echo "=== _initramfs_already_has_liblzma — pipefail + SIGPIPE regression ==="
+# Real lsinitramfs streams ~10k entries from a ~12 MB cpio archive. With
+# `set -euo pipefail`, the original `grep -qF` would exit at first match,
+# send SIGPIPE to lsinitramfs (exit 141), and pipefail would propagate the
+# 141 — the check returned false EVEN WHEN liblzma was present, and
+# firstboot.sh re-ran update-initramfs against a now-ro /boot/firmware,
+# logging the cosmetic "first boot may not activate overlay" WARN.
+# This block reproduces the pipefail interaction with a fake lsinitramfs
+# that emits lots of output BEFORE the matching line.
+SANDBOX=$(mktemp -d -t initramfs-pipefail-XXXXXX)
+trap 'rm -rf "$SANDBOX"' EXIT
+
+# Fake lsinitramfs: stream many lines so grep -q would close the pipe
+# well before the producer finishes.
+mkdir -p "$SANDBOX/bin"
+cat > "$SANDBOX/bin/lsinitramfs" <<'STUB'
+#!/usr/bin/env bash
+set -e
+# Emit a long preamble, then the liblzma line, then more output to ensure
+# any early-exit consumer triggers SIGPIPE on the producer.
+for i in $(seq 1 5000); do
+    echo "usr/lib/aarch64-linux-gnu/preamble-entry-${i}.so"
+done
+echo "usr/lib/aarch64-linux-gnu/liblzma.so.5"
+for i in $(seq 1 5000); do
+    echo "usr/lib/aarch64-linux-gnu/tail-entry-${i}.so"
+done
+STUB
+chmod +x "$SANDBOX/bin/lsinitramfs"
+
+touch "$SANDBOX/initramfs8"
+
+# Verify the helper survives pipefail and returns success.
+_rc=0
+PATH="$SANDBOX/bin:$PATH" _initramfs_already_has_liblzma "$SANDBOX/initramfs8" || _rc=$?
+assert_rc "$_rc" 0 "pipefail-safe: liblzma matched in streamed output (no SIGPIPE false-negative)"
+
+# Negative case: absence still returns false.
+cat > "$SANDBOX/bin/lsinitramfs" <<'STUB'
+#!/usr/bin/env bash
+set -e
+for i in $(seq 1 1000); do
+    echo "usr/lib/aarch64-linux-gnu/nothing-${i}.so"
+done
+STUB
+chmod +x "$SANDBOX/bin/lsinitramfs"
+
+_rc=0
+PATH="$SANDBOX/bin:$PATH" _initramfs_already_has_liblzma "$SANDBOX/initramfs8" || _rc=$?
+assert_rc "$_rc" 1 "pipefail-safe: liblzma absent → false (rebuild)"
+
+# Static-shape assertion: guard the regression at source-level too — the
+# pipeline must NOT use `grep -qF` (early exit + SIGPIPE) and MUST sink
+# to >/dev/null so the producer drains cleanly.
+if grep -nE 'lsinitramfs[^|]+\|[[:space:]]*grep -qF' "$LIB" >/dev/null 2>&1; then
+    echo "  FAIL: helper still uses 'grep -qF' — re-introduces SIGPIPE pipefail bug"
+    fail=$((fail + 1))
+else
+    echo "  PASS: helper does not use 'grep -qF' (SIGPIPE-safe form)"
+    pass=$((pass + 1))
+fi
+if grep -nE 'lsinitramfs[^|]+\|[[:space:]]*grep -F[^|]+>/dev/null' "$LIB" >/dev/null 2>&1; then
+    echo "  PASS: helper sinks grep output to /dev/null (producer drains cleanly)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: helper missing >/dev/null sink — drain shape not guaranteed"
+    fail=$((fail + 1))
+fi
+
+echo
 echo "=== Static wiring — ensure_overlayroot_initramfs_ready calls the skip path ==="
 if grep -qE "_initramfs_already_has_liblzma" "$LIB"; then
     echo "  PASS: ensure_overlayroot_initramfs_ready references the idempotency check"

@@ -141,7 +141,13 @@ _initramfs_already_has_liblzma() {
     local target="$1"
     [[ -f "$target" ]] || return 1
     command -v lsinitramfs >/dev/null 2>&1 || return 1
-    lsinitramfs "$target" 2>/dev/null | grep -qF "liblzma.so.5"
+    # NB: grep -F ... >/dev/null (NOT grep -qF). With `set -euo pipefail`
+    # grep -q exits at first match, which sends SIGPIPE upstream to
+    # lsinitramfs (lsinitramfs streams ~10k entries from a 12 MB cpio
+    # archive). pipefail then propagates the 141 from lsinitramfs and
+    # the check appears to fail even when liblzma IS present. The non-q
+    # form consumes the entire stream, so lsinitramfs exits 0 cleanly.
+    lsinitramfs "$target" 2>/dev/null | grep -F "liblzma.so.5" >/dev/null
 }
 
 ensure_overlayroot_initramfs_ready() {
