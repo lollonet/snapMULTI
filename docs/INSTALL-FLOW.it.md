@@ -45,7 +45,11 @@ PI (boot 2 — systemd gestisce il runtime)
 ├─ snapmulti-server.service     (server / both)
 ├─ snapclient.service           (client / both / client nativo)
 ├─ snapmulti-status.timer       (aggiorna snapshot pagina /status)
-└─ snapmulti-state-backup.{path,timer}  (persistenza server.json + workdir myMPD)
+├─ snapmulti-state-backup.{path,timer}  (persistenza server.json + directory di lavoro myMPD)
+└─ snapmulti-auto-boot-smoke.service    (tono acustico dell'esito del test di
+                                          salute al post-riavvio — pass/warn/
+                                          fail/skip; opt-out con
+                                          SNAPMULTI_BOOT_SMOKE_TONES=off)
 ```
 
 ## Differenze per modalità
@@ -55,8 +59,8 @@ Le quattro modalità di installazione condividono lo stesso framework `firstboot
 | Modalità | Quando | Cosa gira al primo boot | Stack finale |
 |---------|--------|--------------------------|--------------|
 | **server** | Pi 3 / 4 / 5 cablato o WiFi, senza speaker locali | `deploy.sh` (solo server) | 7 container server (snapserver, mpd, mympd, metadata, shairport-sync, librespot, tidal-connect su ARM) |
-| **client** | Pi 3 / 4 / 5 con speaker / DAC collegato, server altrove sulla LAN | `setup.sh` (stack Docker) | 1–3 container client: `snapclient` sempre; `audio-visualizer` + `fb-display` solo quando `/dev/fb0` è presente (gli install headless saltano il profilo `framebuffer`) |
-| **both** | Singolo Pi 4 / 5 come server + speaker locale | `deploy.sh` poi `setup.sh` | 7 server + 1–3 client container sullo stesso host (server in host networking + client in bridge networking; il numero di client dipende dal rilevamento del display) |
+| **client** | Pi 3 / 4 / 5 con altoparlante / DAC collegato, server altrove sulla LAN | `setup.sh` (stack Docker) | 1–3 container client: `snapclient` sempre; `audio-visualizer` + `fb-display` solo quando `/dev/fb0` è presente (le installazioni senza display saltano il profilo `framebuffer`) |
+| **both** | Singolo Pi 4 / 5 come server + altoparlante locale | `deploy.sh` poi `setup.sh` | 7 server + 1–3 client container sullo stesso host (server in host networking + client in bridge networking; il numero di client dipende dal rilevamento del display) |
 | **client-native** | Pi Zero 2 W (risorse insufficienti per Docker) | `setup-zero2w.sh` — installazione apt diretta di snapclient + unit systemd | 1 servizio nativo (`snapclient.service`) — niente Docker |
 
 `install-profile.sh` risolve la modalità da `install.conf` (scritto da `prepare-sd.sh`) e dalla device detection `is_pi_zero_2w`. La promozione a `client-native` avviene in modo trasparente: un operatore che ha scelto `client` per un Pi Zero 2 W ottiene il path nativo perché `client/Docker` eccederebbe il budget di 512 MB di RAM.
@@ -75,8 +79,8 @@ Le quattro modalità di installazione condividono lo stesso framework `firstboot
 ### 2. Pi: cloud-init → `firstboot.sh`
 
 - Il `runcmd` di cloud-init esegue `/boot/firmware/snapmulti/firstboot.sh` come root.
-- Il progresso è renderizzato su `/dev/tty1` (console HDMI) tramite `scripts/common/progress.sh` — TUI full-screen, solo ASCII, no-op quando lanciato via SSH.
-- Resiliente a fallimenti parziali: ogni fase scrive un checkpoint marker (`.done-<fase>`) in `/var/lib/snapmulti-installer/` così un firstboot interrotto riprende invece di ripartire da zero al reboot. Il completamento riuscito alza `/var/lib/snapmulti-installer/.auto-installed`; un fallimento parziale alza invece `.install-failed` — entrambi nella stessa directory, NON sulla partizione boot.
+- Il progresso è renderizzato su `/dev/tty1` (console HDMI) tramite `scripts/common/progress.sh` — TUI a schermo intero, solo ASCII, senza effetti quando lanciato via SSH.
+- Resiliente a fallimenti parziali: ogni fase scrive un file di stato (`.done-<fase>`) in `/var/lib/snapmulti-installer/` così un firstboot interrotto riprende invece di ripartire da zero al riavvio. Il completamento riuscito crea `/var/lib/snapmulti-installer/.auto-installed`; un fallimento parziale crea invece `.install-failed` — entrambi nella stessa directory, NON sulla partizione boot.
 
 ### 3. Pi: path server — `deploy.sh`
 
@@ -91,10 +95,11 @@ Modalità server-only / both. Step:
 
 Modalità client / both (Pi 3 / 4 / 5). Step:
 
-- HAT audio detection (EEPROM → scan I²C → fallback USB).
-- ALSA `/etc/asound.conf` scritta dal HAT rilevato.
-- Server discovery mDNS (oppure override `SNAPSERVER_HOST`).
-- Durante firstboot, `docker compose up -d` avvia SOLO `snapclient` con `COMPOSE_PROFILES=""`. Il profilo `framebuffer` (audio-visualizer + fb-display) è rinviato al `snapclient.service` post-reboot, così la TUI di installazione su `/dev/tty3` non viene calpestata da fb-display che disegna su `/dev/fb0`. Dopo il riavvio, `snapclient.service` legge `.env` con `COMPOSE_PROFILES=framebuffer` e lo stack client completo parte.
+- Rilevamento HAT audio (EEPROM → scansione I²C → ripiego su USB).
+- ALSA `/etc/asound.conf` scritta in base all'HAT rilevato.
+- **Tono di conferma HAT** — subito dopo il rilevamento, `setup.sh` riproduce un singolo tono da 1 secondo a 440 Hz (la nota "LA") sull'uscita ALSA appena configurata. È il primo segnale acustico che l'utente sente: conferma in un colpo solo che il DAC è stato rilevato, che ALSA è configurata e che l'amplificatore è acceso col volume ragionevole. Disattivabile con `TEST_TONE=false` in `install.conf` prima del flash.
+- Scoperta del server tramite mDNS (oppure forzatura con `SNAPSERVER_HOST`).
+- Durante firstboot, `docker compose up -d` avvia SOLO `snapclient` con `COMPOSE_PROFILES=""`. Il profilo `framebuffer` (audio-visualizer + fb-display) è rinviato al `snapclient.service` post-riavvio, così la TUI di installazione su `/dev/tty3` non viene calpestata da fb-display che disegna su `/dev/fb0`. Dopo il riavvio, `snapclient.service` legge `.env` con `COMPOSE_PROFILES=framebuffer` e lo stack client completo parte.
 
 ### 5. Pi: path client-native — `setup-zero2w.sh`
 

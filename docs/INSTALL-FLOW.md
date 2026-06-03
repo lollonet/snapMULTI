@@ -45,7 +45,10 @@ PI (boot 2 — systemd owns the runtime)
 ├─ snapmulti-server.service     (server / both)
 ├─ snapclient.service           (client / both / native client)
 ├─ snapmulti-status.timer       (refresh /status page snapshot)
-└─ snapmulti-state-backup.{path,timer}  (persist server.json + myMPD workdir)
+├─ snapmulti-state-backup.{path,timer}  (persist server.json + myMPD workdir)
+└─ snapmulti-auto-boot-smoke.service    (acoustic post-reboot health cue —
+                                          pass/warn/fail/skip; opt-out with
+                                          SNAPMULTI_BOOT_SMOKE_TONES=off)
 ```
 
 ## Per-mode differences
@@ -93,6 +96,7 @@ Client / both mode (Pi 3 / 4 / 5). Steps:
 
 - Audio HAT detection (EEPROM → I²C scan → USB fallback).
 - ALSA `/etc/asound.conf` written from the detected HAT.
+- **HAT confirmation tone** — immediately after detection, `setup.sh` plays a single 1-second 440 Hz tone (the "A" note) through the just-configured ALSA output. This is the first audible cue the operator hears: it confirms in one stroke that the DAC was detected, ALSA is wired, and the amplifier is on with reasonable volume. Suppress with `TEST_TONE=false` in `install.conf` before flashing.
 - mDNS server discovery (or `SNAPSERVER_HOST` override).
 - During firstboot, `docker compose up -d` starts ONLY `snapclient` with `COMPOSE_PROFILES=""`. The `framebuffer` profile (audio-visualizer + fb-display) is deferred to the post-reboot `snapclient.service`, so the install TUI on `/dev/tty3` is not stomped by fb-display drawing on `/dev/fb0`. After the reboot, `snapclient.service` reads `.env` with `COMPOSE_PROFILES=framebuffer` and the full client stack comes up.
 
