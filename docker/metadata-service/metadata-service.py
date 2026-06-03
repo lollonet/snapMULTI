@@ -2503,6 +2503,27 @@ _CONTAINER_PATTERN = re.compile(
 
 _COMPOSE_NESTED_PATTERN = re.compile(r"^\s+(\w+)/(\S+) -> (\w+)$")
 
+# Container-name → role mapping. Used to group rows in the Containers
+# section under "server" / "client" sub-headers. Mirrors the
+# `_SNAPMULTI_CONTAINERS` list in scripts/smoke/check_containers.sh
+# but split by role (the smoke side only cares about "is this ours");
+# the renderer additionally separates server- from client-side. Drift
+# class: when a new container is added to docker-compose.yml, append
+# it here so it groups correctly — otherwise it falls through to the
+# unclassified bucket and renders below the client group.
+_CONTAINER_ROLE: dict[str, str] = {
+    "snapserver": "server",
+    "mpd": "server",
+    "mympd": "server",
+    "metadata": "server",
+    "shairport-sync": "server",
+    "librespot": "server",
+    "tidal-connect": "server",
+    "snapclient": "client",
+    "audio-visualizer": "client",
+    "fb-display": "client",
+}
+
 
 _NOISE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^\s*Per-HAT kernel module check skipped\b"),
@@ -2714,10 +2735,63 @@ def _status_to_html(
         # the reader doesn't scroll past silent positive confirmations.
         if _is_noise_only_section(recs):
             continue
+
+        # Compose section: drop the per-service nested rows ("  server/X
+        # -> healthy") — the Containers section is now the authoritative
+        # per-container view and the duplication adds scroll without
+        # information. Keep the aggregate count rows and the avahi-socket
+        # mount confirmations, which are not container-health and stay
+        # only in Compose.
+        if sec_name == "Compose":
+            recs = [
+                r
+                for r in recs
+                if not _COMPOSE_NESTED_PATTERN.match(r.get("msg", ""))
+            ]
+            if not recs:
+                continue
+
+        # Containers section: pre-scan to group per-container rows by
+        # role (server / client) under sub-headers. Aggregate rows ("No
+        # active restart failures", "All N have memory limit applied",
+        # "Metadata plugins inside snapserver") stay below at the end.
+        if sec_name == "Containers":
+            server_rows: list[dict] = []
+            client_rows: list[dict] = []
+            other_rows: list[dict] = []
+            for r in recs:
+                m = _CONTAINER_PATTERN.match(r.get("msg", ""))
+                if m and m.group(1) in _CONTAINER_ROLE:
+                    if _CONTAINER_ROLE[m.group(1)] == "server":
+                        server_rows.append(r)
+                    else:
+                        client_rows.append(r)
+                else:
+                    other_rows.append(r)
+            ordered: list[dict] = []
+            if server_rows:
+                ordered.append({"_group_header": "server", "_count": len(server_rows)})
+                ordered.extend(server_rows)
+            if client_rows:
+                ordered.append({"_group_header": "client", "_count": len(client_rows)})
+                ordered.extend(client_rows)
+            ordered.extend(other_rows)
+            recs = ordered
+
         rows = []
         if sec_name == "Containers" and profile_row:
             rows.append(profile_row)
         for r in recs:
+            # Synthetic group header injected above for the Containers
+            # section. Rendered as an info-class row with a chevron icon.
+            if "_group_header" in r:
+                rows.append(
+                    '<li class="r-info row-group-header">'
+                    '<span class="icon">▸</span>'
+                    f"<strong>{html.escape(r['_group_header'])}</strong>"
+                    f" ({r['_count']})</li>"
+                )
+                continue
             status = r.get("status", "info")
             raw_msg = r.get("msg", "")
             # Decode systemd-escape `\xNN` sequences so unit names like
