@@ -136,8 +136,13 @@ SYSDEOF
             echo "WARNING: modules.dep refresh failed — next boot may not activate overlay"
 
         if ! raspi-config nonint do_overlayfs 0; then
-            # Roll back: remove override since overlayroot won't be active
+            # Roll back: remove override since overlayroot won't be active.
+            # Also remove the lzma hook we installed above — leaving it on a
+            # non-overlayroot system serves no purpose and `ro-mode disable`
+            # does not clean it either, so it would otherwise leak across
+            # the enable-fail / disable-later cycle.
             rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+            rm -f /etc/initramfs-tools/hooks/snapmulti-lzma
             echo "ERROR: Failed to enable read-only mode."
             echo "Check that raspi-config is installed and has proper permissions."
             exit 1
@@ -145,6 +150,7 @@ SYSDEOF
         if ! persist_overlayroot_enabled; then
             rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
             rm -f /etc/overlayroot.local.conf
+            rm -f /etc/initramfs-tools/hooks/snapmulti-lzma
             echo "ERROR: Failed to persist overlayroot configuration."
             exit 1
         fi

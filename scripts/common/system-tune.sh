@@ -717,13 +717,20 @@ SYSDEOF
     # internal update-initramfs run now picks up the snapmulti-lzma hook
     # installed above + the refreshed modules.dep.
     if ! raspi-config nonint do_overlayfs 0; then
+        # Roll back EVERYTHING we installed above — the systemd workaround
+        # serves no purpose without overlayroot, and the lzma hook would
+        # leak otherwise (raspi-config never ran successfully so /etc/
+        # initramfs-tools/hooks/snapmulti-lzma sits on a system that will
+        # boot ext4).
         rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+        rm -f /etc/initramfs-tools/hooks/snapmulti-lzma
         warn "raspi-config do_overlayfs failed — workaround rolled back"
         return 1
     fi
 
     if ! persist_overlayroot_enabled; then
         rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+        rm -f /etc/initramfs-tools/hooks/snapmulti-lzma
         warn "overlayroot persistence failed — workaround rolled back"
         return 1
     fi

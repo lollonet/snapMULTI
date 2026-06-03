@@ -86,6 +86,50 @@ _ssh_failure_note() {
 # Bash defers variable resolution to invocation time, so referencing
 # TIMEOUT_CMD / SSH_OPTS / SSH_USER / TMP — all set further down — is
 # safe as long as the test sets them itself before calling probe_host.
+
+# Single source of truth for the remote ~30-line bash payload that
+# probe_host streams over ssh. Lives as a here-doc-captured variable
+# instead of two inlined heredocs (one per timeout-wrapped vs bare-ssh
+# branch) so a future change to the payload is impossible to apply to
+# only half of probe_host. The script runs on every snapMULTI host the
+# operator points fleet-smoke at — `/opt/snapmulti/.../device-smoke.sh
+# --json` is the source of truth for the smoke verdict that drives the
+# fleet aggregate. NB: single-quoted heredoc delimiter (`<<'PAYLOAD'`)
+# disables variable expansion so the payload reaches the device verbatim.
+_FLEET_SMOKE_REMOTE_PAYLOAD=$(cat <<'PAYLOAD'
+srv=$(cat /opt/snapmulti/VERSION 2>/dev/null || echo "")
+cli=$(cat /opt/snapclient/VERSION 2>/dev/null || echo "")
+smoke_script=""
+if [ -x /opt/snapmulti/scripts/device-smoke.sh ]; then
+    smoke_script=/opt/snapmulti/scripts/device-smoke.sh
+elif [ -x /opt/snapclient/scripts/device-smoke.sh ]; then
+    smoke_script=/opt/snapclient/scripts/device-smoke.sh
+fi
+if [ -n "$smoke_script" ]; then
+    smoke_json=$(sudo -n "$smoke_script" --json --no-fail-on-warn 2>/dev/null || true)
+else
+    smoke_json=""
+fi
+[ -z "$smoke_json" ] && smoke_json="{}"
+SMOKE_JSON="$smoke_json" python3 -c '
+import json
+import os
+import sys
+
+srv = sys.argv[1]
+cli = sys.argv[2]
+raw = os.environ.get("SMOKE_JSON", "").strip()
+smoke = {}
+if raw:
+    try:
+        smoke, _ = json.JSONDecoder().raw_decode(raw)
+    except json.JSONDecodeError:
+        smoke = {}
+print(json.dumps({"srv": srv, "cli": cli, "smoke": smoke}, separators=(",", ":")))
+' "$srv" "$cli"
+PAYLOAD
+)
+
 probe_host() {
     local host="$1"
     local role="$2"
@@ -113,75 +157,18 @@ probe_host() {
     # macs. The branch keeps the timeout wrapper when present, drops it
     # cleanly when absent — same observable behaviour as a 4-arg vs
     # 3-arg invocation, no empty-array expansion under `set -u`.
+    # The remote payload lives in $_FLEET_SMOKE_REMOTE_PAYLOAD above —
+    # single source of truth so a future change can't be applied to only
+    # one of the timeout-wrapped / bare-ssh branches. `<<<` pipes the
+    # variable to the ssh remote shell as stdin (equivalent to the
+    # previous inline heredoc, no quoting overhead).
     if (( ${#TIMEOUT_CMD[@]} > 0 )); then
         payload=$("${TIMEOUT_CMD[@]}" \
-                ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' 2>"$stderr_file" <<'REMOTE'
-srv=$(cat /opt/snapmulti/VERSION 2>/dev/null || echo "")
-cli=$(cat /opt/snapclient/VERSION 2>/dev/null || echo "")
-smoke_script=""
-if [ -x /opt/snapmulti/scripts/device-smoke.sh ]; then
-    smoke_script=/opt/snapmulti/scripts/device-smoke.sh
-elif [ -x /opt/snapclient/scripts/device-smoke.sh ]; then
-    smoke_script=/opt/snapclient/scripts/device-smoke.sh
-fi
-if [ -n "$smoke_script" ]; then
-    smoke_json=$(sudo -n "$smoke_script" --json --no-fail-on-warn 2>/dev/null || true)
-else
-    smoke_json=""
-fi
-[ -z "$smoke_json" ] && smoke_json="{}"
-SMOKE_JSON="$smoke_json" python3 -c '
-import json
-import os
-import sys
-
-srv = sys.argv[1]
-cli = sys.argv[2]
-raw = os.environ.get("SMOKE_JSON", "").strip()
-smoke = {}
-if raw:
-    try:
-        smoke, _ = json.JSONDecoder().raw_decode(raw)
-    except json.JSONDecodeError:
-        smoke = {}
-print(json.dumps({"srv": srv, "cli": cli, "smoke": smoke}, separators=(",", ":")))
-' "$srv" "$cli"
-REMOTE
-        ) || rc=$?
+                ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' \
+                2>"$stderr_file" <<<"$_FLEET_SMOKE_REMOTE_PAYLOAD") || rc=$?
     else
-        payload=$(ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' 2>"$stderr_file" <<'REMOTE'
-srv=$(cat /opt/snapmulti/VERSION 2>/dev/null || echo "")
-cli=$(cat /opt/snapclient/VERSION 2>/dev/null || echo "")
-smoke_script=""
-if [ -x /opt/snapmulti/scripts/device-smoke.sh ]; then
-    smoke_script=/opt/snapmulti/scripts/device-smoke.sh
-elif [ -x /opt/snapclient/scripts/device-smoke.sh ]; then
-    smoke_script=/opt/snapclient/scripts/device-smoke.sh
-fi
-if [ -n "$smoke_script" ]; then
-    smoke_json=$(sudo -n "$smoke_script" --json --no-fail-on-warn 2>/dev/null || true)
-else
-    smoke_json=""
-fi
-[ -z "$smoke_json" ] && smoke_json="{}"
-SMOKE_JSON="$smoke_json" python3 -c '
-import json
-import os
-import sys
-
-srv = sys.argv[1]
-cli = sys.argv[2]
-raw = os.environ.get("SMOKE_JSON", "").strip()
-smoke = {}
-if raw:
-    try:
-        smoke, _ = json.JSONDecoder().raw_decode(raw)
-    except json.JSONDecodeError:
-        smoke = {}
-print(json.dumps({"srv": srv, "cli": cli, "smoke": smoke}, separators=(",", ":")))
-' "$srv" "$cli"
-REMOTE
-        ) || rc=$?
+        payload=$(ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" 'bash -s' \
+                2>"$stderr_file" <<<"$_FLEET_SMOKE_REMOTE_PAYLOAD") || rc=$?
     fi
     if (( rc != 0 )); then
         # `timeout(1)` sends SIGTERM and exits 124 on its own timeout —

@@ -1708,8 +1708,13 @@ SYSDEOF
     # keeps the TUI clean.
     if ! raspi-config nonint do_overlayfs 0 >> "${UNIFIED_LOG:-/dev/null}" 2>&1; then
         log_progress "WARNING: raspi-config failed to enable overlayfs"
-        log_progress "         Reverting systemd workaround"
+        log_progress "         Reverting systemd workaround + lzma hook"
+        # Roll back the lzma hook installed above too — leaving it on
+        # a system that will boot ext4 serves no purpose and would
+        # otherwise leak across the failed-install / future-re-install
+        # cycle.
         rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
+        rm -f /etc/initramfs-tools/hooks/snapmulti-lzma
         ENABLE_READONLY=false
         echo ""
         echo "Read-only filesystem: FAILED"
@@ -1719,10 +1724,11 @@ SYSDEOF
         echo ""
     elif ! persist_overlayroot_enabled; then
         log_progress "WARNING: overlayroot persistence verification failed"
-        log_progress "         Reverting Docker config and systemd workaround"
+        log_progress "         Reverting Docker config + systemd workaround + lzma hook"
         tune_docker_daemon --live-restore
         rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
         rm -f /etc/overlayroot.local.conf
+        rm -f /etc/initramfs-tools/hooks/snapmulti-lzma
         ENABLE_READONLY=false
         echo ""
         echo "Read-only filesystem: FAILED"
