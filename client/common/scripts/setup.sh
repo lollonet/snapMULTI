@@ -141,6 +141,12 @@ if [[ -n "$COMMON_MODULE_DIR" ]]; then
     # already been removed and the cleanup is a no-op.
     # shellcheck source=common/cmdline-manager.sh
     [[ -f "$COMMON_MODULE_DIR/cmdline-manager.sh" ]] && source "$COMMON_MODULE_DIR/cmdline-manager.sh"
+    # systemd-units.sh provides install_systemd_unit_files BASE SRC_DIR
+    # used by the snapclient-display install block below. Missing only
+    # on stripped legacy bundles; in that case the inline install lines
+    # are kept as the fallback (see _setup_systemd_services).
+    # shellcheck source=common/systemd-units.sh
+    [[ -f "$COMMON_MODULE_DIR/systemd-units.sh" ]] && source "$COMMON_MODULE_DIR/systemd-units.sh"
 fi
 
 echo "========================================="
@@ -1470,11 +1476,26 @@ fi
 chmod +x "$INSTALL_DIR/scripts/display-detect.sh"
 chmod +x "$INSTALL_DIR/scripts/display.sh"
 if [[ -d /etc/systemd/system ]]; then
+    # COMMON_DIR != INSTALL_DIR on first install; equal on a re-run
+    # where setup.sh executes from /opt/snapclient. Original behaviour:
+    # in the inequal case install unconditionally from COMMON; in the
+    # equal case install only if the file is present in INSTALL_DIR.
+    # daemon-reload + enable then run regardless to surface a clear
+    # systemctl error if the unit was somehow not installed.
     if [[ "$(cd "$COMMON_DIR" 2>/dev/null && pwd)" != "$(cd "$INSTALL_DIR" 2>/dev/null && pwd)" ]]; then
-        install -m 0644 "$COMMON_DIR/systemd/snapclient-display.service" /etc/systemd/system/
-    elif [[ -f "$INSTALL_DIR/systemd/snapclient-display.service" ]]; then
-        install -m 0644 "$INSTALL_DIR/systemd/snapclient-display.service" /etc/systemd/system/
+        _disp_src="$COMMON_DIR/systemd"
+    else
+        _disp_src="$INSTALL_DIR/systemd"
     fi
+    if declare -F install_systemd_unit_files >/dev/null 2>&1; then
+        install_systemd_unit_files "snapclient-display" "$_disp_src" || true
+    else
+        # Legacy fallback when systemd-units.sh is not available
+        # (stripped client bundles).
+        [[ -f "$_disp_src/snapclient-display.service" ]] && \
+            install -m 0644 "$_disp_src/snapclient-display.service" /etc/systemd/system/
+    fi
+    unset _disp_src
     systemctl daemon-reload
     systemctl enable snapclient-display.service
 fi

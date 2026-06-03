@@ -99,11 +99,18 @@ assert '! grep -qE "cp .*\\.service.* /etc/systemd/system/" "$FIRSTBOOT"' \
 assert '! grep -qE "cp .*\\.timer.* /etc/systemd/system/" "$FIRSTBOOT"' \
        'firstboot does not cp .timer files into /etc/systemd/system'
 
-assert 'grep -qE "install -m 0?644 .*\\.service.* /etc/systemd/system/" "$FIRSTBOOT"' \
-       'firstboot installs .service files with mode 0644'
-
-assert 'grep -qE "install -m 0?644 .*\\.timer.* /etc/systemd/system/" "$FIRSTBOOT"' \
-       'firstboot installs .timer files with mode 0644'
+# v0.8 PR8 — inline `install -m 0644 ... .service|.timer ... /etc/systemd/system/`
+# was migrated to the install_systemd_unit_files BASE SRC_DIR helper
+# defined in scripts/common/systemd-units.sh. The contract that
+# firstboot ships static units to /etc/systemd/system/ at mode 0644 is
+# now enforced by:
+#   (a) firstboot.sh calling install_systemd_unit_files (asserted here)
+#   (b) tests/test_systemd_units.sh verifying the helper covers every
+#       base in SYSTEMD_UNITS_SERVER
+#   (c) the helper itself using `install -m 0644 ... /etc/systemd/system/`
+#       (verified in test_systemd_units.sh via helper inspection)
+assert 'grep -qE "install_systemd_unit_files\\b" "$FIRSTBOOT"' \
+       'firstboot installs systemd units via the manifest helper (PR8)'
 
 echo
 echo "=== Bash syntax ==="

@@ -113,6 +113,30 @@ check_install_lines() {
 check_install_lines "$FIRSTBOOT" "firstboot.sh" "SYSTEMD_UNITS_SERVER"
 check_install_lines "$SETUP"     "setup.sh"     "SYSTEMD_UNITS_CLIENT"
 
+# ─── Invariant 2b: helper is called for every manifest base ────────
+# After PR8 migration, every base in the manifest must be reachable
+# from at least one `install_systemd_unit_files "BASE" ...` call in
+# the appropriate script. Pins the migration so a future refactor
+# can't silently drop a base.
+check_helper_usage() {
+    local script="$1" name="$2" manifest_name="$3"
+    declare -n manifest_ref="$manifest_name"
+    local body
+    body=$(cat "$script")
+    local base
+    for base in "${manifest_ref[@]}"; do
+        if grep -qE "install_systemd_unit_files\\b.+\"$base\"" <<< "$body"; then
+            note_pass "$name: install_systemd_unit_files called for '$base'"
+        else
+            note_fail "$name: NO install_systemd_unit_files call references '$base'"
+        fi
+    done
+}
+echo
+echo "=== Invariant 2b: helper called for every manifest base (post-PR8) ==="
+check_helper_usage "$FIRSTBOOT" "firstboot.sh" "SYSTEMD_UNITS_SERVER"
+check_helper_usage "$SETUP"     "setup.sh"     "SYSTEMD_UNITS_CLIENT"
+
 # ─── Invariant 3: no orphan unit files in the unit dirs ────────────
 echo
 echo "=== Invariant 3: no orphan unit files (every static file is declared) ==="
