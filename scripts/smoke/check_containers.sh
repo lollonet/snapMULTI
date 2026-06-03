@@ -37,18 +37,70 @@
 # Containers the smoke considers "ours" — i.e. expected to have a
 # memory limit declared in docker-compose.yml. Anything else (system
 # containers, user-added side projects) is ignored.
-_SNAPMULTI_CONTAINERS=(
-    "snapserver"
-    "mpd"
-    "mympd"
-    "metadata"
-    "shairport-sync"
-    "librespot"
-    "tidal-connect"
-    "snapclient"
-    "audio-visualizer"
-    "fb-display"
-)
+#
+# Loaded from scripts/common/container-manifest.txt — the SSOT shared
+# with docker/metadata-service/metadata-service.py. Adding a new
+# snapMULTI container requires editing ONE file. The inline fallback
+# below preserves the pre-manifest behaviour when the file is missing
+# (e.g. stripped custom staging) so smoke still runs on legacy bundles.
+_SNAPMULTI_CONTAINERS=()
+
+_load_container_manifest() {
+    local _manifest_path=""
+    local _candidate _self_dir _name _role
+    # Allow tests to point at a sandboxed fixture; otherwise resolve
+    # relative to this file. On the device the check is shipped under
+    # /opt/snapmulti/scripts/smoke/ (server) or /opt/snapclient/scripts/
+    # smoke/ (client); the manifest sits at ../common/container-manifest.txt
+    # in both cases.
+    if [[ -n "${SNAPMULTI_CONTAINER_MANIFEST:-}" && -f "${SNAPMULTI_CONTAINER_MANIFEST}" ]]; then
+        _manifest_path="${SNAPMULTI_CONTAINER_MANIFEST}"
+    else
+        _self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        for _candidate in \
+            "$_self_dir/../common/container-manifest.txt" \
+            "$_self_dir/../../scripts/common/container-manifest.txt"; do
+            if [[ -f "$_candidate" ]]; then
+                _manifest_path="$_candidate"
+                break
+            fi
+        done
+    fi
+
+    if [[ -z "$_manifest_path" ]]; then
+        # Fallback — keep aligned with scripts/common/container-manifest.txt
+        # (the SSOT) when adding a new container. The invariant test
+        # tests/test_container_manifest.sh catches drift.
+        _SNAPMULTI_CONTAINERS=(
+            "snapserver" "mpd" "mympd" "metadata" "shairport-sync"
+            "librespot" "tidal-connect"
+            "snapclient" "audio-visualizer" "fb-display"
+        )
+        return 0
+    fi
+
+    while read -r _name _role; do
+        [[ -z "$_name" || "$_name" == \#* ]] && continue
+        [[ -n "$_role" ]] || continue
+        _SNAPMULTI_CONTAINERS+=("$_name")
+    done < "$_manifest_path"
+
+    # Empty-parse guard: a manifest that exists but parses to zero
+    # entries (truncated file, header-only stub, etc.) would silently
+    # bypass every container check. Fall back to the hardcoded list so
+    # smoke still verifies the expected fleet. Mirrors the Python
+    # loader's `if mapping: return mapping` shape — PR #590 review
+    # MEDIUM.
+    if (( ${#_SNAPMULTI_CONTAINERS[@]} == 0 )); then
+        _SNAPMULTI_CONTAINERS=(
+            "snapserver" "mpd" "mympd" "metadata" "shairport-sync"
+            "librespot" "tidal-connect"
+            "snapclient" "audio-visualizer" "fb-display"
+        )
+    fi
+}
+
+_load_container_manifest
 
 _is_snapmulti_container() {
     local name=$1

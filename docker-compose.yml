@@ -297,6 +297,11 @@ services:
       # (Dockerfile.metadata) as a fallback for fresh installs that
       # haven't yet rsync'd `docker/` from the boot partition.
       - ./docker/metadata-service/metadata-service.py:/app/metadata-service.py:ro
+      # container-manifest.txt — SSOT shared with scripts/smoke/check_containers.sh.
+      # /status reads it at module load to populate the role grouping
+      # (server/client sub-headers). Hardcoded fallback in the Python keeps
+      # rendering on legacy stages that lack the bind-mount.
+      - ./scripts/common/container-manifest.txt:/app/container-manifest.txt:ro
       # /audio:/audio (read-only) — so the renderer can serve the
       # system-status.json snapshot written by snapmulti-status.timer
       # on the host. Without this mount, /status renders the

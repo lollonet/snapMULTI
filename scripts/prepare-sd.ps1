@@ -153,6 +153,10 @@ function Assert-PreparedSdCard {
         # v0.8 PR10 — sourced unconditionally by firstboot.sh at
         # line ~115 for the install.conf parse block.
         'common/install-conf-reader.sh',
+        # Container manifest SSOT — bind-mounted into metadata service
+        # via docker-compose.yml AND sourced by check_containers.sh on
+        # every device. Must ship to both server/ and client/ stages.
+        'common/container-manifest.txt',
         'common/play-smoke-tone.sh',
         'common/auto-boot-smoke.sh',
         'common/restore-snapmulti-state.sh',
@@ -219,6 +223,9 @@ function Assert-PreparedSdCard {
             # install.conf reader, so a stripped client bundle
             # surfaces the miss at verify time.
             'client/scripts/common/install-conf-reader.sh',
+            # Container manifest SSOT — consumed by client-side
+            # check_containers.sh too. Must ship with the bundle.
+            'client/scripts/common/container-manifest.txt',
             'client/snapclient.conf'
         )) {
             $path = Join-Path $Dest $file
@@ -706,7 +713,7 @@ function Copy-ClientFiles {
     # Shared modules from server scripts/common/
     $commonDest = Join-Path $scriptsDest 'common'
     New-Item -ItemType Directory -Path $commonDest -Force | Out-Null
-    foreach ($shared in @('install-deps.sh', 'install-docker.sh', 'system-tune.sh', 'overlayroot-lifecycle.sh', 'unified-log.sh', 'logging.sh', 'sanitize.sh', 'systemd-snippets.sh', 'path-resolve.sh', 'install-conf-reader.sh')) {
+    foreach ($shared in @('install-deps.sh', 'install-docker.sh', 'system-tune.sh', 'overlayroot-lifecycle.sh', 'unified-log.sh', 'logging.sh', 'sanitize.sh', 'systemd-snippets.sh', 'path-resolve.sh', 'install-conf-reader.sh', 'container-manifest.txt')) {
         $sharedPath = Join-Path $ScriptDir "common\$shared"
         if (Test-Path $sharedPath) {
             Copy-Item $sharedPath -Destination $commonDest
