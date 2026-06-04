@@ -63,12 +63,16 @@ Defaults:
 | install verifier floor | `180s` | Hardcoded in `verify_services` |
 | healthcheck stability grace | `120s` | Hardcoded in `verify_services` (covers Docker's 30 s health-probe interval + `verify_compose_stack` second-sample check) |
 
-```ini
-# install.conf — written to the SD card boot partition by prepare-sd.sh
-MPD_START_PERIOD=3600s   # 1 hour — covers cold NFS scans of large libraries
+`deploy.sh` derives `MPD_START_PERIOD` purely from `MUSIC_SOURCE` and writes it to `/opt/snapmulti/.env`. A value pre-set in `install.conf` is silently ignored, so the only effective override is to edit `.env` directly **after** the first failed boot:
+
+```sh
+# /opt/snapmulti/.env — written by deploy.sh; raise after first failed install
+sudo sed -i 's/^MPD_START_PERIOD=.*/MPD_START_PERIOD=3600s/' /opt/snapmulti/.env
+sudo rm /var/lib/snapmulti-installer/.install-failed
+sudo bash /boot/firmware/snapmulti/firstboot.sh   # idempotent — resumes from the failed phase
 ```
 
-This propagates through `firstboot.sh` → `deploy.sh` → docker-compose into MPD's healthcheck `start_period`. **Failure mode if you skip this**: `verify_services` exits non-zero → `.install-failed` marker → `setup_readonly_fs` never runs → overlay never activates at boot 2. systemd's `Restart=on-failure` still brings the containers up autonomously after the install gives up, so the device LOOKS healthy from the network — but the install is incomplete. Recovery: re-reflash with the env var set, OR follow the manual completion path in [TROUBLESHOOTING.md — Install marked failed but containers run](TROUBLESHOOTING.md#install-marked-failed-but-containers-run).
+**Failure mode if you skip this**: `verify_services` exits non-zero → `.install-failed` marker → `setup_readonly_fs` never runs → overlay never activates at boot 2. systemd's `Restart=on-failure` still brings the containers up autonomously after the install gives up, so the device LOOKS healthy from the network — but the install is incomplete and root is on writable ext4. See [TROUBLESHOOTING.md — Install marked failed but containers run](TROUBLESHOOTING.md#install-marked-failed-but-containers-run) for the full recovery procedure.
 
 ## Custom config — `.env` files
 
