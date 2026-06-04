@@ -66,22 +66,24 @@ If this is your first snapMULTI install, use the boring path: **Raspberry Pi 4 (
 
 Hardware checklist (Pi model, SD card, audio output) before you begin: [docs/HARDWARE.md](docs/HARDWARE.md).
 
-### 1. Flash the SD with [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
+**Steps 1-3 happen on your laptop (the SD card is plugged into it). Step 4 moves the SD into the Pi and powers it on.** The Pi never connects to the internet during steps 1-3.
+
+### 1. Flash the SD with [Raspberry Pi Imager](https://www.raspberrypi.com/software/) *(on your laptop)*
 
 snapMULTI relies on the cloud-init metadata that Imager writes when you set hostname, user, WiFi and SSH below. **Plain image flashers (Balena Etcher, `dd`) won't work** — they copy bytes only, no metadata, so the Pi boots without network or login.
 
 - OS: **Raspberry Pi OS Lite (64-bit)**
 - Click the gear icon (`Ctrl/Cmd+Shift+X`) and set: hostname, username + password, WiFi (or leave empty for Ethernet), **☑ Enable SSH (password)**
 
-### 2. Get the snapMULTI files
+### 2. Get the snapMULTI files *(on your laptop)*
 
-For a first install, download and extract the [latest release ZIP](https://github.com/lollonet/snapMULTI/releases/latest). Use `git clone https://github.com/lollonet/snapMULTI.git` only if you already use Git or plan to contribute. The folder name does not matter — `prepare-sd.sh` resolves its own path.
+Still on the laptop, download and extract the [latest release ZIP](https://github.com/lollonet/snapMULTI/releases/latest). Use `git clone https://github.com/lollonet/snapMULTI.git` only if you already use Git or plan to contribute. The folder name does not matter — `prepare-sd.sh` resolves its own path.
 
-### 3. Re-insert the SD and run the prep script
+### 3. Re-insert the SD and run the prep script *(on your laptop)*
 
-Re-insert the freshly-flashed SD. On macOS a *"The disk you inserted was not readable"* pop-up may appear for the Pi's Linux partition — click **Ignore**; the `bootfs` partition still mounts.
+Re-insert the freshly-flashed SD into the laptop. On macOS a *"The disk you inserted was not readable"* pop-up may appear for the Pi's Linux partition — click **Ignore**; the `bootfs` partition still mounts.
 
-If you downloaded the ZIP, extract it first. Open a terminal (**Terminal** on macOS/Linux, **PowerShell** on Windows), `cd` into the snapMULTI folder you cloned or extracted, then run:
+If you downloaded the ZIP, extract it first. Open a terminal **on the laptop** (**Terminal** on macOS/Linux, **PowerShell** on Windows), `cd` into the snapMULTI folder you cloned or extracted, then run:
 
 ```bash
 # macOS / Linux:
@@ -92,13 +94,13 @@ If you downloaded the ZIP, extract it first. Open a terminal (**Terminal** on ma
 .\scripts\prepare-sd.ps1
 ```
 
-The script walks you through a few questions: the role (**Audio Player** / **Music Server** / **Server + Player**), the music source (streaming / USB / NAS), the audio output (auto-detect or pick a HAT), the NAS connection details if you chose a network library, and optional advanced settings (read-only mode, image tag). Defaults are sane — you can press Enter through most of it.
+The script walks you through a few questions: the role (**Audio Player** / **Music Server** / **Server + Player**), the music source (streaming / USB / NAS), the audio output (auto-detect or pick a HAT), the NAS connection details if you chose a network library, and optional advanced settings (read-only mode, image tag). Defaults are sane — you can press Enter through most of it. When it finishes, it has copied the snapMULTI tree onto the SD's `bootfs` partition — nothing more is needed on the laptop.
 
 > First PowerShell run on Windows? `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
-### 4. Boot the Pi
+### 4. Boot the Pi *(now on the Pi itself)*
 
-Eject the SD, insert it in the Pi, power on. Wait roughly 15-20 minutes on a Pi 4/5 (longer on Pi 3 or Pi Zero 2 W) — the first-boot installer runs on its own (no SSH), shows progress on HDMI if a screen is attached, then reboots once. The HDMI progress display shows the expected total time so you know whether 8 minutes in is "almost there" or "barely halfway".
+Eject the SD from the laptop, insert it in the Pi, power on. Wait roughly 15-20 minutes on a Pi 4/5 (longer on Pi 3 or Pi Zero 2 W) — the first-boot installer runs on its own (no SSH), shows progress on HDMI if a screen is attached, then reboots once. The HDMI progress display shows the expected total time so you know whether 8 minutes in is "almost there" or "barely halfway".
 
 **It worked when**: with a screen attached, the HDMI display shows the snapMULTI now-playing screen (cover art / spectrum). Either way, from another device open `http://<hostname>.local:8083/`, then open **Status** — every check should be green. Then cast something (see **After install** below).
 
