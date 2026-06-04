@@ -25,6 +25,19 @@ _BACKUP_DIR="${SNAPMULTI_BACKUP_DIR:-/boot/firmware/snapmulti-backup}"
 check_state_backup() {
     section "State backup"
 
+    # State backup is server-only: it persists snapserver `server.json`
+    # (group state) + myMPD workdir + mpd.db across reflashes. A pure
+    # client (`MODE=client`, including the Pi Zero 2 W client-native
+    # path) has none of those artefacts — `snapmulti-state-backup.{path,
+    # timer}` are never installed (see scripts/smoke/check_timers.sh —
+    # the units are gated `server`) and `/boot/firmware/snapmulti-backup/`
+    # is never written. Surfacing "not yet present" on a client confused
+    # the operator into expecting a backup that will never appear.
+    if [[ "${MODE:-auto}" != "server" && "${MODE:-auto}" != "both" ]]; then
+        info "State backup is server-only (this host runs MODE=${MODE:-auto}) — nothing to back up here"
+        return 0
+    fi
+
     if [[ ! -d "$_BACKUP_DIR" ]]; then
         info "State backup not yet present at $_BACKUP_DIR (snapmulti-state-backup.path creates it after the first state change)"
         return 0
