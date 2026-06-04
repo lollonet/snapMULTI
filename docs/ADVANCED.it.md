@@ -63,12 +63,16 @@ Default:
 | floor verificatore install | `180s` | Hardcoded in `verify_services` |
 | grace stabilità healthcheck | `120s` | Hardcoded in `verify_services` (copre l'intervallo di 30 s di Docker fra health-probe + il second-sample check di `verify_compose_stack`) |
 
-```ini
-# install.conf — scritto sulla SD boot da prepare-sd.sh
-MPD_START_PERIOD=3600s   # 1 ora — copre scan NFS a freddo di librerie grandi
+`deploy.sh` deriva `MPD_START_PERIOD` puramente da `MUSIC_SOURCE` e lo scrive in `/opt/snapmulti/.env`. Un valore pre-impostato in `install.conf` viene silenziosamente ignorato, quindi l'unico override efficace è modificare `.env` direttamente **dopo** il primo boot fallito:
+
+```sh
+# /opt/snapmulti/.env — scritto da deploy.sh; alza dopo il primo install fallito
+sudo sed -i 's/^MPD_START_PERIOD=.*/MPD_START_PERIOD=3600s/' /opt/snapmulti/.env
+sudo rm /var/lib/snapmulti-installer/.install-failed
+sudo bash /boot/firmware/snapmulti/firstboot.sh   # idempotente — riprende dalla fase fallita
 ```
 
-Si propaga da `firstboot.sh` → `deploy.sh` → docker-compose dentro lo `start_period` dell'healthcheck di MPD. **Modalità di fallimento se salti il bump**: `verify_services` esce non-zero → marker `.install-failed` → `setup_readonly_fs` non viene mai eseguito → overlay non si attiva al boot 2. Il `Restart=on-failure` di systemd porta comunque su i container autonomamente dopo che l'install si è arreso, quindi il dispositivo SEMBRA sano dalla rete — ma l'install è incompleto. Recovery: riflasha con la variabile ambiente impostata, OPPURE segui il percorso di completamento manuale in [TROUBLESHOOTING.it.md — Install marcato fallito ma i container girano](TROUBLESHOOTING.it.md#install-marcato-fallito-ma-i-container-girano).
+**Modalità di fallimento se salti il bump**: `verify_services` esce non-zero → marker `.install-failed` → `setup_readonly_fs` non viene mai eseguito → overlay non si attiva al boot 2. Il `Restart=on-failure` di systemd porta comunque su i container autonomamente dopo che l'install si è arreso, quindi il dispositivo SEMBRA sano dalla rete — ma l'install è incompleto e il root è su ext4 scrivibile. Vedi [TROUBLESHOOTING.it.md — Install marcato fallito ma i container girano](TROUBLESHOOTING.it.md#install-marcato-fallito-ma-i-container-girano) per la procedura di recupero completa.
 
 ## Configurazione personalizzata — file `.env`
 
