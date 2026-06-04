@@ -66,22 +66,24 @@ Se è la tua prima installazione snapMULTI, scegli il percorso noioso: **Raspber
 
 Checklist hardware (modello Pi, SD, uscita audio) da consultare prima: [docs/HARDWARE.it.md](docs/HARDWARE.it.md).
 
-### 1. Flash dell'SD con [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
+**Gli step 1-3 avvengono sul tuo laptop (la SD è inserita lì). Lo step 4 sposta la SD nel Pi e lo accende.** Il Pi non tocca internet durante gli step 1-3.
+
+### 1. Flash dell'SD con [Raspberry Pi Imager](https://www.raspberrypi.com/software/) *(sul laptop)*
 
 snapMULTI dipende dai metadati cloud-init che Imager scrive quando imposti hostname, utente, WiFi e SSH qui sotto. **I flasher generici (Balena Etcher, `dd`) non funzionano** — copiano solo byte, niente metadati, e il Pi si avvia senza rete né login.
 
 - OS: **Raspberry Pi OS Lite (64-bit)**
 - Clicca l'icona ingranaggio (`Ctrl/Cmd+Shift+X`) e imposta: hostname, username + password, WiFi (o lascia vuoto per Ethernet), **☑ Abilita SSH (password)**
 
-### 2. Scarica i file snapMULTI
+### 2. Scarica i file snapMULTI *(sul laptop)*
 
-Per una prima installazione, scarica ed estrai lo [ZIP dell'ultima release](https://github.com/lollonet/snapMULTI/releases/latest). Usa `git clone https://github.com/lollonet/snapMULTI.git` solo se usi già Git o vuoi contribuire. Il nome della cartella non importa — `prepare-sd.sh` risolve da solo il proprio path.
+Sempre sul laptop, scarica ed estrai lo [ZIP dell'ultima release](https://github.com/lollonet/snapMULTI/releases/latest). Usa `git clone https://github.com/lollonet/snapMULTI.git` solo se usi già Git o vuoi contribuire. Il nome della cartella non importa — `prepare-sd.sh` risolve da solo il proprio path.
 
-### 3. Reinserisci l'SD ed esegui lo script di preparazione
+### 3. Reinserisci l'SD ed esegui lo script di preparazione *(sul laptop)*
 
-Reinserisci la SD appena flashata. Su macOS potrebbe comparire un pop-up *"Il disco inserito non è leggibile"* per la partizione Linux del Pi — clicca **Ignora**; la partizione `bootfs` viene montata comunque.
+Reinserisci la SD appena flashata nel laptop. Su macOS potrebbe comparire un pop-up *"Il disco inserito non è leggibile"* per la partizione Linux del Pi — clicca **Ignora**; la partizione `bootfs` viene montata comunque.
 
-Se hai scaricato lo ZIP, estrailo prima. Apri un terminale (**Terminale** su macOS/Linux, **PowerShell** su Windows), entra con `cd` nella cartella snapMULTI che hai clonato o estratto, poi esegui:
+Se hai scaricato lo ZIP, estrailo prima. Apri un terminale **sul laptop** (**Terminale** su macOS/Linux, **PowerShell** su Windows), entra con `cd` nella cartella snapMULTI che hai clonato o estratto, poi esegui:
 
 ```bash
 # macOS / Linux:
@@ -92,13 +94,13 @@ Se hai scaricato lo ZIP, estrailo prima. Apri un terminale (**Terminale** su mac
 .\scripts\prepare-sd.ps1
 ```
 
-Lo script ti guida con poche domande: il ruolo (**Audio Player** / **Music Server** / **Server + Player**), la sorgente musicale (streaming / USB / NAS), l'uscita audio (auto-rilevamento o scelta dell'HAT), i dati di connessione al NAS se hai scelto una libreria di rete, e impostazioni avanzate opzionali (modalità read-only, tag immagine). I default sono sensati — puoi premere Invio sulla maggior parte.
+Lo script ti guida con poche domande: il ruolo (**Audio Player** / **Music Server** / **Server + Player**), la sorgente musicale (streaming / USB / NAS), l'uscita audio (auto-rilevamento o scelta dell'HAT), i dati di connessione al NAS se hai scelto una libreria di rete, e impostazioni avanzate opzionali (modalità read-only, tag immagine). I default sono sensati — puoi premere Invio sulla maggior parte. Quando termina, ha copiato l'albero snapMULTI sulla partizione `bootfs` della SD — sul laptop non serve altro.
 
 > Prima esecuzione PowerShell su Windows? `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
-### 4. Avvia il Pi
+### 4. Avvia il Pi *(ora sul Pi stesso)*
 
-Espelli l'SD, inseriscila nel Pi, accendi. Aspetta circa 15-20 minuti su Pi 4/5 (di più su Pi 3 o Pi Zero 2 W) — l'installer al primo boot gira da solo (niente SSH), mostra l'avanzamento su HDMI se hai uno schermo collegato, poi si riavvia una volta.
+Espelli l'SD dal laptop, inseriscila nel Pi, accendi. Aspetta circa 15-20 minuti su Pi 4/5 (di più su Pi 3 o Pi Zero 2 W) — l'installer al primo boot gira da solo (niente SSH), mostra l'avanzamento su HDMI se hai uno schermo collegato, poi si riavvia una volta.
 
 **Ha funzionato quando**: con uno schermo collegato, il display HDMI mostra la schermata "in riproduzione" di snapMULTI (copertina / spettro). In ogni caso, da un altro dispositivo apri `http://<hostname>.local:8083/`, poi apri **Status** — tutti i controlli devono essere verdi. Poi fai cast di qualcosa (vedi **Dopo l'installazione** più sotto).
 
