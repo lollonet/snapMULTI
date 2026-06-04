@@ -3,7 +3,10 @@
 #
 # Walks the Snapcast JSON-RPC API on the server (:1780/jsonrpc) to enumerate
 # every connected client, then SSHs in parallel to (server + clients) to:
-#   1. read /opt/snapmulti/VERSION and /opt/snapclient/VERSION
+#   1. read SNAPMULTI_RELEASE from /opt/snapmulti/.env + /opt/snapclient/.env
+#      (release identity, bare tag) and /opt/snapmulti/VERSION +
+#      /opt/snapclient/VERSION (build id, may include `-N-gSHA` distance
+#      suffix when flashed from a post-tag main HEAD)
 #   2. invoke /opt/.../scripts/device-smoke.sh --json --no-fail-on-warn
 # Aggregates the results into a single table (or one JSON object with --json).
 #
@@ -97,8 +100,57 @@ _ssh_failure_note() {
 # fleet aggregate. NB: single-quoted heredoc delimiter (`<<'PAYLOAD'`)
 # disables variable expansion so the payload reaches the device verbatim.
 _FLEET_SMOKE_REMOTE_PAYLOAD=$(cat <<'PAYLOAD'
-srv=$(cat /opt/snapmulti/VERSION 2>/dev/null || echo "")
-cli=$(cat /opt/snapclient/VERSION 2>/dev/null || echo "")
+# Two distinct version notions on a snapMULTI device:
+#   * RELEASE IDENTITY — the snapMULTI release line ("v0.8.1"). Single
+#     source of truth: SNAPMULTI_RELEASE in /opt/snapmulti/.env or
+#     /opt/snapclient/.env (baked from release-manifest.json at flash).
+#     This is what device-smoke.sh prints as "Release vX.Y.Z" and what
+#     the operator means by "what version is this device running".
+#   * BUILD ID — the literal `git describe --tags` value of the commit
+#     the SD was prepared from ("v0.8.1" when flashed from the tag,
+#     "v0.8.1-7-g68e102f" when flashed from N commits past the tag).
+#     Lives in /opt/snapmulti/VERSION or /opt/snapclient/VERSION.
+# Pre-fix this script confused the two: it compared client BUILD ID
+# against server RELEASE IDENTITY and called any mismatch "version
+# drift". A fleet flashed from a mix of tag + post-tag main HEAD
+# tripped that check on every client even though every device was on
+# the same release line. The drift check below now reads the release
+# identity; the build id is kept in `versions` for --json consumers
+# (operator debugging — "which commit did I flash this from").
+_read_release_from_env() {
+    local env_file="$1"
+    [ -r "$env_file" ] || return 0
+    grep -m1 '^SNAPMULTI_RELEASE=' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"'\''[:space:]'
+}
+# Client-native installs (Pi Zero 2 W path) have no `.env` because
+# there is no docker-compose stack — snapclient runs as a plain
+# systemd unit. Their release identity lives only in the manifest
+# on the boot partition. Fall back to it when no `.env` is present.
+_read_release_from_manifest() {
+    local manifest="${1:-/boot/firmware/snapmulti/release-manifest.json}"
+    [ -r "$manifest" ] || return 0
+    # No jq dependency on the device side: a single field grep is fine
+    # because release-manifest.json is a short, machine-written file
+    # with one "snapmulti_release" key.
+    grep -m1 '"snapmulti_release"' "$manifest" 2>/dev/null \
+        | sed -E 's/.*"snapmulti_release"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' \
+        | tr -d '[:space:]'
+}
+srv_build=$(cat /opt/snapmulti/VERSION 2>/dev/null || echo "")
+cli_build=$(cat /opt/snapclient/VERSION 2>/dev/null || echo "")
+srv_release=$(_read_release_from_env /opt/snapmulti/.env)
+cli_release=$(_read_release_from_env /opt/snapclient/.env)
+if [ -z "$srv_release" ] && [ -z "$cli_release" ]; then
+    manifest_release=$(_read_release_from_manifest)
+    # Assign to the role-canonical slot. A client-native device is
+    # always a client, so attribute the manifest release to cli_release.
+    # If /opt/snapmulti exists we are server / both — attribute to srv.
+    if [ -d /opt/snapmulti ]; then
+        srv_release="$manifest_release"
+    else
+        cli_release="$manifest_release"
+    fi
+fi
 smoke_script=""
 if [ -x /opt/snapmulti/scripts/device-smoke.sh ]; then
     smoke_script=/opt/snapmulti/scripts/device-smoke.sh
@@ -116,8 +168,10 @@ import json
 import os
 import sys
 
-srv = sys.argv[1]
-cli = sys.argv[2]
+srv_build = sys.argv[1]
+cli_build = sys.argv[2]
+srv_release = sys.argv[3]
+cli_release = sys.argv[4]
 raw = os.environ.get("SMOKE_JSON", "").strip()
 smoke = {}
 if raw:
@@ -125,8 +179,14 @@ if raw:
         smoke, _ = json.JSONDecoder().raw_decode(raw)
     except json.JSONDecodeError:
         smoke = {}
-print(json.dumps({"srv": srv, "cli": cli, "smoke": smoke}, separators=(",", ":")))
-' "$srv" "$cli"
+print(json.dumps({
+    "srv": srv_build,
+    "cli": cli_build,
+    "release_srv": srv_release,
+    "release_cli": cli_release,
+    "smoke": smoke,
+}, separators=(",", ":")))
+' "$srv_build" "$cli_build" "$srv_release" "$cli_release"
 PAYLOAD
 )
 
@@ -202,10 +262,17 @@ probe_host() {
         return
     fi
     # Compose final per-host record.
+    # `release` is the snapMULTI release identity (bare tag, e.g. "v0.8.1")
+    # read from SNAPMULTI_RELEASE in .env. `versions` is the build id
+    # (`git describe --tags` baked on prepare-sd, e.g. "v0.8.1-7-g68e102f")
+    # — useful for "which commit did I flash from?" but never used for the
+    # drift check since two devices on the same release flashed from
+    # different post-tag commits are not drifting.
     jq --arg h "$host" --arg r "$role" \
         '{host:$h, role:$r, reachable:true,
+          release:{server:.release_srv, client:.release_cli},
           versions:{server:.srv, client:.cli},
-          non_snapmulti: ((.srv == "" and .cli == "") and ((.smoke.schema_version // null) == null)),
+          non_snapmulti: ((.srv == "" and .cli == "" and .release_srv == "" and .release_cli == "") and ((.smoke.schema_version // null) == null)),
           smoke:.smoke}' <<<"$payload" >"$out"
 }
 
@@ -525,11 +592,23 @@ if [[ "$OUTPUT" == "json" ]]; then
        '{server:$server, generated_at: (now | todate), connected_non_snapmulti_clients:$connected_non_snapmulti, disconnected_clients:$disconnected, hosts:.}' <<<"$ALL"
     exit "$overall_fail"
 else
+    # Baseline is the release identity (bare tag) of the SERVER host. Build
+    # id (post-tag commit suffix) is irrelevant for fleet coherence: a
+    # client flashed from main HEAD 7 commits past v0.8.1 still runs v0.8.1
+    # because release-manifest.json + .env carry the release line, not the
+    # commit hash. Fall back to .versions if .release is empty (older
+    # snapMULTI versions did not bake SNAPMULTI_RELEASE in .env).
     baseline_version=$(jq -r --arg server "$SERVER" '
         [.[] | select(.host == $server and .reachable == true and ((.non_snapmulti // false) | not))
-         | (.versions.server // "") as $srv
-         | (.versions.client // "") as $cli
-         | if $srv != "" then $srv elif $cli != "" then $cli else empty end][0] // ""
+         | (.release.server // "") as $rsrv
+         | (.release.client // "") as $rcli
+         | (.versions.server // "") as $vsrv
+         | (.versions.client // "") as $vcli
+         | if   $rsrv != "" then $rsrv
+           elif $rcli != "" then $rcli
+           elif $vsrv != "" then $vsrv
+           elif $vcli != "" then $vcli
+           else empty end][0] // ""
     ' <<<"$ALL")
 
     printf '\nFleet smoke against %s — %s\n\n' "$SERVER" "$(date -u +%FT%TZ)"
@@ -580,18 +659,22 @@ else
                 "$host" "$role" "non-snapMULTI" "SKIP" "—" "not a snapMULTI host"
             continue
         fi
+        # Display the release identity (bare tag), with build id as fallback
+        # when the device is older than the SNAPMULTI_RELEASE-in-.env bake.
+        rsrv=$(jq -r '.release.server // ""' <<<"$rec")
+        rcli=$(jq -r '.release.client // ""' <<<"$rec")
         srv=$(jq -r '.versions.server // ""' <<<"$rec")
         cli=$(jq -r '.versions.client // ""' <<<"$rec")
-        # Prefer the role-canonical VERSION file but fall back to the
-        # other one — a `--both` device has both, and a stock VERSION
-        # may live in only one of the two paths depending on install
-        # quirks. If neither exists this is almost certainly NOT a
-        # snapMULTI host (e.g. a peer macOS / Sonos / Echo wandered in
-        # via the Snapcast client list); mark it as "—".
+        # Prefer the role-canonical source but fall back to the
+        # other one — a `--both` device populates both, and on legacy
+        # installs only one path may exist. If neither release nor build
+        # is present this is almost certainly NOT a snapMULTI host (e.g.
+        # a peer macOS / Sonos / Echo wandered in via the Snapcast client
+        # list); mark it as "—".
         if [[ "$role" == "server" ]]; then
-            ver="${srv:-${cli:-}}"
+            ver="${rsrv:-${rcli:-${srv:-${cli:-}}}}"
         else
-            ver="${cli:-${srv:-}}"
+            ver="${rcli:-${rsrv:-${cli:-${srv:-}}}}"
         fi
         if [[ -z "$ver" ]]; then
             ver="non-snapMULTI"

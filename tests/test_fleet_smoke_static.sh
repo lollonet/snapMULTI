@@ -52,6 +52,30 @@ assert_contains "$src" "ServerAliveInterval=15" "SSH keepalive set (anti-hang wh
 assert_contains "$src" "ServerAliveCountMax=3" "SSH gives up after 3 missed keepalives (~45 s ceiling)"
 assert_contains "$src" '/^\{.*\}$/' "payload sanitiser strips MOTD/banner by picking the single JSON line"
 
+# Release identity vs build id — pre-fix, fleet-smoke compared client
+# `/opt/snapclient/VERSION` (build id, e.g. "v0.8.1-7-g68e102f" from
+# `git describe --tags` baked at flash time) against server
+# `/opt/snapmulti/VERSION` (same build id, but bare "v0.8.1" when the
+# server was flashed from the tag exactly). Two devices on the same
+# release line flashed from different post-tag commits then tripped a
+# false "version drift" WARN on every fleet smoke. The fix reads
+# SNAPMULTI_RELEASE from `.env` (and falls back to release-manifest.json
+# on the boot partition for client-native devices that have no `.env`)
+# as the release identity, and uses that for the drift check.
+assert_contains "$src" "SNAPMULTI_RELEASE" "reads release identity from .env, not just VERSION file"
+assert_contains "$src" "_read_release_from_env" "release-id helper extracted"
+assert_contains "$src" "_read_release_from_manifest" "client-native fallback to release-manifest.json"
+assert_contains "$src" "release_srv" "release identity surfaces in the JSON payload"
+assert_contains "$src" "release_cli" "release identity surfaces for client role too"
+assert_contains "$src" "release:{server:.release_srv, client:.release_cli}" \
+    "per-host record exposes release identity alongside build versions"
+assert_contains "$src" 'jq -r ' "baseline computation uses jq (already required)"
+# The drift baseline now prefers .release over .versions; the original
+# .versions fallback stays for legacy devices that did not bake
+# SNAPMULTI_RELEASE in .env.
+assert_contains "$src" "if   \$rsrv != \"\" then \$rsrv" "drift baseline prefers release-id over build-id"
+assert_contains "$src" "elif \$vsrv != \"\" then \$vsrv" "legacy fallback to build-id when no release-id is baked"
+
 # mDNS discovery hardening (macOS dns-sd path).
 #   1. stdbuf -oL: dns-sd buffers stdout in a pipe, so `timeout 4 dns-sd … | awk`
 #      killed the process before any line flushed. The line-buffer wrapper
