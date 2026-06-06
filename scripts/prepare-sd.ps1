@@ -1069,6 +1069,15 @@ if (Test-Path $firstrun) {
         $udContent = Update-UserDataRuncmd -Content $udContent -HookPath $hookPath
         [System.IO.File]::WriteAllText($userData, $udContent, $Utf8NoBom)
         Write-Host '  user-data patched.'
+        # Post-patch YAML sanity. Mirrors prepare-sd.sh: prove the awk-like
+        # patch did not produce two runcmd: blocks (would break cloud-init
+        # at first boot, the Pi would come up without network).
+        $runcmdMatches = [regex]::Matches($udContent, '(?m)^[\s]*runcmd:')
+        if ($runcmdMatches.Count -ne 1) {
+            Write-Host "  ERROR: user-data has $($runcmdMatches.Count) runcmd: blocks after patch (expected 1)"
+            Write-Host "         Inspect '$userData' for a malformed YAML structure."
+            exit 1
+        }
     }
 } else {
     Write-Host ''
