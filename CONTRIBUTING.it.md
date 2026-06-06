@@ -18,6 +18,15 @@ I contributi community più utili spesso non sono codice:
 
 Per un report hardware, includi: modello Pi + RAM, modello/classe SD se nota, alimentatore, HAT/DAC/uscita audio, tipo installazione (`server`, `client`, `both`), rete (Ethernet/WiFi/NAS), versione snapMULTI e output di `device-smoke.sh` o `fleet-smoke.sh` se disponibile.
 
+## Da dove iniziare
+
+Cerchi un punto di ingresso:
+
+- [`good first issue`](https://github.com/lollonet/snapMULTI/labels/good%20first%20issue) — task piccoli e ben definiti adatti a un primo contributo. In genere contenuti in un singolo file o cartella, non richiedono conoscenza profonda dell'architettura.
+- [`help wanted`](https://github.com/lollonet/snapMULTI/labels/help%20wanted) — issue sostanziali che beneficiano di mani extra. Scope generalmente più ampio rispetto a `good first issue`.
+
+Prima di iniziare, lascia un breve commento sulla issue per "claimarla" (così due persone non duplicano lo stesso fix). Il maintainer risponde in 1–2 giorni. Una volta confermato, apri la PR su `main` quando pronto — non serve un secondo permesso.
+
 ## Inviare codice
 
 1. Fork + branch da `main` (`feature/<nome-corto>` o `fix/<nome-corto>`).
