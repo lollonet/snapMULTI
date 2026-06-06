@@ -1009,7 +1009,8 @@ elif [[ -f "$USERDATA" ]]; then
             if ! python3 -c "
 import sys, yaml
 try:
-    yaml.safe_load(open(sys.argv[1]))
+    with open(sys.argv[1]) as fh:
+        yaml.safe_load(fh)
 except yaml.YAMLError as e:
     print(f'YAML parse error: {e}', file=sys.stderr)
     sys.exit(1)

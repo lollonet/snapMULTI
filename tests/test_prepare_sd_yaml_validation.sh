@@ -46,8 +46,8 @@ assert 'grep -qF "ERROR: user-data has \${_runcmd_count} runcmd: blocks after pa
 assert 'grep -qE "command -v python3 .* python3 -c \"import yaml\"" "$PREP_SH"' \
        'sh: tries python+yaml validation when available'
 
-assert 'grep -qF "yaml.safe_load(open(sys.argv[1]))" "$PREP_SH"' \
-       'sh: full YAML parse via yaml.safe_load'
+assert 'grep -qF "with open(sys.argv[1]) as fh:" "$PREP_SH" && grep -qF "yaml.safe_load(fh)" "$PREP_SH"' \
+       'sh: full YAML parse via yaml.safe_load with context manager'
 
 assert 'grep -qF "First boot will fail with cloud-init unable to parse user-data." "$PREP_SH"' \
        'sh: error message names the actual downstream failure'
