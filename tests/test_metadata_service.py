@@ -883,3 +883,107 @@ class TestStructuredSystemdRow:
             "Host", "Timer foo.timer enabled and active — context"
         )
         assert result is None
+
+
+class TestEstimateElapsedCalibration:
+    """_estimate_elapsed must return None when metadata-service starts
+    mid-track for a non-MPD source.
+
+    The estimator tracks elapsed via local monotonic clock. Its "anchor for
+    track start" is the moment the controlscript first reports the track.
+    For MPD and Spotify that's fine because those sources report their own
+    elapsed independently. For AirPlay and Tidal we have no other source of
+    truth — if metadata-service boots while a track is already playing, our
+    "anchor" is wrong and the local-clock estimate is offset by however much
+    we missed at the start. Returning 0 (the legacy behaviour) made the
+    client UI render the progress bar at the start of a song that was
+    actually half-way through.
+
+    The fix: a track first observed within FRESH_START_GRACE_SEC of service
+    boot is assumed to be a track-change event we caught in time (legacy
+    behaviour preserved). A track first observed after that grace window is
+    treated as "already playing before we booted" and returns None. Clients
+    should treat None as "elapsed unknown".
+    """
+
+    def _service_aged(self, service, seconds: float) -> None:
+        """Move the service's start anchor backwards so it looks like the
+        service has been running for `seconds` seconds. Avoids time.sleep()
+        in tests."""
+        import time as _t
+
+        service._service_start = _t.monotonic() - seconds
+
+    def test_fresh_start_returns_zero_for_first_seen_track(self, service):
+        """Within the grace window, a track-change event is assumed real-time."""
+        # service just constructed → _service_start is now
+        elapsed = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
+        assert elapsed == 0
+
+    def test_cold_start_returns_none_for_first_seen_track(self, service):
+        """After the grace window, a track must be treated as pre-existing."""
+        self._service_aged(service, 10.0)  # 10s > _FRESH_START_GRACE_SEC
+        elapsed = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
+        assert elapsed is None
+
+    def test_cold_start_subsequent_polls_still_none(self, service):
+        """Once a stream/track is flagged uncalibrated, it stays uncalibrated
+        until the next track change."""
+        self._service_aged(service, 10.0)
+        first = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
+        second = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
+        third = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
+        assert first is None
+        assert second is None
+        assert third is None
+
+    def test_cold_start_recovers_on_next_track_change(self, service):
+        """A track change while the timer exists is observed in real time —
+        we have an anchor for the new track. Calibration resumes."""
+        self._service_aged(service, 10.0)
+        first = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
+        assert first is None
+        # Track changes — we observed the transition, so the new track is
+        # calibrated even though service has been up for >grace.
+        recovered = service._estimate_elapsed("AirPlay", "Song B|Artist", True)
+        assert recovered == 0
+
+    def test_fresh_start_accumulates_correctly(self, service):
+        """A calibrated track should still accumulate elapsed via the legacy
+        monotonic-clock path."""
+        import time as _t
+
+        first = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
+        assert first == 0
+        # Move the timer's start backwards to simulate elapsed time
+        service._track_timers["AirPlay"]["start"] = _t.monotonic() - 7.0
+        elapsed = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
+        assert elapsed == 7
+
+    def test_per_stream_calibration_independent(self, service):
+        """A cold-start uncalibrated AirPlay must NOT poison a fresh Tidal
+        timer that starts later — calibration is per-stream."""
+        self._service_aged(service, 10.0)
+        ap = service._estimate_elapsed("AirPlay", "Song A|Artist A", True)
+        # service is now "old", but Tidal's first sighting still hits the
+        # cold-start branch. Both should be uncalibrated.
+        td = service._estimate_elapsed("Tidal", "Song B|Artist B", True)
+        assert ap is None
+        assert td is None
+        # A track change on AirPlay recovers AirPlay only.
+        ap_recovered = service._estimate_elapsed("AirPlay", "Song A2|Artist A", True)
+        td_still_uncalibrated = service._estimate_elapsed(
+            "Tidal", "Song B|Artist B", True
+        )
+        assert ap_recovered == 0
+        assert td_still_uncalibrated is None
+
+    def test_paused_then_resumed_during_uncalibrated_session_stays_none(self, service):
+        """Pause/resume on an uncalibrated track returns None for all phases."""
+        self._service_aged(service, 10.0)
+        playing = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
+        paused = service._estimate_elapsed("AirPlay", "Song A|Artist", False)
+        resumed = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
+        assert playing is None
+        assert paused is None
+        assert resumed is None
