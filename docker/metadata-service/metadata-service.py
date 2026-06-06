@@ -260,13 +260,7 @@ class MetadataService:
         # local-clock estimate would be offset by however much we missed.
         self._track_timers: dict[str, dict[str, Any]] = {}
 
-        # Artwork chain telemetry — track the last (track_key, source) pair
-        # logged per stream, so the chain emits exactly one INFO line per
-        # (track-change × source-level) instead of once per 3-second poll.
-        # Lets the operator grep `journalctl -u snapserver` to see which
-        # fallback level actually serves artwork in real use — answers the
-        # otherwise-blind question "does iTunes ever fire?" without adding
-        # any metrics surface.
+        # Dedup: emit one log per (stream, track, source) transition — not per 3-s poll.
         self._last_artwork_log_key: dict[str, tuple[str, str]] = {}
 
         # Service start anchor for the "cold-start mid-track" heuristic in
@@ -1687,12 +1681,7 @@ class MetadataService:
         self._log_artwork_chain_hit(metadata, artwork_source)
 
     def _log_artwork_chain_hit(self, metadata: dict[str, Any], source: str) -> None:
-        """Emit one INFO log when the artwork chain serves a new (track, source)
-        pair. Skipped for empty source (no artwork resolved) and for "snapcast"
-        (artwork was already on the metadata input — the chain did no work).
-        De-dup keyed by (stream, track) so a long-playing track logs at most
-        once per chain transition. See `_last_artwork_log_key` for state.
-        """
+        """Emit one INFO log per (stream, track, source) transition; skip snapcast/empty."""
         if not source or source == "snapcast":
             return
         stream = metadata.get("source", "?")
