@@ -33,7 +33,7 @@ recipe.
 - Project: <https://github.com/jcorporation/myMPD>
 - Author: jcorporation
 - License: GPL-2.0-or-later
-- Version: upstream `ghcr.io/jcorporation/mympd/mympd:25.0.2` (image used as-is,
+- Version: upstream `ghcr.io/jcorporation/mympd/mympd:25.1.1` (image used as-is,
   not rebuilt by snapMULTI)
 
 ## Streaming sources

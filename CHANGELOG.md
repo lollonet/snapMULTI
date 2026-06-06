@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **myMPD bumped `25.0.2` → `25.1.1`**. Upstream bug-fix release: adds missing MPD idle events (`neighbor`, `mount`) to the myMPD event list, embeds latest `libmpdclient`, ships TLS chain support via updated Mongoose, improves the `mympd-config` script, and rolls in translation updates. No config changes required on the snapMULTI side — drop-in replacement. References updated in `docker-compose.yml`, `CLAUDE.md`, `THIRD-PARTY-NOTICES.md`, `docs/HARDWARE.{md,it.md}`.
+
 ### Documentation
 - **`docs/INSTALL-FLOW.md` + `.it.md` — install pipeline overview for technical users / contributors**. New page explains the host → cloud-init → `firstboot.sh` → reboot pipeline at three levels (one-sentence overview, ASCII timeline, four-mode comparison table) without duplicating the beginner walk-through in `INSTALL.md` or the architecture reference in `USAGE.md`. Cross-linked from `INSTALL.{md,it.md}`, `ADVANCED.{md,it.md}`, `USAGE.{md,it.md}`, `TROUBLESHOOTING.{md,it.md}`, and added to the docs table in `README.{md,it.md}` (single row) — no README expansion. CLAUDE.md SSOT table extended with the new owner row + a corresponding "internal install-pipeline changes → INSTALL-FLOW.md only" rule so future drift between code and the new page surfaces during the doc-update step.
 - **State-backup scope corrected — whole myMPD workdir, not just `state/` subdir**. `ADVANCED.{md,it.md}` + `USAGE.{md,it.md}` updated to reflect `backup-snapmulti-state.sh:152` (`backup_mympd_workdir` snapshots `/opt/snapmulti/mympd/workdir` in full — state + config + smartpls + scripts + pics). User-customised smart playlists / themes / scripts now correctly documented as surviving a reflash.
