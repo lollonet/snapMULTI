@@ -45,6 +45,15 @@ services:
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
+      # COVER_ART_HOST controls the hostname/IP advertised in the AirPlay
+      # artwork URL emitted by meta_shairport.py (the controlscript that
+      # serves embedded AirPlay cover art via an internal HTTP server on
+      # COVER_ART_PORT, default 5858). If unset, meta_shairport.py falls
+      # back to kernel route detection which works on single-NIC LAN setups
+      # but can misfire on multi-NIC hosts, VPN, or sandboxed networks.
+      # Override in .env when the default detection picks the wrong
+      # interface. Empty value preserves the legacy fallback.
+      - COVER_ART_HOST=${COVER_ART_HOST:-}
     command: ["snapserver", "-c", "/etc/snapserver.conf"]
     logging: *default-logging
     healthcheck:

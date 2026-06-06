@@ -157,6 +157,32 @@ artwork -> artist_image -> placeholder incluso
 Su 404 per un artwork, trattalo come transiente: riprova una volta dopo
 500 ms, poi cadi in fallback.
 
+### Note artwork specifiche per source
+
+- **MPD / Spotify**: gli URL artwork puntano sempre alla cache di
+  metadata-service in `http://<SERVER>:8083/artwork/artwork_<md5>.jpg`.
+  Catena di lookup standard (embedded → snapcast → MusicBrainz →
+  iTunes → fallback).
+- **Tidal**: nessun artwork viene pubblicato. Il binario sorgente Tidal
+  espone i metadata tramite una TUI curses che non trasporta URL di
+  artwork, quindi il campo `artwork` è sempre mancante per gli stream
+  Tidal. I client devono cadere in fallback su `artist_image` o sul
+  placeholder incluso senza tentare alcun lookup esterno.
+- **AirPlay**: l'artwork embedded inviato sullo stream metadata AirPlay
+  è decodificato da `meta_shairport.py` e servito da un **server HTTP
+  interno separato**, NON da metadata-service. L'URL punta a
+  `http://<COVER_ART_HOST>:<COVER_ART_PORT>/cover.jpg`, dove
+  `COVER_ART_PORT` di default è `5858` e `COVER_ART_HOST` viene letto
+  dall'env var omonima sul container snapserver (settato in
+  `docker-compose.yml`, override in `.env`). Quando `COVER_ART_HOST`
+  non è settato, il bridge cade in fallback su rilevamento via route
+  kernel — funziona su host LAN single-NIC ma può scegliere
+  l'interfaccia sbagliata su multi-NIC, VPN o reti sandboxed. Su reti
+  non triviali, gli operatori dovrebbero settare `COVER_ART_HOST`
+  esplicitamente all'hostname/IP del server raggiungibile dai client.
+  Assicurati che la porta 5858 sia aperta sul firewall dell'host se
+  presente.
+
 ## Controllo trasporto
 
 Per un nuovo client, usa Snapserver come API di controllo autoritativa:
@@ -179,6 +205,13 @@ properties.canGoNext
 properties.canGoPrevious
 properties.canSeek
 ```
+
+Esempi concreti dai source di snapMULTI:
+
+- **MPD**: `canControl: true`, `canSeek: true`, `canPlay/Pause/GoNext/GoPrevious: true`. Transport completo supportato.
+- **Spotify** (`meta_go-librespot.py`): `canControl: true`. Play/pause/next/previous/seek tutti bidirezionali.
+- **AirPlay** (`meta_shairport.py`): controllo limitato — il sender AirPlay (iPhone/Mac) è autoritativo; il server inoltra solo ciò che shairport-sync espone.
+- **Tidal** (`meta_tidal.py`): `canControl: false` sempre. Il source Tidal usa un binary proprietario il cui control surface è l'app Tidal mobile/desktop — non c'è API che il controlscript possa chiamare. I client DEVONO nascondere i controlli play/pause/next/previous quando lo stream attivo è Tidal, altrimenti tapparli non fa nulla e confonde l'utente.
 
 Molti stream sono controllati dalla loro app nativa e possono riportare
 `canControl: false` o singole capability come false.
