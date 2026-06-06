@@ -993,6 +993,33 @@ elif [[ -f "$USERDATA" ]]; then
             echo "  ERROR: user-data patch failed — auto-install will NOT run on first boot"
             exit 1
         fi
+        # Post-patch YAML sanity. The grep above only proves the hook
+        # string is somewhere in the file. If the awk patch ended up with
+        # two `runcmd:` blocks (or otherwise corrupted the YAML) cloud-init
+        # would refuse to parse user-data at first boot and the Pi would
+        # boot without network. Catch it here on the operator's laptop
+        # instead of discovering it post-flash.
+        _runcmd_count=$(grep -cE "^[[:space:]]*runcmd:" "$USERDATA" || true)
+        if [[ "${_runcmd_count:-0}" -ne 1 ]]; then
+            echo "  ERROR: user-data has ${_runcmd_count} runcmd: blocks after patch (expected 1)"
+            echo "         Inspect '$USERDATA' for a malformed YAML structure."
+            exit 1
+        fi
+        if command -v python3 >/dev/null 2>&1 && python3 -c "import yaml" 2>/dev/null; then
+            if ! python3 -c "
+import sys, yaml
+try:
+    with open(sys.argv[1]) as fh:
+        yaml.safe_load(fh)
+except yaml.YAMLError as e:
+    print(f'YAML parse error: {e}', file=sys.stderr)
+    sys.exit(1)
+" "$USERDATA"; then
+                echo "  ERROR: user-data is not valid YAML after patching."
+                echo "         First boot will fail with cloud-init unable to parse user-data."
+                exit 1
+            fi
+        fi
     fi
 else
     echo ""
