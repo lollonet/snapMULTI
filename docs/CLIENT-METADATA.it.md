@@ -132,6 +132,18 @@ I campi possono essere mancanti, vuoti o null.
 - `elapsed` / `duration` — non tutti gli stream espongono una timeline.
 - `date`, `original_date`, `genre`, `artwork_source` — solo informativi.
 
+Per AirPlay e Tidal nello specifico, `elapsed` può essere **assente**
+anche su uno stream in playing quando metadata-service è stato
+riavviato mentre una traccia era già in corso. Non c'è API nativa di
+position per queste sorgenti, quindi il service può solo stimare
+elapsed contando dal momento in cui ha osservato la traccia per la
+prima volta. Se boota mid-track, non ha un anchor per "track start" e
+emetterebbe un valore sbagliato — quindi omette il campo del tutto. I
+client dovrebbero renderizzare "elapsed sconosciuto" (es. progress bar
+indeterminata o `--:--`), non 0:00. Il campo riappare al cambio di
+traccia successivo. MPD e Spotify non incontrano mai questo caso
+perché riportano position nativamente.
+
 Se `playing: false`, mantieni i metadata ultimi noti visibili se utile, ma
 mostra lo stato di trasporto/playback come idle.
 

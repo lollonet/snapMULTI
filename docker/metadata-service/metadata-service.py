@@ -252,8 +252,19 @@ class MetadataService:
         self._client_stream_map: dict[str, str] = {}
 
         # Track elapsed timers for sources without native position reporting
-        # {stream_id: {"key": "title|artist", "start": monotonic, "accumulated": float}}
+        # {stream_id: {"key": "title|artist", "start": monotonic,
+        #              "accumulated": float, "calibrated": bool}}
+        # "calibrated" is True only when we observed the track-change event
+        # in real time. False when we saw the track for the first time after
+        # service cold-start while it was already playing — in that case our
+        # local-clock estimate would be offset by however much we missed.
         self._track_timers: dict[str, dict[str, Any]] = {}
+
+        # Service start anchor for the "cold-start mid-track" heuristic in
+        # _estimate_elapsed. A track first observed within FRESH_START_GRACE_SEC
+        # of service boot is assumed to be a track-change event we caught in
+        # time; observed after that, we admit we don't know the real elapsed.
+        self._service_start: float = time.monotonic()
 
     @staticmethod
     def _cache_set(
@@ -1431,10 +1442,27 @@ class MetadataService:
             logger.debug(f"go-librespot API unavailable: {e}")
             return None
 
+    # Grace window after service start during which a first-time-seen track
+    # is assumed to be a track-change event observed in real time (calibrated).
+    # After this window, a first-time-seen track is treated as "already playing
+    # when we booted" and we admit we don't know its real elapsed (uncalibrated).
+    # 5 s comfortably covers normal startup poll cycles (3 s default) without
+    # mis-flagging a true track-change as cold-start.
+    _FRESH_START_GRACE_SEC: float = 5.0
+
     def _estimate_elapsed(
         self, stream_id: str, track_key: str, is_playing: bool
-    ) -> int:
+    ) -> int | None:
         """Estimate elapsed seconds for sources without native position reporting.
+
+        Returns:
+            int: estimated elapsed seconds when the timer is calibrated
+                 (track-change observed in real time, or service freshly started).
+            None: when the track was already playing before metadata-service
+                  started polling — i.e. we have no anchor for "track start"
+                  and any local-clock estimate would be wrong. Clients should
+                  treat None as "elapsed unknown" and render the progress bar
+                  accordingly.
 
         Tracks play/pause transitions per stream. Resets when track_key changes.
         """
@@ -1442,13 +1470,22 @@ class MetadataService:
         timer = self._track_timers.get(stream_id)
 
         if timer is None or timer["key"] != track_key:
-            # New track — reset timer
+            # First time we see this track. Decide calibration based on
+            # whether the service has been running long enough that any
+            # in-progress track must have started before our boot.
+            within_grace = (now - self._service_start) <= self._FRESH_START_GRACE_SEC
+            calibrated = (timer is not None) or within_grace
             self._track_timers[stream_id] = {
                 "key": track_key,
                 "start": now if is_playing else 0.0,
                 "accumulated": 0.0,
+                "calibrated": calibrated,
             }
-            return 0
+            return 0 if calibrated else None
+
+        # Existing timer — return either calibrated elapsed or None.
+        if not timer.get("calibrated", True):
+            return None
 
         if is_playing:
             if timer["start"] == 0.0:
@@ -1725,12 +1762,21 @@ class MetadataService:
                                 metadata["elapsed"] = spotify_pos[0]
                                 metadata["duration"] = spotify_pos[1]
 
-                        # AirPlay, Tidal, etc.: estimate from local clock
+                        # AirPlay, Tidal, etc.: estimate from local clock.
+                        # estimated is None when the track was already playing
+                        # before metadata-service started — we have no reliable
+                        # anchor for "track start" so emitting a wrong elapsed
+                        # would mislead the client UI (progress bar at 0:00
+                        # when the song is half-way through). Drop the field
+                        # entirely so the client renders elapsed as unknown.
                         estimated = self._estimate_elapsed(
                             stream_id, track_key, is_playing
                         )
                         if is_playing and metadata.get("elapsed", 0) <= 0:
-                            metadata["elapsed"] = estimated
+                            if estimated is None:
+                                metadata.pop("elapsed", None)
+                            else:
+                                metadata["elapsed"] = estimated
 
                     # Enrich with artwork and tags
                     await loop.run_in_executor(None, self.enrich_artwork, metadata)
