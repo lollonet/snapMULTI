@@ -153,6 +153,30 @@ artwork -> artist_image -> bundled placeholder
 On 404 for artwork, treat it as transient: retry once after 500 ms, then
 fall back.
 
+### Source-specific artwork notes
+
+- **MPD / Spotify**: artwork URLs always point to the metadata-service
+  cache at `http://<SERVER>:8083/artwork/artwork_<md5>.jpg`. Standard
+  lookup chain (embedded → snapcast → MusicBrainz → iTunes → fallback).
+- **Tidal**: no artwork is published. The Tidal source binary exposes
+  metadata through a curses TUI that does not carry artwork URLs, so the
+  `artwork` field is always missing for Tidal streams. Clients should
+  fall back to `artist_image` or the bundled placeholder without
+  attempting any external lookup.
+- **AirPlay**: embedded artwork sent over the AirPlay metadata stream
+  is decoded by `meta_shairport.py` and served from a **separate
+  internal HTTP server**, NOT from the metadata-service. The URL points
+  to `http://<COVER_ART_HOST>:<COVER_ART_PORT>/cover.jpg`, where
+  `COVER_ART_PORT` defaults to `5858` and `COVER_ART_HOST` is taken
+  from the env var of the same name on the snapserver container (set in
+  `docker-compose.yml`, overridable via `.env`). When `COVER_ART_HOST`
+  is unset, the bridge falls back to kernel route detection — works on
+  single-NIC LAN hosts but can pick the wrong interface on multi-NIC,
+  VPN, or sandboxed networks. Operators on non-trivial networks should
+  set `COVER_ART_HOST` explicitly to the server hostname/IP they want
+  clients to reach. Make sure port 5858 is open on the server host's
+  firewall if you have one.
+
 ## Transport control
 
 For a new client, use Snapserver as the authoritative control API:
@@ -177,6 +201,13 @@ properties.canSeek
 
 Many streams are controlled by their native app and may report
 `canControl: false` or individual capabilities as false.
+
+Concrete examples from the snapMULTI sources:
+
+- **MPD**: `canControl: true`, `canSeek: true`, `canPlay/Pause/GoNext/GoPrevious: true`. Full transport supported.
+- **Spotify** (`meta_go-librespot.py`): `canControl: true`. Play/pause/next/previous/seek all bidirectional.
+- **AirPlay** (`meta_shairport.py`): control is limited — the AirPlay sender (iPhone/Mac) is authoritative; the server only forwards what shairport-sync exposes.
+- **Tidal** (`meta_tidal.py`): `canControl: false` always. The Tidal source uses a proprietary binary whose control surface is the Tidal mobile/desktop app — there is no API the controlscript can call back into. Clients MUST hide play/pause/next/previous controls when the active stream is Tidal, otherwise tapping them does nothing and confuses the user.
 
 Volume is client-specific. Use Snapcast client/group state from
 `Server.GetStatus` and Snapcast JSON-RPC methods for volume changes.
