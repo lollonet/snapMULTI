@@ -260,6 +260,15 @@ class MetadataService:
         # local-clock estimate would be offset by however much we missed.
         self._track_timers: dict[str, dict[str, Any]] = {}
 
+        # Artwork chain telemetry — track the last (track_key, source) pair
+        # logged per stream, so the chain emits exactly one INFO line per
+        # (track-change × source-level) instead of once per 3-second poll.
+        # Lets the operator grep `journalctl -u snapserver` to see which
+        # fallback level actually serves artwork in real use — answers the
+        # otherwise-blind question "does iTunes ever fire?" without adding
+        # any metrics surface.
+        self._last_artwork_log_key: dict[str, tuple[str, str]] = {}
+
         # Service start anchor for the "cold-start mid-track" heuristic in
         # _estimate_elapsed. A track first observed within FRESH_START_GRACE_SEC
         # of service boot is assumed to be a track-change event we caught in
@@ -1675,6 +1684,35 @@ class MetadataService:
                         artwork_source = "artist_image"
 
         metadata["artwork_source"] = artwork_source
+        self._log_artwork_chain_hit(metadata, artwork_source)
+
+    def _log_artwork_chain_hit(self, metadata: dict[str, Any], source: str) -> None:
+        """Emit one INFO log when the artwork chain serves a new (track, source)
+        pair. Skipped for empty source (no artwork resolved) and for "snapcast"
+        (artwork was already on the metadata input — the chain did no work).
+        De-dup keyed by (stream, track) so a long-playing track logs at most
+        once per chain transition. See `_last_artwork_log_key` for state.
+        """
+        if not source or source == "snapcast":
+            return
+        stream = metadata.get("source", "?")
+        track_key = (
+            f"{metadata.get('artist', '')}|"
+            f"{metadata.get('album', '')}|"
+            f"{metadata.get('title', '')}"
+        )
+        log_key = (track_key, source)
+        if self._last_artwork_log_key.get(stream) == log_key:
+            return
+        self._last_artwork_log_key[stream] = log_key
+        logger.info(
+            "Artwork served via %s: %s - %s (%s) [%s]",
+            source,
+            metadata.get("artist", "?"),
+            metadata.get("album", "?"),
+            metadata.get("title", "?"),
+            stream,
+        )
 
     # ──────────────────────────────────────────────
     # Main polling loop

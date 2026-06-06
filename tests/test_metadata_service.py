@@ -987,3 +987,93 @@ class TestEstimateElapsedCalibration:
         assert playing is None
         assert paused is None
         assert resumed is None
+
+
+class TestArtworkChainTelemetry:
+    """The artwork chain logs one INFO line per (stream, track, source)
+    transition so an operator can grep the logs to see which fallback level
+    actually serves artwork in real use. Designed to answer the otherwise-
+    blind question "does iTunes ever fire?" without adding a metrics surface.
+
+    Behaviour pinned by these tests:
+    - Skip log for empty source (no artwork resolved) and "snapcast" (input
+      already had artwork, chain did no work).
+    - Log once on first hit; do NOT log again for the same (track, source)
+      pair across repeat polls of the same track.
+    - Log again when source changes for the same track (chain transitioned).
+    - Log again when track changes (different (track, source) tuple).
+    - Per-stream isolation — repeated MPD source must not silence AirPlay.
+    """
+
+    def _meta(self, **kw) -> dict:
+        base = {
+            "source": "MPD",
+            "artist": "Pink Floyd",
+            "album": "The Wall",
+            "title": "Comfortably Numb",
+        }
+        base.update(kw)
+        return base
+
+    def test_snapcast_source_does_not_log(self, service, caplog):
+        with caplog.at_level("INFO"):
+            service._log_artwork_chain_hit(self._meta(), "snapcast")
+        assert "Artwork served" not in caplog.text
+
+    def test_empty_source_does_not_log(self, service, caplog):
+        with caplog.at_level("INFO"):
+            service._log_artwork_chain_hit(self._meta(), "")
+        assert "Artwork served" not in caplog.text
+
+    def test_first_hit_logs_once(self, service, caplog):
+        with caplog.at_level("INFO"):
+            service._log_artwork_chain_hit(self._meta(), "musicbrainz")
+        assert caplog.text.count("Artwork served via musicbrainz") == 1
+        assert "Pink Floyd" in caplog.text
+        assert "The Wall" in caplog.text
+        assert "[MPD]" in caplog.text
+
+    def test_repeat_same_track_same_source_silenced(self, service, caplog):
+        with caplog.at_level("INFO"):
+            for _ in range(5):
+                service._log_artwork_chain_hit(self._meta(), "musicbrainz")
+        # Only the first call logs
+        assert caplog.text.count("Artwork served via musicbrainz") == 1
+
+    def test_same_track_source_changes_logs_again(self, service, caplog):
+        with caplog.at_level("INFO"):
+            service._log_artwork_chain_hit(self._meta(), "musicbrainz")
+            service._log_artwork_chain_hit(self._meta(), "itunes")
+        assert "Artwork served via musicbrainz" in caplog.text
+        assert "Artwork served via itunes" in caplog.text
+
+    def test_track_change_logs_again(self, service, caplog):
+        with caplog.at_level("INFO"):
+            service._log_artwork_chain_hit(self._meta(title="Mother"), "musicbrainz")
+            service._log_artwork_chain_hit(self._meta(title="Hey You"), "musicbrainz")
+        # Different titles → different track_key → both log
+        assert caplog.text.count("Artwork served via musicbrainz") == 2
+
+    def test_per_stream_dedup_isolated(self, service, caplog):
+        """A hit on MPD must not silence the same source on AirPlay."""
+        with caplog.at_level("INFO"):
+            service._log_artwork_chain_hit(self._meta(source="MPD"), "musicbrainz")
+            service._log_artwork_chain_hit(self._meta(source="AirPlay"), "musicbrainz")
+            # Repeat MPD with same track+source — silenced
+            service._log_artwork_chain_hit(self._meta(source="MPD"), "musicbrainz")
+        assert caplog.text.count("Artwork served via musicbrainz") == 2
+        assert "[MPD]" in caplog.text
+        assert "[AirPlay]" in caplog.text
+
+    def test_radio_default_placeholder_logs(self, service, caplog):
+        """The 'default' fallback for radio is exactly the case telemetry
+        most needs to surface — it signals chain exhaustion."""
+        radio = {
+            "source": "Radio",
+            "artist": "",
+            "album": "",
+            "title": "Live Stream",
+        }
+        with caplog.at_level("INFO"):
+            service._log_artwork_chain_hit(radio, "default")
+        assert "Artwork served via default" in caplog.text
