@@ -260,6 +260,9 @@ class MetadataService:
         # local-clock estimate would be offset by however much we missed.
         self._track_timers: dict[str, dict[str, Any]] = {}
 
+        # Dedup: emit one log per (stream, track, source) transition — not per 3-s poll.
+        self._last_artwork_log_key: dict[str, tuple[str, str]] = {}
+
         # Service start anchor for the "cold-start mid-track" heuristic in
         # _estimate_elapsed. A track first observed within FRESH_START_GRACE_SEC
         # of service boot is assumed to be a track-change event we caught in
@@ -1675,6 +1678,30 @@ class MetadataService:
                         artwork_source = "artist_image"
 
         metadata["artwork_source"] = artwork_source
+        self._log_artwork_chain_hit(metadata, artwork_source)
+
+    def _log_artwork_chain_hit(self, metadata: dict[str, Any], source: str) -> None:
+        """Emit one INFO log per (stream, track, source) transition; skip snapcast/empty."""
+        if not source or source == "snapcast":
+            return
+        stream = metadata.get("source", "?")
+        track_key = (
+            f"{metadata.get('artist', '')}|"
+            f"{metadata.get('album', '')}|"
+            f"{metadata.get('title', '')}"
+        )
+        log_key = (track_key, source)
+        if self._last_artwork_log_key.get(stream) == log_key:
+            return
+        self._last_artwork_log_key[stream] = log_key
+        logger.info(
+            "Artwork served via %s: %s - %s (%s) [%s]",
+            source,
+            metadata.get("artist", "?"),
+            metadata.get("album", "?"),
+            metadata.get("title", "?"),
+            stream,
+        )
 
     # ──────────────────────────────────────────────
     # Main polling loop
