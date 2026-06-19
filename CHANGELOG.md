@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`deploy.sh` — mympd memory limit bumped `128M` → `192M` (performance profile only)**. snapvideo (Pi 4 8GB, 78k-song NFS library) was OOM-killed twice on the first boot post-reflash during initial myMPD cover-cache + WebradioDB build at the 128M cgroup cap; steady-state observed at 78M (61%). Bumping to 192M gives ~50% headroom over observed steady so first-boot transients on large libraries don't trip the cap. Minimal and standard profiles left untouched (no observed OOM there yet). The outdated `mympd 8M idle` baseline comment in the performance profile is updated with the observed steady-state.
+
 ## [0.8.2] — 2026-06-07
 
 > **v0.8.2 dep bump** — single upstream image refresh, no snapMULTI rebuild. Image set unchanged (`0.7.7`). No config or behaviour change on the snapMULTI side — reflash from this tag (or `docker compose pull && up -d` on existing installs) picks up the new myMPD image.
