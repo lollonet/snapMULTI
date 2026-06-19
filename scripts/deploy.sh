@@ -270,10 +270,10 @@ EOF
 # For: Pi 4 4GB+, Pi 5, systems with 8GB+ RAM
 # Measured baseline (idle): snapserver 87M, shairport 18M, librespot 22M,
 #   mpd 90M (6k songs), mympd 8M, metadata 52M, tidal 32M
-# 2026-06-19 snapvideo (Pi 4 8GB, 78k-song NFS library): mympd OOM-killed
-#   twice on first boot at 128M cap during initial cache build; steady-state
-#   78M (61%) once cache warms. Bumped to 192M (50% headroom over observed
-#   steady) so first-boot transients don't trigger OOM on large libraries.
+# First-boot cover-cache + WebradioDB build on large NFS libraries can
+#   overshoot the steady-state usage (observed: ~78k-song library reaches
+#   78M steady but >128M during transient build). mympd cap sized for the
+#   transient, not the steady baseline.
 SNAPMULTI_PROFILE=performance
 SNAPSERVER_MEM_LIMIT=256M
 SNAPSERVER_MEM_RESERVE=128M
