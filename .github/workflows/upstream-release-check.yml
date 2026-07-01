@@ -51,7 +51,7 @@ jobs:
             repo: mikebrady/shairport-sync
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Resolve latest upstream and pinned versions
         id: resolve
