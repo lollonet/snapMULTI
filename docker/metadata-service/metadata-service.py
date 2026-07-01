@@ -3216,6 +3216,11 @@ async def handle_root_redirect(request: web.Request) -> web.Response:
         ),
         ("myMPD", f"http://{bare_host}:8180", "Browse and play your music library"),
         (
+            "MPD HTTP stream",
+            f"http://{bare_host}:8000",
+            "Direct MP3 stream of the MPD source (browser/VLC, bypasses Snapcast)",
+        ),
+        (
             "Status page",
             f"http://{bare_host}:8083/status",
             "Containers, audio chain, network, mDNS",
@@ -3243,6 +3248,11 @@ async def handle_root_redirect(request: web.Request) -> web.Response:
             "Metadata WebSocket",
             f"ws://{bare_host}:8082",
             "Live track + cover-art stream",
+        ),
+        (
+            "MPD protocol",
+            f"{bare_host}:6600",
+            "Native MPD control for clients like mpc, ncmpcpp, MALP",
         ),
     ]
 

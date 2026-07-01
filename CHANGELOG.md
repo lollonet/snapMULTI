@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Landing page (`GET /` on `:8083`) now lists the MPD HTTP stream + MPD protocol endpoints**. The metadata-service landing page listed Snapweb, myMPD, and the status/version/metadata/health APIs but omitted two system endpoints MPD already exposes on every install: the direct MP3 HTTP stream on `:8000` (`config/mpd.conf` `httpd` output — browser/VLC playable, bypasses Snapcast) and the native MPD protocol on `:6600` (for clients like `mpc`, `ncmpcpp`, MALP). Both ports are already documented in `docs/USAGE.md`; this surfaces them on the discovery page. No new ports opened — display-only.
+
 ### Fixed
 - **`deploy.sh` — mympd memory limit bumped `128M` → `192M` (performance profile only)**. A Pi 4 8GB with a 78k-song NFS library was OOM-killed twice on the first boot post-reflash during the initial myMPD cover-cache + WebradioDB build at the 128M cgroup cap; steady-state observed at 78M (61%). Bumping to 192M gives ~50% headroom over observed steady so first-boot transients on large libraries don't trip the cap. Minimal and standard profiles left untouched (no observed OOM there yet). The performance profile gains a comment block noting that mympd is sized for the first-boot transient, not the `8M idle` baseline already documented above.
 
