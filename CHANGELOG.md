@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **myMPD bumped `25.1.1` → `25.2.2`**. Rolls up three upstream releases: `25.2.0` (hardened MPD connection handling + unexpected-disconnect recovery, double-linked-list rework, improved UTF-8 validation, WebradioDB update buttons), `25.2.1` (OpenSSL 4.0 compatibility, Mongoose update), `25.2.2` (placeholder-image init fix, libmpdclient fix). Drop-in — no snapMULTI-side config change. References updated in `docker-compose.yml`, `CLAUDE.md`, `THIRD-PARTY-NOTICES.md`, `docs/HARDWARE.{md,it.md}`. Closes #613, #619, #624.
+
 ### Added
 - **Landing page (`GET /` on `:8083`) now lists the MPD HTTP stream + MPD protocol endpoints**. The metadata-service landing page listed Snapweb, myMPD, and the status/version/metadata/health APIs but omitted two system endpoints MPD already exposes on every install: the direct MP3 HTTP stream on `:8000` (`config/mpd.conf` `httpd` output — browser/VLC playable, bypasses Snapcast) and the native MPD protocol on `:6600` (for clients like `mpc`, `ncmpcpp`, MALP). Both ports are already documented in `docs/USAGE.md`; this surfaces them on the discovery page. No new ports opened — display-only.
 
