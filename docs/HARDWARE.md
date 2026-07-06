@@ -258,7 +258,7 @@ Firewall configuration (`ufw` rules) and QoS / `cake` qdisc setup are documented
 | `ghcr.io/devgianlu/go-librespot:v0.7.3` | ~30–50 MB |
 | `lollonet/snapmulti-mpd:<image-set>` | ~50–80 MB |
 | `lollonet/snapmulti-metadata:<image-set>` | ~60–80 MB |
-| `ghcr.io/jcorporation/mympd/mympd:25.1.1` | ~30–50 MB |
+| `ghcr.io/jcorporation/mympd/mympd:25.2.2` | ~30–50 MB |
 | `lollonet/snapmulti-tidal:<image-set>` | ~200–300 MB |
 
 **Client images** (from [client](../client/) directory):
