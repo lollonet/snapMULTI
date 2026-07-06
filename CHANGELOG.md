@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **go-librespot bumped `v0.7.3` → `v0.7.4`**. Upstream reliability + mDNS fixes relevant to snapMULTI: skip tracks Spotify refuses an audio key for instead of freezing playback, avoid duplicate EOF events on loop-context playlist end (fixes spurious multi-track skipping), harden the Avahi backend for renaming, and allow changing the Zeroconf name when no session is active. Drop-in upstream image — no snapMULTI-side config change. References updated in `docker-compose.yml`, `CLAUDE.md`, `THIRD-PARTY-NOTICES.md`, `docs/HARDWARE.{md,it.md}`. Closes #620.
 - **myMPD bumped `25.1.1` → `25.2.2`**. Rolls up three upstream releases: `25.2.0` (hardened MPD connection handling + unexpected-disconnect recovery, double-linked-list rework, improved UTF-8 validation, WebradioDB update buttons), `25.2.1` (OpenSSL 4.0 compatibility, Mongoose update), `25.2.2` (placeholder-image init fix, libmpdclient fix). Drop-in — no snapMULTI-side config change. References updated in `docker-compose.yml`, `CLAUDE.md`, `THIRD-PARTY-NOTICES.md`, `docs/HARDWARE.{md,it.md}`. Closes #613, #619, #624.
 
 ### Added
