@@ -111,6 +111,20 @@ The cues also fire automatically after every boot (`snapmulti-auto-boot-smoke.se
 
 **If still broken.** Run the smoke test (it has an `audio_modules` check that flags kernel-module / HAT mismatches). If `config.txt` is missing `dtoverlay=hifiberry-*` etc., re-run `setup.sh` and confirm the HAT detection picks the right model — EEPROM-less boards need a manual choice.
 
+## Audio drops in and out, or a client is connected but silent
+
+**Symptoms.** The client shows `connected` in Snapweb and its container/service is `healthy`, but sound stutters in and out, or one room stays silent while others play. Container health and roster connectivity both look green.
+
+**Likely cause.** Two distinct failure modes hide behind a green client:
+- **Reconnect flap** — snapclient keeps dropping and re-establishing the server link, usually on a weak 2.4 GHz signal (`Time sync request failed: Connection timed out` in the log). Common on a Pi Zero 2 W that latched onto a distant access point / weak BSSID.
+- **Decoder silent** — the client is connected and its stream is playing on the server, but the local ALSA output never (re)opened, so no PCM reaches the DAC.
+
+**Try this.** The `Audio liveness` smoke check now surfaces both — run `device-smoke.sh` (or `fleet-smoke.sh` for all rooms) and read that section:
+1. **`snapclient flapping: N reconnects in 60s`** → it's the link. Check signal strength on the client: `iwconfig wlan0` (look for `Signal level` worse than about −70 dBm and a high `Tx excessive retries`). If a stronger access point with the same SSID exists, force the client onto it: `nmcli device wifi connect <ssid> bssid <AA:BB:CC:DD:EE:FF>`. Move the device closer to the router, or wire it with Ethernet, if the signal is chronically weak.
+2. **`decoder silent: … no ALSA substream is RUNNING`** → the decode path is wedged. Restart the client: `cd /opt/snapclient && sudo docker compose restart snapclient` (or `sudo systemctl restart snapclient` on the Pi Zero 2 W native install). If it recurs, check for an ALSA device conflict (another process holding the DAC) with `fuser -v /dev/snd/*`.
+
+**Why smoke used to miss this.** Container health only proves the binary is alive; the server roster only proves the control socket is up. Neither looks at whether PCM is actually flowing — the `Audio liveness` check closes that gap by reading the local ALSA playback state and the client's per-group stream status.
+
 ## Speakers don't find the server (snapclient won't connect)
 
 **Symptoms.** A client device is fully booted but never appears in Snapweb. `journalctl -u snapclient` on the client shows repeated reconnect attempts.

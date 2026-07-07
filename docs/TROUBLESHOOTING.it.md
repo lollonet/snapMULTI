@@ -111,6 +111,20 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 
 **Se è ancora bloccato.** Esegui il test di salute (ha un controllo `audio_modules` che segnala disallineamenti fra moduli kernel e HAT). Se `config.txt` non ha `dtoverlay=hifiberry-*` ecc., rilancia `setup.sh` e conferma che il rilevamento HAT scelga il modello giusto — le schede senza EEPROM richiedono una scelta manuale.
 
+## L'audio va e viene, o un client è connesso ma muto
+
+**Sintomi.** Il client appare `connected` in Snapweb e il suo container/servizio è `healthy`, ma il suono singhiozza oppure una stanza resta muta mentre le altre suonano. Sia la salute del container sia la connessione nel roster sembrano a posto.
+
+**Causa probabile.** Dietro un client apparentemente sano si nascondono due modi di guasto distinti:
+- **Riconnessioni a raffica** — snapclient continua a cadere e ristabilire il collegamento col server, di solito su un segnale 2,4 GHz debole (`Time sync request failed: Connection timed out` nel log). Tipico di un Pi Zero 2 W agganciato a un access point lontano / BSSID debole.
+- **Decoder muto** — il client è connesso e il suo stream sta suonando sul server, ma l'uscita ALSA locale non si è mai (ri)aperta, quindi nessun PCM raggiunge il DAC.
+
+**Prova questo.** Il controllo `Audio liveness` del test di salute ora fa emergere entrambi — esegui `device-smoke.sh` (o `fleet-smoke.sh` per tutte le stanze) e leggi quella sezione:
+1. **`snapclient flapping: N reconnects in 60s`** → è il collegamento. Controlla la potenza del segnale sul client: `iwconfig wlan0` (cerca `Signal level` peggiore di circa −70 dBm e un alto `Tx excessive retries`). Se esiste un access point più forte con lo stesso SSID, forza il client su quello: `nmcli device wifi connect <ssid> bssid <AA:BB:CC:DD:EE:FF>`. Avvicina il dispositivo al router, o collegalo via Ethernet, se il segnale è cronicamente debole.
+2. **`decoder silent: … no ALSA substream is RUNNING`** → il percorso di decodifica è incastrato. Riavvia il client: `cd /opt/snapclient && sudo docker compose restart snapclient` (oppure `sudo systemctl restart snapclient` sull'installazione nativa del Pi Zero 2 W). Se si ripresenta, cerca un conflitto sul dispositivo ALSA (un altro processo che tiene il DAC) con `fuser -v /dev/snd/*`.
+
+**Perché il test di salute prima non lo vedeva.** La salute del container prova solo che il binario è vivo; il roster del server prova solo che la socket di controllo è su. Nessuno dei due guarda se il PCM sta davvero scorrendo — il controllo `Audio liveness` colma la lacuna leggendo lo stato di riproduzione ALSA locale e lo stato dello stream del gruppo del client.
+
 ## Gli speaker non trovano il server (snapclient non si connette)
 
 **Sintomi.** Un device client è completamente avviato ma non appare mai in Snapweb. `journalctl -u snapclient` sul client mostra tentativi di riconnessione ripetuti.
