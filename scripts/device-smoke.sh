@@ -335,6 +335,7 @@ if [[ -d "$SMOKE_MODULES_DIR" ]]; then
         check_env.sh \
         check_mdns.sh \
         check_snapcast.sh \
+        check_audio_liveness.sh \
         check_recovery.sh \
         check_state_backup.sh \
     ; do
@@ -1051,6 +1052,7 @@ if [[ "${SMOKE_SKIP_NETWORK:-0}" != "1" ]]; then
     declare -F check_env            >/dev/null && check_env
     declare -F check_mdns           >/dev/null && check_mdns
     declare -F check_snapcast       >/dev/null && check_snapcast
+    declare -F check_audio_liveness >/dev/null && check_audio_liveness
     declare -F check_recovery       >/dev/null && check_recovery
     declare -F check_state_backup   >/dev/null && check_state_backup
 else
