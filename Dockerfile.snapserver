@@ -36,7 +36,7 @@ RUN --mount=type=cache,target=/build/build/CMakeFiles \
 # bindings for rollup + swc not installed cross-platform). Removing the lockfile
 # and using npm install is the documented workaround. Version pinning comes from
 # the fixed v0.9.3 tag instead.
-FROM node:26-alpine3.23@sha256:d1f2956a218f864a8667d0c3f30ca52ed64f488e523a43399bc92de325046476 AS snapweb-builder
+FROM node:26-alpine3.23@sha256:aa0d6534a72362ba0ab3c98b662ed680c32484e0aff8e0ce0888451085796a61 AS snapweb-builder
 WORKDIR /build
 RUN apk add --no-cache git && \
     git clone --depth 1 --branch v0.9.3 https://github.com/snapcast/snapweb.git . && \
