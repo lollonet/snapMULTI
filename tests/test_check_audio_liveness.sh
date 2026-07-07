@@ -119,6 +119,17 @@ boot_out="$(run_check '
 assert_contains "$boot_out" "[INFO] snapclient reconnect check deferred" "boot window demotes flap to INFO"
 assert_not_contains "$boot_out" "[ERROR]" "no FAIL during boot window"
 
+# LOW-1 regression guard: an unreadable log source (docker present but
+# inaccessible, journalctl denied) must skip with INFO, NOT read zero
+# reconnects off the error text and declare the link stable.
+unavailable_out="$(run_check '
+    _al_uptime_s()        { printf 3600; }
+    _al_snapclient_logs() { return 1; }  # source unavailable
+    _al_client_identity() { printf ""; }
+')"
+assert_contains "$unavailable_out" "[INFO] snapclient reconnect check skipped (log source unavailable" "unreadable log source skips with INFO"
+assert_not_contains "$unavailable_out" "[OK] snapclient link stable" "unreadable log source is NOT a false 'link stable' pass"
+
 echo "== orchestration: decoder silent (#422) =="
 silent_out="$(run_check '
     _al_uptime_s()          { printf 3600; }

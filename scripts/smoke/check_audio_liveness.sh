@@ -58,16 +58,24 @@ _al_uptime_s() {
 
 _al_snapclient_logs() {
     # Recent snapclient log text over the flap window (Docker or native).
+    # Returns non-zero when the log source is UNAVAILABLE (docker present
+    # but inaccessible, journalctl denied) so the caller can skip with INFO
+    # instead of reading zero reconnects off an error string and declaring
+    # the link stable. The natural exit code of journalctl / docker logs
+    # propagates — no `|| true` masking it. `2>&1` on the docker path is
+    # deliberate: snapclient writes its log lines (incl. reconnects) to the
+    # container's stderr, so they must be captured on success; on failure
+    # the error text lands on stdout too but the caller discards it.
     if [[ "${INSTALL_TYPE_NATIVE_CLIENT:-false}" == "true" ]]; then
         journalctl -u snapclient.service --since "-${_AL_FLAP_WINDOW_S}s" \
-            --no-pager 2>/dev/null || true
+            --no-pager 2>/dev/null
         return
     fi
-    command -v docker >/dev/null 2>&1 || return
+    command -v docker >/dev/null 2>&1 || return 1
     if [[ $EUID -ne 0 ]] && sudo -n true 2>/dev/null; then
-        sudo -n docker logs --since "${_AL_FLAP_WINDOW_S}s" snapclient 2>&1 || true
+        sudo -n docker logs --since "${_AL_FLAP_WINDOW_S}s" snapclient 2>&1
     else
-        docker logs --since "${_AL_FLAP_WINDOW_S}s" snapclient 2>&1 || true
+        docker logs --since "${_AL_FLAP_WINDOW_S}s" snapclient 2>&1
     fi
 }
 
@@ -88,7 +96,10 @@ _al_server_status_json() {
     # snapserver Server.GetStatus JSON for the given host, or empty string.
     local host="$1"
     command -v curl >/dev/null 2>&1 || return
-    curl -sS --max-time 3 -X POST "http://${host}:1780/jsonrpc" \
+    # -s (not -sS): stderr is discarded below, so -S (show-error) would be a
+    # no-op. An empty body is the caller's "skip" signal for an unreachable
+    # server — connectivity itself is the Snapcast check's job.
+    curl -s --max-time 3 -X POST "http://${host}:1780/jsonrpc" \
         -H 'Content-Type: application/json' \
         -d '{"id":1,"jsonrpc":"2.0","method":"Server.GetStatus"}' \
         2>/dev/null || true
@@ -140,11 +151,16 @@ _al_client_identity() {
 _al_client_stream_state() {
     local rpc_json="$1" client_id="$2"
     command -v jq >/dev/null 2>&1 || { printf ''; return; }
+    # Zero groups matching the client id yields NO output (jq's `EXPR as $g`
+    # with zero left inputs skips the body — it does not bind $g to null), so
+    # a "missing" branch would be dead code. Collect matches into an array and
+    # branch on its length instead; empty output is the caller's skip signal.
     jq -r --arg id "$client_id" '
-        (.result.server.groups[]? | select(.clients[]?.id == $id)) as $g
-        | if $g == null then "missing unknown"
+        [.result.server.groups[]? | select(any(.clients[]?; .id == $id))] as $gs
+        | if ($gs | length) == 0 then empty
           else
-            (($g.clients[] | select(.id == $id) | .connected) // false) as $conn
+            $gs[0] as $g
+            | (($g.clients[] | select(.id == $id) | .connected) // false) as $conn
             | (.result.server.streams[]? | select(.id == $g.stream_id) | .status) as $st
             | "\(if $conn then 1 else 0 end) \($st // "unknown")"
           end
@@ -165,12 +181,21 @@ check_audio_liveness() {
     uptime_s=$(_al_uptime_s)
 
     # ---- 1. reconnect flap ----
+    # `if !` context so set -e doesn't abort on an unavailable log source,
+    # and so we can tell "no reconnects" (healthy) from "logs unreadable"
+    # (skip) — both would otherwise look like an empty string / zero count.
     local logs reconnects verdict
-    logs=$(_al_snapclient_logs)
-    reconnects=$(grep -c 'Reconnecting' <<<"$logs" 2>/dev/null || true)
-    [[ "$reconnects" =~ ^[0-9]+$ ]] || reconnects=0
-    verdict=$(_al_classify_flap "$reconnects" "$uptime_s")
+    if ! logs=$(_al_snapclient_logs); then
+        info "snapclient reconnect check skipped (log source unavailable — docker not accessible or unit missing)"
+        logs=""
+        verdict="skip"
+    else
+        reconnects=$(grep -c 'Reconnecting' <<<"$logs" 2>/dev/null || true)
+        [[ "$reconnects" =~ ^[0-9]+$ ]] || reconnects=0
+        verdict=$(_al_classify_flap "$reconnects" "$uptime_s")
+    fi
     case "$verdict" in
+        skip) : ;;  # already reported above
         flap)
             fail_check "snapclient flapping: ${reconnects} reconnects in ${_AL_FLAP_WINDOW_S}s — audio drops in and out (check WiFi signal / BSSID roaming, see TROUBLESHOOTING)"
             ;;
