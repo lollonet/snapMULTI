@@ -48,12 +48,13 @@ extract_field() {
             # Full-width junction: a long value (e.g. an album name) fills the
             # entire left panel with no trailing padding, so it runs flush into
             # the right panel's "xx<label>: ..." field with ZERO spaces before
-            # the "xx" — the padded rule above can't see it. The right panel's
-            # fields are lowercase "label: value" (app_id, session state), so
-            # cut at "xx" immediately followed by such a label. This does not
-            # touch content like "Jamie xx" (followed by padding, not a label)
-            # and only fires when a right-panel field is glued on.
-            if [[ "$value" =~ ^(.*)xx[a-z][a-z\ _]*:.*$ ]]; then
+            # the "xx" — the padded rule above can't see it. Anchor to the
+            # LITERAL right-panel "Session info" labels (app_id, session state)
+            # rather than a generic "xx<word>:" class: arbitrary Tidal catalog
+            # titles like "Traxxion: Remastered" contain that generic shape and
+            # would be wrongly truncated. Content like "Jamie xx" (followed by
+            # padding, not one of these labels) is likewise untouched.
+            if [[ "$value" =~ ^(.*)xx(app_id|session\ state):.*$ ]]; then
                 value="${BASH_REMATCH[1]}"
             fi
             value="${value% x}"          # also strip trailing ' x' (half-panel)

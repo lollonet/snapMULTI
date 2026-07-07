@@ -96,8 +96,19 @@ assert_eq "$(ef 'xartists: ' "$capture")" "The White Stripes" "artists picked fr
 assert_eq "$(ef 'xtitle: ' "$capture")"   "Seven Nation Army" "title picked from multi-line capture"
 assert_eq "$(ef 'xalbum name: ' "$capture")" "The White Stripes Greatest" "album picked + trimmed from multi-line capture"
 
+echo "== extract_field: real metadata with the generic 'xx…:' shape is preserved =="
+# A generic "xx<word>:" rule would truncate these arbitrary catalog values;
+# anchoring to the literal right-panel labels (app_id / session state) must
+# leave them intact. These have no panel junction — the whole line is one
+# left-panel value.
+assert_eq "$(ef 'xalbum name: ' "xalbum name: Traxxion: Remastered")" \
+    "Traxxion: Remastered" \
+    "'Traxxion: Remastered' (xx + word + colon, not a panel label) is preserved"
+assert_eq "$(ef 'xtitle: ' "xtitle: Foxx: The Remix")" \
+    "Foxx: The Remix" \
+    "'Foxx: The Remix' is preserved"
+
 echo "== extract_field: missing field yields empty =="
-assert_eq "$(ef 'xalbum name: ' "$capture" ; :)" "$(ef 'xalbum name: ' "$capture")" "deterministic on repeat"
 no_album="xtitle: Something               xxapp_id: tidal              x"
 assert_eq "$(ef 'xalbum name: ' "$no_album")" "" "absent field returns empty string"
 
