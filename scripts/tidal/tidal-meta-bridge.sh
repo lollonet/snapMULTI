@@ -12,8 +12,6 @@ TMUX_SESSION="speaker"
 POLL_INTERVAL="${TIDAL_META_POLL:-1}"
 PREV_HASH=""
 
-echo "tidal-meta-bridge: writing to $METADATA_FILE (poll=${POLL_INTERVAL}s)"
-
 # Wait for speaker_controller_application tmux session
 wait_for_tmux() {
     local attempts=0
@@ -45,6 +43,18 @@ extract_field() {
             # containing "xx" have at most one space inside, so the 2-space
             # discriminator preserves content while trimming the panel.
             if [[ "$value" =~ ^(.*[^[:space:]])[[:space:]]{2,}xx.*$ ]]; then
+                value="${BASH_REMATCH[1]}"
+            fi
+            # Full-width junction: a long value (e.g. an album name) fills the
+            # entire left panel with no trailing padding, so it runs flush into
+            # the right panel's "xx<label>: ..." field with ZERO spaces before
+            # the "xx" — the padded rule above can't see it. Anchor to the
+            # LITERAL right-panel "Session info" labels (app_id, session state)
+            # rather than a generic "xx<word>:" class: arbitrary Tidal catalog
+            # titles like "Traxxion: Remastered" contain that generic shape and
+            # would be wrongly truncated. Content like "Jamie xx" (followed by
+            # padding, not one of these labels) is likewise untouched.
+            if [[ "$value" =~ ^(.*)xx(app_id|session\ state):.*$ ]]; then
                 value="${BASH_REMATCH[1]}"
             fi
             value="${value% x}"          # also strip trailing ' x' (half-panel)
@@ -79,6 +89,16 @@ json_escape() {
     s="${s//\"/\\\"}"
     printf '%s' "$s" | tr -d '\000-\037'
 }
+
+# Library mode: let the unit test source this file to reach extract_field /
+# strip_escapes / json_escape without running any of the runtime side
+# effects below (startup log, blocking capture loop).
+if [[ "${TIDAL_META_BRIDGE_LIB_ONLY:-}" == "1" ]]; then
+    # shellcheck disable=SC2317  # exit is the executed-directly fallback
+    return 0 2>/dev/null || exit 0
+fi
+
+echo "tidal-meta-bridge: writing to $METADATA_FILE (poll=${POLL_INTERVAL}s)"
 
 wait_for_tmux
 
