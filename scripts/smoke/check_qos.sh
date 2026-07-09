@@ -28,6 +28,27 @@ if ! declare -F env_get >/dev/null 2>&1; then
     unset _CQ_DIR
 fi
 
+# The DSCP rules are applied by the NetworkManager dispatcher hook only on
+# the first NM up/dhcp event, which lands ~60-120s after boot. A smoke run
+# inside that window sees them missing on a perfectly-configured device, so
+# demote to INFO there (same boot-race tolerance as elsewhere). After the
+# window a genuine absence is still a real FAIL.
+_CQ_BOOT_GRACE_S=120
+
+_cq_uptime_s() {
+    local u
+    u=$(cut -d. -f1 /proc/uptime 2>/dev/null) || u=""
+    printf '%s' "${u:-0}"
+}
+
+# _cq_dscp_verdict <present 0|1+> <uptime_s> -> pass|boot|fail
+_cq_dscp_verdict() {
+    local present="$1" uptime_s="$2"
+    if (( present >= 1 )); then printf 'pass'; return; fi
+    if (( uptime_s < _CQ_BOOT_GRACE_S )); then printf 'boot'; return; fi
+    printf 'fail'
+}
+
 check_qos() {
     [[ "$MODE" == "server" || "$MODE" == "both" ]] || return 0
 
@@ -83,16 +104,18 @@ check_qos() {
         dscp_streaming=$(echo "$mangle_dump" | { grep -cE "tcp +spt:1704 +DSCP +set 0x2e" || true; })
         dscp_rpc=$(echo "$mangle_dump" | { grep -cE "tcp +spt:${rpc_port} +DSCP +set 0x2e" || true; })
 
-        if [[ "$dscp_streaming" -ge 1 ]]; then
-            pass_check "Snapcast streaming priority tag (DSCP EF): set on port 1704"
-        else
-            fail_check "Snapcast streaming priority tag: missing on port 1704 — bufferbloat will desync rooms when LAN is busy"
-        fi
-        if [[ "$dscp_rpc" -ge 1 ]]; then
-            pass_check "Snapcast RPC priority tag (DSCP EF): set on port $rpc_port"
-        else
-            fail_check "Snapcast RPC priority tag: missing on port $rpc_port"
-        fi
+        local uptime_s
+        uptime_s=$(_cq_uptime_s)
+        case "$(_cq_dscp_verdict "$dscp_streaming" "$uptime_s")" in
+            pass) pass_check "Snapcast streaming priority tag (DSCP EF): set on port 1704" ;;
+            boot) info "Snapcast streaming priority tag: not applied yet (uptime ${uptime_s}s < ${_CQ_BOOT_GRACE_S}s — NM dispatcher applies it on the first up/dhcp event)" ;;
+            fail) fail_check "Snapcast streaming priority tag: missing on port 1704 — bufferbloat will desync rooms when LAN is busy" ;;
+        esac
+        case "$(_cq_dscp_verdict "$dscp_rpc" "$uptime_s")" in
+            pass) pass_check "Snapcast RPC priority tag (DSCP EF): set on port $rpc_port" ;;
+            boot) info "Snapcast RPC priority tag: not applied yet (uptime ${uptime_s}s < ${_CQ_BOOT_GRACE_S}s — NM dispatcher applies it on the first up/dhcp event)" ;;
+            fail) fail_check "Snapcast RPC priority tag: missing on port $rpc_port" ;;
+        esac
     else
         warn "Priority tag (DSCP) check skipped (missing dep: iptables — install for QoS inspection)"
     fi
