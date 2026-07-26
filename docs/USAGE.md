@@ -135,17 +135,4 @@ Inspect with `systemctl cat <unit>`. Deployment paths and update strategy: [ADVA
 
 ## Logs & Diagnostics
 
-```bash
-# server live logs
-cd /opt/snapmulti && docker compose logs -f
-docker compose logs -f snapserver shairport-sync librespot mpd
-
-# container health
-docker compose ps
-docker inspect --format='{{.State.Health.Status}}' snapserver
-
-# system status page (browser)
-http://<server>:8083/status
-```
-
-Install-time and post-install failures (with the diagnostic bundle workflow): [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+Log-viewing and container-health commands live in [TROUBLESHOOTING.md — Logs that matter](TROUBLESHOOTING.md#logs-that-matter). Install-time and post-install failures, plus the diagnostic-bundle workflow: [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

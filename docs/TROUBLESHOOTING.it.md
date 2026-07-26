@@ -285,7 +285,7 @@ Il problema del rilevamento HAT di solito è `otg_mode=1` o `dr_mode=host` in `c
 
 ## IPv6 attivato per default — è normale?
 
-snapMULTI abilita IPv6 a livello kernel per default (ADR-008 supersede l'ADR-007 originale che lo disabilitava). `ip -6 addr` che ritorna indirizzi su un device snapMULTI è lo stato **atteso**. Le difese software (Avahi `use-ipv6=no`, pin IPv4 SRV di snapclient via `discover-server.sh`, filtro IPv4 di fb-display in zeroconf, `boot-tune.sh` single-publish) coprono le race dual-stack mDNS originali; il kill-switch a kernel era ridondante e impediva il WebSocket listen di Tidal Connect.
+snapMULTI abilita IPv6 a livello kernel per default (ADR-008). `ip -6 addr` che ritorna indirizzi su un device snapMULTI è lo stato **atteso** — le race dual-stack mDNS originali sono chiuse da difese software, quindi il kill-switch a kernel è stato abbandonato (razionale completo + lista delle difese: [ADVANCED.it.md — IPv6 attivato per default](ADVANCED.it.md#ipv6-attivato-per-default)).
 
 Sintomi che **non** dipendono dall'IPv6 attivo:
 - snapclient non trova il server → verifica che `avahi-browse -rpt _snapcast._tcp` ritorni l'advertiser IPv4 (Avahi `use-ipv6=no` continua a pubblicare solo IPv4).

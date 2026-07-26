@@ -78,6 +78,14 @@ snapMULTI è attualmente mantenuto da un singolo maintainer principale (decision
 
 Il progetto ha forma intenzionalmente da appliance — vedi la sezione `## Non-goals` in [CLAUDE.md](CLAUDE.md) per cosa NON accettiamo come scope. Un "no" a una feature non è personale; di solito significa che il cambiamento appartiene a un layer diverso (l'amplificatore, Home Assistant, un deployment custom di snapclient) e non a snapMULTI stesso.
 
+### Non-goals
+
+- Nessun cloud snapMULTI ospitato né sistema di account.
+- Nessun SLA commerciale né promessa di supporto hardware universale.
+- Nessun deployment su WAN pubblica senza un reverse proxy con autenticazione gestito dall'operatore.
+- Nessun flusso di aggiornamento in-place per utenti ordinari; il percorso supportato è reflash-first.
+- Nessun marketplace di plugin generico né configuratore arbitrario dello stack audio nel core appliance.
+
 ### Path verso co-maintainership
 
 Aperto alla considerazione dopo che un contributor dimostra coinvolgimento sostenuto: diverse PR significative mergate, partecipazione attiva nella triage delle issue, comprensione del modello di update reflash-first ([DEC-003](docs/decisions/DEC-003-reflash-only-updates.md)) + smoke gate (ADR-005). Non è un automatismo — il maintainer principale decide. Se sei interessato, parti dalle issue aperte con label `help wanted`.

@@ -135,17 +135,4 @@ Ispeziona con `systemctl cat <unit>`. Path di deployment e strategie di aggiorna
 
 ## Log e diagnostica
 
-```bash
-# log live server
-cd /opt/snapmulti && docker compose logs -f
-docker compose logs -f snapserver shairport-sync librespot mpd
-
-# salute container
-docker compose ps
-docker inspect --format='{{.State.Health.Status}}' snapserver
-
-# pagina stato sistema (browser)
-http://<server>:8083/status
-```
-
-Fallimenti all'install e post-install (con la procedura del pacchetto diagnostico): [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md).
+I comandi per vedere i log e la salute dei container stanno in [TROUBLESHOOTING.it.md — Log che servono](TROUBLESHOOTING.it.md#log-che-servono). Fallimenti all'install e post-install, più la procedura del pacchetto diagnostico: [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md).
