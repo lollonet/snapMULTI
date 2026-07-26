@@ -32,7 +32,7 @@ Before drilling into a specific symptom, run the all-in-one health check on the 
 sudo bash /opt/snapmulti/scripts/device-smoke.sh --server   # or --client, or --both
 ```
 
-It validates root mount + overlayroot state, Docker storage driver, required systemd units, container expected / running / healthy counts, mDNS advertisement, Snapcast TCP/RPC reachability, audio kernel modules vs configured HAT, QoS, music mounts, and timer health (10 modules in `scripts/smoke/`). If every section is green, the platform itself is healthy — focus on the upstream (network, casting client, app account). If something is red, the failing check tells you which subsystem to focus on. The same script is the release gate (ADR-005) and what `fleet-smoke.sh` runs across multiple devices.
+It validates root mount + overlayroot state, Docker storage driver, required systemd units, container expected / running / healthy counts, mDNS advertisement, Snapcast TCP/RPC reachability, audio kernel modules vs configured HAT, QoS, music mounts, and timer health (one module per subsystem in `scripts/smoke/`). If every section is green, the platform itself is healthy — focus on the upstream (network, casting client, app account). If something is red, the failing check tells you which subsystem to focus on. The same script is the release gate (ADR-005) and what `fleet-smoke.sh` runs across multiple devices.
 
 JSON for scripts / dashboards: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server --json`.
 
@@ -95,7 +95,7 @@ The cues also fire automatically after every boot (`snapmulti-auto-boot-smoke.se
 2. From there: `sudo ro-mode disable && sudo reboot` if you need persistent changes (see [ADVANCED.md — Read-only filesystem](ADVANCED.md#read-only-filesystem)).
 3. If the Pi never gets to a login prompt: pull the SD, open the **boot partition** on your laptop, edit `user-data` to reset credentials, re-insert and boot.
 
-**If still broken.** Reflash with Imager — snapMULTI is reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)), and the install takes about 15-20 min on a Pi 4/5. Back up `/opt/snapmulti/mpd.db` first with `scripts/backup-from-sd.sh` if you want to preserve the music library index.
+**If still broken.** Reflash with Imager — snapMULTI is reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)), and the install takes about 15-20 min on a Pi 4/5. To preserve the music library index, first pull the SD and run `./scripts/backup-from-sd.sh` from the snapMULTI bundle on your computer (host-side — it reads the mounted SD; see "Pre-warm the next reflash" below).
 
 ## No audio
 
@@ -229,7 +229,7 @@ docker exec mpd mpc status | head
 **Try this.**
 
 1. **Wait.** First scan finishes between minutes (small library) and several hours (50 k+ tracks over slow NFS). Once it completes the next boot tone will be **pass** (ascending).
-2. **Pre-warm next reflash.** Before reflashing, run `sudo bash /opt/snapmulti/scripts/backup-from-sd.sh` on the old SD card. The script extracts MPD's `mpd.db` file to the boot partition; on the new install, MPD loads the cached database in seconds instead of full-scanning the NFS share. See [ADVANCED.md — Music library on the network](ADVANCED.md#music-library-on-the-network).
+2. **Pre-warm the next reflash.** The device's backup timer already copies `mpd.db` to the SD's boot partition. Before reflashing, pull the SD, mount it on your Mac/PC, and run `./scripts/backup-from-sd.sh` **from the snapMULTI bundle on that computer** (not on the Pi — the script is host-side and reads the SD you just mounted). It copies `mpd.db` into the bundle, and `prepare-sd.sh` re-stages it onto the new SD, so the new install loads the cached database in seconds instead of full-scanning the NFS share. See [ADVANCED.md — Music library on the network](ADVANCED.md#music-library-on-the-network).
 
 **If still broken.** If `docker exec mpd mpc status` does NOT show `Updating DB` AND mpd remains `unhealthy` for more than an hour, you have a real problem — check `docker logs mpd` and the NAS reachability ([NAS library empty or never mounts](#nas-library-empty-or-never-mounts-nfs--smb)).
 

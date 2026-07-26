@@ -1396,7 +1396,7 @@ if install_profile_needs_server_stack "$INSTALL_TYPE"; then
            install_systemd_unit_files "snapmulti-state-backup" "$state_bk_dir"; then
             systemctl daemon-reload
             # .path = event-driven (low-latency on direct watched-path writes)
-            # .timer = safety net every 10 min for nested writes that .path misses
+            # .timer = safety net every 5 min for nested writes that .path misses
             systemctl enable --now snapmulti-state-backup.path
             systemctl enable --now snapmulti-state-backup.timer
             # Seed: arm watcher catches FUTURE writes only. On a re-run firstboot

@@ -1295,7 +1295,7 @@ install_snapmulti_state_restore() {
             warn "snapmulti-state-backup.path could not be enabled — state changes may not be backed up via event trigger"
         fi
         if systemctl enable --now snapmulti-state-backup.timer >/dev/null 2>&1; then
-            ok "snapmulti-state-backup.timer enabled and active (10-min safety net)"
+            ok "snapmulti-state-backup.timer enabled and active (5-min safety net)"
         else
             warn "snapmulti-state-backup.timer could not be enabled — nested-write safety net unavailable"
         fi
@@ -1437,7 +1437,7 @@ main() {
         if systemctl start snapmulti-state-backup.service >/dev/null 2>&1; then
             ok "snapmulti-state-backup seeded (post-services) with current server.json"
         else
-            warn "post-services seed failed — boot-partition backup will catch up at next state change or .timer tick (10 min)"
+            warn "post-services seed failed — boot-partition backup will catch up at next state change or .timer tick (5 min)"
         fi
     fi
     write_version
