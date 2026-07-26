@@ -130,7 +130,7 @@ Dettagli:
 - **OS 64-bit obbligatorio** — Imager propone 32-bit come predefinito per questo modello. Seleziona esplicitamente "Raspberry Pi OS Lite (64-bit)"
 - **Solo WiFi 2,4 GHz** — niente 5 GHz. Usa il tuo SSID 2,4 GHz quando configuri il WiFi in Imager
 - **512 MB RAM** — solo audio headless (senza display). Non può eseguire fb-display o server
-- **snapclient nativo (no Docker)** — `firstboot.sh` rileva il Pi Zero 2 W tramite `is_pi_zero_2w` (`scripts/common/device-detect.sh`), promuove il profilo da `client` a `client-native` e poi richiama `client/common/scripts/setup-zero2w.sh`. Lo script installa snapclient v0.35 dal `.deb` upstream di badaix e salta del tutto Docker, dockerd e fuse-overlayfs. Gli altri modelli client continuano a usare il path Docker standard
+- **snapclient nativo (no Docker)** — `firstboot.sh` rileva il Pi Zero 2 W tramite `is_pi_zero_2w` (`scripts/common/device-detect.sh`), promuove il profilo da `client` a `client-native` e poi richiama `client/common/scripts/setup-zero2w.sh`. Lo script installa snapclient v0.35 — preferendo il `.deb` compilato da snapMULTI (`snapclient-deb/v0.35.0-snapmulti1`, allineato alla versione snapcast del server) e con fallback al pacchetto apt della distro (Trixie 0.31 / Bookworm 0.27, compatibile a livello di protocollo ma più vecchio) — e salta del tutto Docker, dockerd e fuse-overlayfs. Gli altri modelli client continuano a usare il path Docker standard
 - **Hardware guard per server / both** — all'inizio di `firstboot.sh`, `_validate_profile_hardware()` rifiuta `INSTALL_TYPE=server` e `INSTALL_TYPE=both` su Pi Zero 2 W. Il primo boot si interrompe con `log_error` ed `exit 1`, segnalando subito il vincolo invece di fallire più tardi durante `docker compose pull` con un OOM oscuro. Per recuperare, riflashare l'SD scegliendo Audio Player
 - **Zram swap disabilitato** — `tune_pi_zero_2w_swap_safety()` in `scripts/common/system-tune.sh` maschera `dev-zram0.swap` / `rpi-zram-writeback.service` e rimuove `/var/swap` al primo boot. Senza questa correzione, `rpi-zram-writeback` scrive sul file swap che vive nel layer alto tmpfs da 256 MB dell'overlay e il kernel va in panic quando il tmpfs si riempie (osservato il 2026-05-11)
 - **Ruolo single-client, niente failover multi-server** — lo snapclient nativo usa direttamente l'autodiscovery di libavahi-client. La macchina a stati di failover multi-server di `discover-server.sh` (TCP probing, anti-flapping, scelta IPv4 intelligente) non è disponibile sul Pi Zero 2 W. Accettabile per i setup headless tipici a singola stanza; se serve failover usa un client Pi 3 B+ o Pi 4
@@ -283,6 +283,8 @@ Configurazione del firewall (regole `ufw`) e setup QoS / `cake` qdisc sono docum
 - File database MPD: <100 MB indipendentemente dalla dimensione della libreria
 
 ## Configurazioni Consigliate
+
+> Le schede elencate sotto sono scelte dalla **famiglia DAC PCM5122** che snapMULTI valida e sono attese funzionanti, ma solo le unità in [Combinazioni Testate](#combinazioni-testate) sono state verificate fisicamente end-to-end. Considera le altre come attese-funzionanti, non validate al lancio.
 
 ### Starter — 2 stanze
 
