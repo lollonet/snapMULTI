@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+- **`check_env.sh` smoke — now validates the CLIENT `.env`, not only the server one**. The `.env` integrity check only looked at `/opt/snapmulti/.env`, so on a pure client (which has `/opt/snapclient/.env` with `SNAPCLIENT_`/`VISUALIZER_`/`FBDISPLAY_` limit keys, written by `setup.sh`) it reported "no .env found" and never validated the client config — a malformed `FBDISPLAY_MEM_LIMIT` etc. would pass smoke silently. The check is now mode/dir-aware: it validates `$SERVER_DIR/.env` and `$CLIENT_DIR/.env` (both on a `both` install), falling back to the well-known `/opt` paths. Native Pi Zero clients (which use `/etc/default/snapclient`, no container limits) correctly report no `.env`. Verified live on a client (snapdigi) and a both-mode host (snapvideo). New `tests/test_check_env_client.sh` (8 assertions).
 
 - **`docs/TROUBLESHOOTING.{md,it.md}` — `backup-from-sd.sh` reflash-prewarm steps corrected to the host-side invocation (doc-vs-software audit, #652)**. The "pre-warm the next reflash" step (and a shorter mention above it) told the user to run `sudo bash /opt/snapmulti/scripts/backup-from-sd.sh` **on the old SD card / device** — but the script is **host-side** (`backup-from-sd.sh:7`: reads the SD "mounted on your Mac/PC"). Following the doc, a user reflashing would fail to preserve `mpd.db` and hit a full NFS re-scan. Rewritten to: pull the SD → mount on the computer → run `./scripts/backup-from-sd.sh` from the bundle → `prepare-sd.sh` re-stages it. README and ADVANCED already described this correctly.
 
