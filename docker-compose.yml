@@ -342,8 +342,11 @@ services:
   # SECURITY NOTICE: tidal-connect base image is Raspbian Stretch (EOL 2019-07).
   # We pull APT packages from archive.debian.org with `trusted=yes` and bypass
   # Valid-Until checks. The tidal-connect binary itself is proprietary and
-  # unmaintained. This service is **opt-in** (Compose profile `tidal`):
-  # enable only if you accept the security trade-off. See docs/USAGE.md#tidal-connect-security-note.
+  # unmaintained. The service is gated behind the Compose profile `tidal`, but
+  # that profile is **enabled by default on ARM installs** — deploy.sh writes
+  # COMPOSE_PROFILES=tidal to /opt/snapmulti/.env on Pi 3/4/5, so it is active
+  # out of the box. Opt OUT by removing `tidal` from COMPOSE_PROFILES if you
+  # don't accept the security trade-off. See docs/USAGE.md#tidal-connect-security-note.
   tidal-connect:
     image: lollonet/snapmulti-tidal:${IMAGE_TAG:-latest}
     container_name: tidal-connect

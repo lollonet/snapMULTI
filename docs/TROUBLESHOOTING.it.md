@@ -32,7 +32,7 @@ Prima di addentrarti nei singoli sintomi, esegui il controllo di salute generale
 sudo bash /opt/snapmulti/scripts/device-smoke.sh --server   # oppure --client, o --both
 ```
 
-Verifica stato mount root + overlayroot, storage driver Docker, unit systemd richieste, conteggio container previsti / attivi / healthy, annuncio mDNS, raggiungibilità TCP/RPC di Snapcast, moduli kernel audio rispetto all'HAT configurato, QoS, mount musica e salute dei timer (10 moduli in `scripts/smoke/`). Se tutte le sezioni sono verdi, la piattaforma è sana — concentrati a monte (rete, app di cast, account). Se qualcosa è rosso, il check fallito ti dice quale sottosistema controllare. Lo stesso script è il release gate (ADR-005) e quello che `fleet-smoke.sh` esegue su più device.
+Verifica stato mount root + overlayroot, storage driver Docker, unit systemd richieste, conteggio container previsti / attivi / healthy, annuncio mDNS, raggiungibilità TCP/RPC di Snapcast, moduli kernel audio rispetto all'HAT configurato, QoS, mount musica e salute dei timer (un modulo per sottosistema in `scripts/smoke/`). Se tutte le sezioni sono verdi, la piattaforma è sana — concentrati a monte (rete, app di cast, account). Se qualcosa è rosso, il check fallito ti dice quale sottosistema controllare. Lo stesso script è il release gate (ADR-005) e quello che `fleet-smoke.sh` esegue su più device.
 
 Output JSON per script / dashboard: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server --json`.
 
@@ -95,7 +95,7 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 2. Da lì: `sudo ro-mode disable && sudo reboot` se servono modifiche persistenti (vedi [ADVANCED.it.md — Filesystem read-only](ADVANCED.it.md#filesystem-read-only)).
 3. Se il Pi non arriva mai al login: estrai la SD, apri la **partizione boot** sul laptop, modifica `user-data` per resettare le credenziali, reinserisci e accendi.
 
-**Se è ancora bloccato.** Riflasha con Imager — snapMULTI è reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)), e l'install dura circa 15-20 min su Pi 4/5. Fai prima un backup di `/opt/snapmulti/mpd.db` con `scripts/backup-from-sd.sh` se vuoi preservare l'indice della libreria musicale.
+**Se è ancora bloccato.** Riflasha con Imager — snapMULTI è reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)), e l'install dura circa 15-20 min su Pi 4/5. Per preservare l'indice della libreria musicale, estrai prima l'SD ed esegui `./scripts/backup-from-sd.sh` dal bundle snapMULTI sul tuo computer (host-side — legge l'SD montata; vedi "Pre-warm del prossimo reflash" più sotto).
 
 ## Niente audio
 
@@ -229,7 +229,7 @@ docker exec mpd mpc status | head
 **Cosa provare.**
 
 1. **Aspetta.** La prima scansione finisce tra minuti (libreria piccola) e diverse ore (50 k+ tracce su NFS lento). Una volta completata, il tono al prossimo boot sarà **pass** (ascendente).
-2. **Pre-warm del prossimo reflash.** Prima del reflash, lancia `sudo bash /opt/snapmulti/scripts/backup-from-sd.sh` sull'SD vecchia. Lo script estrae `mpd.db` di MPD sulla partizione boot; sul nuovo install MPD carica il database cached in secondi invece di rescansionare tutta la share NFS. Vedi [ADVANCED.it.md — Libreria musicale in rete](ADVANCED.it.md#libreria-musicale-in-rete).
+2. **Pre-warm del prossimo reflash.** Il timer di backup del device copia già `mpd.db` sulla partizione boot dell'SD. Prima del reflash, estrai l'SD, montala sul tuo Mac/PC ed esegui `./scripts/backup-from-sd.sh` **dal bundle snapMULTI su quel computer** (non sul Pi — lo script è host-side e legge l'SD appena montata). Copia `mpd.db` nel bundle, e `prepare-sd.sh` lo re-stagea sulla nuova SD, così il nuovo install carica il database cached in secondi invece di rescansionare tutta la share NFS. Vedi [ADVANCED.it.md — Libreria musicale in rete](ADVANCED.it.md#libreria-musicale-in-rete).
 
 **Se è ancora bloccato.** Se `docker exec mpd mpc status` NON mostra `Updating DB` E mpd resta `unhealthy` per più di un'ora, hai un problema vero — controlla `docker logs mpd` e la raggiungibilità del NAS ([Libreria NAS vuota o non si monta](#libreria-nas-vuota-o-non-si-monta-nfs--smb)).
 
