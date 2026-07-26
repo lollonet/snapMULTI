@@ -40,7 +40,7 @@ jobs:
       CODENAME: ${{ matrix.codename }}
       ARCH: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Resolve snapcast tag
         id: tag
@@ -107,7 +107,7 @@ jobs:
     env:
       REF: ${{ github.ref }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - uses: actions/download-artifact@v8
         with:
