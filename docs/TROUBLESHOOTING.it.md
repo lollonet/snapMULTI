@@ -20,7 +20,7 @@ Lo puoi anche generare manualmente su un device in esecuzione per supporto:
 sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp
 ```
 
-Stesse regole di anonimizzazione.
+Su un device solo-player (Audio Player) lo script si trova invece in `/opt/snapclient/scripts/diagnostic.sh`. Stesse regole di anonimizzazione.
 
 > **Non ti senti a tuo agio con i comandi da terminale?** Fermati qui: allega il pacchetto diagnostico a una issue GitHub e descrivi cosa hai visto su HDMI / LED / app del router. I comandi sotto sono utili, ma il pacchetto diagnostico è il percorso di supporto principale.
 
@@ -320,7 +320,7 @@ cat /var/log/snapmulti-install.log
 http://<server>:8083/status
 ```
 
-Per creare un pacchetto diagnostico portabile e anonimizzato da allegare a una segnalazione bug: `sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp`.
+Per creare un pacchetto diagnostico portabile e anonimizzato da allegare a una segnalazione bug: `sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp` (sui device solo-player: `/opt/snapclient/scripts/diagnostic.sh`).
 
 ## Ancora bloccato?
 

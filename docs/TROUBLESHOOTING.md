@@ -20,7 +20,7 @@ You can also create one manually on a running device for support reports:
 sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp
 ```
 
-Same redaction rules.
+On a player-only (Audio Player) device the script lives at `/opt/snapclient/scripts/diagnostic.sh` instead. Same redaction rules.
 
 > **Not comfortable with terminal commands?** Stop here: attach the diagnostic bundle to a GitHub issue and describe what you saw on HDMI / LEDs / router app. The commands below are useful, but the bundle is the support-first path.
 
@@ -320,7 +320,7 @@ cat /var/log/snapmulti-install.log
 http://<server>:8083/status
 ```
 
-For a portable, anonymised bundle to attach to a bug report: `sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp`.
+For a portable, anonymised bundle to attach to a bug report: `sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp` (on player-only devices: `/opt/snapclient/scripts/diagnostic.sh`).
 
 ## Still stuck?
 
