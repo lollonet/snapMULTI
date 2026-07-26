@@ -156,13 +156,7 @@ Schema completo: [Snapcast JSON-RPC v2.0.0](https://github.com/badaix/snapcast/b
 
 ## Unit systemd
 
-Dopo l'installazione, systemd controlla il ciclo di vita dei container (ADR-005). Docker `restart: unless-stopped` gestisce i crash, systemd gestisce il boot.
-
-- Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`, `snapmulti-state-backup.path` (myMPD), `snapmulti-state-backup.timer` (server.json + safety net)
-- Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (solo client HDMI)
-- Tutti: `snapmulti-boot-tune.service` (CPU governor, autosuspend USB, WiFi powersave)
-
-Ispeziona con `systemctl cat <unit>`. I file di unit sono installati da `firstboot.sh`.
+Dopo l'installazione, systemd controlla il ciclo di vita dei container (ADR-005). Docker `restart: unless-stopped` gestisce i crash, systemd gestisce il boot. L'inventario autorevole delle unit (server / client / tutte) sta in [USAGE.it.md](USAGE.it.md#unit-systemd) — ispeziona qualunque unit con `systemctl cat <unit>`. I file di unit sono installati da `firstboot.sh`.
 
 ## Strategia di aggiornamento
 
@@ -184,7 +178,7 @@ Dopo ogni reflash o aggiornamento in-place, esegui il test di salute sul device 
 
 snapMULTI separa due concetti di versione, così una release di soli script (CHANGELOG, docs, fix nell'installer) non costringe a ricostruire e ripubblicare le immagini Docker:
 
-- **`SNAPMULTI_RELEASE`** — il tag git della release (es. `v0.7.9.6`). Quello che `gh release view` mostra.
+- **`SNAPMULTI_RELEASE`** — il tag git della release (es. `v0.8.3`). Quello che `gh release view` mostra.
 - **`SNAPMULTI_IMAGE_SET`** — il tag Docker delle immagini a cui la release si aggancia (es. `0.7.7`). Quello che `docker compose pull` scarica.
 
 La maggior parte delle release incrementa entrambi. Una release di soli script incrementa `SNAPMULTI_RELEASE` e mantiene `SNAPMULTI_IMAGE_SET` all'ultimo valore pubblicato. La fonte di verità è `release-manifest.json` alla radice del repo, copiato sulla SD da `prepare-sd.sh`.
@@ -245,7 +239,7 @@ Il gate bypassa sia `requires_image_rebuild=false` sia il check di esistenza su 
 
 Dopo deploy / reflash:
 
-- Riga info del test di salute: `device-smoke.sh` → sezione `System` → `Release v0.7.9.6 (images 0.7.7)`
+- Riga info del test di salute: `device-smoke.sh` → sezione `System` → `Release v0.8.3 (images 0.7.7)`
 - Pacchetto diagnostico: `scripts/diagnostic.sh` produce `meta.txt` con `snapmulti_release=...` e `snapmulti_image_set=...`; il pacchetto include anche il `release-manifest.json` (scrubbato) dalla partizione di boot.
 - `.env` del server: `grep ^SNAPMULTI_ /opt/snapmulti/.env`
 - `.env` del client: `grep ^SNAPMULTI_ /opt/snapclient/.env`
@@ -339,7 +333,7 @@ Si assume ~200 MB di overhead SO + Docker. Le percentuali rappresentano i *limit
 
 ## Regole firewall
 
-Se l'host usa `ufw` o equivalente, apri queste porte sul **server**:
+Se l'host usa `ufw` o equivalente, apri queste porte sul **server** (lo scopo di ogni porta è definito nella tabella container in [USAGE.it.md](USAGE.it.md#architettura)):
 
 ```bash
 # Snapcast core

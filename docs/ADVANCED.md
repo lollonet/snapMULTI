@@ -156,13 +156,7 @@ Full schema: [Snapcast JSON-RPC v2.0.0](https://github.com/badaix/snapcast/blob/
 
 ## Systemd units
 
-After install, systemd owns container lifecycle (ADR-005). Docker `restart: unless-stopped` handles crashes, systemd handles boot.
-
-- Server: `snapmulti-server.service`, `snapmulti-status.timer`, `snapmulti-backup.timer`, `snapmulti-state-backup.path` (myMPD), `snapmulti-state-backup.timer` (server.json + safety net)
-- Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (HDMI clients only)
-- All: `snapmulti-boot-tune.service` (CPU governor, USB autosuspend, WiFi powersave)
-
-Inspect with `systemctl cat <unit>`. Unit files are installed by `firstboot.sh`.
+After install, systemd owns the container lifecycle (ADR-005). Docker `restart: unless-stopped` handles crashes, systemd handles boot. The authoritative unit inventory (server / client / all) lives in [USAGE.md](USAGE.md#systemd-units) — inspect any of them with `systemctl cat <unit>`. Unit files are installed by `firstboot.sh`.
 
 ## Update strategy
 
@@ -184,7 +178,7 @@ After every reflash or in-place update, run the smoke test on the device to conf
 
 snapMULTI separates two version concepts so a script-only release (CHANGELOG, docs, installer fixes) does not force a Docker image rebuild + repush:
 
-- **`SNAPMULTI_RELEASE`** — the git tag of the release (e.g. `v0.7.9.6`). What `gh release view` shows.
+- **`SNAPMULTI_RELEASE`** — the git tag of the release (e.g. `v0.8.3`). What `gh release view` shows.
 - **`SNAPMULTI_IMAGE_SET`** — the Docker image tag the release pins to (e.g. `0.7.7`). What `docker compose pull` fetches.
 
 Most releases bump both. A script-only release bumps `SNAPMULTI_RELEASE` and keeps `SNAPMULTI_IMAGE_SET` at the last published value. The source of truth is `release-manifest.json` at the repo root, staged onto the SD by `prepare-sd.sh`.
@@ -245,7 +239,7 @@ The gate bypasses both `requires_image_rebuild=false` and the Docker Hub existen
 
 After a deploy / reflash:
 
-- Smoke test info line: `device-smoke.sh` → `System` section → `Release v0.7.9.6 (images 0.7.7)`
+- Smoke test info line: `device-smoke.sh` → `System` section → `Release v0.8.3 (images 0.7.7)`
 - Diagnostic bundle: `scripts/diagnostic.sh` produces `meta.txt` with `snapmulti_release=...` and `snapmulti_image_set=...`; the bundle also includes the scrubbed `release-manifest.json` from the boot partition.
 - Server `.env`: `grep ^SNAPMULTI_ /opt/snapmulti/.env`
 - Client `.env`: `grep ^SNAPMULTI_ /opt/snapclient/.env`
@@ -339,7 +333,7 @@ Assumes ~200 MB OS + Docker overhead. Percentages represent *limit ceilings*, no
 
 ## Firewall rules
 
-If the host runs `ufw` or an equivalent, open these ports on the **server** side:
+If the host runs `ufw` or an equivalent, open these ports on the **server** side (each port's purpose is defined in the container table in [USAGE.md](USAGE.md#architecture)):
 
 ```bash
 # Snapcast core
