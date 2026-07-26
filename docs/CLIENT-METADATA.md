@@ -85,13 +85,14 @@ Metadata-service ws://<SERVER>:8082            live metadata push (full snapshot
 
 ## Metadata shape
 
-Example:
+Example — an **MPD** payload, which carries the full set of keys (streaming
+sources omit `track` / `disc` / `bitrate`, see below):
 
 ```json
 {
   "playing": true,
-  "stream_id": "Tidal",
-  "source": "Tidal",
+  "stream_id": "MPD",
+  "source": "MPD",
   "title": "Malibu",
   "artist": "Hole",
   "album": "Celebrity Skin",
@@ -101,10 +102,14 @@ Example:
   "codec": "FLAC",
   "sample_rate": 44100,
   "bit_depth": 16,
+  "bitrate": 1411,
   "elapsed": 15,
   "duration": 230,
+  "date": "1998-09-02",
   "original_date": "1998-09-02",
   "genre": "rock",
+  "track": "3",
+  "disc": "1",
   "volume": 72,
   "muted": false
 }
@@ -113,6 +118,14 @@ Example:
 `volume` and `muted` are present only when subscribing with `{"subscribe":...}`,
 because they are client/room-specific. They are not present when using
 `{"subscribe_stream":...}`.
+
+`date`, `track`, `disc` and `bitrate` are **source-dependent**: the MPD source
+populates all four from the file's tags. Streaming sources (Tidal / AirPlay /
+Spotify) never populate `track`, `disc`, or `bitrate` — these keys are **absent
+from the payload entirely** for those sources, not empty or zero. Read them with
+a default (e.g. `payload.get("bitrate", 0)`), never `payload["bitrate"]`. `date`
+may still be filled in via MusicBrainz enrichment for any source; `original_date`
+is the original-release date when a separate tag exists — often equal to `date`.
 
 The `artwork` / `artist_image` URLs embed the server hostname as the
 metadata-service sees itself. If the client lives on a different network
@@ -127,6 +140,7 @@ Fields may be missing, empty, or null.
 - `artist_image` — optional fallback image.
 - `elapsed` / `duration` — not all streams expose a timeline.
 - `date`, `original_date`, `genre`, `artwork_source` — informational only.
+- `track`, `disc`, `bitrate` — MPD-only; absent entirely on streaming sources.
 
 For AirPlay and Tidal specifically, `elapsed` may be **absent** even on
 a playing stream when metadata-service was restarted while a track was
