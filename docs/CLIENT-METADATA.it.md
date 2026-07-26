@@ -89,13 +89,14 @@ risolto da `_snapcast._tcp.local`. Mai hardcodare un IP. Mai assumere che
 
 ## Forma dei metadata
 
-Esempio:
+Esempio — un payload **MPD**, che porta l'insieme completo delle chiavi (le
+source di streaming omettono `track` / `disc` / `bitrate`, vedi sotto):
 
 ```json
 {
   "playing": true,
-  "stream_id": "Tidal",
-  "source": "Tidal",
+  "stream_id": "MPD",
+  "source": "MPD",
   "title": "Malibu",
   "artist": "Hole",
   "album": "Celebrity Skin",
@@ -123,12 +124,13 @@ Esempio:
 presenti quando usi `{"subscribe_stream":...}`.
 
 `date`, `track`, `disc` e `bitrate` sono **dipendenti dalla source**: la source
-MPD li popola tutti e quattro dai tag del file, mentre le source di streaming
-(Tidal / AirPlay / Spotify) forniscono solo ciò che espongono — di solito né
-`track` né `disc`. Il servizio emette sempre le chiavi; i valori assenti sono
-`""` (stringhe) o `0` (`bitrate`). `date` è la data di pubblicazione così come
-la riporta la source; `original_date` è la data di pubblicazione originale
-quando esiste un tag separato (arricchimento MusicBrainz) — spesso coincidono.
+MPD li popola tutti e quattro dai tag del file. Le source di streaming
+(Tidal / AirPlay / Spotify) non popolano mai `track`, `disc` o `bitrate` — per
+quelle source queste chiavi sono **del tutto assenti dal payload**, non vuote o a
+zero. Leggile con un default (es. `payload.get("bitrate", 0)`), mai
+`payload["bitrate"]`. `date` può comunque essere valorizzata via arricchimento
+MusicBrainz per qualsiasi source; `original_date` è la data di pubblicazione
+originale quando esiste un tag separato — spesso coincide con `date`.
 
 Le URL `artwork` / `artist_image` incorporano l'hostname che il
 metadata-service vede di se stesso. Se il client vive su un segmento di rete
@@ -143,6 +145,7 @@ I campi possono essere mancanti, vuoti o null.
 - `artist_image` — immagine di fallback opzionale.
 - `elapsed` / `duration` — non tutti gli stream espongono una timeline.
 - `date`, `original_date`, `genre`, `artwork_source` — solo informativi.
+- `track`, `disc`, `bitrate` — solo MPD; del tutto assenti sulle source di streaming.
 
 Per AirPlay e Tidal nello specifico, `elapsed` può essere **assente**
 anche su uno stream in playing quando metadata-service è stato
