@@ -101,10 +101,14 @@ Example:
   "codec": "FLAC",
   "sample_rate": 44100,
   "bit_depth": 16,
+  "bitrate": 1411,
   "elapsed": 15,
   "duration": 230,
+  "date": "1998-09-02",
   "original_date": "1998-09-02",
   "genre": "rock",
+  "track": "3",
+  "disc": "1",
   "volume": 72,
   "muted": false
 }
@@ -113,6 +117,14 @@ Example:
 `volume` and `muted` are present only when subscribing with `{"subscribe":...}`,
 because they are client/room-specific. They are not present when using
 `{"subscribe_stream":...}`.
+
+`date`, `track`, `disc` and `bitrate` are **source-dependent**: the MPD source
+populates all four from the file's tags, while the streaming sources
+(Tidal / AirPlay / Spotify) provide only what they expose — usually neither
+`track` nor `disc`. The service always emits the keys; absent values are `""`
+(strings) or `0` (`bitrate`). `date` is the release date as the source reports
+it; `original_date` is the original-release date when a separate tag exists
+(MusicBrainz enrichment) — they are often equal.
 
 The `artwork` / `artist_image` URLs embed the server hostname as the
 metadata-service sees itself. If the client lives on a different network
