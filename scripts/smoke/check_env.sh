@@ -27,29 +27,42 @@
 
 # shellcheck disable=SC2154
 
-# Where to look for .env. /opt/snapmulti is server-side; client mode
-# doesn't have a .env (snapclient.conf instead).
-_ENV_CANDIDATES=(
-    /opt/snapmulti/.env
-)
-
 check_env() {
     section ".env Integrity"
 
-    local env_file=""
-    local candidate
-    for candidate in "${_ENV_CANDIDATES[@]}"; do
-        if [[ -f "$candidate" ]]; then
-            env_file="$candidate"
-            break
-        fi
-    done
+    # Both install shapes carry a Docker `.env` with per-service limit keys:
+    # the server at $SERVER_DIR/.env (/opt/snapmulti) and the Docker client at
+    # $CLIENT_DIR/.env (/opt/snapclient, with SNAPCLIENT_/VISUALIZER_/FBDISPLAY_
+    # limits). A `both` install has BOTH. Validate every one that exists — an
+    # earlier version only looked at /opt/snapmulti/.env, so a pure client (no
+    # server .env) reported "no .env" and never validated its client config.
+    # Native Pi Zero clients use /etc/default/snapclient (no container limits),
+    # so no .env there is the expected, correct state.
+    local -a candidates=()
+    [[ -n "${SERVER_DIR:-}" && -f "${SERVER_DIR}/.env" ]] && candidates+=("${SERVER_DIR}/.env")
+    [[ -n "${CLIENT_DIR:-}" && -f "${CLIENT_DIR}/.env" ]] && candidates+=("${CLIENT_DIR}/.env")
+    if (( ${#candidates[@]} == 0 )); then
+        # Fall back to the well-known install paths when the dirs weren't
+        # resolved (e.g. a bare re-run outside device-smoke's detection).
+        local wk
+        for wk in /opt/snapmulti/.env /opt/snapclient/.env; do
+            [[ -f "$wk" ]] && candidates+=("$wk")
+        done
+    fi
 
-    if [[ -z "$env_file" ]]; then
-        info "No .env found in any of: ${_ENV_CANDIDATES[*]} (client-only device?)"
+    if (( ${#candidates[@]} == 0 )); then
+        info "No .env found (server /opt/snapmulti/.env or client /opt/snapclient/.env) — native client (uses /etc/default/snapclient) or a fresh checkout?"
         return
     fi
 
+    local env_file
+    for env_file in "${candidates[@]}"; do
+        _check_env_validate "$env_file"
+    done
+}
+
+_check_env_validate() {
+    local env_file="$1"
     pass_check ".env present at $env_file"
 
     # Stream the file, split on '=', validate per-key. Skip comments
