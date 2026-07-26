@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] — 2026-07-26
+
+> **v0.8.3 — script + upstream-image refresh, no snapMULTI rebuild.** Image set unchanged (`0.7.7`); the two upstream bumps (myMPD 25.2.2, go-librespot v0.7.4) are compose-tag pulls and the two changed baked files (`metadata-service.py`, `tidal-meta-bridge.sh`) are bind-mounted, so a reflash from this tag delivers everything without rebuilding snapMULTI images. Release-gate validated live: `device-smoke.sh --both` green on a fresh snapvideo flash (0 WARN / 0 ERROR, 10/10 containers healthy, full MPD metadata + artwork, pre-built db recovered, new `Audio liveness` + DSCP boot-gate checks passing on real hardware).
+
 ### Changed
 - **go-librespot bumped `v0.7.3` → `v0.7.4`**. Upstream reliability + mDNS fixes relevant to snapMULTI: skip tracks Spotify refuses an audio key for instead of freezing playback, avoid duplicate EOF events on loop-context playlist end (fixes spurious multi-track skipping), harden the Avahi backend for renaming, and allow changing the Zeroconf name when no session is active. Drop-in upstream image — no snapMULTI-side config change. References updated in `docker-compose.yml`, `CLAUDE.md`, `THIRD-PARTY-NOTICES.md`, `docs/HARDWARE.{md,it.md}`. Closes #620.
 - **myMPD bumped `25.1.1` → `25.2.2`**. Rolls up three upstream releases: `25.2.0` (hardened MPD connection handling + unexpected-disconnect recovery, double-linked-list rework, improved UTF-8 validation, WebradioDB update buttons), `25.2.1` (OpenSSL 4.0 compatibility, Mongoose update), `25.2.2` (placeholder-image init fix, libmpdclient fix). Drop-in — no snapMULTI-side config change. References updated in `docker-compose.yml`, `CLAUDE.md`, `THIRD-PARTY-NOTICES.md`, `docs/HARDWARE.{md,it.md}`. Closes #613, #619, #624.
