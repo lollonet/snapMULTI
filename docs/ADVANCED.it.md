@@ -41,7 +41,7 @@ Se la tua libreria è su un NAS (Synology, QNAP, server Linux generico, condivis
 |------------|--------|------|
 | NFS | NAS Linux / Synology / QNAP, allow-list per IP | `prepare-sd.sh` scrive una coppia `.mount`/`.automount` systemd; nessuna password |
 | SMB / CIFS | Condivisione Windows, Synology / QNAP con username + password | `prepare-sd.sh` scrive temporaneamente le credenziali in `install.conf` sulla partizione FAT32. Al primo boot, `firstboot.sh` le copia in `/etc/snapmulti-smb-credentials` con permessi root-only e poi le rimuove da `install.conf` |
-| USB | Disco collegato al Pi | Auto-montato da `udisks2`; scegli l'UUID della partizione nel menu |
+| USB | Disco collegato al Pi | La prima partizione USB con un filesystem viene auto-rilevata al primo boot (`mount-music.sh` scandisce `/dev/sd?1`/`/dev/sd?`) e montata in `/media/usb-music` tramite automount systemd basato sull'UUID — nessuna scelta nel menu |
 | Locale | File copiati in `/audio` sul Pi | Default per chi inizia |
 
 Naming dei path: le share NAS con **spazi** vengono rifiutate all'installazione (Synology di default `Music Share` → rinomina sul NAS in `Music_Share`). Vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md) se il mount fallisce silenziosamente dopo l'installazione.

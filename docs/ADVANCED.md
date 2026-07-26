@@ -41,7 +41,7 @@ If your library lives on a NAS (Synology, QNAP, generic Linux server, Windows sh
 |----------|------|-------|
 | NFS | Linux / Synology / QNAP NAS, allow-list by IP | `prepare-sd.sh` writes a systemd `.mount`/`.automount` pair; no password |
 | SMB / CIFS | Windows share, Synology / QNAP with username + password | `prepare-sd.sh` writes the credentials temporarily into `install.conf` on the FAT32 boot partition. On first boot, `firstboot.sh` copies them to `/etc/snapmulti-smb-credentials` with root-only permissions and then removes them from `install.conf` |
-| USB | Drive plugged into the Pi | Auto-mounted by `udisks2`; pick the partition UUID in the menu |
+| USB | Drive plugged into the Pi | The first USB partition with a filesystem is auto-detected on first boot (`mount-music.sh` scans `/dev/sd?1`/`/dev/sd?`) and mounted at `/media/usb-music` via a systemd automount keyed on its UUID — no menu selection |
 | Local | Files copied into `/audio` on the Pi | Default for first-time users |
 
 Path naming: NAS shares with **spaces** are rejected at install time (Synology defaults `Music Share` → rename on the NAS to `Music_Share`). See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if the mount silently fails post-install.
