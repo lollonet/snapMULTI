@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Status page — system-vitals badge (temperature · CPU load · audio resync)**. `/status` now shows a compact vitals badge at the top, next to the release info: SoC temperature, 1-minute CPU load, and a 24 h count of snapclient buffer-resync events. Resync is the honest Snapcast-path dropout proxy — there is no persistent ALSA xrun counter (snapclient owns ALSA and closes it on idle), so buffer resyncs (`pShortBuffer` / `Hard sync`) are what's actually measurable. All three are collected **host-side** by `device-smoke.sh` (`check_thermal` / `check_system` CPU load / `check_audio_liveness` resync) and rendered by the **read-only** `metadata-service.py` from the existing status snapshot — no new container privileges, and (bind-mounted renderer) it lands on reflash without an image rebuild. New tests: `_al_count_resyncs` pure classifier + `_extract_vitals` badge rendering.
+
 ## [0.8.3] — 2026-07-26
 
 > **v0.8.3 — script + upstream-image refresh, no snapMULTI rebuild.** Image set unchanged (`0.7.7`); the two upstream bumps (myMPD 25.2.2, go-librespot v0.7.4) are compose-tag pulls and the two changed baked files (`metadata-service.py`, `tidal-meta-bridge.sh`) are bind-mounted, so a reflash from this tag delivers everything without rebuilding snapMULTI images. Release-gate validated live: `device-smoke.sh --both` green on a fresh snapvideo flash (0 WARN / 0 ERROR, 10/10 containers healthy, full MPD metadata + artwork, pre-built db recovered, new `Audio liveness` + DSCP boot-gate checks passing on real hardware).

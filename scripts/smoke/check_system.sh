@@ -96,6 +96,17 @@ check_system() {
         fi
     fi
 
+    # CPU load average — a compact system vital surfaced next to the release
+    # identity (the status page promotes temperature / load / audio-resync
+    # into a header badge). Purely informational: load is workload-dependent,
+    # never a pass/fail gate.
+    if [[ -r /proc/loadavg ]]; then
+        local _la1 _la5 _la15 _cores
+        read -r _la1 _la5 _la15 _ </proc/loadavg 2>/dev/null || true
+        _cores=$(nproc 2>/dev/null || echo '?')
+        [[ -n "${_la1:-}" ]] && info "CPU load: ${_la1} ${_la5} ${_la15} (${_cores} cores)"
+    fi
+
     # 1. Cmdline — quiet boot flags. Only meaningful when display is
     # connected; on headless devices their absence is fine. We grep
     # /proc/cmdline directly inside the loop below — no need to slurp

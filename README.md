@@ -116,7 +116,7 @@ Replace `hostname` with what you set in Step 1.
 | `http://hostname.local:8083/` | **Start here** — links to every snapMULTI web page and API |
 | `http://hostname.local:1780` | **Snapweb** — per-room volume, group speakers, switch source |
 | `http://hostname.local:8180` | **myMPD** — browse and play music library |
-| `http://hostname.local:8083/status` | **Status page** — container + audio + NFS status |
+| `http://hostname.local:8083/status` | **Status page** — container + audio + NFS status, plus system vitals (temp · CPU load · audio resync) |
 
 ### Cast from your apps
 

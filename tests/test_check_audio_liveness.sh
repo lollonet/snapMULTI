@@ -77,6 +77,12 @@ assert_eq "$(_al_classify_decoder playing 0 0 3600)" "disconnected" "disconnecte
 assert_eq "$(_al_classify_decoder playing 0 1 30)"   "boot"         "boot window suppresses silent verdict"
 assert_eq "$(_al_classify_decoder unknown 0 1 3600)" "unknown"      "unknown stream state -> unknown"
 
+echo "== _al_count_resyncs =="
+assert_eq "$(printf '' | _al_count_resyncs)" "0" "empty log -> 0 resyncs"
+assert_eq "$(printf 'steady line\nanother line\n' | _al_count_resyncs)" "0" "no resync markers -> 0"
+assert_eq "$(printf '(Stream) pShortBuffer->full() ...: -18503\nHard sync at 44100\nResync buffer drift\n' | _al_count_resyncs)" "3" "three distinct markers -> 3"
+assert_eq "$(printf 'pShortBuffer\npShortBuffer\n' | _al_count_resyncs)" "2" "repeated pShortBuffer counted per line"
+
 # ── Layer 2: orchestration via seam overrides ────────────────────────
 # Run check_audio_liveness in a child bash with helper shims + seam
 # overrides, capturing its emitted lines.
@@ -129,6 +135,23 @@ unavailable_out="$(run_check '
 ')"
 assert_contains "$unavailable_out" "[INFO] snapclient reconnect check skipped (log source unavailable" "unreadable log source skips with INFO"
 assert_not_contains "$unavailable_out" "[OK] snapclient link stable" "unreadable log source is NOT a false 'link stable' pass"
+
+echo "== orchestration: audio resync vital (24h) =="
+resync_out="$(run_check '
+    _al_uptime_s()                { printf 3600; }
+    _al_snapclient_logs()         { printf ""; }
+    _al_snapclient_resync_count() { printf 7; }
+    _al_client_identity()         { printf ""; }  # stop after resync leg
+')"
+assert_contains "$resync_out" "[INFO] Audio resync (snapclient, 24h): 7" "resync count surfaced as INFO vital"
+
+resync_na_out="$(run_check '
+    _al_uptime_s()                { printf 3600; }
+    _al_snapclient_logs()         { printf ""; }
+    _al_snapclient_resync_count() { return 1; }  # log source unavailable
+    _al_client_identity()         { printf ""; }
+')"
+assert_contains "$resync_na_out" "[INFO] Audio resync (24h): log source unavailable" "unavailable resync source -> n/a INFO"
 
 echo "== orchestration: decoder silent (#422) =="
 silent_out="$(run_check '
