@@ -17,6 +17,7 @@ import logging
 import mmap
 import os
 import signal
+import re
 import socket
 import sys
 import threading
@@ -107,6 +108,73 @@ def get_lan_ip() -> str:
     if cached_ip in ("?.?.?.?", "Booting…") or now - cached_at > _LAN_IP_TTL:
         _LAN_IP_CACHE = (_get_lan_ip(), now)
     return _LAN_IP_CACHE[0]
+
+
+_VITALS_CACHE: tuple[str, float] = ("", 0.0)
+_VITALS_TTL = 60.0
+
+
+def _parse_vitals(records: list) -> str:
+    """Compact 'temp · load · resync' string from status-snapshot records.
+
+    Reads the same host-side vitals the server's /status badge shows
+    (temperature from check_thermal, CPU load from check_system, 24h
+    audio-resync from check_audio_liveness) by stable message prefix. Uses
+    DejaVuSans-safe glyphs only (°, ·) — no emoji, which the framebuffer font
+    cannot render. Returns '' when none are present.
+    """
+    temp = load = resync = None
+    for r in records:
+        msg = r.get("msg", "") if isinstance(r, dict) else ""
+        if temp is None and "SoC" in msg:
+            m = re.search(r"(\d+(?:\.\d+)?)\s*°C", msg)
+            if m:
+                temp = m.group(1)
+        if load is None:
+            m = re.match(r"CPU load:\s*([\d.]+)", msg)
+            if m:
+                load = m.group(1)  # 1-minute average
+        if resync is None:
+            m = re.match(r"Audio resync[^:]*:\s*(\d+)\b", msg)
+            if m:
+                resync = m.group(1)
+    parts = []
+    if temp is not None:
+        parts.append(f"{temp}°C")
+    if load is not None:
+        parts.append(f"load {load}")
+    if resync is not None:
+        parts.append(f"resync {resync}")
+    return "  ·  ".join(parts)
+
+
+def _fetch_vitals() -> str:
+    """Fetch the local metadata-service status snapshot and format its vitals.
+    Returns '' on any error (network, non-200, bad JSON) — the display must
+    never stall or crash on a vitals hiccup."""
+    try:
+        resp = requests.get(
+            f"http://{metadata_host}:{METADATA_HTTP_PORT}/status?format=json",
+            timeout=1.5,
+        )
+        if resp.status_code != 200:
+            return ""
+        return _parse_vitals(resp.json().get("records", []))
+    except Exception:  # noqa: BLE001 — a vitals hiccup must never stall/crash the display
+        return ""
+
+
+def get_vitals() -> str:
+    """TTL-cached vitals string for the bottom status line. The status
+    snapshot only updates every ~5 min, so a 60 s cache keeps the render path
+    from doing HTTP on every base-frame redraw. On a transient fetch failure
+    the last good value is kept until the fetch succeeds again."""
+    global _VITALS_CACHE
+    now = time.time()
+    cached, cached_at = _VITALS_CACHE
+    if now - cached_at > _VITALS_TTL:
+        _VITALS_CACHE = ((_fetch_vitals() or cached), now)
+    return _VITALS_CACHE[0]
 
 
 server_info: dict = {}
@@ -1034,6 +1102,12 @@ def render_base_frame() -> Image.Image:
         ver_parts.append(f"srv {srv_ver}")
     ver_suffix = "  •  " + "  /  ".join(ver_parts) if ver_parts else ""
     status_text = f"{get_lan_ip()}  →  {snapserver_display}{ver_suffix}"
+    # System vitals (temp · load · resync) appended next to the version. The
+    # line is re-centered below from its full width, so appending shifts the
+    # whole line to stay centered automatically.
+    vitals = get_vitals()
+    if vitals:
+        status_text = f"{status_text}  •  {vitals}"
     status_font_size = max(10, L["clock_h"] // 3)
     status_font = _get_font(status_font_size)
     bbox = draw.textbbox((0, 0), status_text, font=status_font)
