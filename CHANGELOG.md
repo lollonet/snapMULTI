@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.8.4] — 2026-08-22
+
+> **v0.8.4 — system-vitals readout + CI/doc polish, no snapMULTI rebuild.** Image set unchanged (`0.7.7`): the new system-vitals badge ships as a bind-mounted `metadata-service.py` / `fb_display.py` plus staged smoke-script changes, so a reflash from this tag delivers it without rebuilding any image. Also rolls up the doc-vs-software audit (#652), the client-`.env` smoke fix, and a CI-efficiency pass (concurrency-cancel + docs-only skips). No source, port, or container-security change.
+
 ### Changed
 - **CI — cancel superseded runs + skip the security scan on docs-only PRs**. Added `concurrency: cancel-in-progress` to `validate`, `security`, `build-test`, and `claude-code-review`, so a new push to a PR cancels the in-flight run instead of running both to completion (the latest run is what a required check reads, so this is safe). `validate`'s push trigger narrowed from `['**']` to `[main]` — feature-branch validation is covered by the `pull_request` event, eliminating the branch-push + PR double run. `security` (not a required check) now `paths-ignore`s `**.md` / `docs/**`, so docs-only PRs skip it. `validate` and `claude-review` are required checks, so they intentionally keep running on every PR — path-skipping a required check would block merge. No `$` impact (the repo is public — hosted runners are free); the win is faster feedback and less self-hosted-runner load.
 
