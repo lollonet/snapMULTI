@@ -21,6 +21,12 @@ on:
       - 'config/shairport-sync.conf'
   workflow_dispatch:
 
+# Docker builds are the heaviest PR job — cancel a superseded build when a
+# new commit lands on the same PR instead of running both to completion.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
