@@ -96,7 +96,7 @@ Tidal Connect è **abilitato di default sugli install ARM** (`deploy.sh` scrive 
 |-------------|-----|---------|
 | **Snapweb** | `http://<server>:1780` | Cambia sorgente per altoparlante, raggruppa/separa, volume per stanza |
 | **myMPD** | `http://<server>:8180` | Sfoglia libreria musicale, code, playlist, copertine |
-| **Stato sistema** | `http://<server>:8083/status` | Salute container + audio + NFS (auto-refresh) |
+| **Stato sistema** | `http://<server>:8083/status` | Salute container + audio + NFS, più un badge di vitali di sistema (temperatura SoC · carico CPU · conteggio resync audio 24 h) — auto-refresh |
 | **App Snapcast per Android** | [Play Store](https://play.google.com/store/apps/details?id=de.badaix.snapcast) | Equivalente mobile di Snapweb |
 
 Regole rapide:

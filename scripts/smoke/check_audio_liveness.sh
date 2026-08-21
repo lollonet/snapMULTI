@@ -79,6 +79,42 @@ _al_snapclient_logs() {
     fi
 }
 
+# Resync window: 24h. A "resync" is snapclient correcting playback-buffer
+# drift — logged as `pShortBuffer->full()` / `Resync` / `Hard sync`. There is
+# no persistent ALSA xrun counter (snapclient owns ALSA and closes it on
+# idle), so buffer-resync events are the closest proxy to an audible dropout
+# on the Snapcast path. Count is bounded by container / journal log retention.
+_AL_RESYNC_WINDOW_S=86400
+
+_al_count_resyncs() {
+    # Pure classifier: count snapclient buffer-resync markers in the log text
+    # on stdin. Echoes an integer (0 when none / empty). No I/O — unit-tested
+    # directly.
+    local n
+    n=$(grep -cE 'pShortBuffer|[Rr]esync|[Hh]ard sync' 2>/dev/null || true)
+    [[ "$n" =~ ^[0-9]+$ ]] || n=0
+    printf '%s' "$n"
+}
+
+_al_snapclient_resync_count() {
+    # Echo the resync-event count over the 24h window; return non-zero when
+    # the log source is unavailable so the caller reports n/a instead of a
+    # misleading 0.
+    local logs
+    if [[ "${INSTALL_TYPE_NATIVE_CLIENT:-false}" == "true" ]]; then
+        logs=$(journalctl -u snapclient.service --since "-${_AL_RESYNC_WINDOW_S}s" \
+            --no-pager 2>/dev/null) || return 1
+    else
+        command -v docker >/dev/null 2>&1 || return 1
+        if [[ $EUID -ne 0 ]] && sudo -n true 2>/dev/null; then
+            logs=$(sudo -n docker logs --since "${_AL_RESYNC_WINDOW_S}s" snapclient 2>&1) || return 1
+        else
+            logs=$(docker logs --since "${_AL_RESYNC_WINDOW_S}s" snapclient 2>&1) || return 1
+        fi
+    fi
+    printf '%s' "$logs" | _al_count_resyncs
+}
+
 _al_pcm_running() {
     # rc 0 if any ALSA playback substream is RUNNING, 1 otherwise.
     local s state
@@ -209,6 +245,17 @@ check_audio_liveness() {
             pass_check "snapclient link stable: no reconnects in ${_AL_FLAP_WINDOW_S}s"
             ;;
     esac
+
+    # ---- 1b. buffer-resync count (24h) — informational audio-health vital ----
+    # Surfaced on the status page next to temperature / CPU load. Not a gate:
+    # resyncs are workload- and network-dependent; a rising trend is what
+    # signals real dropouts, not any single absolute value.
+    local resyncs
+    if resyncs=$(_al_snapclient_resync_count); then
+        info "Audio resync (snapclient, 24h): ${resyncs}"
+    else
+        info "Audio resync (24h): log source unavailable"
+    fi
 
     # ---- 2. decoder silent while stream playing ----
     local identity client_id server_host

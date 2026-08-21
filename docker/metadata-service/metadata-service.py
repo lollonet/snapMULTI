@@ -3004,9 +3004,63 @@ def _status_to_html(
         verdict_icon=verdict_icon,
         verdict_text=verdict_text,
         subtext=schema_banner + subtext,
+        vitals_html=_extract_vitals(records),
         sections_html="".join(sec_html_parts),
         footer=footer,
         embedded_json=json.dumps(data).replace("</", "<\\/"),
+    )
+
+
+def _extract_vitals(records: list[dict]) -> str:
+    """Build the compact System-vitals badge (temperature · CPU load · audio
+    resync) shown at the top of the status page, next to the release info.
+
+    The three values are collected host-side by device-smoke (check_thermal,
+    check_system, check_audio_liveness) and land in `records` as info/pass
+    messages — this reads them back by stable message prefix rather than
+    re-collecting them (the metadata container is read-only and cannot read
+    the host's sensors). Any vital that is absent renders as an em dash.
+    """
+    import html as _html
+    import re
+
+    temp: str | None = None
+    load: str | None = None
+    resync: str | None = None
+    for r in records:
+        msg = r.get("msg", "")
+        if temp is None and "SoC" in msg:
+            m = re.search(r"(\d+(?:\.\d+)?)\s*°C", msg)
+            if m:
+                temp = m.group(1)
+        if load is None:
+            m = re.match(r"CPU load:\s*([\d.]+)", msg)
+            if m:
+                load = m.group(1)  # 1-minute average
+        if resync is None:
+            m = re.match(r"Audio resync[^:]*:\s*(\d+)\b", msg)
+            if m:
+                resync = m.group(1)
+
+    if temp is None and load is None and resync is None:
+        return ""
+
+    def _cell(icon: str, label: str, value: str | None) -> str:
+        v = _html.escape(value) if value is not None else "—"
+        return (
+            f'<span class="vital">'
+            f'<span class="v-icon">{icon}</span>'
+            f'<span class="v-val">{v}</span>'
+            f'<span class="v-label">{label}</span>'
+            f"</span>"
+        )
+
+    return (
+        '<div class="vitals" role="group" aria-label="System vitals">'
+        + _cell("🌡", "°C", temp)
+        + _cell("⚙", "load 1m", load)
+        + _cell("♻", "resync 24h", resync)
+        + "</div>"
     )
 
 
@@ -3016,6 +3070,7 @@ def _render_html_shell(
     verdict_icon: str,
     verdict_text: str,
     subtext: str,
+    vitals_html: str = "",
     sections_html: str,
     footer: str,
     embedded_json: str = "{}",
@@ -3070,6 +3125,20 @@ def _render_html_shell(
     padding: .7rem 1rem; background: rgba(251,191,36,.12);
     border-left: 4px solid var(--accent-warn);
     margin-bottom: 1rem; font-size: .92rem;
+  }}
+  .vitals {{
+    display: flex; gap: .55rem; flex-wrap: wrap; margin: -.4rem 0 1.2rem;
+  }}
+  .vital {{
+    display: inline-flex; align-items: baseline; gap: .45rem;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: .5rem; padding: .5rem .85rem;
+  }}
+  .vital .v-icon  {{ font-size: 1rem; align-self: center; }}
+  .vital .v-val   {{ font-size: 1.05rem; font-weight: 600; color: var(--text); }}
+  .vital .v-label {{
+    font-size: .72rem; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: .05em;
   }}
   section {{
     background: var(--panel); border: 1px solid var(--border);
@@ -3144,6 +3213,7 @@ def _render_html_shell(
   <h1><span class="icon">{verdict_icon}</span>{verdict_text}</h1>
   <p>{subtext}</p>
 </div>
+{vitals_html}
 {sections_html}
 <footer>{footer}</footer>
 <script id="status-data" type="application/json">{embedded_json}</script>

@@ -1077,3 +1077,81 @@ class TestArtworkChainTelemetry:
         with caplog.at_level("INFO"):
             service._log_artwork_chain_hit(radio, "default")
         assert "Artwork served via default" in caplog.text
+
+
+class TestSystemVitals:
+    """Status-page System-vitals badge (temperature / CPU load / audio resync).
+
+    The three values are collected host-side by device-smoke and land in the
+    snapshot as info/pass records; `_extract_vitals` reads them back by stable
+    message prefix (the container is read-only and cannot read the sensors).
+    """
+
+    def _records(self, msgs: list[str]) -> list[dict]:
+        return [{"section": "x", "status": "info", "msg": m} for m in msgs]
+
+    def test_extract_vitals_all_present(self, metadata_service_module):
+        html = metadata_service_module._extract_vitals(
+            self._records(
+                [
+                    "SoC 69.1°C via vcgencmd (below 75°C warn floor)",
+                    "CPU load: 0.39 0.28 0.27 (4 cores)",
+                    "Audio resync (snapclient, 24h): 7",
+                ]
+            )
+        )
+        assert 'class="vitals"' in html
+        assert "69.1" in html
+        assert "0.39" in html  # 1-minute average only
+        assert ">7<" in html
+        assert "—" not in html
+
+    def test_extract_vitals_missing_render_dash(self, metadata_service_module):
+        html = metadata_service_module._extract_vitals(
+            self._records(["CPU load: 1.20 1.10 0.90 (4 cores)"])
+        )
+        assert "1.20" in html
+        assert html.count("—") == 2  # temperature + resync absent
+
+    def test_extract_vitals_empty_when_no_vitals(self, metadata_service_module):
+        assert metadata_service_module._extract_vitals([]) == ""
+
+    def test_extract_vitals_unavailable_resync_not_numeric(
+        self, metadata_service_module
+    ):
+        # "log source unavailable" must not be parsed as a resync count.
+        html = metadata_service_module._extract_vitals(
+            self._records(["Audio resync (24h): log source unavailable"])
+        )
+        assert html == ""  # no numeric vital at all -> no badge
+
+    def test_status_page_includes_vitals_badge(self, metadata_service_module):
+        data = {
+            "schema_version": 1,
+            "status": "ok",
+            "failures": 0,
+            "warnings": 0,
+            "hostname": "pi-server",
+            "mode": "both",
+            "records": [
+                {
+                    "section": "System",
+                    "status": "info",
+                    "msg": "CPU load: 0.50 0.40 0.30 (4 cores)",
+                },
+                {
+                    "section": "Thermal",
+                    "status": "pass",
+                    "msg": "SoC 62.0°C via vcgencmd (below 75°C warn floor)",
+                },
+                {
+                    "section": "Audio liveness",
+                    "status": "info",
+                    "msg": "Audio resync (snapclient, 24h): 0",
+                },
+            ],
+        }
+        html = metadata_service_module._status_to_html(data, age_s=1.0)
+        assert 'class="vitals"' in html
+        assert "62.0" in html
+        assert "0.50" in html

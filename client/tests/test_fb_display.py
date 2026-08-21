@@ -743,3 +743,58 @@ class TestIsSpectrumActive:
         fb_display.bands[:] = fb_display.NOISE_FLOOR
         fb_display.bands[0] = fb_display.NOISE_FLOOR + 4
         assert fb_display.is_spectrum_active()
+
+
+class TestVitals:
+    """Bottom-line system vitals (temp · load · resync) from the /status snapshot."""
+
+    def _records(self, msgs):
+        return [{"section": "x", "status": "info", "msg": m} for m in msgs]
+
+    def test_parse_all_three(self):
+        s = fb_display._parse_vitals(
+            self._records(
+                [
+                    "SoC 69.1°C via vcgencmd (below 75°C warn floor)",
+                    "CPU load: 0.39 0.28 0.27 (4 cores)",
+                    "Audio resync (snapclient, 24h): 7",
+                ]
+            )
+        )
+        assert "69.1°C" in s
+        assert "load 0.39" in s
+        assert "resync 7" in s
+        assert "·" in s  # DejaVuSans-safe separator, no emoji
+
+    def test_parse_partial_temp_only(self):
+        s = fb_display._parse_vitals(
+            self._records(["SoC 62.0°C via vcgencmd (below 75°C warn floor)"])
+        )
+        assert s == "62.0°C"
+
+    def test_parse_unavailable_resync_not_numeric(self):
+        s = fb_display._parse_vitals(
+            self._records(["Audio resync (24h): log source unavailable"])
+        )
+        assert s == ""
+
+    def test_parse_empty(self):
+        assert fb_display._parse_vitals([]) == ""
+
+    def test_get_vitals_ttl_cache(self, monkeypatch):
+        calls = {"n": 0}
+
+        def fake_fetch():
+            calls["n"] += 1
+            return "71°C"
+
+        monkeypatch.setattr(fb_display, "_fetch_vitals", fake_fetch)
+        fb_display._VITALS_CACHE = ("", 0.0)
+        assert fb_display.get_vitals() == "71°C"
+        assert fb_display.get_vitals() == "71°C"  # cache hit within TTL
+        assert calls["n"] == 1
+
+    def test_get_vitals_keeps_last_good_on_failure(self, monkeypatch):
+        fb_display._VITALS_CACHE = ("70°C", 0.0)  # stale timestamp -> refetch
+        monkeypatch.setattr(fb_display, "_fetch_vitals", lambda: "")  # failure
+        assert fb_display.get_vitals() == "70°C"  # last good kept
