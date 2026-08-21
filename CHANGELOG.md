@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+- **CI — cancel superseded runs + skip the security scan on docs-only PRs**. Added `concurrency: cancel-in-progress` to `validate`, `security`, `build-test`, and `claude-code-review`, so a new push to a PR cancels the in-flight run instead of running both to completion (the latest run is what a required check reads, so this is safe). `validate`'s push trigger narrowed from `['**']` to `[main]` — feature-branch validation is covered by the `pull_request` event, eliminating the branch-push + PR double run. `security` (not a required check) now `paths-ignore`s `**.md` / `docs/**`, so docs-only PRs skip it. `validate` and `claude-review` are required checks, so they intentionally keep running on every PR — path-skipping a required check would block merge. No `$` impact (the repo is public — hosted runners are free); the win is faster feedback and less self-hosted-runner load.
+
 ### Fixed
 - **`check_env.sh` smoke — now validates the CLIENT `.env`, not only the server one**. The `.env` integrity check only looked at `/opt/snapmulti/.env`, so on a pure client (which has `/opt/snapclient/.env` with `SNAPCLIENT_`/`VISUALIZER_`/`FBDISPLAY_` limit keys, written by `setup.sh`) it reported "no .env found" and never validated the client config — a malformed `FBDISPLAY_MEM_LIMIT` etc. would pass smoke silently. The check is now mode/dir-aware: it validates `$SERVER_DIR/.env` and `$CLIENT_DIR/.env` (both on a `both` install), falling back to the well-known `/opt` paths. Native Pi Zero clients (which use `/etc/default/snapclient`, no container limits) correctly report no `.env`. Verified live on a client (snapdigi) and a both-mode host (snapvideo). New `tests/test_check_env_client.sh` (8 assertions).
 

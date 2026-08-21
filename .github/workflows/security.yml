@@ -3,7 +3,16 @@ name: Security Scan
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**']
+
+# Not a required check, so paths-ignore is safe: a docs-only PR skips the
+# scan entirely (nothing to scan) without blocking merge. Cancel superseded
+# runs to free the runner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   gitleaks:

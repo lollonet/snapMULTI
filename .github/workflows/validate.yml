@@ -2,8 +2,17 @@ name: Validate Configurations
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
+
+# Cancel superseded runs: a new push to the same PR/branch cancels the
+# in-flight one. The latest run is what the `validate` required check reads,
+# so cancelling stale runs is safe and frees the runner. push is main-only
+# now — feature-branch validation is covered by the pull_request event, so
+# a branch push with an open PR no longer runs validate twice.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:

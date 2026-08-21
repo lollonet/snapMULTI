@@ -4,6 +4,13 @@ on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
 
+# Cancel a superseded review when a new commit is pushed to the same PR —
+# no point reviewing a stale head. The latest run is what the `claude-review`
+# required check reads, so this is safe.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   claude-review:
     runs-on: ubuntu-latest
