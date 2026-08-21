@@ -1116,7 +1116,9 @@ class TestSystemVitals:
     def test_extract_vitals_empty_when_no_vitals(self, metadata_service_module):
         assert metadata_service_module._extract_vitals([]) == ""
 
-    def test_extract_vitals_unavailable_resync_not_numeric(self, metadata_service_module):
+    def test_extract_vitals_unavailable_resync_not_numeric(
+        self, metadata_service_module
+    ):
         # "log source unavailable" must not be parsed as a resync count.
         html = metadata_service_module._extract_vitals(
             self._records(["Audio resync (24h): log source unavailable"])
