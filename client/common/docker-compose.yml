@@ -168,6 +168,9 @@ services:
       - APP_VERSION=${APP_VERSION:-}
       # Both-mode: pin to 127.0.0.1 and never run mDNS discovery fallback (same design as snapclient).
       - INSTALL_TYPE=${INSTALL_TYPE:-}
+      # Panel standby: blank the display after N idle (no-audio) seconds, wake
+      # on audio. 0 = never blank. Default 15s.
+      - FBDISPLAY_STANDBY_SECONDS=${FBDISPLAY_STANDBY_SECONDS:-15}
     logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "pidof python3 || exit 1"]

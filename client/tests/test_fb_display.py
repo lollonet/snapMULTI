@@ -146,29 +146,6 @@ class TestSmoothingCoefficients:
         assert fb_display.ATTACK_COEFF > fb_display.DECAY_COEFF
 
 
-class TestIdleWave:
-    """Test idle animation wave generation."""
-
-    def test_returns_correct_shape(self):
-        wave = fb_display.generate_idle_wave()
-        assert len(wave) == fb_display.NUM_BANDS
-
-    def test_values_above_display_floor(self):
-        wave = fb_display.generate_idle_wave()
-        assert all(v >= fb_display.DISPLAY_FLOOR for v in wave)
-
-    def test_values_below_zero(self):
-        """Idle wave should be subtle (well below 0 dBFS)."""
-        wave = fb_display.generate_idle_wave()
-        assert all(v < 0 for v in wave)
-
-    def test_wave_changes_over_time(self):
-        """Consecutive calls should produce different values (animation)."""
-        w1 = fb_display.generate_idle_wave().copy()
-        w2 = fb_display.generate_idle_wave().copy()
-        assert not np.array_equal(w1, w2)
-
-
 class TestGetCurrentElapsed:
     """Test local clock elapsed time calculation."""
 
@@ -798,3 +775,22 @@ class TestVitals:
         fb_display._VITALS_CACHE = ("70°C", 0.0)  # stale timestamp -> refetch
         monkeypatch.setattr(fb_display, "_fetch_vitals", lambda: "")  # failure
         assert fb_display.get_vitals() == "70°C"  # last good kept
+
+
+class TestStandby:
+    """Pure standby decision (_should_standby) for the panel power management."""
+
+    def test_disabled_never_blanks(self):
+        assert fb_display._should_standby(False, 9999, 0) is False
+
+    def test_playing_never_blanks(self):
+        assert fb_display._should_standby(True, 9999, 15) is False
+
+    def test_idle_below_threshold(self):
+        assert fb_display._should_standby(False, 10, 15) is False
+
+    def test_idle_at_threshold(self):
+        assert fb_display._should_standby(False, 15, 15) is True
+
+    def test_idle_above_threshold(self):
+        assert fb_display._should_standby(False, 30, 15) is True

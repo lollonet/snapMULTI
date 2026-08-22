@@ -11,6 +11,7 @@ and a pre-allocated framebuffer write buffer to avoid per-frame allocations.
 
 import asyncio
 import colorsys
+import fcntl
 import io
 import json
 import logging
@@ -44,6 +45,18 @@ LOCAL_METADATA_PIN = INSTALL_TYPE == "both"
 SPECTRUM_WS_PORT = int(os.environ.get("VISUALIZER_WS_PORT", "8081"))
 FB_DEVICE = "/dev/fb0"
 TARGET_FPS = 20
+
+# Display standby: power the panel off after this many idle (nothing-playing)
+# seconds, wake on playback. 0 = never blank. Validated on Pi 4 vc4-kms +
+# WIMAXIT HDMI via FBIOBLANK; the container reaches the panel through its
+# /dev/fb0 device (no /sys, no vcgencmd needed).
+try:
+    STANDBY_SECONDS = int(os.environ.get("FBDISPLAY_STANDBY_SECONDS", "15"))
+except ValueError:
+    STANDBY_SECONDS = 15
+_FBIOBLANK = 0x4611
+_FB_BLANK_UNBLANK = 0
+_FB_BLANK_POWERDOWN = 4
 
 
 def _get_lan_ip() -> str:
@@ -288,24 +301,6 @@ PEAK_HOLD_S = 1.5  # seconds before peak marker vanishes
 # 72 dB window covers 16-bit dynamic range from noise floor to 0 dBFS.
 DISPLAY_FLOOR = -72.0  # dBFS below which bars show nothing (16-bit noise floor)
 DISPLAY_RANGE = 72.0  # maps DISPLAY_FLOOR..0 dBFS to 0..1
-
-# Idle animation state
-idle_animation_phase: float = 0.0
-IDLE_ANIMATION_SPEED = 0.05  # radians per frame
-
-
-def generate_idle_wave() -> np.ndarray:
-    """Generate a subtle breathing wave pattern for idle state."""
-    global idle_animation_phase
-    idle_animation_phase += IDLE_ANIMATION_SPEED
-    if idle_animation_phase > 2 * np.pi:
-        idle_animation_phase -= 2 * np.pi
-
-    # Vectorized wave: phase offset per bar, scaled to low levels
-    offsets = idle_animation_phase + np.arange(NUM_BANDS) * 0.3
-    wave = np.sin(offsets) * 0.5 + 0.5
-    return DISPLAY_FLOOR + 4 + wave * 6
-
 
 # Metadata state
 current_metadata: dict | None = None
@@ -1618,15 +1613,18 @@ def is_spectrum_active() -> bool:
 _RENDER_MAX_ERRORS = 50
 
 
-def _render_and_write_frame(is_playing: bool) -> None:
+def _render_and_write_frame(is_playing: bool, draw_spectrum: bool = True) -> None:
     """Render spectrum + clock + progress and write all to FB in one call.
 
-    Batches all rendering into a single executor call to avoid
-    multiple thread switches per frame.
+    Batches all rendering into a single executor call to avoid multiple thread
+    switches per frame. When idle the caller passes draw_spectrum=False so the
+    spectrum region keeps whatever is there (the idle logo) — no animation, no
+    per-frame CPU (see render_loop).
     """
-    # Spectrum — always rendered
-    spec_fb = render_spectrum()
-    write_region_to_fb_fast(spec_fb, layout["right_x"], layout["spec_y"])
+    # Spectrum — only while playing; idle leaves the static idle logo in place
+    if draw_spectrum:
+        spec_fb = render_spectrum()
+        write_region_to_fb_fast(spec_fb, layout["right_x"], layout["spec_y"])
 
     # Clock — rendered every call but only written when dirty (once/second)
     clock_result = render_clock()
@@ -1645,17 +1643,84 @@ def _render_and_write_frame(is_playing: bool) -> None:
             _progress_cache["dirty"] = False
 
 
+def _fb_set_power(on: bool) -> None:
+    """Power the panel on/off via FBIOBLANK (DPMS). Validated on Pi 4 vc4-kms
+    with the WIMAXIT HDMI panel. Any ioctl error is logged and swallowed so a
+    driver without blank support never crashes the display."""
+    if fb_fd is None:
+        return
+    try:
+        fcntl.ioctl(
+            fb_fd, _FBIOBLANK, _FB_BLANK_UNBLANK if on else _FB_BLANK_POWERDOWN
+        )
+    except OSError as e:
+        logger.warning("FBIOBLANK %s failed: %s", "on" if on else "off", e)
+
+
+def _should_standby(is_playing: bool, idle_seconds: float, standby_seconds: int) -> bool:
+    """True when the panel should power off: standby enabled, nothing playing,
+    and idle for at least standby_seconds. Pure — unit-tested."""
+    return standby_seconds > 0 and not is_playing and idle_seconds >= standby_seconds
+
+
+def _render_idle_logo() -> None:
+    """Draw the snapMULTI logo centred in the spectrum region (static, once)
+    when idle — nicer than an empty black panel, and no per-frame CPU."""
+    if spectrum_bg_np is None or _logo_img is None or not layout:
+        return
+    base = Image.fromarray(spectrum_bg_np.copy(), "RGB")
+    lh = max(1, int(base.height * 0.55))
+    lw = max(1, int(_logo_img.width * lh / _logo_img.height))
+    logo = _logo_img.resize((lw, lh), Image.LANCZOS)
+    base.paste(logo, ((base.width - lw) // 2, (base.height - lh) // 2), logo)
+    fb = _rgb_to_fb_native(np.array(base, dtype=np.uint8))
+    write_region_to_fb_fast(fb, layout["right_x"], layout["spec_y"])
+
+
 async def render_loop() -> None:
     """Main render loop with adaptive FPS."""
     global base_frame, base_frame_version, spectrum_bg_np
 
     FPS_ACTIVE = 20
     FPS_QUIET = 5
+    FPS_IDLE = 1  # nothing playing: clock only, no spectrum animation
     consecutive_errors = 0
+    blanked = False
+    idle_logo_shown = False
+    last_active = time.monotonic()
 
     while True:
         try:
             start = time.monotonic()
+            is_playing = bool(current_metadata and current_metadata.get("playing"))
+            spectrum_active = is_spectrum_active()
+            # "active" = audio is flowing. Wake / keep-awake on the spectrum
+            # feed too, not just the metadata "playing" flag: metadata can lag
+            # playback start by many seconds, which would leave the panel dark
+            # well after the music started.
+            active = is_playing or spectrum_active
+            if active:
+                last_active = start
+
+            # ---- Display standby (panel power) ----
+            # Blank the panel after STANDBY_SECONDS with no audio; wake on
+            # audio. While blanked the loop writes nothing, so the panel
+            # backlight stays off and the CPU idles.
+            if not blanked and _should_standby(
+                active, start - last_active, STANDBY_SECONDS
+            ):
+                _fb_set_power(False)
+                blanked = True
+                logger.info("Display standby: panel off after %ds idle", STANDBY_SECONDS)
+            elif blanked and active:
+                _fb_set_power(True)
+                blanked = False
+                base_frame_version = -1  # force a full redraw on wake
+                logger.info("Display wake: audio resumed")
+            if blanked:
+                consecutive_errors = 0
+                await asyncio.sleep(1.0)
+                continue
 
             # Rebuild base frame if metadata changed
             if base_frame_version != metadata_version:
@@ -1670,34 +1735,46 @@ async def render_loop() -> None:
                 # Full frame overwrites clock/progress regions — force redraw
                 _clock_cache["dirty"] = True
                 _progress_cache["dirty"] = True
+                idle_logo_shown = False  # full redraw wiped it; re-draw if idle
                 logger.info("Base frame updated (metadata changed)")
 
             if spectrum_bg_np is None or spectrum_bg_fb is None:
                 await asyncio.sleep(0.1)
                 continue
 
-            # Determine adaptive FPS
-            is_playing = current_metadata and current_metadata.get("playing")
-            spectrum_active = is_spectrum_active()
-
-            if is_playing and spectrum_active:
+            # Determine adaptive FPS (spectrum_active/active computed above)
+            if spectrum_active:
                 fps = FPS_ACTIVE
-            elif is_playing:
+            elif active:
                 fps = FPS_QUIET
             else:
-                fps = FPS_QUIET  # Keep animating idle wave at reasonable FPS
+                # No audio: the breathing-wave animation was removed. The loop
+                # only keeps the clock ticking, so drop to 1 FPS and skip the
+                # spectrum render entirely — this lets the CPU actually idle.
+                fps = FPS_IDLE
 
-            # When idle, generate subtle wave animation instead of real spectrum
-            if not is_playing:
-                with _band_lock:
-                    bands[:] = generate_idle_wave()
+            # No audio: show the static snapMULTI logo in the spectrum region
+            # once (nicer than an empty panel); audio: render the real spectrum.
+            # Driven by `active` (not the laggy metadata flag) so the logo
+            # appears as soon as the music stops.
+            if active:
+                idle_logo_shown = False
+                draw_spectrum = True
+            else:
+                draw_spectrum = False
+                if not idle_logo_shown:
+                    await asyncio.get_event_loop().run_in_executor(
+                        None, _render_idle_logo
+                    )
+                    idle_logo_shown = True
 
             # Batch all rendering + FB writes into a single executor call
             # to avoid 5+ thread switches per frame
             await asyncio.get_event_loop().run_in_executor(
                 None,
                 _render_and_write_frame,
-                is_playing,
+                active,
+                draw_spectrum,
             )
 
             elapsed = time.monotonic() - start
