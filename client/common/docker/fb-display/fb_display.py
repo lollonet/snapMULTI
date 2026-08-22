@@ -1643,18 +1643,22 @@ def _render_and_write_frame(is_playing: bool, draw_spectrum: bool = True) -> Non
             _progress_cache["dirty"] = False
 
 
-def _fb_set_power(on: bool) -> None:
+def _fb_set_power(on: bool) -> bool:
     """Power the panel on/off via FBIOBLANK (DPMS). Validated on Pi 4 vc4-kms
-    with the WIMAXIT HDMI panel. Any ioctl error is logged and swallowed so a
-    driver without blank support never crashes the display."""
+    with the WIMAXIT HDMI panel. Returns True if the ioctl succeeded, False on
+    error — so the caller never enters a "blanked" state (which stops all
+    rendering) on hardware whose driver rejects FBIOBLANK, which would freeze
+    the display instead of blanking it."""
     if fb_fd is None:
-        return
+        return False
     try:
         fcntl.ioctl(
             fb_fd, _FBIOBLANK, _FB_BLANK_UNBLANK if on else _FB_BLANK_POWERDOWN
         )
+        return True
     except OSError as e:
         logger.warning("FBIOBLANK %s failed: %s", "on" if on else "off", e)
+        return False
 
 
 def _should_standby(is_playing: bool, idle_seconds: float, standby_seconds: int) -> bool:
@@ -1686,6 +1690,7 @@ async def render_loop() -> None:
     FPS_IDLE = 1  # nothing playing: clock only, no spectrum animation
     consecutive_errors = 0
     blanked = False
+    standby_failed = False  # panel rejected FBIOBLANK — disable standby, no retry/spam
     idle_logo_shown = False
     last_active = time.monotonic()
 
@@ -1706,13 +1711,25 @@ async def render_loop() -> None:
             # Blank the panel after STANDBY_SECONDS with no audio; wake on
             # audio. While blanked the loop writes nothing, so the panel
             # backlight stays off and the CPU idles.
-            if not blanked and _should_standby(
+            if not blanked and not standby_failed and _should_standby(
                 active, start - last_active, STANDBY_SECONDS
             ):
-                _fb_set_power(False)
-                blanked = True
-                logger.info("Display standby: panel off after %ds idle", STANDBY_SECONDS)
+                # Only enter the blanked (render-halted) state if the panel
+                # actually powered off; if the driver rejects FBIOBLANK, stay
+                # awake and keep rendering rather than freezing on the last frame.
+                if _fb_set_power(False):
+                    blanked = True
+                    logger.info(
+                        "Display standby: panel off after %ds idle", STANDBY_SECONDS
+                    )
+                else:
+                    standby_failed = True  # give up quietly; keep rendering
+                    logger.warning(
+                        "Display standby disabled: panel does not support FBIOBLANK"
+                    )
             elif blanked and active:
+                # Resume rendering even if the unblank ioctl fails — a frozen
+                # black panel is worse than a redundant unblank attempt.
                 _fb_set_power(True)
                 blanked = False
                 base_frame_version = -1  # force a full redraw on wake
