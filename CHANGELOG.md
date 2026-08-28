@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **fb-display — HDMI panel standby + static idle logo**. The framebuffer display now powers the HDMI panel off via `FBIOBLANK` after `FBDISPLAY_STANDBY_SECONDS` (default 15, 0 = never) with no audio, and wakes on audio — cutting heat and power on a desk-mounted display (validated on Pi 4 vc4-kms + a WIMAXIT HDMI panel; the container reaches the panel through its `/dev/fb0` device, no `/sys` or `vcgencmd`). Wake and keep-awake key off the spectrum/audio feed (`active`), not the metadata "playing" flag, which can lag playback start by ~15 s — otherwise the panel would stay dark well after the music started. While blanked the render loop writes nothing, so the backlight stays off and the CPU can idle. Also replaced the always-animating idle spectrum "breathing wave" (a continuous ~5 FPS render that kept the CPU busy for no value) with a **static snapMULTI logo** in the spectrum region when idle. `FBDISPLAY_STANDBY_SECONDS` is wired through `client/common/docker-compose.yml` and documented in `client/common/.env.example`. New `_should_standby` pure-classifier tests; the obsolete idle-wave tests were removed. `fb_display.py` is bind-mounted, so this lands on reflash without an image rebuild.
+
 ## [0.8.4] — 2026-08-22
 
 > **v0.8.4 — system-vitals readout + CI/doc polish, no snapMULTI rebuild.** Image set unchanged (`0.7.7`): the new system-vitals badge ships as a bind-mounted `metadata-service.py` / `fb_display.py` plus staged smoke-script changes, so a reflash from this tag delivers it without rebuilding any image. Also rolls up the doc-vs-software audit (#652), the client-`.env` smoke fix, and a CI-efficiency pass (concurrency-cancel + docs-only skips). No source, port, or container-security change.
