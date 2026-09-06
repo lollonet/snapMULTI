@@ -158,12 +158,13 @@ elif [ -x /opt/snapclient/scripts/device-smoke.sh ]; then
     smoke_script=/opt/snapclient/scripts/device-smoke.sh
 fi
 if [ -n "$smoke_script" ]; then
-    smoke_json=$(sudo -n "$smoke_script" --json --no-fail-on-warn 2>/dev/null || true)
+    smoke_rc=0
+    smoke_json=$(sudo -n "$smoke_script" --json --no-fail-on-warn 2>/dev/null) || smoke_rc=$?
 else
+    smoke_rc=127
     smoke_json=""
 fi
-[ -z "$smoke_json" ] && smoke_json="{}"
-SMOKE_JSON="$smoke_json" python3 -c '
+SMOKE_JSON="$smoke_json" SMOKE_EXIT_CODE="$smoke_rc" python3 -c '
 import json
 import os
 import sys
@@ -173,17 +174,18 @@ cli_build = sys.argv[2]
 srv_release = sys.argv[3]
 cli_release = sys.argv[4]
 raw = os.environ.get("SMOKE_JSON", "").strip()
-smoke = {}
+smoke = None
 if raw:
     try:
-        smoke, _ = json.JSONDecoder().raw_decode(raw)
+        smoke = json.loads(raw)
     except json.JSONDecodeError:
-        smoke = {}
+        pass
 print(json.dumps({
     "srv": srv_build,
     "cli": cli_build,
     "release_srv": srv_release,
     "release_cli": cli_release,
+    "smoke_exit_code": int(os.environ["SMOKE_EXIT_CODE"]),
     "smoke": smoke,
 }, separators=(",", ":")))
 ' "$srv_build" "$cli_build" "$srv_release" "$cli_release"
@@ -255,11 +257,40 @@ probe_host() {
     # that starts with `{` and ends with `}` after the banner is robust
     # and avoids breaking the subsequent jq parse.
     payload=$(printf '%s\n' "$payload" | awk '/^\{.*\}$/' | tail -n 1)
-    # Validate JSON; if smoke returned non-JSON (older snapMULTI?), mark partial.
-    if ! jq -e . <<<"$payload" >/dev/null 2>&1; then
-        jq -nc --arg h "$host" --arg r "$role" --arg raw "$payload" \
-            '{host:$h, role:$r, reachable:true, parse_error:true, raw:$raw}' >"$out"
-        return
+    # An unavailable or incomplete smoke is a failed check, never evidence
+    # that this requested host is healthy (or is a non-snapMULTI peer).
+    if ! jq -e '
+        .smoke as $s |
+        type == "object" and
+        (.smoke_exit_code | type == "number" and . == floor and . >= 0 and . <= 255) and
+        ($s | type == "object") and $s.schema_version == 1 and
+        ($s.records | type == "array" and length > 0) and
+        all($s.records[]; type == "object" and
+            (.status == "pass" or .status == "warn" or .status == "fail" or .status == "info") and
+            (.msg | type == "string")) and
+        ($s.failures == ([$s.records[] | select(.status == "fail")] | length)) and
+        ($s.warnings == ([$s.records[] | select(.status == "warn")] | length)) and
+        ($s.status == (if $s.failures > 0 then "fail"
+                       elif $s.warnings > 0 then "warn" else "ok" end))
+    ' <<<"$payload" >/dev/null 2>&1; then
+        payload=$(jq -nc --arg raw "$payload" '
+            ($raw | fromjson? // {} | if type == "object" then . else {} end) |
+            .error = "smoke-invalid" | .smoke = {schema_version:1,
+                status:"fail", failures:1, warnings:0,
+                records:[{status:"fail", msg:"smoke-invalid: missing or invalid smoke result"}]}
+        ')
+    else
+        # Exit 1 with failure records is the normal smoke failure contract.
+        # Other non-zero exits must not disappear behind an otherwise valid report.
+        payload=$(jq '
+            if .smoke_exit_code != 0 and
+                (.smoke_exit_code != 1 or .smoke.failures == 0) then
+                .error = "smoke-exit-error" |
+                .smoke.status = "fail" | .smoke.failures += 1 |
+                .smoke.records += [{status:"fail",
+                    msg:("smoke-exit-error: exit " + (.smoke_exit_code | tostring))}]
+            else . end
+        ' <<<"$payload")
     fi
     # Compose final per-host record.
     # `release` is the snapMULTI release identity (bare tag, e.g. "v0.8.1")
@@ -272,7 +303,7 @@ probe_host() {
         '{host:$h, role:$r, reachable:true,
           release:{server:.release_srv, client:.release_cli},
           versions:{server:.srv, client:.cli},
-          non_snapmulti: ((.srv == "" and .cli == "" and .release_srv == "" and .release_cli == "") and ((.smoke.schema_version // null) == null)),
+          non_snapmulti:false, error:.error, smoke_exit_code:.smoke_exit_code,
           smoke:.smoke}' <<<"$payload" >"$out"
 }
 
@@ -667,22 +698,20 @@ else
         cli=$(jq -r '.versions.client // ""' <<<"$rec")
         # Prefer the role-canonical source but fall back to the
         # other one — a `--both` device populates both, and on legacy
-        # installs only one path may exist. If neither release nor build
-        # is present this is almost certainly NOT a snapMULTI host (e.g.
-        # a peer macOS / Sonos / Echo wandered in via the Snapcast client
-        # list); mark it as "—".
+        # installs only one path may exist. Missing version metadata is
+        # not evidence that a requested host can be skipped.
         if [[ "$role" == "server" ]]; then
             ver="${rsrv:-${rcli:-${srv:-${cli:-}}}}"
         else
             ver="${rcli:-${rsrv:-${cli:-${srv:-}}}}"
         fi
         if [[ -z "$ver" ]]; then
-            ver="non-snapMULTI"
+            ver="unknown"
         fi
         fails=$(jq -r '[.smoke.records[]? | select(.status=="fail")] | length' <<<"$rec" 2>/dev/null || echo "?")
         warns=$(jq -r '[.smoke.records[]? | select(.status=="warn")] | length' <<<"$rec" 2>/dev/null || echo "?")
         version_drift=false
-        if [[ -n "$baseline_version" && "$ver" != "non-snapMULTI" && "$ver" != "$baseline_version" ]]; then
+        if [[ -n "$baseline_version" && "$ver" != "unknown" && "$ver" != "$baseline_version" ]]; then
             version_drift=true
         fi
         if [[ "$fails" == "0" ]]; then
