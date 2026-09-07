@@ -964,27 +964,19 @@ start_services() {
     # COMPOSE_PROFILES in .env controls which services are active.
     # docker compose up -d starts all services matching active profiles.
     #
-    # --force-recreate is required: deploy.sh writes (or rewrites) .env
-    # right before this call, and Docker Compose does NOT consider
-    # deploy.resources.limits.memory part of the recreate-hash. Without
-    # --force-recreate, a container that's already running keeps the
-    # memory limit it had at first creation (often unlimited from the
-    # initial firstboot), and subsequent .env tweaks silently never
-    # apply. CPU limits go through HostConfig.NanoCpus and ARE applied,
-    # which made the drift invisible until inspected with
-    # `docker inspect ... HostConfig.Memory`.
-    # Prefer the systemd unit when it's already installed (normal
-    # firstboot flow: install_systemd_service ran first). systemctl start
-    # triggers ExecStart=`docker compose up -d` AND the mDNS self-heal
-    # ExecStartPost. Fall back to raw compose only when the unit isn't
-    # registered yet (e.g. manual `deploy.sh` from a dev host or tests).
+    # Prefer the systemd unit when it is installed (the normal path).
+    # Restart rather than invoking Compose first: ExecStartPre must restore
+    # state before any container can write default state. `restart` also
+    # re-enters the pre-start chain when a deploy runs on an active unit;
+    # the boot-scoped restore guard preserves newer same-boot live state.
+    # The mem-drift ExecStartPre below handles the one resource setting
+    # Compose does not include reliably in its recreate hash. Fall back to
+    # raw Compose only when the unit is genuinely unavailable.
     info "Launching docker compose (containers will start and become healthy in 30-60s)..."
     if systemctl list-unit-files snapmulti-server.service --no-legend 2>/dev/null | grep -q snapmulti-server.service; then
-        # `up -d --force-recreate` (NOT `compose down`) so ExecStart picks up the new .env without a 30-40 s network teardown; `|| true` covers fresh installs with no compose project yet.
-        docker compose up -d --force-recreate >/dev/null 2>&1 || true
         info "Handing over to systemd (snapmulti-server.service) — waits for Avahi ready + mDNS race recovery, may take 60-180s..."
-        if ! systemctl start snapmulti-server.service; then
-            error "Failed to start snapmulti-server.service"
+        if ! systemctl restart snapmulti-server.service; then
+            error "Failed to restart snapmulti-server.service"
             exit 1
         fi
     else
@@ -1152,12 +1144,12 @@ ExecStartPre=/usr/local/sbin/restore-snapmulti-state
 # unusual setups (no avahi installed) — falls through after 30 s.
 $(avahi_daemon_ready_execstartpre)
 # Detect-and-recreate on mem_limit drift, symmetric to snapclient.service
-# (PR #393). The first compose up during firstboot runs BEFORE the final
+# (PR #393). The first systemd-managed compose up during firstboot runs
+# BEFORE the final
 # reboot that activates cgroup memory v2 (cmdline_ensure_memory_cgroup
-# patches cmdline.txt but takes effect only after reboot). So even though
-# deploy.sh:921 invokes \`docker compose up -d --force-recreate\`, the
-# resulting containers are created without cgroup memory v2 →
-# HostConfig.Memory=0. The next \`systemctl start\` (after reboot) runs
+# patches cmdline.txt but takes effect only after reboot). The resulting
+# containers are therefore created without cgroup memory v2 →
+# HostConfig.Memory=0. The next boot's systemd start runs
 # plain \`compose up -d\`, which is idempotent on existing containers and
 # keeps the limit-less ones. We probe snapserver (representative of the
 # stack — they're all created together) and force-recreate the whole
@@ -1412,7 +1404,7 @@ main() {
     validate_config
     pull_images
     # Install the systemd unit BEFORE the first compose start so that
-    # `start_services` can hand off to `systemctl start
+    # `start_services` can hand off to `systemctl restart
     # snapmulti-server.service` instead of running `docker compose up`
     # directly. This way the unit's ExecStartPost mDNS self-heal takes
     # effect on first boot — not just on restarts after install

@@ -16,15 +16,39 @@
 # server.json which would then be backed up over the good one on the
 # next timer fire.
 #
-# Idempotent. No-op when no backup exists yet (fresh install).
+# Runs at most once per boot. A successful no-backup check also records
+# completion so a later same-boot service restart cannot apply a stale
+# backup over newer live state.
 set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/snapmulti}"
 PUID="${PUID:-1000}"
 PGID="${PGID:-1000}"
+RESTORE_GUARD="${RESTORE_GUARD:-/run/snapmulti-state-restore.complete}"
 TAG="[restore-snapmulti-state]"
 
 _log() { echo "$TAG $*" >&2; }
+
+mark_restore_complete() {
+    local guard_dir
+    if ! guard_dir=$(dirname "$RESTORE_GUARD"); then
+        _log "FATAL: cannot resolve restore guard directory: $RESTORE_GUARD"
+        return 1
+    fi
+    if ! mkdir -p "$guard_dir"; then
+        _log "FATAL: cannot create restore guard directory: $guard_dir"
+        return 1
+    fi
+    if ! : > "$RESTORE_GUARD"; then
+        _log "FATAL: cannot write restore guard: $RESTORE_GUARD"
+        return 1
+    fi
+}
+
+if [[ -f "$RESTORE_GUARD" ]]; then
+    _log "restore already completed this boot — preserving live state"
+    exit 0
+fi
 
 load_owner_from_env() {
     local env_file="$INSTALL_DIR/.env"
@@ -52,19 +76,27 @@ load_owner_from_env
 # persistence is the truth in that mode — defer to it.
 if ! mount 2>/dev/null | grep -q ' on / type overlay'; then
     _log "overlayroot inactive — ext4 is already persistent, skipping restore"
+    if ! mark_restore_complete; then
+        exit 1
+    fi
     exit 0
 fi
 
 # Detect boot partition (same logic as backup-snapmulti-state.sh).
-if [[ -d /boot/firmware ]]; then
-    BOOT=/boot/firmware
-else
-    BOOT=/boot
+if [[ -z "${BOOT:-}" ]]; then
+    if [[ -d /boot/firmware ]]; then
+        BOOT=/boot/firmware
+    else
+        BOOT=/boot
+    fi
 fi
 BACKUP_DIR="$BOOT/snapmulti-backup"
 
 if [[ ! -d "$BACKUP_DIR" ]]; then
     _log "no backup directory yet at $BACKUP_DIR — nothing to restore (fresh install)"
+    if ! mark_restore_complete; then
+        exit 1
+    fi
     exit 0
 fi
 
@@ -132,4 +164,8 @@ fi
 
 if (( restored_any == 0 )); then
     _log "no backup files to restore at $BACKUP_DIR (backup timer never fired? fresh install?)"
+fi
+
+if ! mark_restore_complete; then
+    exit 1
 fi

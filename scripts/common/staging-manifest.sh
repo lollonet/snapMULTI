@@ -80,6 +80,8 @@ STAGING_SERVER_OPTIONAL=(
     "scripts/docker-driver-reconcile.sh"
     "client/common/scripts/ro-mode.sh"
     ".env.example"
+    "data/server.json"
+    "mympd/workdir"
 )
 STAGING_SERVER_OPTIONAL_DESTS=(
     ""
@@ -90,7 +92,11 @@ STAGING_SERVER_OPTIONAL_DESTS=(
     ""
     ""
     ""
+    "data"
+    "mympd"
 )
+# data/server.json and mympd/workdir above are normal optional manifest
+# entries: full-reflash state transfer must not depend on MUSIC_SOURCE.
 # Special-case entries (stay inline in copy_server_files because they
 # have conditional logic the generic stage_manifest_entry can't model):
 #   - scripts/tidal      → server/scripts/tidal/  (subdir copy idiom)
