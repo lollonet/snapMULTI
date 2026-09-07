@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Diagnostic archives filter every collected file before publication, including smoke JSON, stderr and Docker state. JSON structure is preserved; filtering failure prevents archive creation. Tests use synthetic files rather than collecting diagnostics from the test host.
 - Reflash preparation carries recovered Snapserver and myMPD state through staging and firstboot instead of transferring only the MPD database.
 - State restore is guarded per boot so restarting the server service does not overwrite newer live settings with an older backup.
+- Explicit server deploys request container recreation through systemd after restore, preserving application of changed nonzero memory limits without forcing recreation on ordinary service restarts.
 - Metadata client lookup prioritises exact client IDs and rejects ambiguous aliases, preventing volume commands from targeting the wrong room.
 
 ### Documentation

@@ -969,11 +969,15 @@ start_services() {
     # state before any container can write default state. `restart` also
     # re-enters the pre-start chain when a deploy runs on an active unit;
     # the boot-scoped restore guard preserves newer same-boot live state.
-    # The mem-drift ExecStartPre below handles the one resource setting
-    # Compose does not include reliably in its recreate hash. Fall back to
-    # raw Compose only when the unit is genuinely unavailable.
+    # Explicit deploys request recreation even for nonzero memory-limit
+    # changes that Compose may not detect. The unit consumes the request
+    # after restore; ordinary service restarts do not request recreation.
     info "Launching docker compose (containers will start and become healthy in 30-60s)..."
     if systemctl list-unit-files snapmulti-server.service --no-legend 2>/dev/null | grep -q snapmulti-server.service; then
+        if ! touch /run/snapmulti-server-recreate; then
+            error "Failed to request server container recreation"
+            exit 1
+        fi
         info "Handing over to systemd (snapmulti-server.service) — waits for Avahi ready + mDNS race recovery, may take 60-180s..."
         if ! systemctl restart snapmulti-server.service; then
             error "Failed to restart snapmulti-server.service"
@@ -1143,6 +1147,9 @@ ExecStartPre=/usr/local/sbin/restore-snapmulti-state
 # \`sleep 2\` lets avahi publish its first announce. Non-fatal on
 # unusual setups (no avahi installed) — falls through after 30 s.
 $(avahi_daemon_ready_execstartpre)
+# Explicit deploy request: apply all resource changes after state restore.
+# Keep the request on failure so a retry cannot silently retain old limits.
+ExecStartPre=/bin/sh -c 'if [ -f /run/snapmulti-server-recreate ]; then /usr/bin/docker compose up -d --force-recreate && /usr/bin/rm -f /run/snapmulti-server-recreate; fi'
 # Detect-and-recreate on mem_limit drift, symmetric to snapclient.service
 # (PR #393). The first systemd-managed compose up during firstboot runs
 # BEFORE the final
