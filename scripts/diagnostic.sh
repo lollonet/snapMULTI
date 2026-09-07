@@ -24,8 +24,8 @@
 #   install.conf     install.conf copy with credentials scrubbed
 #   meta.txt         hostname, model, snapMULTI version, run reason
 #
-# Anonymisation: an `anonymise` filter pass scrubs IPv4 addresses (except
-# loopback), MAC addresses, WiFi SSIDs from wpa_supplicant traces, and
+# Anonymisation: a final Python 3 filter pass scrubs private IPv4 addresses,
+# MAC addresses, WiFi SSIDs from wpa_supplicant traces, and
 # credential lines from any captured config (SMB_PASS=, SMB_USER=,
 # *_TOKEN=, *_SECRET=, *_PASSWORD=). Hostname is left alone — most
 # install issues are device-specific and the operator references their
@@ -140,27 +140,59 @@ log() { echo "[diag] $*" >&2; }
 # looks identifying. The maintainer reads many of these bundles and
 # wholesale anonymisation makes them useless.
 #
-# Patterns are split into one `-e` per match instead of using string
-# alternation `(A|B|C)` inside `()` — that's GNU-ERE only; BSD sed
-# rejects it. The target is Linux Pi OS (GNU sed) but keeping the
-# regex portable makes the script testable on macOS too.
+# Parse JSON before filtering strings: line-based credential replacement
+# would otherwise remove closing quotes/braces from compact smoke output.
 anonymise() {
-    sed -E \
-        -e 's|([Ss][Mm][Bb]_PASS[[:space:]]*=[[:space:]]*).*|\1[REDACTED]|g' \
-        -e 's|([Ss][Mm][Bb]_USER[[:space:]]*=[[:space:]]*).*|\1[REDACTED]|g' \
-        -e 's|([A-Za-z][A-Za-z0-9_]*_TOKEN[[:space:]]*=[[:space:]]*).*|\1[REDACTED]|g' \
-        -e 's|([A-Za-z][A-Za-z0-9_]*_SECRET[[:space:]]*=[[:space:]]*).*|\1[REDACTED]|g' \
-        -e 's|([A-Za-z][A-Za-z0-9_]*_PASSWORD[[:space:]]*=[[:space:]]*).*|\1[REDACTED]|g' \
-        -e 's|([A-Za-z][A-Za-z0-9_]*_PASSPHRASE[[:space:]]*=[[:space:]]*).*|\1[REDACTED]|g' \
-        -e 's|(ssid=")[^"]+(")|\1[SSID]\2|g' \
-        -e 's|(psk=")[^"]+(")|\1[REDACTED]\2|g' \
-        -e 's|([Bb]earer[[:space:]]+)[A-Za-z0-9._-]{20,}|\1[REDACTED]|g' \
-        -e 's|([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}|xx:xx:xx:xx:xx:xx|g' \
-        -e 's|192\.168\.[0-9]{1,3}\.[0-9]{1,3}|x.x.x.x|g' \
-        -e 's|10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|x.x.x.x|g' \
-        -e 's|172\.1[6-9]\.[0-9]{1,3}\.[0-9]{1,3}|x.x.x.x|g' \
-        -e 's|172\.2[0-9]\.[0-9]{1,3}\.[0-9]{1,3}|x.x.x.x|g' \
-        -e 's|172\.3[01]\.[0-9]{1,3}\.[0-9]{1,3}|x.x.x.x|g'
+    python3 -c '
+import json
+import re
+import sys
+
+credential = r"(?:SMB_(?:PASS|USER)|[A-Za-z][A-Za-z0-9_]*_(?:TOKEN|SECRET|PASSWORD|PASSPHRASE)|TOKEN|SECRET|PASSWORD|PASSPHRASE)"
+
+def scrub(text):
+    text = re.sub(r"(?i)(\"" + credential + r"\"[ \t]*:[ \t]*\")(?:\\.|[^\"\\])*(\")", r"\1[REDACTED]\2", text)
+    text = re.sub(r"(?im)(\b" + credential + r"[ \t]*=[ \t]*).*", r"\1[REDACTED]", text)
+    text = re.sub(r"(?i)(\bssid=\")[^\"]*(\")", r"\1[SSID]\2", text)
+    text = re.sub(r"(?i)(\bpsk=\")[^\"]*(\")", r"\1[REDACTED]\2", text)
+    text = re.sub(r"(?i)(\bBearer[ \t]+)[A-Za-z0-9._~+/=-]+", r"\1[REDACTED]", text)
+    text = re.sub(r"(?i)(?:[0-9a-f]{2}:){5}[0-9a-f]{2}", "xx:xx:xx:xx:xx:xx", text)
+    return re.sub(r"(?<![\d.])(?:192\.168|10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}(?![\d.])", "x.x.x.x", text)
+
+def clean(value):
+    if isinstance(value, dict):
+        return {scrub(key): ("[REDACTED]" if re.fullmatch(credential, key, re.I) or key.lower() == "psk"
+                            else "[SSID]" if key.lower() == "ssid" else clean(item))
+                for key, item in value.items()}
+    if isinstance(value, list):
+        return [clean(item) for item in value]
+    return scrub(value) if isinstance(value, str) else value
+
+raw = sys.stdin.read()
+try:
+    result = json.dumps(clean(json.loads(raw))) + "\n"
+except json.JSONDecodeError:
+    # Compose can emit JSON lines; logs can mix JSON and plain text.
+    lines = []
+    for line in raw.splitlines(keepends=True):
+        try:
+            lines.append(json.dumps(clean(json.loads(line))) + "\n")
+        except json.JSONDecodeError:
+            lines.append(scrub(line))
+    result = "".join(lines)
+sys.stdout.write(result)
+'
+}
+
+write_bundle() {
+    local file
+    # Refuse publication on any filtering failure, including missing Python.
+    find "$STAGE_DIR" -type f -print0 > "$WORK_DIR/files" || return 1
+    while IFS= read -r -d '' file; do
+        anonymise < "$file" > "$WORK_DIR/redacted" || return 1
+        mv "$WORK_DIR/redacted" "$file" || return 1
+    done < "$WORK_DIR/files"
+    tar -czf "$BUNDLE_PATH" -C "$WORK_DIR" "$BUNDLE_NAME"
 }
 
 # ─── Collection ─────────────────────────────────────────────────────
@@ -216,10 +248,8 @@ log "Collecting snapMULTI diagnostics (reason=$REASON, out=$BUNDLE_PATH)"
     fi
 } > "$STAGE_DIR/meta.txt"
 
-# release-manifest.json from the boot partition (no secrets, no
-# scrubbing needed — but pass through anonymise for consistency with
-# install.conf handling). Pinned to the SD-staged copy because that's
-# the artefact that drove this install.
+# Release manifest from the SD-staged copy that drove this install.
+# All captured files are filtered by write_bundle before publication.
 for candidate in /boot/firmware/snapmulti/release-manifest.json \
                  /boot/snapmulti/release-manifest.json \
                  /opt/snapmulti/release-manifest.json \
@@ -227,13 +257,13 @@ for candidate in /boot/firmware/snapmulti/release-manifest.json \
     if [[ -f "$candidate" ]]; then
         {
             echo "# Source: $candidate"
-            anonymise < "$candidate"
+            cat "$candidate"
         } > "$STAGE_DIR/release-manifest.json"
         break
     fi
 done
 
-# install.conf copy (scrubbed). Look in all canonical locations.
+# install.conf copy (scrubbed before archiving). Look in canonical locations.
 for candidate in /boot/firmware/snapmulti/install.conf \
                  /boot/snapmulti/install.conf \
                  /opt/snapmulti/install.conf \
@@ -241,7 +271,7 @@ for candidate in /boot/firmware/snapmulti/install.conf \
     if [[ -f "$candidate" ]]; then
         {
             echo "# Source: $candidate"
-            anonymise < "$candidate"
+            cat "$candidate"
         } > "$STAGE_DIR/install.conf"
         break
     fi
@@ -274,7 +304,7 @@ if command -v journalctl >/dev/null 2>&1; then
     {
         journalctl --since "-1h" --no-pager -q \
             -u 'snapmulti-*' -u 'snapclient*' -u 'docker' -u 'avahi-daemon' \
-            2>&1 | tail -2000 | anonymise
+            2>&1 | tail -2000
     } > "$STAGE_DIR/journal.log" || true
 fi
 
@@ -287,7 +317,7 @@ fi
 # 5000 lines covers a full install run with verbose deploy output.
 if [[ -f /var/log/snapmulti-install.log ]]; then
     tail -5000 /var/log/snapmulti-install.log 2>/dev/null \
-        | anonymise > "$STAGE_DIR/install.log" || true
+        > "$STAGE_DIR/install.log" || true
 fi
 
 # Docker compose logs — best-effort; only meaningful if docker is up.
@@ -302,8 +332,8 @@ if command -v docker >/dev/null 2>&1; then
         done
     fi
     if [[ -n "$compose" ]] && docker info >/dev/null 2>&1; then
-        docker compose -f "$compose" logs --tail=200 --no-color 2>&1 \
-            | anonymise > "$STAGE_DIR/docker.log" || true
+        docker compose -f "$compose" logs --tail=200 --no-color \
+            > "$STAGE_DIR/docker.log" 2>&1 || true
         # State snapshot (running, restartcount, healthcheck).
         docker compose -f "$compose" ps --format json 2>/dev/null > "$STAGE_DIR/docker-ps.json" || true
     fi
@@ -312,7 +342,7 @@ fi
 # Kernel ring buffer — dmesg may need root to read fully; tolerate
 # partial output.
 if command -v dmesg >/dev/null 2>&1; then
-    dmesg 2>/dev/null | tail -300 | anonymise > "$STAGE_DIR/dmesg.log" || true
+    dmesg 2>/dev/null | tail -300 > "$STAGE_DIR/dmesg.log" || true
 fi
 
 # Loaded modules relevant to snapMULTI (audio, WiFi, fuse-overlayfs).
@@ -348,19 +378,15 @@ fi
     echo ""
     echo "=== df / overlay tmpfs usage ==="
     df -h / /var 2>/dev/null | head -5 || true
-} | anonymise > "$STAGE_DIR/hw.txt" || true
+} > "$STAGE_DIR/hw.txt" || true
 # /proc/cmdline carries firmware-injected device identifiers — most
 # notably `smsc95xx.macaddr=<MAC>` on Pi 3 / 4 — that the file-level
-# anonymise pass must rewrite. Earlier versions of this script piped
-# only the journal / docker / dmesg streams through anonymise; hw.txt
-# went through raw and leaked MAC addresses into every install-failed
-# bundle. Pipe-on-write closes the gap without touching the
-# per-section formatting above.
+# final anonymise pass must rewrite, along with the other staged files.
 
 # ─── Bundle ──────────────────────────────────────────────────────────
 mkdir -p "$OUT_DIR" 2>/dev/null || true
-if ! tar -czf "$BUNDLE_PATH" -C "$WORK_DIR" "$BUNDLE_NAME" 2>"$WORK_DIR/tar.err"; then
-    log "ERROR: tar failed:"
+if ! write_bundle 2>"$WORK_DIR/tar.err"; then
+    log "ERROR: bundle filtering or archiving failed; do not share a partial archive:"
     cat "$WORK_DIR/tar.err" >&2
     exit 1
 fi

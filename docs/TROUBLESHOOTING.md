@@ -12,7 +12,7 @@ If `firstboot.sh` aborts, the cleanup trap writes a redacted tarball to the **FA
 /boot/firmware/snapmulti-diag-install-failed-<UTC-ts>.tar.gz
 ```
 
-What's inside: last hour of install logs, hardware detection output (model, audio HAT, network), failing step name, container logs. The bundle is **anonymised** before it lands on the SD — no MAC addresses, no LAN IPs, no SSIDs, no passwords, no API tokens — so it is safe to attach to a public [GitHub issue](https://github.com/lollonet/snapMULTI/issues/new/choose). The boot partition survives overlayroot activation and rootfs corruption; that's why we write there rather than `/var/log`.
+What's inside: last hour of install logs, hardware detection output (model, audio HAT, network), failing step name, container logs. **Every file is filtered before archiving**, including smoke JSON and Docker state. The filter removes private IPv4 addresses, MAC addresses and recognised credential/SSID formats while preserving JSON structure. It requires Python 3; if filtering fails, no new archive is created. This is not a guarantee of complete anonymity: hostnames, paths, IPv6 addresses and unrecognised log formats may remain. Review the contents before attaching them to a public [GitHub issue](https://github.com/lollonet/snapMULTI/issues/new/choose). The boot partition remains accessible independently of overlayroot; that's why we write there rather than `/var/log`.
 
 You can also create one manually on a running device for support reports:
 
