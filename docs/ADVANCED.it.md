@@ -212,8 +212,8 @@ Riprodotta in `tests/test_firstboot_image_tag_derivation.sh`.
    - Mantieni `image_set` all'ultimo valore pubblicato (es. `0.7.7`)
    - Imposta `requires_image_rebuild` a `false`
 2. Aggiorna `CHANGELOG.md` `[Unreleased]` → nuovo header di versione.
-3. Apri la PR, fai merge, fai push del tag (`git tag v0.7.8 && git push v0.7.8`).
-4. Il gate di `build-push.yml` legge il manifest, vede `requires_image_rebuild=false`, verifica che tutte e 5 le immagini di produzione esistano su Docker Hub al tag `:0.7.7`, e **salta la matrice di build**. Viene pubblicata una nuova GitHub Release; gli utenti fanno `docker compose pull` e continuano con le stesse immagini.
+3. Apri una PR, supera la CI e il [controllo di rilascio su dispositivo reale](adr/ADR-005.reflash-systemd-robustness.md#release-gate), integra la PR e crea il tag sul commit verificato (`git tag v0.7.8 && git push origin v0.7.8`).
+4. Il gate di `build-push.yml` legge il manifest, vede `requires_image_rebuild=false`, verifica che tutte e 5 le immagini di produzione esistano su Docker Hub al tag `:0.7.7`, e **salta la matrice di build**. Dopo il successo del gate, pubblica la GitHub Release per quel tag con le note di rilascio: questo workflow non la crea automaticamente. Gli utenti eseguono il reflash dalla release per ricevere gli script aggiornati, riutilizzando lo stesso set di immagini.
 
 ### Tagliare una release che cambia i container
 

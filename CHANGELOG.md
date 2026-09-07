@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.6] — 2026-09-07
+
+> Script-only fixes; image set remains `0.7.7`. Reflash to install the updated scripts and bind-mounted metadata service.
+
+### Fixed
+- Fleet smoke now fails explicitly on missing, malformed or inconsistent device results, while preserving valid failure records and process exit codes (#685).
+- Diagnostic archives filter every collected file before publication, including smoke JSON, stderr and Docker state. JSON structure is preserved; filtering failure prevents archive creation. Tests use synthetic files rather than collecting diagnostics from the test host.
+- Reflash preparation carries recovered Snapserver and myMPD state through staging and firstboot instead of transferring only the MPD database.
+- State restore is guarded per boot so restarting the server service does not overwrite newer live settings with an older backup.
+- Metadata client lookup prioritises exact client IDs and rejects ambiguous aliases, preventing volume commands from targeting the wrong room.
+
+### Documentation
+- Diagnostic sharing guidance now states the limits of anonymisation rather than promising that every archive is safe to publish unchanged.
+- Script-only release instructions distinguish image verification from GitHub Release publication and direct users to reflash rather than an in-place Compose pull.
+
 ## [0.8.5] — 2026-08-28
 
 > **v0.8.5 — fb-display HDMI panel standby, no snapMULTI rebuild.** Image set unchanged (`0.7.7`): the framebuffer display now powers the HDMI panel off after an idle (no-audio) timeout and wakes on audio, and the always-animating idle spectrum is replaced by a static snapMULTI logo. Shipped as a bind-mounted `fb_display.py`, so a reflash from this tag delivers it without rebuilding any image. No source, port, or container-security change.
