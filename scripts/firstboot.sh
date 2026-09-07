@@ -687,6 +687,32 @@ if install_profile_needs_server_stack "$INSTALL_TYPE"; then
         cp "$SNAP_BOOT/server/docker-driver-reconcile.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/ro-mode.sh" "$SERVER_DIR/scripts/" 2>/dev/null || true
         cp "$SNAP_BOOT/server/.version" "$SERVER_DIR/" 2>/dev/null || true
+        # Full-reflash persistence seeds are independent of MUSIC_SOURCE.
+        # Copy them into the writable project tree before deploy.sh can
+        # start Compose. Fail explicitly: firstboot may run in a caller's
+        # conditional context where errexit is not inherited reliably.
+        if [[ -f "$SNAP_BOOT/server/data/server.json" ]]; then
+            if ! mkdir -p "$SERVER_DIR/data"; then
+                log_error "Failed to create writable snapserver state directory"
+                exit 1
+            fi
+            if ! cp "$SNAP_BOOT/server/data/server.json" "$SERVER_DIR/data/server.json"; then
+                log_error "Failed to restore snapserver state seed from SD"
+                exit 1
+            fi
+            log_info "Restored snapserver state seed from SD"
+        fi
+        if [[ -d "$SNAP_BOOT/server/mympd/workdir" ]]; then
+            if ! mkdir -p "$SERVER_DIR/mympd/workdir"; then
+                log_error "Failed to create writable myMPD workdir"
+                exit 1
+            fi
+            if ! cp -a "$SNAP_BOOT/server/mympd/workdir/." "$SERVER_DIR/mympd/workdir/"; then
+                log_error "Failed to restore myMPD workdir seed from SD"
+                exit 1
+            fi
+            log_info "Restored myMPD workdir seed from SD"
+        fi
         # Restore the MPD database backup only when the music source is on a
         # network mount (NFS/SMB) where a full rescan would take hours.
         # For local sources (USB/local disk) the db may be stale or contain

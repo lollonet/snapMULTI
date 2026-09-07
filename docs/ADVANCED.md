@@ -212,8 +212,8 @@ Reproduced in `tests/test_firstboot_image_tag_derivation.sh`.
    - Keep `image_set` at the last published value (e.g. `0.7.7`)
    - Set `requires_image_rebuild` to `false`
 2. Update `CHANGELOG.md` `[Unreleased]` → new version header.
-3. Open PR, merge, push tag (`git tag v0.7.8 && git push v0.7.8`).
-4. The `build-push.yml` gate reads the manifest, sees `requires_image_rebuild=false`, verifies all 5 production images exist on Docker Hub at `:0.7.7`, and **skips the build matrix**. A fresh GitHub Release is published; users `docker compose pull` and continue running the same images.
+3. Open a PR, pass CI and the [real-device release gate](adr/ADR-005.reflash-systemd-robustness.md#release-gate), merge, then tag the verified commit (`git tag v0.7.8 && git push origin v0.7.8`).
+4. The `build-push.yml` gate reads the manifest, sees `requires_image_rebuild=false`, verifies all 5 production images exist on Docker Hub at `:0.7.7`, and **skips the build matrix**. After the gate succeeds, publish the GitHub Release for that tag with release notes; this workflow does not create it automatically. Users reflash from the release to receive the updated scripts while reusing the same image set.
 
 ### Cutting a container-changing release
 

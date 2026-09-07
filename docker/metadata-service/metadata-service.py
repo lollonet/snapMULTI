@@ -449,20 +449,52 @@ class MetadataService:
                 return None
             return server
 
-    def _build_client_stream_map(self, server: dict) -> dict[str, str]:
-        """Build CLIENT_ID → stream_id mapping from server status."""
-        mapping: dict[str, str] = {}
+    def _build_client_lookup(self, server: dict) -> dict[str, tuple[dict, str] | None]:
+        """Index raw IDs and aliases to one client, or reserve them as ambiguous."""
+        raw_ids: dict[str, dict[int, tuple[dict, str]]] = {}
+        aliases: dict[str, dict[int, tuple[dict, str]]] = {}
+
         for group in server.get("groups", []):
             stream_id = group.get("stream_id", "")
             for client in group.get("clients", []):
-                for identifier in [
+                candidate = (client, stream_id)
+                raw_id = client.get("id", "")
+                if raw_id:
+                    raw_ids.setdefault(raw_id, {})[id(client)] = candidate
+
+                direct_aliases = {
                     client.get("host", {}).get("name", ""),
                     client.get("config", {}).get("name", ""),
-                    client.get("id", ""),
-                ]:
-                    if identifier:
-                        mapping[identifier] = stream_id
-        return mapping
+                } - {""}
+                generated_aliases = {
+                    f"snapclient-{identifier}"
+                    for identifier in direct_aliases | {raw_id}
+                    if identifier
+                }
+                for alias in direct_aliases | generated_aliases:
+                    aliases.setdefault(alias, {})[id(client)] = candidate
+
+        lookup: dict[str, tuple[dict, str] | None] = {}
+        for raw_id, candidates in raw_ids.items():
+            # Raw keys are always reserved. A duplicate must never fall back
+            # to an alias on a different client.
+            lookup[raw_id] = (
+                next(iter(candidates.values())) if len(candidates) == 1 else None
+            )
+        for alias, candidates in aliases.items():
+            if alias not in raw_ids:
+                lookup[alias] = (
+                    next(iter(candidates.values())) if len(candidates) == 1 else None
+                )
+        return lookup
+
+    def _build_client_stream_map(self, server: dict) -> dict[str, str]:
+        """Build the stream cache from the canonical client lookup."""
+        return {
+            identifier: candidate[1]
+            for identifier, candidate in self._build_client_lookup(server).items()
+            if candidate is not None
+        }
 
     def _build_server_info(self, server: dict) -> dict:
         """Build server_info payload from current server status."""
@@ -494,16 +526,12 @@ class MetadataService:
             # Remove failed clients outside iteration
             ws_clients.difference_update(clients_to_remove)
 
-    @staticmethod
-    def _match_client_id(client_id: str, identifiers: list[str]) -> bool:
-        # Exact match or `snapclient-`-prefix-stripped exact match. Substring matching here would mis-route "Sala" volume to "Sala Grande".
-        if any(client_id == i for i in identifiers if i):
-            return True
-        if client_id.startswith("snapclient-"):
-            stripped = client_id[len("snapclient-") :]
-            if any(stripped == i for i in identifiers if i):
-                return True
-        return False
+    def _match_client_id(self, client_id: str, server: dict) -> dict | None:
+        """Return the client from the same canonical lookup as stream routing."""
+        if not client_id:
+            return None
+        candidate = self._build_client_lookup(server).get(client_id)
+        return candidate[0] if candidate is not None else None
 
     def _resolve_client_stream(self, client_id: str) -> str | None:
         """Resolve a CLIENT_ID to its stream_id using cached mapping.
@@ -511,10 +539,8 @@ class MetadataService:
         Resolution order:
           1. Exact match on `_client_stream_map` (the snapserver-reported
              client identifier).
-          2. Strip the standard `snapclient-` prefix and try exact match
-             again — handles the documented case where snapclient sets its
-             ID as `snapclient-<hostname>` while snapserver registers
-             `<hostname>`.
+          2. An unambiguous host/config alias, including the documented
+             `snapclient-<hostname>` convention.
 
         Word-boundary fuzzy matching was removed: it correctly fixed the
         "Cucina" / "Cucinino" collision but still misfired on
@@ -526,21 +552,8 @@ class MetadataService:
         the snapserver identifier exactly, or use the `snapclient-` prefix
         convention.
         """
-        # Exact match first
         if client_id in self._client_stream_map:
             return self._client_stream_map[client_id]
-        # Documented prefix convention: snapclient may identify itself as
-        # `snapclient-<hostname>` while snapserver registered just
-        # `<hostname>`.
-        if client_id.startswith("snapclient-"):
-            stripped = client_id[len("snapclient-") :]
-            if stripped in self._client_stream_map:
-                logger.debug(
-                    "Resolved '%s' via snapclient- prefix strip → '%s'",
-                    client_id,
-                    stripped,
-                )
-                return self._client_stream_map[stripped]
         logger.debug(
             "No stream match for client '%s' (registered: %s). "
             "Rename to match exactly or use 'snapclient-<id>' prefix.",
@@ -551,17 +564,11 @@ class MetadataService:
 
     def _find_client_volume(self, server: dict, client_id: str) -> dict:
         """Find volume info for a specific client."""
-        for group in server.get("groups", []):
-            for client in group.get("clients", []):
-                identifiers = [
-                    client.get("host", {}).get("name", ""),
-                    client.get("config", {}).get("name", ""),
-                    client.get("id", ""),
-                ]
-                if self._match_client_id(client_id, identifiers):
-                    return client.get("config", {}).get(
-                        "volume", {"percent": 100, "muted": False}
-                    )
+        client = self._match_client_id(client_id, server)
+        if client:
+            return client.get("config", {}).get(
+                "volume", {"percent": 100, "muted": False}
+            )
         return {"percent": 100, "muted": False}
 
     # ──────────────────────────────────────────────
@@ -1392,19 +1399,8 @@ class MetadataService:
                 return False
 
             server = status.get("result", {}).get("server", {})
-            snap_client_id = None
-            for group in server.get("groups", []):
-                for client in group.get("clients", []):
-                    identifiers = [
-                        client.get("host", {}).get("name", ""),
-                        client.get("config", {}).get("name", ""),
-                        client.get("id", ""),
-                    ]
-                    if self._match_client_id(client_id, identifiers):
-                        snap_client_id = client.get("id")
-                        break
-                if snap_client_id:
-                    break
+            client = self._match_client_id(client_id, server)
+            snap_client_id = client.get("id") if client else None
 
             if not snap_client_id:
                 logger.warning(f"Client {client_id} not found for volume control")

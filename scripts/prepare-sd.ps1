@@ -657,6 +657,21 @@ function Copy-ServerFiles {
         Copy-Item $envExample -Destination $serverDest
     }
 
+    # Full-reflash persistence seeds. Unlike mpd.db below, snapserver and
+    # myMPD state are valid for every music-source choice.
+    $serverJson = Join-Path $ProjectDir 'data\server.json'
+    if (Test-Path $serverJson -PathType Leaf) {
+        $serverDataDest = Join-Path $serverDest 'data'
+        New-Item -ItemType Directory -Path $serverDataDest -Force | Out-Null
+        Copy-Item $serverJson -Destination $serverDataDest -ErrorAction Stop
+    }
+    $mympdWorkdir = Join-Path $ProjectDir 'mympd\workdir'
+    if (Test-Path $mympdWorkdir -PathType Container) {
+        $mympdDest = Join-Path $serverDest 'mympd'
+        New-Item -ItemType Directory -Path $mympdDest -Force | Out-Null
+        Copy-Item $mympdWorkdir -Destination $mympdDest -Recurse -Force -ErrorAction Stop
+    }
+
     # ro-mode helper
     $roMode = Join-Path $ClientDir 'common\scripts\ro-mode.sh'
     if (Test-Path $roMode) {

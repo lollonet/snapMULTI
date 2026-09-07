@@ -85,10 +85,28 @@ OUT_DIR=$(mktemp -d /tmp/diag-test-out-XXXXXX)
 # shellcheck disable=SC2064
 trap "rm -rf '$OUT_DIR'" EXIT
 
-# Run diagnostic.sh against a writable tmp dir. On macOS /proc is
-# absent so most collectors will be no-ops; that's fine, we're
-# validating the bundle skeleton, not the host inventory.
-bundle_path=$("$DIAG" --reason unit-test --out-dir "$OUT_DIR" 2>/dev/null || true)
+# Extract only pure filtering/archiving functions. Never run collectors:
+# a writable output directory does not isolate reads of the real host.
+awk '
+    /^anonymise\(\) \{/ || /^write_bundle\(\) \{/ {f=1}
+    f {print}
+    f && /^\}/ {f=0}
+' "$DIAG" > "$OUT_DIR/functions.sh"
+# shellcheck source=/dev/null
+source "$OUT_DIR/functions.sh"
+WORK_DIR="$OUT_DIR/work"
+BUNDLE_NAME="snapmulti-diag-unit-test-20260907-000000Z"
+STAGE_DIR="$WORK_DIR/$BUNDLE_NAME"
+BUNDLE_PATH="$OUT_DIR/$BUNDLE_NAME.tar.gz"
+mkdir -p "$STAGE_DIR/nested"
+printf 'hostname=synthetic-pi\n' > "$STAGE_DIR/meta.txt"
+printf 'peer 192.168.1.42 mac aa:bb:cc:dd:ee:ff\n' > "$STAGE_DIR/hw.txt"
+printf 'SMB_PASS=fake-synthetic-password\n' > "$STAGE_DIR/smoke.stderr"
+printf 'Authorization: Bearer fake-synthetic-bearer\n' > "$STAGE_DIR/nested/new.log"
+printf '%s\n' '{"records":[{"status":"fail","msg":"peer 192.168.1.42 SMB_PASS=fake-synthetic-password"}],"password":"fake-synthetic-password","ssid":"SyntheticWifi"}' > "$STAGE_DIR/smoke.json"
+printf '%s\n' '{"State":"running","IP":"10.0.0.5"}' '{"State":"exited","MAC":"aa:bb:cc:dd:ee:ff"}' > "$STAGE_DIR/docker-ps.json"
+write_bundle
+bundle_path="$BUNDLE_PATH"
 assert "[[ -f \"$bundle_path\" ]]" "bundle file created at advertised path"
 
 bundle_basename=$(basename "$bundle_path" 2>/dev/null || echo "")
@@ -100,6 +118,23 @@ assert "[[ \"$bundle_basename\" =~ Z\\.tar\\.gz$ ]]" \
 bundle_list=$(tar tzf "$bundle_path" 2>/dev/null || true)
 assert_contains "$bundle_list" "meta.txt" "bundle includes meta.txt"
 assert_contains "$bundle_list" "hw.txt" "bundle includes hw.txt"
+mkdir "$OUT_DIR/extracted"
+tar xzf "$bundle_path" -C "$OUT_DIR/extracted"
+extracted="$OUT_DIR/extracted/$BUNDLE_NAME"
+assert '! grep -R -E "192[.]168[.]1[.]42|10[.]0[.]0[.]5|aa:bb:cc:dd:ee:ff|fake-synthetic-password|fake-synthetic-bearer|SyntheticWifi" "$extracted"' \
+    "all archive members filtered, including JSON, stderr and nested files"
+assert 'jq -e ".records[0].status == \"fail\" and .password == \"[REDACTED]\" and .ssid == \"[SSID]\"" "$extracted/smoke.json" >/dev/null' \
+    "smoke JSON stays valid and preserves the failure verdict"
+assert 'jq -se "length == 2 and .[0].State == \"running\" and .[1].State == \"exited\"" "$extracted/docker-ps.json" >/dev/null' \
+    "Docker JSON lines remain parseable and preserve container state"
+assert_contains "$(cat "$extracted/meta.txt")" "hostname=synthetic-pi" "non-sensitive context preserved"
+assert 'grep -q "^if ! write_bundle " "$DIAG"' "production archive path uses the final filter"
+
+# A failing filter must not create a publishable archive.
+assert '(anonymise() { return 1; }; BUNDLE_PATH="$OUT_DIR/failed.tar.gz"; ! write_bundle) && [[ ! -e "$OUT_DIR/failed.tar.gz" ]]' \
+    "filter failure prevents archive creation"
+assert '(python3() { return 127; }; BUNDLE_PATH="$OUT_DIR/no-python.tar.gz"; ! write_bundle) && [[ ! -e "$OUT_DIR/no-python.tar.gz" ]]' \
+    "missing Python prevents archive creation"
 
 echo
 echo "=== Functional: anonymisation ==="
@@ -142,6 +177,8 @@ docker bridge 172.17.0.1 active
 container 172.20.5.8 active
 high-end 172.30.250.99 reached
 high-end 172.31.0.4 reached
+loopback 127.0.0.1 public 8.8.8.8
+log prefix {"password":"fake-fragment-value","status":"running"}
 EOF
 )
 
@@ -167,6 +204,8 @@ assert_not_contains "$scrubbed" "172.17.0.1" "raw 172.16/12 IP gone (low end)"
 assert_not_contains "$scrubbed" "172.20.5.8" "raw 172.16/12 IP gone (mid end)"
 assert_not_contains "$scrubbed" "172.30.250.99" "raw 172.16/12 IP gone (172.30.x.x)"
 assert_not_contains "$scrubbed" "172.31.0.4" "raw 172.16/12 IP gone (172.31.x.x)"
+assert_not_contains "$scrubbed" "fake-fragment-value" "credential in prefixed JSON log redacted"
+assert_contains "$scrubbed" "127.0.0.1 public 8.8.8.8" "loopback and public addresses preserved"
 
 # install_type is structural metadata, not credential — must survive
 assert_contains "$scrubbed" "INSTALL_TYPE=client" "INSTALL_TYPE preserved (not a credential)"
