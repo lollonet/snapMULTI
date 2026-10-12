@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **CI — `upstream-release-check` closes superseded tracking issues**. The dedupe step only matched the current latest tag, so a prior run's issue for an older tag was never found and never closed — every weekly upstream release left its own open issue behind (13 stale duplicates accumulated across shairport-sync, go-librespot and myMPD before this fix). The workflow now closes every other open `upstream-bump` issue for the same project once the issue tracking the current latest exists, with a comment linking to it.
+
 ## [0.8.6] — 2026-09-07
 
 > Script-only fixes; image set remains `0.7.7`. Reflash to install the updated scripts and bind-mounted metadata service.
