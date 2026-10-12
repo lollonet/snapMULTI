@@ -129,7 +129,7 @@ systemd owns container lifecycle after install (ADR-005). Docker `restart: unles
 
 - Server: `snapmulti-server.service` (with `ExecStartPre=restore-snapmulti-state` for snapcast group + myMPD state restore from `/boot/firmware/snapmulti-backup/` — see [ADVANCED.md](ADVANCED.md#read-only-filesystem)), `snapmulti-status.timer`, `snapmulti-backup.timer` (MPD database backup), `snapmulti-state-backup.path` (event-driven on myMPD state changes — the script snapshots the whole workdir), `snapmulti-state-backup.timer` (5-min safety net — captures snapserver `server.json` periodically; the `lastSeen` heartbeats every ~3 s rule out an event-driven trigger on that file)
 - Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (HDMI clients only)
-- All: `snapmulti-boot-tune.service`, `snapmulti-auto-boot-smoke.service` (acoustic post-boot health cue — see [TROUBLESHOOTING.md](TROUBLESHOOTING.md#health-check-tones) for cue vocabulary and opt-out)
+- All: `snapmulti-boot-tune.service`, `snapmulti-avahi-name.timer` (takes the Avahi host name back after a `<hostname>-2` conflict rename, 3 min after boot then every 15 min), `snapmulti-auto-boot-smoke.service` (acoustic post-boot health cue — see [TROUBLESHOOTING.md](TROUBLESHOOTING.md#health-check-tones) for cue vocabulary and opt-out)
 
 Inspect with `systemctl cat <unit>`. Deployment paths and update strategy: [ADVANCED.md](ADVANCED.md#deployment-without-prepare-sd).
 

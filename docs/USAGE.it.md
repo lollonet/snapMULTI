@@ -129,7 +129,7 @@ Dopo l'installazione systemd possiede il ciclo di vita dei container (ADR-005). 
 
 - Server: `snapmulti-server.service` (con `ExecStartPre=restore-snapmulti-state` per ripristinare gruppi snapcast + stato myMPD da `/boot/firmware/snapmulti-backup/` — vedi [ADVANCED.it.md](ADVANCED.it.md#filesystem-read-only)), `snapmulti-status.timer`, `snapmulti-backup.timer` (backup database MPD), `snapmulti-state-backup.path` (event-driven sui cambiamenti dello stato myMPD — lo script fa snapshot dell'intera workdir), `snapmulti-state-backup.timer` (rete di sicurezza ogni 5 min — cattura periodicamente `server.json` di snapserver; gli heartbeat `lastSeen` ogni ~3 s escludono un trigger event-driven su quel file)
 - Client: `snapclient.service`, `snapclient-discover.timer`, `snapclient-display.service` (solo client HDMI)
-- Tutti: `snapmulti-boot-tune.service`, `snapmulti-auto-boot-smoke.service` (segnale audio del test di salute al boot — vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md#toni-test-salute) per vocabolario e opt-out)
+- Tutti: `snapmulti-boot-tune.service`, `snapmulti-avahi-name.timer` (riprende il nome host di Avahi dopo un rename `<hostname>-2` da conflitto, 3 min dopo il boot e poi ogni 15 min), `snapmulti-auto-boot-smoke.service` (segnale audio del test di salute al boot — vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md#toni-test-salute) per vocabolario e opt-out)
 
 Ispeziona con `systemctl cat <unit>`. Path di deployment e strategie di aggiornamento: [ADVANCED.it.md](ADVANCED.it.md#deploy-senza-prepare-sd).
 
