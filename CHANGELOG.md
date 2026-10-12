@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.7] — 2026-10-13
+
+> Script-only release; image set remains `0.7.7`. Reflash to install the Avahi host-name reclaim timer. The other changes are CI and contributor tooling.
+
 ### Changed
 - **Pre-push hook runs the CI-pinned ruff and hadolint**. The hook used whatever `ruff`/`hadolint` was on `PATH`; a newer local version enables rules CI does not run, so code that passes CI failed locally on every push (ruff 0.16.5 vs the pinned 0.15.8, hadolint 2.15.1 vs v2.12.0). The hook now reads both pins from `.github/workflows/validate.yml`, uses the local binary only when it matches, otherwise runs the pinned version via `uvx` / the `hadolint/hadolint` image when that actually works (uvx can fetch it, the Docker daemon answers) and skips with a warning when it doesn't, and exits non-zero if the pins cannot be read. It also lints the client Dockerfiles, like CI. New `tests/test_pre_push_linters.sh`.
 - **CI — `upstream-release-check` closes superseded tracking issues**. The dedupe step only matched the current latest tag, so a prior run's issue for an older tag was never found and never closed — every weekly upstream release left its own open issue behind (13 stale duplicates accumulated across shairport-sync, go-librespot and myMPD before this fix). The workflow now closes every other open `upstream-bump` issue for the same project once the issue tracking the current latest exists, with a comment linking to it.
