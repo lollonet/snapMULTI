@@ -132,7 +132,7 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 **Causa probabile.** L'mDNS non raggiunge il client (sottorete diversa, isolamento VLAN, router che non inoltra `_snapcast._tcp`), oppure l'`avahi-daemon` del server non sta annunciando.
 
 **Cosa provare.**
-1. Sul server: `systemctl is-active avahi-daemon` — deve dire `active`. Poi `avahi-browse -r _snapcast._tcp --terminate` — deve elencare l'hostname del server.
+1. Sul server: `systemctl is-active avahi-daemon` — deve dire `active`. Poi `avahi-browse -r _snapcast._tcp --terminate` — deve elencare l'hostname del server. Se elenca `<hostname>-2.local`, Avahi ha perso un conflitto di nome (di solito un record che il router o un Mac tiene ancora in cache da un avvio precedente); `snapmulti-avahi-name.timer` riprende il nome entro 15 minuti, oppure lancia subito `sudo /usr/local/bin/snapmulti-avahi-name.sh`. Se il nome torna sempre `-2`, un altro dispositivo in rete usa lo stesso hostname.
 2. Sul client: `avahi-browse -r _snapcast._tcp --terminate` — deve elencare il server. Se non lo fa, l'mDNS non attraversa la rete.
 3. Come workaround, imposta un server statico nel `.env` del client: `SNAPSERVER_HOST=<server-ip>` e `cd /opt/snapclient && sudo docker compose up -d`.
 

@@ -132,7 +132,7 @@ The cues also fire automatically after every boot (`snapmulti-auto-boot-smoke.se
 **Likely cause.** mDNS isn't reaching the client (different subnet, VLAN isolation, router doesn't forward `_snapcast._tcp`), or the server's `avahi-daemon` isn't advertising.
 
 **Try this.**
-1. On the server: `systemctl is-active avahi-daemon` — must say `active`. Then `avahi-browse -r _snapcast._tcp --terminate` — must list the server's hostname.
+1. On the server: `systemctl is-active avahi-daemon` — must say `active`. Then `avahi-browse -r _snapcast._tcp --terminate` — must list the server's hostname. If it lists `<hostname>-2.local`, Avahi lost a name conflict (usually a record your router or a Mac still caches from an earlier boot); `snapmulti-avahi-name.timer` takes the name back within 15 minutes, or run `sudo /usr/local/bin/snapmulti-avahi-name.sh` now. If the name keeps coming back as `-2`, another device on the LAN uses the same hostname.
 2. On the client: `avahi-browse -r _snapcast._tcp --terminate` — must list the server. If it doesn't, mDNS isn't crossing your network.
 3. As a workaround, set a static server in the client `.env`: `SNAPSERVER_HOST=<server-ip>` and `cd /opt/snapclient && sudo docker compose up -d`.
 
