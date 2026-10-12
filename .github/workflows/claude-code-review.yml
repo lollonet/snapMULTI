@@ -138,4 +138,6 @@ jobs:
             - Do NOT suggest refactors or "nice to have" improvements.
             - Do NOT re-report findings from previous review rounds.
             - If the PR is clean, say "No issues found" — don't invent findings.
-          claude_args: --allowedTools "Bash(gh *),Bash(printf *),Bash(echo *),Bash(cat *),Read,Glob,Grep"
+          # Pinned: since the action defaulted to claude-sonnet-5-5 the review
+          # ran 3-5 turns and posted nothing (sonnet-5 ran ~21 turns and posted).
+          claude_args: --model claude-sonnet-5 --allowedTools "Bash(gh *),Bash(printf *),Bash(echo *),Bash(cat *),Read,Glob,Grep"
