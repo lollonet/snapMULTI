@@ -1,18 +1,63 @@
 #!/usr/bin/env bash
 # Pre-push hook - runs CI checks before pushing
-# Mirrors validate.yml gates for local/remote parity
+# Mirrors validate.yml gates for local/remote parity, including the
+# pinned ruff and hadolint versions read from validate.yml.
 # Install: ln -sf ../../scripts/git-hooks/pre-push .git/hooks/pre-push
 # Bypass with: git push --no-verify
+# Debug: scripts/git-hooks/pre-push --print-linters
 
 set -euo pipefail
-
-echo "Running pre-push CI checks..."
-echo ""
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
+
+# validate.yml owns the linter pins. A newer local ruff/hadolint enables
+# rules CI does not run and fails code CI accepts, so run the pinned ones.
+CI_WORKFLOW=".github/workflows/validate.yml"
+if [ ! -f "$CI_WORKFLOW" ]; then
+    printf "${RED}pre-push: %s not found (run from the repo root)${NC}\n" "$CI_WORKFLOW" >&2
+    exit 1
+fi
+RUFF_PIN=$(sed -nE 's/.*pip install ruff==([0-9][0-9.]*).*/\1/p' "$CI_WORKFLOW" | head -n 1)
+HADOLINT_PIN=$(sed -nE 's/.*HL_VERSION="v?([0-9][0-9.]*)".*/\1/p' "$CI_WORKFLOW" | head -n 1)
+if [ -z "$RUFF_PIN" ] || [ -z "$HADOLINT_PIN" ]; then
+    printf "${RED}pre-push: cannot read ruff/hadolint pins from %s${NC}\n" "$CI_WORKFLOW" >&2
+    exit 1
+fi
+
+# Local binary when it already matches the pin, otherwise the pinned
+# version via uvx / Docker; empty when neither is available.
+resolve_ruff() {
+    if command -v ruff >/dev/null 2>&1 \
+        && [ "$(ruff --version 2>/dev/null | awk '{print $2}')" = "$RUFF_PIN" ]; then
+        echo "ruff"
+    elif command -v uvx >/dev/null 2>&1; then
+        echo "uvx ruff@$RUFF_PIN"
+    fi
+}
+
+resolve_hadolint() {
+    if command -v hadolint >/dev/null 2>&1 \
+        && [ "$(hadolint --version 2>/dev/null | awk '{print $NF}')" = "$HADOLINT_PIN" ]; then
+        echo "hadolint"
+    elif command -v docker >/dev/null 2>&1; then
+        echo "docker run --rm -v \"\$PWD:/w\" -w /w hadolint/hadolint:v$HADOLINT_PIN hadolint"
+    fi
+}
+
+RUFF_CMD=$(resolve_ruff)
+HADOLINT_CMD=$(resolve_hadolint)
+
+if [ "${1:-}" = "--print-linters" ]; then
+    printf 'ruff_pin=%s\nhadolint_pin=%s\nruff_cmd=%s\nhadolint_cmd=%s\n' \
+        "$RUFF_PIN" "$HADOLINT_PIN" "$RUFF_CMD" "$HADOLINT_CMD"
+    exit 0
+fi
+
+echo "Running pre-push CI checks..."
+echo ""
 
 FAILED=0
 
@@ -44,21 +89,21 @@ else
 fi
 
 # Hadolint
-if command -v hadolint &> /dev/null; then
+if [ -n "$HADOLINT_CMD" ]; then
     for f in Dockerfile.*; do
         [ -f "$f" ] || continue
-        run_check "Hadolint ($f)" "hadolint --config .hadolint.yaml --failure-threshold warning $f"
+        run_check "Hadolint ($f)" "$HADOLINT_CMD --config .hadolint.yaml --failure-threshold warning $f"
     done
 else
-    printf "${YELLOW}  hadolint not installed - skipping${NC}\n"
+    printf "${YELLOW}  hadolint %s unavailable (no matching hadolint, no docker) - skipping${NC}\n" "$HADOLINT_PIN"
 fi
 
 # Ruff
-if command -v ruff &> /dev/null; then
-    run_check "Ruff check" "ruff check docker/metadata-service/ scripts/meta_*.py tests/"
-    run_check "Ruff format" "ruff format --check docker/metadata-service/ scripts/meta_*.py tests/"
+if [ -n "$RUFF_CMD" ]; then
+    run_check "Ruff check" "$RUFF_CMD check docker/metadata-service/ scripts/meta_*.py tests/"
+    run_check "Ruff format" "$RUFF_CMD format --check docker/metadata-service/ scripts/meta_*.py tests/"
 else
-    printf "${YELLOW}  ruff not installed - skipping${NC}\n"
+    printf "${YELLOW}  ruff %s unavailable (no matching ruff, no uvx) - skipping${NC}\n" "$RUFF_PIN"
 fi
 
 # Python tests
