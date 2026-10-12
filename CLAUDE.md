@@ -31,6 +31,7 @@ Italian translations (`*.it.md`) mirror the English docs and must stay in sync.
 - Failure-mode tables, recovery procedures → `docs/TROUBLESHOOTING.md` only
 - README links to docs/ for anything technical — never inline technical details
 - Quality gate changes → update `CONTROL.yaml` + CI workflow + pre-push hook together
+- Linter versions (ruff, hadolint) are pinned only in `.github/workflows/validate.yml`; `scripts/git-hooks/pre-push` reads them from there — bump the pin in validate.yml, never in the hook
 
 ## Deployment Targets
 

@@ -110,7 +110,13 @@ jobs:
 
             ## Output Format
 
-            Post a single comment with this structure:
+            Your final answer is NOT shown to anyone — only a posted comment is.
+            Always finish by posting exactly one comment with
+            `gh pr comment ${{ github.event.pull_request.number }} --body-file -`
+            (pass the body on stdin), even when there are no findings: a clean
+            PR gets a short "Ready to merge — no issues found" comment.
+
+            The comment has this structure:
 
             ### Header
             One-line summary: is this ready to merge, or are there blockers?
