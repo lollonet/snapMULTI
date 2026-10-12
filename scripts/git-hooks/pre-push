@@ -28,21 +28,29 @@ if [ -z "$RUFF_PIN" ] || [ -z "$HADOLINT_PIN" ]; then
 fi
 
 # Local binary when it already matches the pin, otherwise the pinned
-# version via uvx / Docker; empty when neither is available.
+# version via uvx / Docker if that actually runs (uvx can fetch it, the
+# Docker daemon answers); empty when neither is usable, so the check is
+# skipped with a warning instead of failing the push on a tooling error.
+version_core() {
+    # "v2.12.0-no-git" -> "2.12.0"
+    local v="${1#v}"
+    echo "${v%%-*}"
+}
+
 resolve_ruff() {
     if command -v ruff >/dev/null 2>&1 \
-        && [ "$(ruff --version 2>/dev/null | awk '{print $2}')" = "$RUFF_PIN" ]; then
+        && [ "$(version_core "$(ruff --version 2>/dev/null | awk '{print $2}')")" = "$RUFF_PIN" ]; then
         echo "ruff"
-    elif command -v uvx >/dev/null 2>&1; then
+    elif command -v uvx >/dev/null 2>&1 && uvx "ruff@$RUFF_PIN" --version >/dev/null 2>&1; then
         echo "uvx ruff@$RUFF_PIN"
     fi
 }
 
 resolve_hadolint() {
     if command -v hadolint >/dev/null 2>&1 \
-        && [ "$(hadolint --version 2>/dev/null | awk '{print $NF}')" = "$HADOLINT_PIN" ]; then
+        && [ "$(version_core "$(hadolint --version 2>/dev/null | awk '{print $NF}')")" = "$HADOLINT_PIN" ]; then
         echo "hadolint"
-    elif command -v docker >/dev/null 2>&1; then
+    elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
         echo "docker run --rm -v \"\$PWD:/w\" -w /w hadolint/hadolint:v$HADOLINT_PIN hadolint"
     fi
 }
@@ -90,12 +98,13 @@ fi
 
 # Hadolint
 if [ -n "$HADOLINT_CMD" ]; then
-    for f in Dockerfile.*; do
+    # Same file set as validate.yml: server and client Dockerfiles.
+    for f in Dockerfile.* client/common/docker/*/Dockerfile; do
         [ -f "$f" ] || continue
         run_check "Hadolint ($f)" "$HADOLINT_CMD --config .hadolint.yaml --failure-threshold warning $f"
     done
 else
-    printf "${YELLOW}  hadolint %s unavailable (no matching hadolint, no docker) - skipping${NC}\n" "$HADOLINT_PIN"
+    printf "${YELLOW}  hadolint %s unavailable (no matching hadolint, Docker not running) - skipping${NC}\n" "$HADOLINT_PIN"
 fi
 
 # Ruff
@@ -103,7 +112,7 @@ if [ -n "$RUFF_CMD" ]; then
     run_check "Ruff check" "$RUFF_CMD check docker/metadata-service/ scripts/meta_*.py tests/"
     run_check "Ruff format" "$RUFF_CMD format --check docker/metadata-service/ scripts/meta_*.py tests/"
 else
-    printf "${YELLOW}  ruff %s unavailable (no matching ruff, no uvx) - skipping${NC}\n" "$RUFF_PIN"
+    printf "${YELLOW}  ruff %s unavailable (no matching ruff, uvx cannot fetch it) - skipping${NC}\n" "$RUFF_PIN"
 fi
 
 # Python tests
