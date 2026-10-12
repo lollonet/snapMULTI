@@ -142,6 +142,7 @@ jobs:
           fi
 
       - name: Open tracking issue
+        id: create
         if: steps.resolve.outputs.stale == 'true' && steps.existing.outputs.num == ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -182,7 +183,35 @@ jobs:
           body=${body//__NOTES__/${NOTES}}
           body=${body//__REPO__/${REPO}}
 
-          gh issue create \
+          url=$(gh issue create \
             --title "[upstream] ${NAME} ${LATEST} available (pinned ${PINNED})" \
             --label upstream-bump \
-            --body "${body}"
+            --body "${body}")
+          echo "number=${url##*/}" >> "$GITHUB_OUTPUT"
+
+      - name: Close superseded tracking issues for this upstream
+        # The dedupe step above only matches the current LATEST tag, so a
+        # prior run's issue for an older tag is never found and never
+        # closed — every weekly release leaves its own open issue behind.
+        # Close every other open upstream-bump issue for this NAME now
+        # that we know the number tracking the current latest.
+        if: steps.resolve.outputs.stale == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ matrix.name }}
+          LATEST: ${{ steps.resolve.outputs.latest }}
+          CURRENT_NUM: ${{ steps.create.outputs.number || steps.existing.outputs.num }}
+        run: |
+          set -euo pipefail
+          gh issue list \
+            --state open \
+            --label upstream-bump \
+            --search "in:title [upstream] ${NAME}" \
+            --json number,title \
+            --jq ".[] | select(.number != ${CURRENT_NUM}) | .number" \
+          | while IFS= read -r n; do
+              [[ -z "$n" ]] && continue
+              echo "Closing superseded issue #${n}"
+              gh issue close "$n" --reason "not planned" \
+                --comment "Superseded by #${CURRENT_NUM} (${NAME} ${LATEST}, the current upstream-bump tracker)."
+            done
