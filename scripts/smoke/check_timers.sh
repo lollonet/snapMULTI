@@ -11,6 +11,7 @@
 #   - snapmulti-state-backup.path  : event-driven myMPD state backup (server.json excluded — lastSeen heartbeat loop)
 #   - snapmulti-state-backup.timer : 5-min server.json backup + safety net for myMPD nested writes
 #   - snapclient-discover.timer    : mDNS rediscovery for client failover
+#   - snapmulti-avahi-name.timer   : Avahi host name back after a <host>-2 rename
 # A timer that is enabled-but-not-active means firstboot installed it
 # but something later disabled it (e.g. a partial reflash). A timer
 # that's missing entirely means the install did not complete — the
@@ -111,5 +112,13 @@ check_timers() {
         info "Timer snapclient-discover.timer skipped on native client (libavahi-client used instead)"
     else
         _check_timer "snapclient-discover.timer"    "mDNS server rediscovery (multi-server failover)" client
+    fi
+
+    # Installed with boot-tune (install_boot_tune_service) on server and
+    # Docker client installs; the native client path does not use it.
+    if [[ "${INSTALL_TYPE_NATIVE_CLIENT:-false}" == "true" ]]; then
+        info "Timer snapmulti-avahi-name.timer skipped on native client (not installed on that path)"
+    else
+        _check_timer "snapmulti-avahi-name.timer" "Avahi host name taken back after a <host>-2 conflict rename" ""
     fi
 }
