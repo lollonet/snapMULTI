@@ -57,6 +57,9 @@ except ValueError:
 _FBIOBLANK = 0x4611
 _FB_BLANK_UNBLANK = 0
 _FB_BLANK_POWERDOWN = 4
+# While blanked, repeat the power-off this often: the output can come back
+# on without fb-display asking, and nothing else would turn it off again.
+STANDBY_REASSERT_SECONDS = 30
 
 
 def _get_lan_ip() -> str:
@@ -1667,6 +1670,13 @@ def _should_standby(is_playing: bool, idle_seconds: float, standby_seconds: int)
     return standby_seconds > 0 and not is_playing and idle_seconds >= standby_seconds
 
 
+def _should_reassert_standby(now: float, last_assert: float, interval: float) -> bool:
+    """True when a blanked panel is due for another power-off. The HDMI output
+    can come back on while fb-display stays blanked, so the power-off is
+    repeated every `interval` seconds. Pure — unit-tested."""
+    return now - last_assert >= interval
+
+
 def _render_idle_logo() -> None:
     """Draw the snapMULTI logo centred in the spectrum region (static, once)
     when idle — nicer than an empty black panel, and no per-frame CPU."""
@@ -1690,6 +1700,7 @@ async def render_loop() -> None:
     FPS_IDLE = 1  # nothing playing: clock only, no spectrum animation
     consecutive_errors = 0
     blanked = False
+    last_blank = 0.0  # monotonic time of the last successful power-off
     standby_failed = False  # panel rejected FBIOBLANK — disable standby, no retry/spam
     idle_logo_shown = False
     last_active = time.monotonic()
@@ -1719,6 +1730,7 @@ async def render_loop() -> None:
                 # awake and keep rendering rather than freezing on the last frame.
                 if _fb_set_power(False):
                     blanked = True
+                    last_blank = start
                     logger.info(
                         "Display standby: panel off after %ds idle", STANDBY_SECONDS
                     )
@@ -1734,6 +1746,22 @@ async def render_loop() -> None:
                 blanked = False
                 base_frame_version = -1  # force a full redraw on wake
                 logger.info("Display wake: audio resumed")
+            elif blanked and _should_reassert_standby(
+                start, last_blank, STANDBY_REASSERT_SECONDS
+            ):
+                if _fb_set_power(False):
+                    last_blank = start
+                else:
+                    # Panel state unknown: render again rather than sit on
+                    # what may be a lit, frozen panel. The idle timer then
+                    # retries the power-off once and disables standby if it
+                    # fails again.
+                    blanked = False
+                    last_active = start
+                    base_frame_version = -1
+                    logger.warning(
+                        "Display standby: repeat power-off failed, rendering again"
+                    )
             if blanked:
                 consecutive_errors = 0
                 await asyncio.sleep(1.0)
