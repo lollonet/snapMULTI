@@ -180,14 +180,14 @@ ARM-only audio source using `edgecrush3r/tidal-connect` as base image (Raspbian 
 - **Git workflow**: always use PRs, never push directly to main unless explicitly requested
 - **Audio format**: 44100:16:2 (44.1kHz, 16-bit, stereo) across all sources
 - **CI gates**: shellcheck on all `scripts/**/*.sh`, docker-compose syntax, server+client bash tests
-- **Debian support**: bookworm (primary) + trixie (Docker repo falls back to bookworm)
+- **Debian support**: trixie (primary, current Raspberry Pi OS) + bookworm (Imager "Legacy"); Docker CE comes from the matching per-codename repo (`docker_repo_codename` in `scripts/common/install-docker.sh`)
 - **Console display**: ASCII-only for `/dev/tty1` output — PSF fonts lack Unicode symbols (✓▶○⠋). Use `[x]`/`[>]`/`[ ]` and `|/-\` spinner
 
 ## Non-goals
 
 Explicitly out of scope — refuse scope-creep PRs that propose any of these without first opening an architectural discussion:
 
-- **Custom Linux distribution.** Use Debian bookworm + cloud-init. No Buildroot, no Yocto, no custom OS.
+- **Custom Linux distribution.** Use Raspberry Pi OS (Debian) + cloud-init. No Buildroot, no Yocto, no custom OS.
 - **Custom PCB / proprietary hardware.** Pi 3/4/5 + commodity HATs only.
 - **Vendor cloud / hosted services.** No snapMULTI account system, telemetry endpoint, or hosted control plane. Everything runs on the user's LAN.
 - **Public-WAN deployment without an operator-managed reverse proxy and authentication.** The security model assumes a trusted LAN; exposing snapMULTI ports on the public internet is the operator's responsibility, not a product feature.

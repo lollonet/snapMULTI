@@ -312,7 +312,7 @@ If you choose **Network share**, you'll then enter:
 After you answer the menus, `prepare-sd.sh` / `prepare-sd.ps1`:
 
 1. Copies the installer and config files onto the boot partition
-2. Patches the Pi's first-boot mechanism (`user-data` on Bookworm) to run the installer automatically
+2. Patches the Pi's first-boot mechanism (`user-data` on Bookworm and later) to run the installer automatically
 3. Sets a temporary 800×600 display resolution for the install progress screen
 4. Verifies all files are present
 5. Unmounts / ejects the SD card

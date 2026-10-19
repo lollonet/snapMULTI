@@ -5,6 +5,16 @@
 # Requires: curl, dpkg, apt-get (run as root)
 # Side effects: adds Docker GPG key, APT source, installs docker-ce + compose plugin
 
+# Map a Debian codename to the Docker CE repo suite that serves it.
+# Docker publishes one suite per Debian release; a codename newer than
+# the ones listed here (testing/sid) uses the newest published suite.
+docker_repo_codename() {
+    case "$1" in
+        bullseye|bookworm|trixie) echo "$1" ;;
+        *) echo "trixie" ;;
+    esac
+}
+
 # Add Docker apt repo and GPG key. Idempotent: skips if already configured.
 # Does NOT run apt-get update — caller decides when to refresh.
 setup_docker_repo() {
@@ -18,15 +28,9 @@ setup_docker_repo() {
     fi
     chmod a+r /etc/apt/keyrings/docker.asc
 
-    local arch version_codename docker_codename
+    local arch docker_codename
     arch=$(dpkg --print-architecture)
-    version_codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
-
-    # Docker doesn't support all Debian versions — fallback to bookworm
-    case "$version_codename" in
-        bullseye|bookworm) docker_codename="$version_codename" ;;
-        *) docker_codename="bookworm" ;;
-    esac
+    docker_codename=$(docker_repo_codename "$(. /etc/os-release && echo "$VERSION_CODENAME")")
 
     echo "deb [arch=$arch signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $docker_codename stable" \
         > /etc/apt/sources.list.d/docker.list
