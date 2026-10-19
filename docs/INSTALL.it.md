@@ -314,7 +314,7 @@ Se scegli **Condivisione di rete**, dovrai quindi inserire:
 Dopo aver risposto ai menu, `prepare-sd.sh` / `prepare-sd.ps1`:
 
 1. Copia l'installer e i file di configurazione sulla partizione di boot
-2. Modifica il meccanismo di primo avvio del Pi (`user-data` su Bookworm) per eseguire l'installer automaticamente
+2. Modifica il meccanismo di primo avvio del Pi (`user-data` su Bookworm e successivi) per eseguire l'installer automaticamente
 3. Imposta una risoluzione temporanea di 800×600 per la schermata di progresso dell'installazione
 4. Verifica che tutti i file siano presenti
 5. Smonta / espelle la scheda SD
