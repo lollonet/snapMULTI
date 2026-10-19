@@ -794,3 +794,78 @@ class TestStandby:
 
     def test_idle_above_threshold(self):
         assert fb_display._should_standby(False, 30, 15) is True
+
+    def test_reassert_not_due_before_interval(self):
+        assert fb_display._should_reassert_standby(129.9, 100.0, 30) is False
+
+    def test_reassert_due_at_interval(self):
+        assert fb_display._should_reassert_standby(130.0, 100.0, 30) is True
+
+    def test_reassert_due_long_after(self):
+        assert fb_display._should_reassert_standby(10_000.0, 100.0, 30) is True
+
+    def test_reassert_interval_is_positive(self):
+        # 0 would repeat the ioctl on every 1 s blanked tick.
+        assert fb_display.STANDBY_REASSERT_SECONDS > 1
+
+
+class _StopLoop(BaseException):
+    """Ends render_loop; BaseException so its error handler does not catch it."""
+
+
+def _run_idle_render_loop(monkeypatch, power_results, until):
+    """Drive render_loop on a fake clock with nothing playing and no frame
+    to render, until the clock passes `until`. `power_results` feeds the
+    return values of _fb_set_power (then True). Returns (now, on) calls."""
+    clock = {"now": 1000.0}
+    calls = []
+    results = list(power_results)
+
+    def fake_power(on):
+        calls.append((clock["now"], on))
+        return results.pop(0) if results else True
+
+    async def fake_sleep(seconds):
+        clock["now"] += seconds
+        if clock["now"] > until:
+            raise _StopLoop
+
+    monkeypatch.setattr(fb_display.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(fb_display.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(fb_display, "_fb_set_power", fake_power)
+    monkeypatch.setattr(fb_display, "is_spectrum_active", lambda: False)
+    monkeypatch.setattr(fb_display, "current_metadata", None)
+    monkeypatch.setattr(fb_display, "STANDBY_SECONDS", 15)
+    monkeypatch.setattr(fb_display, "base_frame_version", fb_display.metadata_version)
+    monkeypatch.setattr(fb_display, "spectrum_bg_np", None)
+    # A wake forces a full redraw; there is no framebuffer to draw on here.
+    monkeypatch.setattr(fb_display, "render_base_frame", lambda: None)
+    monkeypatch.setattr(fb_display, "extract_spectrum_bg", lambda: None)
+    monkeypatch.setattr(fb_display, "write_full_frame", lambda frame: None)
+
+    with pytest.raises(_StopLoop):
+        asyncio.run(fb_display.render_loop())
+    return calls
+
+
+class TestStandbyRenderLoop:
+    """render_loop keeps a blanked panel off."""
+
+    def test_power_off_repeats_while_blanked(self, monkeypatch):
+        calls = _run_idle_render_loop(monkeypatch, [], until=1100.0)
+        offs = [t - 1000.0 for t, on in calls if not on]
+        assert [on for _, on in calls] == [False] * len(calls)
+        # First power-off after 15 s idle, then one every 30 s.
+        assert len(offs) == 3
+        assert offs[0] == pytest.approx(15, abs=1)
+        assert offs[1] - offs[0] == pytest.approx(30, abs=1)
+        assert offs[2] - offs[1] == pytest.approx(30, abs=1)
+
+    def test_failed_repeat_renders_again_then_disables_standby(self, monkeypatch):
+        # Initial power-off works, the repeat fails, the retry after the
+        # idle timer fails too: standby is disabled, no further ioctls.
+        calls = _run_idle_render_loop(monkeypatch, [True, False, False], until=1300.0)
+        offs = [t - 1000.0 for t, on in calls if not on]
+        assert len(offs) == 3
+        assert offs[1] - offs[0] == pytest.approx(30, abs=1)
+        assert offs[2] - offs[1] == pytest.approx(15, abs=1)
