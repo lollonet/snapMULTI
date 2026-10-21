@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Docker CE on Raspberry Pi OS trixie comes from Docker's trixie repo**. The installer only knew Docker's bullseye and bookworm suites, so on trixie — the current Raspberry Pi OS — it installed Docker packages built for bookworm. `setup_docker_repo` now picks the suite matching the Debian codename (`docker_repo_codename`: bullseye, bookworm, trixie; a newer codename uses trixie). Applies to new installs; a reflashed Pi gets it. New `tests/test_install_docker_repo.sh`.
 
+### Fixed
+- **fb-display keeps the HDMI panel off during standby** (#718). fb-display powered the panel off once and then only waited for audio; when the HDMI output came back on during standby (seen on a Pi 4 with the display output active again hours after the power-off), the panel stayed lit until the next track. While in standby it now repeats the power-off every 30 s. If a repeat fails it renders again, and the idle timer retries once and disables standby if that fails too. `fb_display.py` is bind-mounted: a reflash or a live update installs it, no image rebuild.
+
 ## [0.8.7] — 2026-10-13
 
 > Script-only release; image set remains `0.7.7`. Reflash to install the Avahi host-name reclaim timer. The other changes are CI and contributor tooling.
