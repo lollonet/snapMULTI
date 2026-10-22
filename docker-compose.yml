@@ -22,6 +22,18 @@ x-fifo-security: &fifo-security
   cap_add:
     - DAC_OVERRIDE
 
+# Music library, read-only. rslave propagation: a network share mounted on
+# the host after the container started (systemd .automount, NFS/SMB back
+# after an outage) still shows up inside instead of an empty mountpoint.
+x-music-volume: &music-volume
+  type: bind
+  source: ${MUSIC_PATH:-/media/music}
+  target: /music
+  read_only: true
+  bind:
+    propagation: rslave
+    create_host_path: true
+
 services:
   snapserver:
     image: lollonet/snapmulti-server:${IMAGE_TAG:-latest}
@@ -183,7 +195,7 @@ services:
     volumes:
       - ./mympd/workdir:/var/lib/mympd
       - ./mympd/cachedir:/var/cache/mympd
-      - ${MUSIC_PATH:-/media/music}:/music:ro
+      - *music-volume
       - ./mpd/playlists:/playlists:ro
     environment:
       - TZ=${TZ:-Europe/Berlin}
@@ -230,7 +242,7 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./audio:/audio
-      - ${MUSIC_PATH:-/media/music}:/music:ro
+      - *music-volume
       - ./config/mpd.conf:/etc/mpd.conf:ro
       - ./mpd/playlists:/playlists
       - ./mpd/data:/data

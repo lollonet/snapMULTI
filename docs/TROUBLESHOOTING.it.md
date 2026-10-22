@@ -159,6 +159,8 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 
 **Causa probabile.** Path share NAS errato (snapMULTI rifiuta path con spazi — il default Synology `Music Share` va rinominato `Music_Share`), credenziali SMB sbagliate, export NFS non autorizzato per l'IP del Pi, o `.automount` systemd che non si è abilitato.
 
+**NAS spento all'avvio.** Il Pi monta la share appena il NAS risponde, e MPD e myMPD la vedono senza riavvio. Le immagini uscite prima di questa correzione richiedono `cd /opt/snapmulti && sudo docker compose restart mpd mympd` quando la share torna disponibile — il sintomo è `Failed to open /music: Symbolic link loop` in `docker logs mpd`.
+
 **Cosa provare.**
 1. Sul server: identifica il nome della mount unit (systemd-escapa il path) e controlla il suo stato. I mount point predefiniti sono `/media/nfs-music` per NFS o `/media/smb-music` per SMB — sostituisci con quello che corrisponde al tuo install:
    ```bash

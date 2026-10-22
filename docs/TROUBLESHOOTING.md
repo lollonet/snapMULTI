@@ -159,6 +159,8 @@ The cues also fire automatically after every boot (`snapmulti-auto-boot-smoke.se
 
 **Likely cause.** NAS share path mismatch (snapMULTI rejects paths with spaces — Synology's default `Music Share` must be renamed `Music_Share`), wrong username / password for SMB, NFS export not allowed for the Pi's IP, or the systemd `.automount` failed to enable.
 
+**NAS was offline at boot.** The host mounts the share as soon as the NAS answers, and MPD and myMPD see it without a restart. Images released before this fix need `cd /opt/snapmulti && sudo docker compose restart mpd mympd` once the share is back — their symptom is `Failed to open /music: Symbolic link loop` in `docker logs mpd`.
+
 **Try this.**
 1. On the server: identify the mount unit name (systemd-escapes the mount path) and check its state. Default mount points are `/media/nfs-music` for NFS or `/media/smb-music` for SMB — substitute the one that matches your install:
    ```bash
