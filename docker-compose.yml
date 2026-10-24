@@ -74,6 +74,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+      # Probe every 2 s during start_period instead of waiting for the
+      # first 30 s interval: every source container waits on
+      # service_healthy here, so this cuts ~25 s off each stack start.
+      # Needs Docker Engine 25+ (older engines ignore the key).
+      start_interval: 2s
     deploy:
       resources:
         limits:
@@ -250,6 +255,10 @@ services:
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     environment:
       - TZ=${TZ:-Europe/Berlin}
+      # streaming / streaming-only: the entrypoint skips its 120 s wait
+      # for music files (there is no library to wait for). Unset or any
+      # other value keeps the wait (NFS/SMB/USB may attach after boot).
+      - MUSIC_SOURCE=${MUSIC_SOURCE:-}
     logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "echo 'ping' | nc -w 2 127.0.0.1 6600 | grep -q OK || exit 1"]
@@ -397,7 +406,12 @@ services:
         condition: service_healthy
     logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f speaker_controller || exit 1"]
+      # Check the main Connect binary, not the metadata helper. The
+      # [t] bracket keeps `pgrep -f` from matching the `sh -c` running
+      # this very check (its cmdline contains the pattern text, which the
+      # regex does not match), so a dead tidal_connect_application makes
+      # the container unhealthy instead of always passing.
+      test: ["CMD-SHELL", "pgrep -f '[t]idal_connect_application' >/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
