@@ -180,7 +180,7 @@ install_snapclient_apt() {
 
     info "Installing snapclient from distro apt (fallback)"
     if ! DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends snapclient; then
-        error "apt-get install snapclient failed — firstboot will retry on next boot"
+        error "apt-get install snapclient failed — nothing retries automatically; fix the network/apt issue, then re-run: sudo bash /boot/firmware/snapmulti/firstboot.sh (resumes from the last completed step), or reflash"
         exit 1
     fi
     local v

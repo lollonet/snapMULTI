@@ -1818,12 +1818,13 @@ if ! pull_compose_images log_progress 1024; then
     stop_progress_animation
     echo ""
     echo "WARNING: Failed to pull some container images"
-    echo "  firstboot will retry on next boot, or run manually:"
+    echo "  Nothing retries this automatically. To finish the install, run:"
     echo "  cd $INSTALL_DIR && docker compose pull"
-    # Don't exit 1 — let firstboot retry. After a Docker storage driver
-    # switch (readonly mode), images were wiped and the pull may fail
-    # due to rate limits or network issues. On next boot, fuse-overlayfs
-    # is already configured so no wipe happens, and the pull retries.
+    # Don't exit here — finish the remaining steps, then exit 1 at the end
+    # (see "Setup Incomplete" below) so firstboot records the failure.
+    # Nothing re-runs firstboot by itself (cloud-init runcmd runs once);
+    # re-running firstboot.sh resumes from the last completed step, and
+    # fuse-overlayfs is already configured by then, so no image wipe.
     PULL_FAILED=true
 else
     PULL_FAILED=false
@@ -1836,7 +1837,7 @@ echo ""
 # Re-runs on overlayroot: persists images so tmpfs doesn't fill on next boot.
 # ============================================
 if [[ "$PULL_FAILED" == "true" ]]; then
-    echo "Skipping bake — images incomplete (will retry on next boot)"
+    echo "Skipping bake — images incomplete (re-run after a successful pull)"
 elif mountpoint -q /media/root-ro 2>/dev/null; then
     log_progress "Baking Docker images to SD card..."
     BAKE_DIR=$(mktemp -d /tmp/snapclient-bake-XXXXX)
@@ -1903,15 +1904,18 @@ progress_complete
 _elapsed="$((SECONDS / 60))m$((SECONDS % 60))s"
 
 # Exit early with clear error if pull failed — don't show success banner.
-# firstboot won't mark .done-setup, so it retries on next boot
-# (fuse-overlayfs already configured, no wipe)
+# firstboot then does not mark the setup step done. Nothing re-runs it on
+# its own: re-running firstboot.sh resumes from the last completed step
+# (fuse-overlayfs already configured, no wipe); otherwise reflash.
 if [[ "${PULL_FAILED:-false}" == "true" ]]; then
     echo "========================================="
     echo "Setup Incomplete ($_elapsed)"
     echo "========================================="
     echo ""
-    echo "WARNING: Image pull failed — will retry on next boot"
-    echo "  To retry manually: cd $INSTALL_DIR && docker compose pull"
+    echo "WARNING: Image pull failed — the client is not ready yet."
+    echo "  To retry: cd $INSTALL_DIR && docker compose pull"
+    echo "  Or resume the install: sudo bash /boot/firmware/snapmulti/firstboot.sh"
+    echo "  (resumes from the last completed step), or reflash the SD card."
     exit 1
 fi
 
