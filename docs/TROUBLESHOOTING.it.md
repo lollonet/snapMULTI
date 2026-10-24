@@ -88,7 +88,7 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 3. Sul Pi Zero 2 W: conferma che Imager abbia un SSID 2,4 GHz, non 5 GHz (il radio del Zero 2 W non fa 5 GHz).
 4. Su un Pi 4 / 5 bloccato su un canale 5 GHz DFS: riflasha con un SSID 2,4 GHz oppure un canale 5 GHz non-DFS (36–48).
 
-**Se è ancora bloccato.** Se hai l'HDMI: fai login, esegui `ip addr` e `iwgetid -r` per verificare che il Pi sia in WiFi. Se `ip addr` non mostra un indirizzo su `wlan0`, le credenziali WiFi in Imager erano sbagliate — riflasha. Se `iwgetid` mostra l'SSID giusto ma `ip addr` non mostra l'indirizzo, hai un problema DHCP sul router.
+**Se è ancora bloccato.** Se hai l'HDMI: fai login, esegui `ip addr` e `iwgetid -r` per verificare che il Pi sia in WiFi. Se `ip addr` non mostra un indirizzo su `wlan0`, le credenziali WiFi in Imager erano sbagliate — riflasha. Se `iwgetid` mostra l'SSID giusto ma `ip addr` non mostra l'indirizzo, hai un problema DHCP sul router. Il watchdog WiFi riavvia un Pi solo-WiFi soltanto dopo che il gateway ha risposto almeno una volta dall'avvio; un Pi il cui WiFi non è mai partito riceve solo riavvii dell'interfaccia, quindi spegnilo e riaccendilo.
 
 ## Console di emergenza / root bloccato
 
@@ -115,7 +115,7 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 3. Controlla il mixer hardware: `alsamixer -c 0`, F6 per scegliere la card, alza il master e tutti i controlli "Digital" / "Speaker".
 4. Verifica che l'HAT sia rilevato: `aplay -l` deve mostrare il tuo DAC; `dmesg | grep -i 'snd\|hifiberry\|wm8'` deve mostrare il caricamento del driver.
 
-**Se è ancora bloccato.** Esegui il test di salute (ha un controllo `audio_modules` che segnala disallineamenti fra moduli kernel e HAT). Se `config.txt` non ha `dtoverlay=hifiberry-*` ecc., rilancia `setup.sh` e conferma che il rilevamento HAT scelga il modello giusto — le schede senza EEPROM richiedono una scelta manuale.
+**Se è ancora bloccato.** Esegui il test di salute (ha un controllo `audio_modules` che segnala disallineamenti fra moduli kernel e HAT). Se `config.txt` non ha `dtoverlay=hifiberry-*` ecc., rilancia `setup.sh` e conferma che il rilevamento HAT scelga il modello giusto — le schede senza EEPROM richiedono una scelta manuale. `setup.sh` si rifiuta di girare con la modalità read-only attiva (le sue modifiche andrebbero perse al riavvio): esegui prima `sudo ro-mode disable && sudo reboot`. Lo stesso vale se colleghi uno schermo HDMI a un player installato headless: lo schermo resta spento finché non rilanci `setup.sh` con lo schermo collegato (o riflashi la scheda), perché il visualizzatore ha bisogno di un instradamento audio che un'installazione headless non configura.
 
 ## L'audio va e viene, o un client è connesso ma muto
 

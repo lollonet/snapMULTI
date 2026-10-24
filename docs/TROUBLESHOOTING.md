@@ -88,7 +88,7 @@ The cues also fire automatically after every boot (`snapmulti-auto-boot-smoke.se
 3. On Pi Zero 2 W: confirm Imager has a 2.4 GHz SSID, not 5 GHz (the Zero 2 W radio doesn't do 5 GHz).
 4. On a Pi 4 / 5 stuck on a DFS 5 GHz channel: re-flash with a 2.4 GHz SSID or a non-DFS 5 GHz channel (36–48).
 
-**If still broken.** If you have HDMI: log in, run `ip addr` and `iwgetid -r` to confirm the Pi is even on WiFi. If `ip addr` shows no `wlan0` address, the WiFi credentials in Imager were wrong — re-flash. If `iwgetid` shows the right SSID but `ip addr` shows no address, you have a DHCP issue at the router.
+**If still broken.** If you have HDMI: log in, run `ip addr` and `iwgetid -r` to confirm the Pi is even on WiFi. If `ip addr` shows no `wlan0` address, the WiFi credentials in Imager were wrong — re-flash. If `iwgetid` shows the right SSID but `ip addr` shows no address, you have a DHCP issue at the router. The WiFi watchdog reboots a WiFi-only Pi only after its gateway has answered at least once since boot; a Pi whose WiFi never came up gets interface restarts only, so power-cycle it.
 
 ## Emergency console / root locked out
 
@@ -115,7 +115,7 @@ The cues also fire automatically after every boot (`snapmulti-auto-boot-smoke.se
 3. Check the hardware mixer: `alsamixer -c 0`, press F6 to pick the right card, raise the master and any "Digital" / "Speaker" controls.
 4. Verify the HAT was detected: `aplay -l` should show your DAC; `dmesg | grep -i 'snd\|hifiberry\|wm8'` should show driver load messages.
 
-**If still broken.** Run the smoke test (it has an `audio_modules` check that flags kernel-module / HAT mismatches). If `config.txt` is missing `dtoverlay=hifiberry-*` etc., re-run `setup.sh` and confirm the HAT detection picks the right model — EEPROM-less boards need a manual choice.
+**If still broken.** Run the smoke test (it has an `audio_modules` check that flags kernel-module / HAT mismatches). If `config.txt` is missing `dtoverlay=hifiberry-*` etc., re-run `setup.sh` and confirm the HAT detection picks the right model — EEPROM-less boards need a manual choice. `setup.sh` refuses to run while read-only mode is active (its changes would be lost at reboot): run `sudo ro-mode disable && sudo reboot` first. The same applies after plugging an HDMI screen into a player installed headless: the screen stays off until `setup.sh` is re-run with the screen connected (or the card is reflashed), because the visualizer needs audio routing that a headless install does not configure.
 
 ## Audio drops in and out, or a client is connected but silent
 

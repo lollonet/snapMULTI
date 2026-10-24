@@ -270,7 +270,7 @@ GitHub → Actions → Build and Push Images → Run workflow
   force_rebuild: ☑ true
 ```
 
-Il gate bypassa sia `requires_image_rebuild=false` sia il check di esistenza su Docker Hub; la matrice gira e ripubblica l'`image_set` che il manifest dichiara (NON il tag appena tagliato).
+Il gate bypassa sia `requires_image_rebuild=false` sia il check di esistenza su Docker Hub; la matrice gira e ripubblica l'`image_set` che il manifest dichiara (NON il tag appena tagliato). Lancialo dal tag della release per ricostruire esattamente il codice rilasciato; un lancio da un branch pubblica `<image_set>` più `:manual`, mai `:latest`.
 
 ### Ispezionare l'identità della release live
 
@@ -291,9 +291,11 @@ Il profilo segue la RAM installata, non il nome della scheda:
 
 | Profilo | Hardware tipico |
 |---------|-----------------|
-| minimal | Pi 3, Pi Zero 2 W, qualsiasi cosa sotto ~1,8 GB |
-| standard | schede da ~2 GB (Pi 4 / Pi 5 2 GB) |
-| performance | da 4 GB in su (Pi 4 / Pi 5 4–8 GB, x86_64) |
+| minimal | Pi 3, Pi Zero 2 W, Pi 4 / Pi 5 1 GB |
+| standard | Pi 4 / Pi 5 2 GB |
+| performance | Pi 4 / Pi 5 da 4 GB in su |
+
+Altri host: sotto 2 GB minimal; performance da 8 GB sul server, da 4 GB su un player; standard nel mezzo. Rilanciare `deploy.sh` riscrive il blocco del profilo in `.env` quando i valori differiscono (ogni modifica è registrata nel log): una modifica dentro quel blocco viene annullata, un override messo dopo il blocco prevale.
 
 ### Limiti memoria server
 
