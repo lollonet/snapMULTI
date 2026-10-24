@@ -95,7 +95,7 @@ assert "! grep -q 'Waiting for music' '$SBX/out'" "MUSIC_SOURCE=streaming-only s
 
 echo
 echo "## SIGTERM during the music wait exits promptly"
-MUSIC_SOURCE= start_entrypoint
+MUSIC_SOURCE='' start_entrypoint
 wait_for "grep -q 'Waiting for music' '$SBX/out'" 30 || true
 assert "grep -q 'Waiting for music' '$SBX/out'" "music wait active when MUSIC_SOURCE is unset"
 t0=$(date +%s%N)
