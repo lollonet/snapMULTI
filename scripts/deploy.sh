@@ -508,6 +508,10 @@ QEOF
     # Boot-time tuning service (shared function from system-tune.sh)
     install_boot_tune_service "$SCRIPT_DIR/boot-tune.sh"
 
+    # mDNS _http._tcp for the landing page + URL on the console login
+    # screen (server installs only — client-only installs never run deploy.sh)
+    install_server_discovery
+
     ok "System dependencies ready"
 }
 
