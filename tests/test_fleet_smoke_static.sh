@@ -103,6 +103,17 @@ assert_not_contains "$src" '|| echo "{}")' \
     'no `|| echo "{}"` concat on smoke JSON capture (would mask failures)'
 assert_contains "$src" "json.loads(raw)" \
     "parser requires a complete single JSON document"
+# set -u + bare ${USER}: dies with "USER: unbound variable" under cron,
+# systemd units and containers, where USER is not exported.
+assert_not_contains "$src" 'SSH_USER="${USER}"' \
+    "SSH_USER default does not dereference an unset USER under set -u"
+assert_contains "$src" 'SSH_USER="${USER:-$(id -un)}"' \
+    "SSH_USER falls back to id -un when USER is unset"
+if env -u USER bash "$FLEET_SH" --help >/dev/null 2>&1; then
+    pass=$((pass + 1)); echo "  PASS: --help runs with USER unset"
+else
+    fail=$((fail + 1)); echo "  FAIL: --help runs with USER unset"
+fi
 # Behavioral coverage runs the production capture, parser and renderer with
 # isolated SSH/API stubs in test_fleet_smoke_results.py, not a copied parser.
 
