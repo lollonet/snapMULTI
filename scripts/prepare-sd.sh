@@ -52,6 +52,17 @@ check_client_dir() {
     fi
 }
 
+# patch_user_data_runcmd FILE HOOK_PATH
+#
+# Inserts `- [bash, HOOK_PATH]` as the first runcmd entry of a cloud-init
+# user-data file (in place). The new entry copies the indentation of the
+# existing runcmd items: Imager writes them at the same column as the
+# `runcmd:` key (`runcmd:` / `- localectl ...`), and a hard-coded
+# two-space indent would mix two sequence indents under one key, which
+# cloud-init refuses to parse. Handles `runcmd:` / `runcmd: []` /
+# `runcmd: null` / `runcmd: ~` (optionally with a trailing comment) and a
+# missing key (appended at end of file). Only the first runcmd key is
+# touched.
 patch_user_data_runcmd() {
     local user_data="$1"
     local hook_path="$2"
@@ -59,28 +70,38 @@ patch_user_data_runcmd() {
     tmp=$(mktemp)
 
     if ! awk -v hook="$hook_path" '
-        BEGIN {
-            entry = "  - [bash, " hook "]"
-            patched = 0
-        }
-        /^[[:space:]]*runcmd:[[:space:]]*(\[\]|null|~)?[[:space:]]*$/ {
-            indent = ""
-            if (match($0, /^[[:space:]]*/)) {
-                indent = substr($0, 1, RLENGTH)
-            }
-            print indent "runcmd:"
-            print indent entry
-            patched = 1
-            next
-        }
-        {
-            print
-        }
+        { lines[NR] = $0 }
         END {
+            entry = "- [bash, " hook "]"
+            patched = 0
+            for (i = 1; i <= NR; i++) {
+                line = lines[i]
+                if (!patched && line ~ /^[[:space:]]*runcmd:[[:space:]]*(\[\]|null|~)?[[:space:]]*(#.*)?$/) {
+                    match(line, /^[[:space:]]*/)
+                    indent = substr(line, 1, RLENGTH)
+                    child = indent "  "
+                    # Block form: inherit the indent of the first existing item.
+                    if (line ~ /runcmd:[[:space:]]*(#.*)?$/) {
+                        for (j = i + 1; j <= NR; j++) {
+                            if (lines[j] ~ /^[[:space:]]*(#.*)?$/) continue
+                            if (lines[j] ~ /^[[:space:]]*-([[:space:]]|$)/) {
+                                match(lines[j], /^[[:space:]]*/)
+                                if (RLENGTH >= length(indent)) child = substr(lines[j], 1, RLENGTH)
+                            }
+                            break
+                        }
+                    }
+                    print indent "runcmd:"
+                    print child entry
+                    patched = 1
+                    continue
+                }
+                print line
+            }
             if (!patched) {
                 print ""
                 print "runcmd:"
-                print entry
+                print "  " entry
             }
         }
     ' "$user_data" > "$tmp"; then
@@ -91,14 +112,87 @@ patch_user_data_runcmd() {
     mv "$tmp" "$user_data"
 }
 
+# validate_user_data FILE
+#
+# Post-patch sanity gate for cloud-init user-data. A broken user-data is
+# silent until first boot, where cloud-init rejects the whole file and the
+# Pi comes up without network, user or installer. Checks, in order:
+#   1. exactly one `runcmd:` key (a missed match appends a second block);
+#   2. the firstboot hook is present;
+#   3. the runcmd items share one indent (the Imager column-0 case);
+#   4. full yaml.safe_load + "hook is inside runcmd" when python3 + PyYAML
+#      are available. Stock macOS has python3 but usually no PyYAML, so
+#      check 3 is the fallback that still catches the indentation bug.
+# Prints the reason and returns 1 on failure.
+validate_user_data() {
+    local file="$1" runcmd_count
+    runcmd_count=$(grep -cE "^[[:space:]]*runcmd:" "$file" || true)
+    if [[ "${runcmd_count:-0}" -ne 1 ]]; then
+        echo "  ERROR: user-data has ${runcmd_count} runcmd: blocks (expected 1)"
+        return 1
+    fi
+    if ! grep -qF "snapmulti/firstboot.sh" "$file"; then
+        echo "  ERROR: user-data has no runcmd hook for snapmulti/firstboot.sh"
+        return 1
+    fi
+    if ! awk '
+        !found && /^[[:space:]]*runcmd:[[:space:]]*(#.*)?$/ {
+            match($0, /^[[:space:]]*/); key = RLENGTH; found = 1; first = -1; next
+        }
+        found == 1 {
+            if ($0 ~ /^[[:space:]]*(#.*)?$/) next
+            match($0, /^[[:space:]]*/); ind = RLENGTH
+            if ($0 ~ /^[[:space:]]*-([[:space:]]|$)/ && ind >= key) {
+                if (first < 0) first = ind
+                else if (ind < first) bad = 1
+                next
+            }
+            if (first >= 0 && ind > first) next
+            found = 2
+        }
+        END { exit bad }
+    ' "$file"; then
+        echo "  ERROR: user-data runcmd items use mixed indentation"
+        return 1
+    fi
+    if command -v python3 >/dev/null 2>&1 && python3 -c "import yaml" 2>/dev/null; then
+        if ! python3 -c "
+import sys, yaml
+try:
+    with open(sys.argv[1]) as fh:
+        data = yaml.safe_load(fh)
+except yaml.YAMLError as e:
+    print(f'YAML parse error: {e}', file=sys.stderr)
+    sys.exit(1)
+cmds = data.get('runcmd') if isinstance(data, dict) else None
+if not isinstance(cmds, list) or not any('snapmulti/firstboot.sh' in str(c) for c in cmds):
+    print('runcmd does not contain the snapmulti/firstboot.sh hook', file=sys.stderr)
+    sys.exit(1)
+" "$file"; then
+            echo "  ERROR: user-data is not valid cloud-init YAML."
+            return 1
+        fi
+    fi
+    return 0
+}
+
 # ── Auto-detect boot partition ────────────────────────────────────
 detect_boot() {
     local candidates=()
     # macOS
     [[ -d "/Volumes/bootfs" ]] && candidates+=("/Volumes/bootfs")
-    # Linux: common mount points
-    for base in "/media/$USER" "/media" "/mnt"; do
-        [[ -d "$base/bootfs" ]] && candidates+=("$base/bootfs")
+    # Linux: common mount points. udisks2 mounts under /media/$USER on
+    # Debian/Ubuntu and /run/media/$USER on Fedora/Arch. Under sudo, USER
+    # is root, so also look at the invoking user's directories. ${..:-}
+    # keeps `set -u` happy when USER/SUDO_USER are unset (cron, env -i).
+    local base
+    for base in "/media/${USER:-}" "/run/media/${USER:-}" \
+                "/media/${SUDO_USER:-}" "/run/media/${SUDO_USER:-}" \
+                "/media" "/mnt"; do
+        [[ "$base" == */ ]] && continue   # empty USER / SUDO_USER
+        [[ -d "$base/bootfs" ]] || continue
+        case " ${candidates[*]:-} " in *" $base/bootfs "*) continue ;; esac
+        candidates+=("$base/bootfs")
     done
     # Prefer partitions that look like a Pi boot (has cmdline.txt or config.txt)
     for candidate in "${candidates[@]}"; do
@@ -367,13 +461,13 @@ show_advanced_menu() {
         echo "    -> Apt upgrade: enabled (default)"
     fi
 
-    # 3. Image tag
-    read -rp "  Docker image tag [latest]: " choice
+    # 3. Image tag (default = manifest image_set, see ADV_IMAGE_TAG above)
+    read -rp "  Docker image tag [$ADV_IMAGE_TAG]: " choice
     if [[ -n "$choice" ]]; then
         ADV_IMAGE_TAG="$choice"
         echo "    -> Image tag: $ADV_IMAGE_TAG"
     else
-        echo "    -> Image tag: latest (default)"
+        echo "    -> Image tag: $ADV_IMAGE_TAG (default)"
     fi
 
     # 4. Verbose install
@@ -479,7 +573,8 @@ get_smb_config() {
         echo "  Note: username adjusted to '$SMB_USER' (unsupported characters removed)"
     fi
     if [[ -n "$SMB_USER" ]]; then
-        read -rsp "  Password: " SMB_PASS
+        # IFS= keeps leading/trailing spaces: they are valid in a password.
+        IFS= read -rsp "  Password: " SMB_PASS
         echo ""
     else
         SMB_PASS=""
@@ -945,11 +1040,15 @@ FIRSTRUN="$BOOT/firstrun.sh"
 USERDATA="$BOOT/user-data"
 # Bullseye mounts boot at /boot, Bookworm+ at /boot/firmware
 HOOK_BOOKWORM='bash /boot/firmware/snapmulti/firstboot.sh'
-HOOK_BULLSEYE='bash /boot/snapmulti/firstboot.sh'
+# firstrun.sh is written by older Imager releases, but those can still
+# target a Bookworm+ image (FAT partition at /boot/firmware). Probe both
+# mount points at run time instead of assuming the Bullseye layout.
+# shellcheck disable=SC2016  # expanded by firstrun.sh on the Pi, not here
+HOOK_FIRSTRUN='for _sm_boot in /boot/firmware /boot; do if [ -f "$_sm_boot/snapmulti/firstboot.sh" ]; then bash "$_sm_boot/snapmulti/firstboot.sh"; break; fi; done'
 
 if [[ -f "$FIRSTRUN" ]]; then
-    # Legacy Pi Imager (Bullseye): boot partition is /boot
-    HOOK="$HOOK_BULLSEYE"
+    # Legacy Pi Imager: firstrun.sh hook (boot partition probed at run time)
+    HOOK="$HOOK_FIRSTRUN"
     if grep -qF "snapmulti/firstboot.sh" "$FIRSTRUN"; then
         echo "firstrun.sh already patched, skipping."
     else
@@ -977,49 +1076,46 @@ if [[ -f "$FIRSTRUN" ]]; then
 elif [[ -f "$USERDATA" ]]; then
     # Modern Pi Imager (Bookworm+): boot partition is /boot/firmware
     HOOK="$HOOK_BOOKWORM"
+    # Keep the pristine Imager user-data once (a re-run must not overwrite
+    # it with an already-patched copy). cloud-init only reads user-data /
+    # meta-data / network-config, so the extra file is inert.
+    USERDATA_BAK="$USERDATA.snapmulti.bak"
+    if [[ ! -f "$USERDATA_BAK" ]]; then
+        cp "$USERDATA" "$USERDATA_BAK"
+    fi
     if grep -qF "snapmulti/firstboot.sh" "$USERDATA"; then
-        echo "user-data already patched, skipping."
+        echo "user-data already patched, validating ..."
+        # Still validate: a card patched by an older prepare-sd may carry
+        # the mixed-indent runcmd that cloud-init rejects at first boot.
+        if ! validate_user_data "$USERDATA"; then
+            echo "         First boot would fail: cloud-init cannot use this user-data."
+            echo "         Re-flash the card with Raspberry Pi Imager and re-run prepare-sd."
+            exit 1
+        fi
+        echo "  user-data OK."
     else
         echo "Patching user-data to run installer on first boot ..."
         # Convert "bash /path/to/firstboot.sh" to YAML list "[bash, /path/to/firstboot.sh]"
         HOOK_PATH="${HOOK#bash }"
-        if ! patch_user_data_runcmd "$USERDATA" "$HOOK_PATH"; then
+        # Patch a temp copy on the same filesystem and only replace the
+        # real user-data once it validates: a broken user-data is silent
+        # on the laptop and fatal at first boot (cloud-init rejects it,
+        # the Pi comes up without network, user or installer).
+        USERDATA_TMP="$USERDATA.snapmulti.tmp"
+        cp "$USERDATA" "$USERDATA_TMP"
+        if ! patch_user_data_runcmd "$USERDATA_TMP" "$HOOK_PATH"; then
+            rm -f "$USERDATA_TMP"
             echo "  ERROR: failed to patch user-data runcmd"
             exit 1
         fi
-        if grep -qF "snapmulti/firstboot.sh" "$USERDATA"; then
-            echo "  user-data patched."
-        else
-            echo "  ERROR: user-data patch failed — auto-install will NOT run on first boot"
+        if ! validate_user_data "$USERDATA_TMP"; then
+            rm -f "$USERDATA_TMP"
+            echo "         First boot will fail with cloud-init unable to parse user-data."
+            echo "         '$USERDATA' was left unchanged."
             exit 1
         fi
-        # Post-patch YAML sanity. The grep above only proves the hook
-        # string is somewhere in the file. If the awk patch ended up with
-        # two `runcmd:` blocks (or otherwise corrupted the YAML) cloud-init
-        # would refuse to parse user-data at first boot and the Pi would
-        # boot without network. Catch it here on the operator's laptop
-        # instead of discovering it post-flash.
-        _runcmd_count=$(grep -cE "^[[:space:]]*runcmd:" "$USERDATA" || true)
-        if [[ "${_runcmd_count:-0}" -ne 1 ]]; then
-            echo "  ERROR: user-data has ${_runcmd_count} runcmd: blocks after patch (expected 1)"
-            echo "         Inspect '$USERDATA' for a malformed YAML structure."
-            exit 1
-        fi
-        if command -v python3 >/dev/null 2>&1 && python3 -c "import yaml" 2>/dev/null; then
-            if ! python3 -c "
-import sys, yaml
-try:
-    with open(sys.argv[1]) as fh:
-        yaml.safe_load(fh)
-except yaml.YAMLError as e:
-    print(f'YAML parse error: {e}', file=sys.stderr)
-    sys.exit(1)
-" "$USERDATA"; then
-                echo "  ERROR: user-data is not valid YAML after patching."
-                echo "         First boot will fail with cloud-init unable to parse user-data."
-                exit 1
-            fi
-        fi
+        mv -f "$USERDATA_TMP" "$USERDATA"
+        echo "  user-data patched."
     fi
 else
     echo ""
@@ -1065,7 +1161,24 @@ VERIFY_ERRORS=0
 # -- snapMULTI files --
 echo ""
 echo "--- snapMULTI files ---"
-for f in install.conf firstboot.sh release-manifest.json common/progress.sh common/logging.sh common/unified-log.sh common/sanitize.sh common/system-tune.sh common/install-docker.sh common/install-deps.sh common/setup-docker.sh common/wait-network.sh common/mount-music.sh common/systemd-snippets.sh common/release-manifest.sh common/play-smoke-tone.sh common/auto-boot-smoke.sh common/restore-snapmulti-state.sh common/backup-snapmulti-state.sh common/snapmulti-state-backup.service common/snapmulti-state-backup.path common/snapmulti-state-backup.timer common/path-resolve.sh common/install-conf-reader.sh common/container-manifest.txt common/env-reader.sh common/audio/smoke-pass.wav common/audio/smoke-warn.wav common/audio/smoke-fail.wav common/audio/smoke-skip.wav; do
+# Keep in sync with Assert-PreparedSdCard in prepare-sd.ps1. Includes every
+# module firstboot.sh sources unconditionally (a missing one aborts the
+# install under set -e before the TUI is up).
+for f in install.conf firstboot.sh release-manifest.json \
+         common/progress.sh common/logging.sh common/unified-log.sh \
+         common/sanitize.sh common/system-tune.sh common/install-docker.sh \
+         common/install-deps.sh common/setup-docker.sh common/wait-network.sh \
+         common/mount-music.sh common/systemd-snippets.sh common/release-manifest.sh \
+         common/cmdline-manager.sh common/install-profile.sh common/staging-manifest.sh \
+         common/overlayroot-lifecycle.sh common/device-detect.sh \
+         common/install-conf-mirror.sh common/systemd-units.sh common/verify-compose.sh \
+         common/play-smoke-tone.sh common/auto-boot-smoke.sh \
+         common/restore-snapmulti-state.sh common/backup-snapmulti-state.sh \
+         common/snapmulti-state-backup.service common/snapmulti-state-backup.path \
+         common/snapmulti-state-backup.timer common/path-resolve.sh \
+         common/install-conf-reader.sh common/container-manifest.txt common/env-reader.sh \
+         common/audio/smoke-pass.wav common/audio/smoke-warn.wav \
+         common/audio/smoke-fail.wav common/audio/smoke-skip.wav; do
     if [[ -f "$DEST/$f" ]]; then
         echo "  [OK] snapmulti/$f"
     else
@@ -1077,6 +1190,7 @@ done
 if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     for f in server/docker-compose.yml server/deploy.sh server/boot-tune.sh \
              server/device-smoke.sh server/docker-driver-reconcile.sh \
+             server/diagnostic.sh \
              server/scripts/tidal/tidal-meta-bridge.sh \
              server/config/snapserver.conf server/config/mpd.conf \
              server/config/shairport-sync.conf server/config/go-librespot.yml \
@@ -1101,11 +1215,13 @@ if install_profile_needs_client_stack "$INSTALL_TYPE"; then
              client/scripts/audio-hat-detect.sh \
              client/scripts/boot-tune.sh client/scripts/ro-mode.sh \
              client/scripts/docker-driver-reconcile.sh \
+             client/scripts/diagnostic.sh \
              client/scripts/discover-server.sh \
              client/scripts/display.sh client/scripts/display-detect.sh \
              client/scripts/common/install-deps.sh \
              client/scripts/common/install-docker.sh \
              client/scripts/common/system-tune.sh \
+             client/scripts/common/overlayroot-lifecycle.sh \
              client/scripts/common/unified-log.sh \
              client/scripts/common/logging.sh \
              client/scripts/common/sanitize.sh \
@@ -1262,18 +1378,26 @@ echo "Next steps:"
 echo "  1. Remove the SD card"
 echo "  2. Insert into Raspberry Pi"
 echo "  3. Power on -- installation takes ~15-20 minutes on Pi 4/5 (longer on Pi 3 or Pi Zero 2 W), then auto-reboots"
+# Use the hostname Imager wrote to user-data when we found one; keep the
+# placeholder otherwise (firstrun.sh cards, hand-made images).
+NEXT_HOST=$(printf '%s' "${HOSTNAME_SET:-}" | tr -d "\r\"' ")
 if install_profile_needs_server_stack "$INSTALL_TYPE"; then
-    echo "  4. Open this URL in a browser (replace <hostname> with the one you set in Imager):"
-    echo "       http://<hostname>.local:8083/         <-- start here: lists every server endpoint"
+    if [[ -n "$NEXT_HOST" ]]; then
+        echo "  4. Open this URL in a browser:"
+    else
+        NEXT_HOST="<hostname>"
+        echo "  4. Open this URL in a browser (replace <hostname> with the one you set in Imager):"
+    fi
+    echo "       http://${NEXT_HOST}.local:8083/         <-- start here: lists every server endpoint"
     echo ""
     echo "     Direct links if you prefer:"
-    echo "       http://<hostname>.local:1780          Snapweb (volume, rooms, source)"
-    echo "       http://<hostname>.local:8180          myMPD (browse and play library)"
-    echo "       http://<hostname>.local:8083/status   Status page (containers, audio, mDNS)"
+    echo "       http://${NEXT_HOST}.local:1780          Snapweb (volume, rooms, source)"
+    echo "       http://${NEXT_HOST}.local:8180          myMPD (browse and play library)"
+    echo "       http://${NEXT_HOST}.local:8083/status   Status page (containers, audio, mDNS)"
     echo "  5. Cast from your apps:"
-    echo "       Spotify  -> select '<hostname> Spotify' in the Spotify app (Premium required)"
-    echo "       AirPlay  -> AirPlay icon -> '<hostname> AirPlay'"
-    echo "       Tidal    -> cast to '<hostname> Tidal' (ARM/Pi only, enabled by default)"
+    echo "       Spotify  -> select '${NEXT_HOST} Spotify' in the Spotify app (Premium required)"
+    echo "       AirPlay  -> AirPlay icon -> '${NEXT_HOST} AirPlay'"
+    echo "       Tidal    -> cast to '${NEXT_HOST} Tidal' (ARM/Pi only, enabled by default)"
 elif install_profile_needs_client_stack "$INSTALL_TYPE"; then
     # `client-native` was rejected by the gate above, so this branch
     # fires only for `client` (the predicate is also true for `both`

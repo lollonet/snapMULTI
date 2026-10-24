@@ -1,4 +1,4 @@
-# prepare-sd.ps1 — Unified SD card preparation for snapMULTI (Windows).
+# prepare-sd.ps1 -- Unified SD card preparation for snapMULTI (Windows).
 #
 # PowerShell equivalent of prepare-sd.sh. Asks what to install, copies
 # the right files to the boot partition, and patches cloud-init so the
@@ -20,7 +20,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Explicit UTF-8 (no BOM) for all file writes — PS 5.1 (.NET Framework)
+# Explicit UTF-8 (no BOM) for all file writes -- PS 5.1 (.NET Framework)
 # defaults to UTF-16 with WriteAllText, which corrupts boot partition files.
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
@@ -28,7 +28,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
 $ClientDir = Join-Path $ProjectDir 'client'
 
-# ── Read release manifest ─────────────────────────────────────────
+# -- Read release manifest -----------------------------------------
 # Resolved from $ScriptDir (script-anchored) so the manifest is found
 # regardless of the cwd the operator invoked us from. Missing manifest
 # falls back to empty strings + the legacy 'latest' IMAGE_TAG default.
@@ -45,12 +45,12 @@ if (Test-Path $ManifestPath) {
             $ManifestImageSet = [string]$manifest.image_set
         }
     } catch {
-        Write-Warning "release-manifest.json parse failed: $_ — falling back to 'latest'"
+        Write-Warning "release-manifest.json parse failed: $_ -- falling back to 'latest'"
     }
 }
 $DefaultImageTag = if ($ManifestImageSet) { $ManifestImageSet } else { 'latest' }
 
-# ── Auto-detect boot partition ────────────────────────────────────
+# -- Auto-detect boot partition ------------------------------------
 function Find-BootPartition {
     # Look for a volume labeled "bootfs"
     $volumes = Get-Volume | Where-Object { $_.FileSystemLabel -eq 'bootfs' }
@@ -66,9 +66,11 @@ function Find-BootPartition {
     return $null
 }
 
-# ── Check client directory ────────────────────────────────────────
+# -- Check client directory ----------------------------------------
 function Assert-ClientDir {
-    $setupSh = Join-Path $ClientDir 'common' 'scripts' 'setup.sh'
+    # Nested Join-Path: the multi-child form (Join-Path a b c d) is
+    # PowerShell 6+ only and is a parse-time error on Windows PowerShell 5.1.
+    $setupSh = Join-Path (Join-Path (Join-Path $ClientDir 'common') 'scripts') 'setup.sh'
     if (-not (Test-Path $setupSh)) {
         throw "client/ directory is missing or incomplete. Expected: $setupSh"
     }
@@ -80,16 +82,33 @@ function Update-UserDataRuncmd {
         [string]$HookPath
     )
 
-    $entry = "  - [bash, $HookPath]"
+    # Mirror of patch_user_data_runcmd in prepare-sd.sh. The new entry
+    # copies the indentation of the existing runcmd items: Imager writes
+    # them at the same column as the key ("runcmd:" / "- localectl ..."),
+    # and a hard-coded two-space indent would mix two sequence indents
+    # under one key, which cloud-init refuses to parse.
+    $entry = "- [bash, $HookPath]"
     $lines = $Content -split "`r?`n"
     $result = New-Object System.Collections.Generic.List[string]
     $patched = $false
 
-    foreach ($line in $lines) {
-        if ((-not $patched) -and ($line -match '^(\s*)runcmd:\s*(\[\]|null|~)?\s*$')) {
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $line = $lines[$i]
+        if ((-not $patched) -and ($line -match '^(\s*)runcmd:\s*(\[\]|null|~)?\s*(#.*)?$')) {
             $indent = $Matches[1]
+            $child = "$indent  "
+            if ($line -match 'runcmd:\s*(#.*)?$') {
+                # Block form: inherit the indent of the first existing item.
+                for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+                    if ($lines[$j] -match '^\s*(#.*)?$') { continue }
+                    if (($lines[$j] -match '^(\s*)-(\s|$)') -and ($Matches[1].Length -ge $indent.Length)) {
+                        $child = $Matches[1]
+                    }
+                    break
+                }
+            }
             $result.Add("${indent}runcmd:")
-            $result.Add("${indent}  - [bash, $HookPath]")
+            $result.Add("${child}${entry}")
             $patched = $true
         } else {
             $result.Add($line)
@@ -101,10 +120,105 @@ function Update-UserDataRuncmd {
             $result.Add('')
         }
         $result.Add('runcmd:')
-        $result.Add($entry)
+        $result.Add("  $entry")
     }
 
     return (($result -join "`n").TrimEnd("`r", "`n") + "`n")
+}
+
+# Mirror of validate_user_data in prepare-sd.sh. Returns $null when the
+# patched user-data looks usable by cloud-init, otherwise the reason.
+# Python + PyYAML are rarely present on Windows, so the structural checks
+# (one runcmd key, hook present, one item indent) carry the load; the
+# YAML parse runs only when a working interpreter with PyYAML is found.
+function Test-UserDataRuncmd {
+    param([string]$Content)
+
+    $runcmdMatches = [regex]::Matches($Content, '(?m)^[\s]*runcmd:')
+    if ($runcmdMatches.Count -ne 1) {
+        return "user-data has $($runcmdMatches.Count) runcmd: blocks after patch (expected 1)"
+    }
+    if ($Content -notmatch 'snapmulti/firstboot\.sh') {
+        return 'user-data has no runcmd hook for snapmulti/firstboot.sh'
+    }
+
+    $lines = $Content -split "`r?`n"
+    $key = -1
+    $first = -1
+    foreach ($line in $lines) {
+        if ($key -lt 0) {
+            if ($line -match '^(\s*)runcmd:\s*(#.*)?$') { $key = $Matches[1].Length }
+            continue
+        }
+        if ($line -match '^\s*(#.*)?$') { continue }
+        $null = $line -match '^(\s*)'
+        $ind = $Matches[1].Length
+        if (($line -match '^\s*-(\s|$)') -and ($ind -ge $key)) {
+            if ($first -lt 0) { $first = $ind }
+            elseif ($ind -lt $first) { return 'user-data runcmd items use mixed indentation' }
+            continue
+        }
+        if (($first -ge 0) -and ($ind -gt $first)) { continue }
+        break
+    }
+
+    # Optional full parse. Windows ships a python.exe "App Execution Alias"
+    # stub that just exits non-zero, so probe for PyYAML before trusting it.
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        foreach ($py in @('python3', 'python', 'py')) {
+            if (-not (Get-Command $py -ErrorAction SilentlyContinue)) { continue }
+            & $py -c 'import yaml' 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) { continue }
+            $tmpYaml = [System.IO.Path]::GetTempFileName()
+            try {
+                [System.IO.File]::WriteAllText($tmpYaml, $Content, $Utf8NoBom)
+                # One line, no double quotes: PS 5.1 mangles embedded
+                # double quotes when passing arguments to native programs.
+                $pyCheck = "import sys, yaml; d = yaml.safe_load(open(sys.argv[1], encoding='utf-8')); c = d.get('runcmd') if isinstance(d, dict) else None; sys.exit(0 if isinstance(c, list) and any('snapmulti/firstboot.sh' in str(x) for x in c) else 1)"
+                & $py -c $pyCheck $tmpYaml 2>$null | Out-Null
+                if ($LASTEXITCODE -ne 0) { return 'user-data is not valid cloud-init YAML (PyYAML check)' }
+            } finally {
+                Remove-Item $tmpYaml -Force -ErrorAction SilentlyContinue
+            }
+            break
+        }
+    } catch {
+        # Interpreter probing is best-effort; the structural checks above stand.
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    return $null
+}
+
+# Normalise staged text files to LF without BOM. A clone made with Git for
+# Windows defaults (core.autocrlf=true) has CRLF shell scripts unless the
+# repo's .gitattributes was honoured; bash on the Pi then dies at
+# `set -euo pipefail\r` before firstboot can draw the TUI or write a
+# failure marker. Files containing NUL bytes (images, WAVs, databases) are
+# skipped as binary.
+function Convert-StagedTextToLf {
+    param([string]$Root)
+    $binaryExt = @('.png', '.jpg', '.jpeg', '.gif', '.ico', '.wav', '.mp3', '.flac', '.db', '.gz', '.zip', '.ttf', '.otf')
+    $fixed = 0
+    foreach ($f in Get-ChildItem -Path $Root -Recurse -File -Force) {
+        if ($binaryExt -contains $f.Extension.ToLower()) { continue }
+        $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+        if ($bytes.Length -eq 0) { continue }
+        if ([Array]::IndexOf($bytes, [byte]0) -ge 0) { continue }
+        $hasBom = ($bytes.Length -ge 3) -and ($bytes[0] -eq 0xEF) -and ($bytes[1] -eq 0xBB) -and ($bytes[2] -eq 0xBF)
+        $hasCr = [Array]::IndexOf($bytes, [byte]13) -ge 0
+        if (-not ($hasBom -or $hasCr)) { continue }
+        $text = $Utf8NoBom.GetString($bytes)
+        if ($hasBom) { $text = $text.Substring(1) }
+        $text = $text.Replace("`r`n", "`n")
+        [System.IO.File]::WriteAllText($f.FullName, $text, $Utf8NoBom)
+        $fixed++
+    }
+    if ($fixed -gt 0) {
+        Write-Host "  Normalised $fixed staged text file(s) to LF line endings"
+    }
 }
 
 function Assert-PreparedSdCard {
@@ -146,18 +260,23 @@ function Assert-PreparedSdCard {
         'common/install-profile.sh',
         'common/staging-manifest.sh',
         'common/overlayroot-lifecycle.sh',
-        # v0.8 PR9 — sourced unconditionally by firstboot.sh and
+        # Sourced unconditionally by firstboot.sh (set -e abort if absent).
+        'common/device-detect.sh',
+        'common/install-conf-mirror.sh',
+        'common/systemd-units.sh',
+        'common/verify-compose.sh',
+        # v0.8 PR9 -- sourced unconditionally by firstboot.sh and
         # (guarded) by setup.sh. Missing from SD = immediate firstboot
         # abort under set -euo pipefail.
         'common/path-resolve.sh',
-        # v0.8 PR10 — sourced unconditionally by firstboot.sh at
+        # v0.8 PR10 -- sourced unconditionally by firstboot.sh at
         # line ~115 for the install.conf parse block.
         'common/install-conf-reader.sh',
-        # Container manifest SSOT — bind-mounted into metadata service
+        # Container manifest SSOT -- bind-mounted into metadata service
         # via docker-compose.yml AND sourced by check_containers.sh on
         # every device. Must ship to both server/ and client/ stages.
         'common/container-manifest.txt',
-        # env_get helper SSOT — sourced (guarded) by smoke check_*
+        # env_get helper SSOT -- sourced (guarded) by smoke check_*
         # modules + play-smoke-tone.sh + diagnostic.sh. Same all-
         # stages ship rationale as the manifests above.
         'common/env-reader.sh',
@@ -185,13 +304,20 @@ function Assert-PreparedSdCard {
 
     if ($InstallType -in @('server', 'both')) {
         foreach ($file in @(
+            # Keep in sync with the server verify list in prepare-sd.sh.
             'server/docker-compose.yml',
             'server/deploy.sh',
+            'server/boot-tune.sh',
+            'server/device-smoke.sh',
+            'server/docker-driver-reconcile.sh',
             'server/diagnostic.sh',
             'server/scripts/tidal/tidal-meta-bridge.sh',
             'server/config/snapserver.conf',
             'server/config/mpd.conf',
-            'server/config/shairport-sync.conf'
+            'server/config/shairport-sync.conf',
+            'server/config/go-librespot.yml',
+            'server/config/tidal-asound.conf',
+            'server/ro-mode.sh'
         )) {
             $path = Join-Path $Dest $file
             if (Test-Path $path) {
@@ -205,32 +331,40 @@ function Assert-PreparedSdCard {
 
     if ($InstallType -in @('client', 'both')) {
         foreach ($file in @(
+            # Keep in sync with the client verify list in prepare-sd.sh.
             'client/docker-compose.yml',
             'client/scripts/setup.sh',
             'client/scripts/diagnostic.sh',
             'client/scripts/audio-hat-detect.sh',
+            'client/scripts/boot-tune.sh',
+            'client/scripts/ro-mode.sh',
+            'client/scripts/docker-driver-reconcile.sh',
             'client/scripts/discover-server.sh',
             'client/scripts/display.sh',
             'client/scripts/display-detect.sh',
             'client/scripts/common/install-deps.sh',
             'client/scripts/common/install-docker.sh',
+            'client/scripts/common/system-tune.sh',
+            'client/scripts/common/unified-log.sh',
+            'client/scripts/common/logging.sh',
+            'client/scripts/common/sanitize.sh',
             'client/scripts/common/systemd-snippets.sh',
             # v0.8: overlayroot-lifecycle.sh is sourced by client's
-            # ro-mode.sh + system-tune.sh — must ship to client/.
+            # ro-mode.sh + system-tune.sh -- must ship to client/.
             'client/scripts/common/overlayroot-lifecycle.sh',
-            # v0.8 PR9 — setup.sh sources path-resolve.sh from
+            # v0.8 PR9 -- setup.sh sources path-resolve.sh from
             # $COMMON_MODULE_DIR/path-resolve.sh (= /opt/snapclient/
             # scripts/common/ on a real install). Must ship under
             # client/.
             'client/scripts/common/path-resolve.sh',
-            # v0.8 PR10 — same shared-modules treatment for the
+            # v0.8 PR10 -- same shared-modules treatment for the
             # install.conf reader, so a stripped client bundle
             # surfaces the miss at verify time.
             'client/scripts/common/install-conf-reader.sh',
-            # Container manifest SSOT — consumed by client-side
+            # Container manifest SSOT -- consumed by client-side
             # check_containers.sh too. Must ship with the bundle.
             'client/scripts/common/container-manifest.txt',
-            # env_get helper SSOT — same client-side staging requirement
+            # env_get helper SSOT -- same client-side staging requirement
             # as the manifests above.
             'client/scripts/common/env-reader.sh',
             'client/snapclient.conf'
@@ -282,7 +416,7 @@ function Assert-PreparedSdCard {
     Write-Host 'All checks passed.'
 }
 
-# ── Show install menu ─────────────────────────────────────────────
+# -- Show install menu ---------------------------------------------
 function Show-Menu {
     Write-Host ''
     Write-Host '  +---------------------------------------------+'
@@ -315,7 +449,7 @@ function Get-InstallType {
     }
 }
 
-# ── Music source menu (server/both only) ─────────────────────────
+# -- Music source menu (server/both only) -------------------------
 function Show-MusicMenu {
     Write-Host ''
     Write-Host '  +---------------------------------------------+'
@@ -369,7 +503,7 @@ function Get-NetworkType {
     }
 }
 
-# ── Audio output menus (client/both only) ────────────────────────
+# -- Audio output menus (client/both only) ------------------------
 # Mirror of the bash audio menu in prepare-sd.sh. See that file for
 # the design rationale; this file is the Windows host-side parity.
 function Show-AudioMenu {
@@ -419,7 +553,7 @@ function Get-SupportedHats {
         $nameLine = Select-String -Path $f.FullName -Pattern '^HAT_NAME=' -SimpleMatch:$false | Select-Object -First 1
         $name = $slug
         if ($nameLine) {
-            # HAT_NAME="..." — strip the variable prefix and surrounding quotes.
+            # HAT_NAME="..." -- strip the variable prefix and surrounding quotes.
             $name = $nameLine.Line -replace '^HAT_NAME=', ''
             $name = $name.Trim('"').Trim("'")
             if (-not $name) { $name = $slug }
@@ -554,7 +688,7 @@ function Get-SmbConfig {
     $share = ''
     while (-not $share) {
         $rawShare = Read-Host '  Share name (e.g. Music)'
-        # SMB shares with spaces need manual fstab escaping — not supported in auto-setup
+        # SMB shares with spaces need manual fstab escaping -- not supported in auto-setup
         if ($rawShare -match ' ') {
             Write-Host '  Share names with spaces are not supported. Try again without spaces,'
             Write-Host '  or restart and choose option 4 (manual). See docs/USAGE.md.'
@@ -582,7 +716,7 @@ function Get-SmbConfig {
     return @{ Server = $server; Share = $share; User = $user; Pass = $pass }
 }
 
-# ── Copy helpers ──────────────────────────────────────────────────
+# -- Copy helpers --------------------------------------------------
 function Copy-ServerFiles {
     param([string]$Dest)
     $serverDest = Join-Path $Dest 'server'
@@ -602,7 +736,7 @@ function Copy-ServerFiles {
     if (Test-Path $smokeSh) {
         Copy-Item $smokeSh -Destination $serverDest
     }
-    # Modular smoke checks (scripts/smoke/check_*.sh) — sourced by
+    # Modular smoke checks (scripts/smoke/check_*.sh) -- sourced by
     # device-smoke.sh at runtime. Without -Recurse the subdirectory
     # is never copied and the 6 new check modules silently fail to
     # load on the device. Mirrors prepare-sd.sh copy_server_files.
@@ -623,7 +757,7 @@ function Copy-ServerFiles {
         New-Item -ItemType Directory -Path $tidalDest -Force | Out-Null
         Copy-Item (Join-Path $tidalSrc '*') -Destination $tidalDest -Recurse -Force
     }
-    # diagnostic.sh — install-failed trap in firstboot.sh invokes this to
+    # diagnostic.sh -- install-failed trap in firstboot.sh invokes this to
     # bundle journalctl + install.log + smoke output to the FAT32 boot
     # partition. Without it on the SD, a failed first boot leaves no
     # recoverable diagnostics for a Windows user (no SSH, no console).
@@ -642,7 +776,7 @@ function Copy-ServerFiles {
     # See PR #319 (which added the bind-mount), PR #321 (the Linux side
     # of this fix), and the post-merge install failure on pi-server.
     # Copy-Item -Recurse is idempotent on Windows when the destination
-    # tree already exists (it merges contents) — no `cp -rT` needed.
+    # tree already exists (it merges contents) -- no `cp -rT` needed.
     $dockerSrc = Join-Path $ProjectDir 'docker'
     if (Test-Path $dockerSrc) {
         $dockerDest = Join-Path $serverDest 'docker'
@@ -679,7 +813,7 @@ function Copy-ServerFiles {
     }
 
     # Optional: pre-built MPD database. Only ship it when the target's music
-    # source is a network mount — for local USB/disk the db's path pointers
+    # source is a network mount -- for local USB/disk the db's path pointers
     # likely don't match the new host's library. See #278.
     $mpdDb = Join-Path $ProjectDir 'mpd\data\mpd.db'
     if (Test-Path $mpdDb) {
@@ -742,7 +876,7 @@ function Copy-ClientFiles {
         }
     }
 
-    # initramfs-hooks/ — required by overlayroot-lifecycle.sh's
+    # initramfs-hooks/ -- required by overlayroot-lifecycle.sh's
     # install_initramfs_lzma_hook (snapmulti-lzma copy_exec's liblzma.so.5
     # so kmod inside initramfs can decompress overlay.ko.xz). Mirror of
     # scripts/prepare-sd.sh copy_client_files lines 596-610.
@@ -771,12 +905,12 @@ function Copy-ClientFiles {
     if (Test-Path $smokeSh) {
         Copy-Item $smokeSh -Destination $scriptsDest
     }
-    # diagnostic.sh — see Copy-ServerFiles for context.
+    # diagnostic.sh -- see Copy-ServerFiles for context.
     $diagnosticSh = Join-Path $ScriptDir 'diagnostic.sh'
     if (Test-Path $diagnosticSh) {
         Copy-Item $diagnosticSh -Destination $scriptsDest
     }
-    # Modular smoke checks dir — mirrors prepare-sd.sh copy_client_files.
+    # Modular smoke checks dir -- mirrors prepare-sd.sh copy_client_files.
     # Client firstboot path is recursive so once smoke/ lands here it
     # propagates to /opt/snapclient/scripts/smoke/ automatically.
     $smokeDir = Join-Path $ScriptDir 'smoke'
@@ -812,7 +946,7 @@ function Copy-ClientFiles {
     }
 }
 
-# ── Main ──────────────────────────────────────────────────────────
+# -- Main ----------------------------------------------------------
 
 # Detect boot partition
 if (-not $Boot) {
@@ -856,7 +990,7 @@ Write-Host ''
 Write-Host "Installing as: $InstallType"
 Write-Host ''
 
-# ── Audio output (client/both only) ──────────────────────────────
+# -- Audio output (client/both only) ------------------------------
 $AudioHat = 'auto'
 $AudioInternalOutput = ''
 if ($InstallType -in @('client', 'both')) {
@@ -884,7 +1018,7 @@ if ($InstallType -in @('client', 'both')) {
     Write-Host ''
 }
 
-# ── Music source (server/both only) ─────────────────────────────
+# -- Music source (server/both only) -----------------------------
 $MusicSource = ''
 $NfsServer = ''
 $NfsExport = ''
@@ -914,7 +1048,7 @@ if ($InstallType -in @('server', 'both')) {
     }
 }
 
-# ── Copy files to SD card ─────────────────────────────────────────
+# -- Copy files to SD card -----------------------------------------
 $Dest = Join-Path $Boot 'snapmulti'
 Write-Host "Copying files to $Dest ..."
 
@@ -935,13 +1069,13 @@ NFS_SERVER=$NfsServer
 NFS_EXPORT=$NfsExport
 SMB_SERVER=$SmbServer
 SMB_SHARE=$SmbShare
-# Audio output (client/both only — server installs ignore these)
+# Audio output (client/both only -- server installs ignore these)
 AUDIO_HAT=$AudioHat
 AUDIO_INTERNAL_OUTPUT=$AudioInternalOutput
 # Release identity comes from release-manifest.json on the SD (single SSOT,
 # staged below). Do not duplicate SNAPMULTI_RELEASE / SNAPMULTI_IMAGE_SET here.
 # Advanced options
-# (PowerShell prep currently uses defaults — the bash side has an
+# (PowerShell prep currently uses defaults -- the bash side has an
 # interactive Advanced menu that lets the user toggle these. Parity
 # work tracked in #322 follow-up.)
 ENABLE_READONLY=true
@@ -952,6 +1086,9 @@ TEST_TONE=true
 SMB_USER=$SmbUser
 SMB_PASS=$SmbPass
 "@
+# A here-string keeps the line endings of this .ps1 file, which is CRLF on
+# Windows checkouts. install.conf is read by bash on the Pi: write LF.
+$confContent = $confContent.Replace("`r`n", "`n")
 [System.IO.File]::WriteAllText((Join-Path $Dest 'install.conf'), $confContent, $Utf8NoBom)
 
 # Always: firstboot + common
@@ -981,9 +1118,13 @@ Get-ChildItem -Path $Dest -Recurse -Force -Directory -ErrorAction SilentlyContin
 Get-ChildItem -Path $Dest -Recurse -Force -File -Filter '*.pyc' -ErrorAction SilentlyContinue |
     Remove-Item -Force -ErrorAction SilentlyContinue
 
-# ── Write version files ──────────────────────────────────────────
+# CRLF -> LF (and BOM strip) for everything staged so far: shell scripts,
+# Python, configs, compose files and systemd units all run on the Pi.
+Convert-StagedTextToLf -Root $Dest
+
+# -- Write version files ------------------------------------------
 # Both use the same version tag from the monorepo (with "v" prefix).
-# NB: NO `--abbrev=0` — keep the `-<N>-g<sha>` suffix from `git describe` so a
+# NB: NO `--abbrev=0` -- keep the `-<N>-g<sha>` suffix from `git describe` so a
 # flash from a main HEAD past the latest tag bakes the disambiguated version
 # instead of the bare tag. See the matching comment in prepare-sd.sh:829.
 try {
@@ -1002,7 +1143,7 @@ if ($InstallType -in @('client', 'both')) {
 $size = (Get-ChildItem $Dest -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
 Write-Host ("  Copied {0:N1} MB to boot partition." -f $size)
 
-# ── Set temporary 800x600 resolution ──────────────────────────────
+# -- Set temporary 800x600 resolution ------------------------------
 $cmdline = Join-Path $Boot 'cmdline.txt'
 $setupVideo = 'video=HDMI-A-1:800x600@60'
 if (Test-Path $cmdline) {
@@ -1011,6 +1152,19 @@ if (Test-Path $cmdline) {
         $content = "$content $setupVideo"
         Write-Host '  Set temporary setup resolution (800x600) in cmdline.txt'
     }
+    # Disable Pi OS rpi-swap/zram before systemd starts. firstboot also
+    # masks/stops these units, but rpi-resize-swap-file runs before
+    # cloud-init; cmdline masks are the only cross-platform way to prevent
+    # swap creation during the very first boot without mounting ext4 rootfs.
+    # Sync with scripts/prepare-sd.sh SWAP_MASK_UNITS array.
+    $swapMaskUnits = @(
+        'rpi-resize-swap-file.service',
+        'rpi-setup-loop@var-swap.service',
+        'dev-zram0.swap',
+        'systemd-zram-setup@zram0.service',
+        'rpi-zram-writeback.service',
+        'rpi-zram-writeback.timer'
+    )
     # Mask units we know we never want active. Parsed by PID 1 before
     # any unit starts; survives overlayroot upper-layer wipes (a
     # post-firstboot systemctl mask would be lost on every reboot).
@@ -1018,15 +1172,16 @@ if (Test-Path $cmdline) {
     $bootMaskUnits = @(
         'NetworkManager-wait-online.service'
     )
-    foreach ($unit in $bootMaskUnits) {
+    foreach ($unit in ($swapMaskUnits + $bootMaskUnits)) {
         $token = "systemd.mask=$unit"
-        if ($content -notmatch ('\b' + [regex]::Escape($token) + '\b')) {
+        # Whitespace-delimited token match (\b is unreliable around '@'/'.').
+        if ($content -notmatch ('(^|\s)' + [regex]::Escape($token) + '(\s|$)')) {
             $content = "$content $token"
             Write-Host "  Added systemd.mask=$unit to cmdline.txt"
         }
     }
 
-    # IPv6 kernel state (ADR-008 supersedes ADR-007). Default ON —
+    # IPv6 kernel state (ADR-008 supersedes ADR-007). Default ON --
     # software defenses (Avahi use-ipv6=no, snapclient IPv4 SRV pin,
     # fb-display IPv4 filter) carry the load. Tidal Connect needs the
     # IPv6 stack for its WebSocket listen. Opt back in to disable via
@@ -1040,22 +1195,25 @@ if (Test-Path $cmdline) {
             Write-Host '  IPv6 disabled at kernel cmdline (DISABLE_IPV6=true)'
         }
     } else {
-        Write-Host '  IPv6 left enabled at kernel (default — Tidal Connect needs it)'
+        Write-Host '  IPv6 left enabled at kernel (default -- Tidal Connect needs it)'
     }
 
     [System.IO.File]::WriteAllText($cmdline, "$content`n", $Utf8NoBom)
 }
 
-# ── Patch user-data (Bookworm+ cloud-init) ────────────────────────
+# -- Patch user-data (Bookworm+ cloud-init) ------------------------
 $userData = Join-Path $Boot 'user-data'
 $firstrun = Join-Path $Boot 'firstrun.sh'
-# Bullseye mounts boot at /boot, Bookworm+ at /boot/firmware
-$hookBullseye = 'bash /boot/snapmulti/firstboot.sh'
+# Bullseye mounts boot at /boot, Bookworm+ at /boot/firmware.
+# firstrun.sh comes from older Imager releases, which can still target a
+# Bookworm+ image: probe both mount points at run time (mirror of
+# HOOK_FIRSTRUN in prepare-sd.sh).
+$hookFirstrun = 'for _sm_boot in /boot/firmware /boot; do if [ -f "$_sm_boot/snapmulti/firstboot.sh" ]; then bash "$_sm_boot/snapmulti/firstboot.sh"; break; fi; done'
 $hookBookworm = 'bash /boot/firmware/snapmulti/firstboot.sh'
 
 if (Test-Path $firstrun) {
-    # Legacy Pi Imager (Bullseye): boot partition is /boot
-    $hook = $hookBullseye
+    # Legacy Pi Imager: firstrun.sh hook (boot partition probed at run time)
+    $hook = $hookFirstrun
     $frContent = [System.IO.File]::ReadAllText($firstrun)
     # Normalize CRLF to LF so (?m)^ anchors work reliably
     $frContent = $frContent.Replace("`r`n", "`n")
@@ -1064,10 +1222,13 @@ if (Test-Path $firstrun) {
     } else {
         Write-Host 'Patching firstrun.sh to chain installer ...'
         $insertLine = "# snapMULTI auto-install`n$hook`n"
+        # The hook contains '$' characters: escape them for the -replace
+        # substitution string ('$$' is a literal '$').
+        $insertRepl = $insertLine.Replace('$', '$$')
         if ($frContent -match '(?m)^rm -f.*firstrun\.sh') {
-            $frContent = $frContent -replace '(?m)(^rm -f.*firstrun\.sh)', "$insertLine`$1"
+            $frContent = $frContent -replace '(?m)(^rm -f.*firstrun\.sh)', "$insertRepl`$1"
         } else {
-            $frContent = $frContent -replace '(?m)(^exit 0)', "$insertLine`$1"
+            $frContent = $frContent -replace '(?m)(^exit 0)', "$insertRepl`$1"
         }
         [System.IO.File]::WriteAllText($firstrun, $frContent, $Utf8NoBom)
         Write-Host '  firstrun.sh patched.'
@@ -1076,23 +1237,42 @@ if (Test-Path $firstrun) {
     # Modern Pi Imager (Bookworm+): boot partition is /boot/firmware
     $hook = $hookBookworm
     $udContent = [System.IO.File]::ReadAllText($userData)
+    # Keep the pristine Imager user-data once (a re-run must not overwrite
+    # it with an already-patched copy). cloud-init ignores the extra file.
+    $userDataBak = "$userData.snapmulti.bak"
+    if (-not (Test-Path $userDataBak)) {
+        Copy-Item $userData -Destination $userDataBak
+    }
     if ($udContent -match 'snapmulti/firstboot\.sh') {
-        Write-Host 'user-data already patched, skipping.'
+        Write-Host 'user-data already patched, validating ...'
+        # Still validate: a card patched by an older prepare-sd may carry
+        # the mixed-indent runcmd that cloud-init rejects at first boot.
+        $udError = Test-UserDataRuncmd -Content $udContent
+        if ($udError) {
+            Write-Host "  ERROR: $udError"
+            Write-Host '         First boot would fail: cloud-init cannot use this user-data.'
+            Write-Host '         Re-flash the card with Raspberry Pi Imager and re-run prepare-sd.'
+            exit 1
+        }
+        Write-Host '  user-data OK.'
     } else {
         Write-Host 'Patching user-data to run installer on first boot ...'
         $hookPath = $hook -replace '^bash ', ''
-        $udContent = Update-UserDataRuncmd -Content $udContent -HookPath $hookPath
-        [System.IO.File]::WriteAllText($userData, $udContent, $Utf8NoBom)
-        Write-Host '  user-data patched.'
-        # Post-patch YAML sanity. Mirrors prepare-sd.sh: prove the awk-like
-        # patch did not produce two runcmd: blocks (would break cloud-init
-        # at first boot, the Pi would come up without network).
-        $runcmdMatches = [regex]::Matches($udContent, '(?m)^[\s]*runcmd:')
-        if ($runcmdMatches.Count -ne 1) {
-            Write-Host "  ERROR: user-data has $($runcmdMatches.Count) runcmd: blocks after patch (expected 1)"
-            Write-Host "         Inspect '$userData' for a malformed YAML structure."
+        $patched = Update-UserDataRuncmd -Content $udContent -HookPath $hookPath
+        # Validate BEFORE touching the card: a broken user-data is silent
+        # here and fatal at first boot (cloud-init rejects it, the Pi comes
+        # up without network, user or installer).
+        $udError = Test-UserDataRuncmd -Content $patched
+        if ($udError) {
+            Write-Host "  ERROR: $udError"
+            Write-Host '         First boot will fail with cloud-init unable to parse user-data.'
+            Write-Host "         Inspect '$userData' for a malformed YAML structure (left unchanged)."
             exit 1
         }
+        $userDataTmp = "$userData.snapmulti.tmp"
+        [System.IO.File]::WriteAllText($userDataTmp, $patched, $Utf8NoBom)
+        Move-Item -Path $userDataTmp -Destination $userData -Force
+        Write-Host '  user-data patched.'
     }
 } else {
     Write-Host ''
@@ -1102,7 +1282,7 @@ if (Test-Path $firstrun) {
     Write-Host ''
 }
 
-# ── Refresh cloud-init meta-data (NoCloud instance-id) ────────────
+# -- Refresh cloud-init meta-data (NoCloud instance-id) ------------
 # Cloud-init treats two boots with the same instance-id as the SAME instance and skips runcmd / firstboot.
 # Always write a fresh ID so this boot is "new" even if the SD was previously booted.
 $metadata = Join-Path $Boot 'meta-data'
@@ -1124,10 +1304,20 @@ if (Test-Path $userData) {
     Write-Host "  meta-data written (instance-id=$newInstanceId)"
 }
 
-# ── Verify SD card contents ───────────────────────────────────────
+# Hostname Imager wrote to user-data, for the "Next steps" URLs below.
+# Read now: the card is ejected before those lines are printed.
+$nextHost = ''
+if (Test-Path $userData) {
+    $hostLine = Select-String -Path $userData -Pattern '^hostname:\s*(\S+)' | Select-Object -First 1
+    if ($hostLine) {
+        $nextHost = $hostLine.Matches[0].Groups[1].Value.Trim('"', "'")
+    }
+}
+
+# -- Verify SD card contents ---------------------------------------
 Assert-PreparedSdCard -Dest $Dest -Boot $Boot -InstallType $InstallType
 
-# ── Eject SD card ─────────────────────────────────────────────────
+# -- Eject SD card -------------------------------------------------
 Write-Host ''
 Write-Host 'Ejecting SD card...'
 try {
@@ -1139,7 +1329,7 @@ try {
     Write-Host '  WARNING: Could not eject -- please eject manually via File Explorer.'
 }
 
-# ── Done ──────────────────────────────────────────────────────────
+# -- Done ----------------------------------------------------------
 Write-Host ''
 Write-Host '=== SD card ready! ==='
 Write-Host ''
@@ -1149,17 +1339,23 @@ Write-Host '  2. Insert into Raspberry Pi'
 Write-Host '  3. Power on -- installation takes ~15-20 minutes on Pi 4/5 (longer on Pi 3 or Pi Zero 2 W), then auto-reboots'
 switch ($InstallType) {
     { $_ -in 'server', 'both' } {
-        Write-Host '  4. Open this URL in a browser (replace <hostname> with the one you set in Imager):'
-        Write-Host '       http://<hostname>.local:8083/         <-- start here: lists every server endpoint'
+        if ($nextHost) {
+            $h = $nextHost
+            Write-Host '  4. Open this URL in a browser:'
+        } else {
+            $h = '<hostname>'
+            Write-Host '  4. Open this URL in a browser (replace <hostname> with the one you set in Imager):'
+        }
+        Write-Host "       http://$h.local:8083/         <-- start here: lists every server endpoint"
         Write-Host ''
         Write-Host '     Direct links if you prefer:'
-        Write-Host '       http://<hostname>.local:1780          Snapweb (volume, rooms, source)'
-        Write-Host '       http://<hostname>.local:8180          myMPD (browse and play library)'
-        Write-Host '       http://<hostname>.local:8083/status   Status page (containers, audio, mDNS)'
+        Write-Host "       http://$h.local:1780          Snapweb (volume, rooms, source)"
+        Write-Host "       http://$h.local:8180          myMPD (browse and play library)"
+        Write-Host "       http://$h.local:8083/status   Status page (containers, audio, mDNS)"
         Write-Host '  5. Cast from your apps:'
-        Write-Host "       Spotify  -> select '<hostname> Spotify' in the Spotify app (Premium required)"
-        Write-Host "       AirPlay  -> AirPlay icon -> '<hostname> AirPlay'"
-        Write-Host "       Tidal    -> cast to '<hostname> Tidal' (ARM/Pi only, enabled by default)"
+        Write-Host "       Spotify  -> select '$h Spotify' in the Spotify app (Premium required)"
+        Write-Host "       AirPlay  -> AirPlay icon -> '$h AirPlay'"
+        Write-Host "       Tidal    -> cast to '$h Tidal' (ARM/Pi only, enabled by default)"
     }
     'client' {
         Write-Host '  4. The player auto-discovers your snapMULTI server via mDNS'
