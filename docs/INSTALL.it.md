@@ -17,7 +17,7 @@ Hai già dimestichezza con Raspberry Pi Imager e terminale? Questa è tutta l'in
 5. Dalla cartella snapMULTI, esegui `./scripts/prepare-sd.sh` su macOS/Linux oppure `.\scripts\prepare-sd.ps1` su Windows.
 6. Scegli cosa deve fare questo Pi: **Audio Player**, **Music Server** o **Server + Player**.
 7. Espelli la SD, avvia il Pi e attendi circa 15-20 minuti su Pi 4/5 (di più su Pi 3 o Pi Zero 2 W). Installa, verifica e poi riavvia una volta. Il display HDMI di progresso mostra il tempo totale previsto accanto all'elapsed, così sai a che punto sei.
-8. Apri `http://<hostname>.local:8083/` — la pagina iniziale contiene i link a Snapweb, myMPD, status e API.
+8. Verifica che abbia funzionato. **Music Server / Server + Player:** apri `http://<hostname>.local:8083/` — la pagina iniziale contiene i link a Snapweb, myMPD, status e API; **Status** deve essere tutto verde. **Audio Player:** non ha una pagina web propria — compare come altoparlante nello Snapweb del server (`http://<server>.local:1780`). Dettagli per ruolo: [Ha funzionato?](#ha-funzionato--controllo-per-ruolo)
 
 Se un passaggio non è chiaro, continua con la procedura dettagliata qui sotto. Se il primo boot fallisce, recupera il pacchetto diagnostico dalla SD come descritto in [TROUBLESHOOTING.it.md — In caso di dubbio](TROUBLESHOOTING.it.md#in-caso-di-dubbio--prendi-il-pacchetto-diagnostico).
 
@@ -131,7 +131,7 @@ Scegli una delle due opzioni. Se non sei sviluppatore, usa **Opzione A — Scari
 
 > Preferisci lo ZIP della release taggata al pulsante verde **Code → Download ZIP** della home page del repo — quest'ultimo scarica il branch `main`, che può contenere lavori non rilasciati.
 
-### Opzione B — Clone con Git (consigliato se vuoi aggiornare)
+### Opzione B — Clone con Git (se usi già Git o vuoi contribuire)
 
 Hai bisogno di Git installato sul tuo computer.
 
@@ -154,7 +154,7 @@ git clone https://github.com/lollonet/snapMULTI.git
 cd snapMULTI
 ```
 
-> Il repository include sia il software server che client in un unico monorepo.
+> Il repository include sia il software server che client in un unico monorepo. Un clone non cambia il modo di aggiornare: gli aggiornamenti sono sempre un reflash ([ADVANCED.it.md — Strategia di aggiornamento](ADVANCED.it.md#strategia-di-aggiornamento)); `git pull` ti procura solo i file della nuova release per quel reflash.
 
 ### Aprire un terminale nella cartella snapMULTI
 
@@ -188,15 +188,19 @@ Se il rilevamento automatico fallisce (più schede SD, punto di mount insolito):
 
 ### Windows (PowerShell)
 
-Apri PowerShell come utente normale (non Amministratore). Se non hai mai eseguito script prima:
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
+Apri PowerShell come utente normale (non Amministratore) nella cartella snapMULTI. Windows blocca gli script estratti da uno ZIP scaricato, e `Set-ExecutionPolicy RemoteSigned` da solo **non** toglie questo blocco. Scegli una delle due:
 
-Poi:
 ```powershell
+# Opzione 1 — bypass solo per questa esecuzione (niente da annullare)
+powershell -ExecutionPolicy Bypass -File .\scripts\prepare-sd.ps1
+
+# Opzione 2 — sblocca una volta la cartella estratta, poi esegui normalmente
+Get-ChildItem -Recurse | Unblock-File
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # solo se su questo PC gli script non sono mai stati permessi
 .\scripts\prepare-sd.ps1
 ```
+
+Un `git clone` non ha il marchio "scaricato da internet", quindi lì il passo `Unblock-File` dell'Opzione 2 non serve.
 
 Se il rilevamento automatico fallisce:
 ```powershell
@@ -345,7 +349,10 @@ snapMULTI Auto-Install
 [ ] Verifying health...
 ```
 
-Il Pi **si riavvia automaticamente** quando l'installazione è completa. Dopo il riavvio, il display diventa scuro (normale — nessun desktop su Lite OS).
+Il Pi **si riavvia automaticamente** quando l'installazione è completa. Dopo il riavvio, cosa mostra lo schermo dipende dal ruolo:
+
+- **Music Server** — il prompt di login della console testuale (nessun desktop su Lite OS). Sulle installazioni server la schermata di login mostra l'indirizzo da aprire, `http://<hostname>.local:8083/`, e l'IP del Pi.
+- **Audio Player / Server + Player** — la schermata del player snapMULTI ("Ready to Play" finché non parte qualcosa). La barra in basso mostra `<IP del player> → <server>`. Senza riproduzione il pannello si spegne dopo ~15 secondi; si riaccende appena parte l'audio.
 
 > Se l'HDMI rimane nero per tutto il tempo: l'installazione continua comunque in background — `firstboot.sh` è lanciato da `cloud-init` `runcmd` e non ha bisogno del display. **Il LED verde ACT del Pi lampeggerà in modo irregolare durante la finestra di 15-20 minuti su Pi 4/5 — è attività sulla scheda SD, il tuo segnale che l'install sta procedendo.** Aspetta tutta la finestra; per controllare lo stato senza schermo, fai `ssh <username>@<hostname>.local` e segui uno dei due log: `sudo tail -f /var/log/snapmulti-install.log` (il log strutturato di snapMULTI) oppure `sudo journalctl -u cloud-final.service -f` (l'unit cloud-init che lancia `firstboot.sh`).
 
@@ -371,15 +378,15 @@ Se non lo senti, l'installazione prosegue comunque — ma controlla alimentazion
 
 > **Placeholder hostname.** Da qui in avanti, `<hostname>.local` significa l'hostname che hai impostato in Imager al Passo 1c. Se hai impostato `myradio`, usa `myradio.local` ovunque appaia `<hostname>.local` qui sotto.
 
-### Controllo per principianti — aprire la pagina iniziale
+### Ha funzionato? — controllo per ruolo
 
-Da un altro computer o telefono sulla stessa rete, apri:
+| Hai installato | Ha funzionato quando |
+|----------------|----------------------|
+| **Music Server** o **Server + Player** | Da un telefono o computer sulla stessa rete apri `http://<hostname>.local:8083/` e poi **Status** — tutti i controlli sono verdi. Il server compare anche come "snapMULTI on `<hostname>`" nelle app Bonjour / di esplorazione rete. Su un Music Server con schermo collegato, la schermata di login della console mostra lo stesso indirizzo e l'IP del Pi |
+| **Audio Player** con schermo | Lo schermo HDMI mostra la schermata del player con `<IP del player> → <server>` nella barra in basso, e l'altoparlante è elencato nello Snapweb del server (`http://<server>.local:1780`) |
+| **Audio Player** senza schermo | Hai sentito il tono di prova di 1 secondo durante l'installazione e la triade ascendente di tre note dopo il riavvio (= tutti i controlli OK, vedi [segnali audio](TROUBLESHOOTING.it.md#toni-test-salute)). L'altoparlante è elencato nello Snapweb del server (`http://<server>.local:1780`) — riproduci qualcosa per sentirlo |
 
-```
-http://<hostname>.local:8083/
-```
-
-Da quella pagina apri **Status**. Se tutti i controlli sono verdi, la piattaforma è sana. Se la pagina iniziale non si apre, prova lo stesso URL usando l'indirizzo IP del Pi al posto di `<hostname>.local`.
+Un Audio Player non ha una pagina web propria (la porta 8083 esiste solo sul server). Se la pagina iniziale del server non si apre, prova lo stesso URL usando l'indirizzo IP del Pi al posto di `<hostname>.local`.
 
 ### Trovare il Pi sulla tua rete
 
@@ -397,7 +404,7 @@ ssh <username>@<hostname>.local
 
 > **Utenti Windows:** Usa Windows Terminal, PowerShell o [PuTTY](https://putty.org) con `<hostname>.local` come host.
 
-> **Se `.local` non si risolve:** Usa l'indirizzo IP invece. Trovalo nell'app del router o del mesh WiFi sotto dispositivi connessi / client DHCP, oppure controlla l'output HDMI dopo il riavvio — il Pi stampa il suo IP sulla console.
+> **Se `.local` non si risolve:** Usa l'indirizzo IP invece. Trovalo nell'app del router o del mesh WiFi sotto dispositivi connessi / client DHCP, oppure guarda lo schermo HDMI dopo il riavvio — sia la schermata di login della console del server sia la barra in basso della schermata del player lo mostrano (vedi [Cosa vedrai sull'HDMI](#cosa-vedrai-sullhdmi)).
 
 ### Controllo avanzato — container in esecuzione
 
@@ -415,7 +422,7 @@ mpd                Up X minutes (healthy)
 mympd              Up X minutes (healthy)
 metadata           Up X minutes (healthy)
 ```
-Su Raspberry Pi (ARM — Pi 3 B+ / 4 / 5): appare anche `tidal-connect` (abilitato di default sugli install ARM; rimuovi `tidal` da `COMPOSE_PROFILES` in `/opt/snapmulti/.env` per disabilitarlo).
+Su Raspberry Pi (ARM — Pi 3 B+ / 4 / 5): appare anche `tidal-connect` (abilitato di default sugli install ARM; per disabilitarlo vedi [ADVANCED.it.md — Disattivare Tidal Connect](ADVANCED.it.md#disattivare-tidal-connect)).
 
 **Audio Player (opzione 1)** — output atteso:
 ```
@@ -483,21 +490,13 @@ Se **Status** è verde e le interfacce web si aprono, il server è pronto. Prova
 |----------|-----------|
 | `/opt/snapmulti/` | Server: file Docker Compose, config, dati |
 | `/opt/snapclient/` | Client: file Docker Compose, config audio |
-| `/opt/snapmulti/.env` | Impostazioni server (modifica per cambiare config) |
-| `/opt/snapclient/.env` | Impostazioni client (modifica per cambiare config) |
+| `/opt/snapmulti/.env` | Impostazioni server |
+| `/opt/snapclient/.env` | Impostazioni client |
 
-Per cambiare impostazioni dopo l'installazione:
-```bash
-sudo nano /opt/snapmulti/.env      # o /opt/snapclient/.env per Pi speaker
-cd /opt/snapmulti
-sudo docker compose up -d           # NON restart — restart non ricarica .env
-```
+Per cambiare impostazioni dopo l'installazione, segui [ADVANCED.it.md — Modificare le impostazioni su un Pi read-only](ADVANCED.it.md#modificare-le-impostazioni-su-un-pi-read-only). Il Pi gira in read-only di default, quindi una semplice modifica di `.env` si perde al riavvio successivo.
 
 ---
 
 ## Requisiti di rete
 
-- Il Pi e il tuo telefono/computer devono essere sulla **stessa subnet** (stesso router) perché mDNS (hostname `.local`) e auto-discovery funzionino
-- La maggior parte delle reti domestiche funziona senza modifiche — nessun port forwarding o firewall necessario
-- Per la lista completa delle porte e le regole firewall, vedi [Guida Avanzata — Regole firewall](ADVANCED.it.md#regole-firewall)
-- mDNS usa UDP 5353 — se hai più VLAN, avrai bisogno di un ripetitore mDNS o imposta IP statici in `.env`
+Il Pi e il tuo telefono/computer devono essere sulla stessa rete (stesso router, niente WiFi ospiti né isolamento VLAN) perché i nomi `.local` e l'auto-discovery funzionino. Dettagli — requisiti del router, VLAN / mDNS, porte: [HARDWARE.it.md — Requisiti di rete](HARDWARE.it.md#requisiti-di-rete).

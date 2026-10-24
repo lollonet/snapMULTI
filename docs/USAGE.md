@@ -12,18 +12,46 @@ Server stack (7 containers, host networking):
 
 | Container | Role | Port |
 |-----------|------|------|
-| `snapserver` | Audio streaming + JSON-RPC control | 1704, 1705, 1780, 4953 |
+| `snapserver` | Audio streaming + JSON-RPC control (also runs `meta_shairport.py`, the AirPlay cover-art server) | 1704, 1705, 1780, 4953, 5858 |
 | `mpd` | Music library playback (FIFO out) | 6600, 8000 |
 | `mympd` | Web UI for MPD | 8180 |
-| `shairport-sync` | AirPlay receiver (FIFO out) | 5000, 5858 |
-| `librespot` | Spotify Connect (FIFO out) | 24879 + ephemeral |
+| `shairport-sync` | AirPlay receiver (FIFO out) | 5000 |
+| `librespot` | Spotify Connect (FIFO out) | 24879 (localhost only) + ephemeral |
 | `tidal-connect` | Tidal Connect, ARM only (FIFO out) | 2019 |
 | `metadata` | Cover art + track info | 8082 (WS), 8083 (HTTP) — see [CLIENT-METADATA.md](CLIENT-METADATA.md) for integration patterns |
 
 Audio chain: source → FIFO pipe in `/audio/` → snapserver → FLAC over network → snapclient → ALSA out. Unified format `44100:16:2` (44.1 kHz / 16-bit / stereo) across all sources, no resampling.
 
 Client stack (3 containers on Pi 3/4/5; native snapclient `.deb` on Pi Zero 2W):
-`snapclient` + `audio-visualizer` (port 8081) + `fb-display` (HDMI cover art).
+`snapclient` + `audio-visualizer` (port 8081, bound to `127.0.0.1`) + `fb-display` (HDMI cover art).
+
+### Ports
+
+All server containers use host networking, so these are ports on the server's own IP. An Audio Player opens no LAN ports of its own (its visualizer WebSocket listens on `127.0.0.1:8081` only).
+
+| Port | Protocol | Direction | Service | Purpose |
+|------|----------|-----------|---------|---------|
+| 1704 | TCP | Server → Clients | snapserver | Audio streaming |
+| 1705 | TCP | Bidirectional | snapserver | Snapcast JSON-RPC control |
+| 1780 | HTTP | Bidirectional | snapserver | Snapweb UI + HTTP API |
+| 4953 | TCP | Inbound | snapserver | TCP audio input (ffmpeg / Android streaming) |
+| 5858 | HTTP | Inbound | snapserver (`meta_shairport.py`) | AirPlay cover art |
+| 5000 | TCP | Inbound | shairport-sync | AirPlay (RTSP) |
+| 2019 | TCP | Inbound | tidal-connect | Tidal Connect discovery (ARM only) |
+| 24879 | WebSocket | Localhost only | librespot | go-librespot API for Spotify metadata / control |
+| ephemeral | TCP | Inbound | librespot | Spotify Connect zeroconf (random port) |
+| 6600 | TCP | Bidirectional | mpd | MPD protocol (client control) |
+| 8000 | HTTP | Server → Clients | mpd | MPD HTTP audio stream |
+| 8180 | HTTP | Bidirectional | mympd | myMPD web UI |
+| 8082 | WebSocket | Server → Clients | metadata | Track info push |
+| 8083 | HTTP | Server → Clients | metadata | Landing page, `/status`, cover art, health |
+| 5353 | UDP | Multicast | host `avahi-daemon` | mDNS autodiscovery |
+
+Firewall rules for these ports: [ADVANCED.md — Firewall rules](ADVANCED.md#firewall-rules).
+
+### Port conflicts
+
+Because of host networking, a port already held by another program on the server makes the matching container crash at start. `deploy.sh` checks 1704, 1705, 1780, 2019, 4953, 5000, 5858, 6600, 8000, 8082, 8083, 8180 and 24879 before starting the stack and prints `Port <N> already in use by <process>` for each conflict. Typical culprits on a reused host: a system MPD (6600, 8000), another Snapcast server (1704/1705/1780), another AirPlay receiver (5000). Find the holder with `sudo ss -tlnp | grep ':<N> '`, stop or disable that program (`sudo systemctl disable --now <service>`), then `sudo systemctl restart snapmulti-server.service`.
 
 ## Container security model
 
@@ -39,11 +67,13 @@ Defaults applied to every container in `docker-compose.yml`:
 
 **Exception 1 — D-Bus / Avahi containers** (`snapserver`, `shairport-sync`, `librespot`): need `apparmor:unconfined` to access the host's D-Bus socket for mDNS advertisement (Avahi) and `cap_add: DAC_OVERRIDE` to write to the named-pipe FIFOs owned by the host's `PUID` user. AppArmor in the default Ubuntu profile blocks the D-Bus connection otherwise. `mpd` mounts the same Avahi/D-Bus sockets but keeps the default AppArmor profile — it does not require `apparmor:unconfined`. Everything else stays dropped.
 
-**Exception 2 — `tidal-connect`** (ARM only): runs as root because the proprietary upstream binary needs it. **Enabled by default on ARM installs** — `deploy.sh` writes `COMPOSE_PROFILES=tidal` into `/opt/snapmulti/.env` so the `tidal` profile is active out of the box on Pi 3/4/5. To **opt out** (e.g. for a fully free-software stack), remove `tidal` from `COMPOSE_PROFILES` in `/opt/snapmulti/.env` and run `sudo systemctl restart snapmulti-server.service`. See [Tidal Connect security note](#tidal-connect-security-note) for the full disclosure.
+**Exception 2 — `tidal-connect`** (ARM only): runs as root because the proprietary upstream binary needs it. **Enabled by default on ARM installs** — `deploy.sh` writes `COMPOSE_PROFILES=tidal` into `/opt/snapmulti/.env` so the `tidal` profile is active out of the box on Pi 3/4/5. To **opt out** (e.g. for a fully free-software stack), see [ADVANCED.md — Disabling Tidal Connect](ADVANCED.md#disabling-tidal-connect). See [Tidal Connect security note](#tidal-connect-security-note) for the full disclosure.
 
-**Privacy / telemetry**: snapMULTI itself does not phone home. There is no snapMULTI cloud service, hosted control plane, telemetry endpoint, analytics SDK, or snapMULTI account. Runtime control and metadata APIs are local LAN services. External network traffic still exists for normal dependencies and chosen integrations: OS/Docker downloads during install/update, Docker Hub image pulls, Spotify/Tidal/AirPlay provider traffic, and metadata/artwork lookups.
+**Privacy / telemetry**: There is no snapMULTI cloud service, hosted control plane, telemetry endpoint, analytics SDK, or snapMULTI account. Runtime control and metadata APIs are local LAN services. External network traffic still exists for normal dependencies and chosen integrations: OS/Docker downloads during install/update, Docker Hub image pulls, Spotify/Tidal/AirPlay provider traffic, and metadata/artwork lookups.
 
-**Threat model**: snapMULTI is designed for a trusted LAN — server and clients on the same subnet behind a residential router. Out-of-scope: WAN exposure (no authentication on JSON-RPC, Snapweb or myMPD), multi-tenant scenarios, malicious clients on the LAN. If you need any of those, put a reverse proxy with auth in front and use `bind 127.0.0.1` in `config/snapserver.conf`.
+**Update check**: besides the integrations above, snapMULTI makes one request of its own — a release check. The `metadata` service fetches `https://api.github.com/repos/lollonet/snapMULTI/releases/latest` at most once every 24 hours (and again after the container restarts) so that `/status` and `/version` can show `Update available`. It is a plain unauthenticated HTTPS `GET` with aiohttp's default `User-Agent` (`Python/<version> aiohttp/<version>`) and no other identifying headers — no device ID, hostname, or usage data is sent — but GitHub sees your public IP address. There is no setting to turn it off; block `api.github.com` on your router if you need to.
+
+**Threat model**: snapMULTI is designed for a trusted LAN — server and clients on the same subnet behind a residential router. Out-of-scope: WAN exposure (no authentication on JSON-RPC, Snapweb or myMPD), multi-tenant scenarios, malicious clients on the LAN. If you need any of those, put a reverse proxy with auth in front and set `bind_to_address = 127.0.0.1` in the relevant sections of `config/snapserver.conf`.
 
 ## Audio Sources
 
@@ -53,7 +83,7 @@ Defaults applied to every container in `docker-compose.yml`:
 |---|-----------|------|-------------|
 | 1 | `MPD` | pipe | myMPD web UI at `:8180`, or any MPD client (`mpc`, Cantata, MPDroid) on port `6600` |
 | 2 | `Tidal` | pipe (ARM only) | Cast from the Tidal app — appears as `<hostname> Tidal` |
-| 3 | `AirPlay` | pipe | Cast from iOS / macOS — appears as the server hostname |
+| 3 | `AirPlay` | pipe | Cast from iOS / macOS — appears as `<hostname> AirPlay` |
 | 4 | `Spotify` | pipe | Cast from any Spotify Premium app — appears as `<hostname> Spotify` |
 | 5 | `TCP-Input` | tcp (server, :4953) | Stream raw PCM from anywhere: `ffmpeg ... tcp://<server>:4953` |
 | 6 | `LineIn` | alsa | Capture from ALSA device. Uncomment in `snapserver.conf` |
@@ -75,18 +105,18 @@ snapMULTI does not promise the same level of long-term support for every source.
 
 ### Customising device names
 
-Spotify and Tidal default to `<hostname> Spotify` / `<hostname> Tidal`. Override via `SPOTIFY_NAME` / `TIDAL_NAME` in `.env` — see [ADVANCED.md — Custom config](ADVANCED.md#custom-config--env-files).
+AirPlay, Spotify and Tidal default to `<hostname> AirPlay` / `<hostname> Spotify` / `<hostname> Tidal`. Override via `AIRPLAY_NAME` / `SPOTIFY_NAME` / `TIDAL_NAME` in `.env` — see [ADVANCED.md — Custom config](ADVANCED.md#custom-config--env-files).
 
 ### Tidal Connect security note
 
 <a id="tidal-connect-security-note"></a>
-Tidal Connect is **enabled by default on ARM installs** (`deploy.sh` writes `COMPOSE_PROFILES=tidal` to `/opt/snapmulti/.env` on Pi 3/4/5). To opt out for a fully free-software stack, remove `tidal` from `COMPOSE_PROFILES` in `/opt/snapmulti/.env` and restart `snapmulti-server.service`. The upstream container is built on Raspbian Stretch (EOL 2019), pulls packages from `archive.debian.org` with `trusted=yes`, and contains a proprietary unmaintained binary. ARM only (no x86_64 build exists). Read the disclosure block in `docker-compose.yml` before keeping it enabled.
+Tidal Connect is **enabled by default on ARM installs** (`deploy.sh` writes `COMPOSE_PROFILES=tidal` to `/opt/snapmulti/.env` on Pi 3/4/5). To opt out for a fully free-software stack, see [ADVANCED.md — Disabling Tidal Connect](ADVANCED.md#disabling-tidal-connect). The upstream container is built on Raspbian Stretch (EOL 2019), pulls packages from `archive.debian.org` with `trusted=yes`, and contains a proprietary unmaintained binary. ARM only (no x86_64 build exists). Read the disclosure block in `docker-compose.yml` before keeping it enabled.
 
 ### Streaming from Android (no native cast)
 
 | Method | App | Quality | Setup |
 |--------|-----|---------|-------|
-| AirPlay sender | AirMusic, AllStream | Good | Install app → select AirPlay target = the server hostname |
+| AirPlay sender | AirMusic, AllStream | Good | Install app → select AirPlay target `<hostname> AirPlay` |
 | TCP via BubbleUPnP | BubbleUPnP + ffmpeg relay | Good | Capture in BubbleUPnP, relay `ffmpeg ... tcp://server:4953` |
 | Direct TCP | Termux + ffmpeg | Lossless | `ffmpeg -f pulse -i default -f s16le -ar 44100 -ac 2 tcp://server:4953` |
 

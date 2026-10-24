@@ -220,23 +220,7 @@ Audio format: 44100 Hz, 16-bit, stereo (default FLAC codec).
 
 ### Network Configuration
 
-**Required ports:**
-
-| Port | Protocol | Direction | Purpose |
-|------|----------|-----------|---------|
-| 1704 | TCP | Server → Clients | Audio streaming |
-| 1705 | TCP | Bidirectional | Snapcast JSON-RPC control |
-| 1780 | HTTP | Bidirectional | Snapweb UI + HTTP API |
-| 4953 | TCP | Inbound | TCP audio input (ffmpeg/Android streaming) |
-| 5000 | TCP | Inbound | AirPlay (shairport-sync RTSP) |
-| 5858 | TCP | Inbound | AirPlay cover art (meta_shairport.py) |
-| 2019 | TCP | Inbound | Tidal Connect discovery (ARM only) |
-| 6600 | TCP | Bidirectional | MPD protocol (client control) |
-| 8000 | HTTP | Server → Clients | MPD HTTP audio stream |
-| 8082 | WebSocket | Server → Clients | Metadata service (track info push) |
-| 8083 | HTTP | Server → Clients | Metadata service (cover art, health) |
-| 8180 | HTTP | Bidirectional | myMPD web UI |
-| 5353 | UDP | Multicast | mDNS autodiscovery |
+**Ports:** the full port table (protocol, direction, service, purpose) lives in [USAGE.md — Ports](USAGE.md#ports). Typical home use needs no port forwarding — every port is LAN-only.
 
 **Router requirements:**
 - Clients and server must be on the same subnet (or mDNS must be forwarded)
@@ -346,8 +330,8 @@ These hardware combinations have been verified end-to-end (firstboot → smoke t
 | Limitation | Details |
 |------------|---------|
 | **Pi Zero 2 W as server** | 512 MB RAM cannot fit server containers (592M limits in minimal profile). Use as headless client only |
-| **Pi Zero 2 W with display** | 512 MB RAM is too tight for fb-display + visualizer (352M limits). Use Pi 3+ for display clients |
-| **Pi 3 1 GB — both mode with display** | Server (592M) + client display (352M) = 944M limits on 1 GB — not supported. Use server-only or client-only, not both |
+| **Pi Zero 2 W with display** | 512 MB RAM is too tight for fb-display + visualizer (384M limits). Use Pi 3+ for display clients |
+| **Pi 3 1 GB — both mode with display** | Server (592M) + client display (384M) = 976M limits on 1 GB — not supported. Use server-only or client-only, not both |
 | **Pi Zero W (v1) as server** | Too slow for shairport-sync + librespot simultaneously |
 | **librespot on ARMv6** | Not officially supported on Pi Zero v1 / Pi 1 ([details](https://github.com/librespot-org/librespot/pull/1457)). Cross-compilation possible but unsupported |
 | **3.5mm audio on Pi** | Noticeable noise floor; use DAC HAT or USB DAC for quality |

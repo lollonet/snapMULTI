@@ -35,11 +35,11 @@ snapMULTI is not "open Sonos". It is a community-maintained appliance for people
 
 | Your situation | What to install on each Pi | Notes |
 |----------------|----------------------------|-------|
-| **One speaker, one room** | One Pi → choose **Audio Player** | Any Pi 3 B+ / 4 / 5 / Zero 2 W |
-| **Server + one speaker on the same Pi** | One Pi → choose **Server + Player** | Pi 4 2 GB+ (Pi Zero 2 W not supported in this mode) |
+| **One speaker, one room, one Pi** | One Pi → choose **Server + Player** | Pi 4 2 GB+ (Pi Zero 2 W not supported in this mode) |
 | **Central server, speakers in other rooms** | One Pi → **Music Server**. Each speaker Pi → **Audio Player** | mDNS auto-discovers — speakers find the server on first boot |
+| **Adding a speaker to an existing snapMULTI system** | Each new Pi → **Audio Player** | Any Pi 3 B+ / 4 / 5 / Zero 2 W. A player only plays what a server sends — on its own it plays nothing |
 | **Music library lives on a NAS** | Pick Music Server or Server + Player | `prepare-sd.sh` will ask for the NFS / SMB path. Have user / password ready for SMB |
-| **You only have a Pi Zero 2 W as client** | Choose **Audio Player** | Auto-promoted to native snapclient — no Docker, no cover-art display. See [Pi Zero 2 W Notes](docs/HARDWARE.md#pi-zero-2-w-notes) |
+| **Pi Zero 2 W as a speaker** | Choose **Audio Player** (needs a server elsewhere) | Auto-promoted to native snapclient — no Docker, no cover-art display. See [Pi Zero 2 W Notes](docs/HARDWARE.md#pi-zero-2-w-notes) |
 
 ## Realistic expectations
 
@@ -47,8 +47,8 @@ snapMULTI is not "open Sonos". It is a community-maintained appliance for people
 - **Skill floor**: you should be comfortable flashing an SD with Raspberry Pi Imager, finding your Pi by hostname (`.local`) or IP, and copying a small file off the SD card if something goes wrong. You do **not** need to know Docker, systemd, ALSA, or Snapcast — snapMULTI handles them.
 - **SD card matters**: cheap microSDs are the #1 cause of "install hangs". Use a SanDisk / Samsung A1 (or better). 16 GB is the minimum.
 - **Network**: 2.4 GHz works but 5 GHz or Ethernet is more stable.
-- **Privacy**: snapMULTI has no telemetry, no hosted snapMULTI cloud, and no account system. It runs on your LAN. Install/update steps still download packages and Docker images, and streaming integrations contact their own providers (Spotify, Tidal, Apple/AirPlay, metadata/artwork sources).
-- **Streaming services have their own requirements**: Spotify Connect needs Premium. Tidal Connect runs only on ARM (the Raspberry Pi CPU architecture — so it works on any Pi, but not on an x86 server) and is enabled by default on Pi installs (opt-out by removing `tidal` from `COMPOSE_PROFILES`, see [security note](docs/USAGE.md#tidal-connect-security-note)). AirPlay needs an Apple device.
+- **Privacy**: snapMULTI has no telemetry, no hosted snapMULTI cloud, and no account system. It runs on your LAN. Install/update steps still download packages and Docker images, streaming integrations contact their own providers (Spotify, Tidal, Apple/AirPlay, metadata/artwork sources), and the server checks GitHub for a newer snapMULTI release about once a day (a plain request, no device identifiers — [details](docs/USAGE.md#container-security-model)).
+- **Streaming services have their own requirements**: Spotify Connect needs Premium. Tidal Connect runs only on ARM (the Raspberry Pi CPU architecture — so it works on any Pi, but not on an x86 server) and is enabled by default on Pi installs ([how to turn it off](docs/ADVANCED.md#disabling-tidal-connect), [security note](docs/USAGE.md#tidal-connect-security-note)). AirPlay needs an Apple device.
 
 ## Recommended first build
 
@@ -58,8 +58,8 @@ If this is your first snapMULTI install, use the boring path: **Raspberry Pi 4 (
 
 - **Pi Zero 2 W** is supported as a headless Audio Player only; it is not a server or "Server + Player" target.
 - **NAS share paths with spaces** are rejected. Rename `Music Share` to `Music_Share` on the NAS side.
-- **Tidal Connect** uses an upstream proprietary component. It is enabled by default on ARM installs; remove `tidal` from `COMPOSE_PROFILES` in `/opt/snapmulti/.env` if you want a fully free-software stack.
-- **Updates are reflash-first**. The filesystem is read-only, so you update by re-flashing the SD with a new release (~15-20 min on Pi 4/5, settings auto-detect) rather than patching a running system.
+- **Tidal Connect** uses an upstream proprietary component. It is enabled by default on ARM installs; [turn it off](docs/ADVANCED.md#disabling-tidal-connect) if you want a fully free-software stack.
+- **Updates are reflash-first**. The filesystem is read-only, so you update by re-flashing the SD with a new release (~15-20 min on Pi 4/5, answering the Imager and `prepare-sd` questions again) rather than patching a running system. See [Updating](#updating).
 - **Hardware quality matters**. Bad SD cards, weak PSUs and flaky WiFi cause most first-install failures.
 
 ## Quick start
@@ -96,13 +96,17 @@ If you downloaded the ZIP, extract it first. Open a terminal **on the laptop** (
 
 The script walks you through a few questions: the role (**Audio Player** / **Music Server** / **Server + Player**), the music source (streaming / USB / NAS), the audio output (auto-detect or pick a HAT), the NAS connection details if you chose a network library, and optional advanced settings (read-only mode, image tag). Defaults are sane — you can press Enter through most of it. When it finishes, it has copied the snapMULTI tree onto the SD's `bootfs` partition — nothing more is needed on the laptop.
 
-> First PowerShell run on Windows? `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+> Windows blocks scripts from a downloaded ZIP, even after `Set-ExecutionPolicy RemoteSigned`. Run it as `powershell -ExecutionPolicy Bypass -File .\scripts\prepare-sd.ps1` instead (alternatives: [docs/INSTALL.md](docs/INSTALL.md#windows-powershell)).
 
 ### 4. Boot the Pi *(now on the Pi itself)*
 
 Eject the SD from the laptop, insert it in the Pi, power on. Wait roughly 15-20 minutes on a Pi 4/5 (longer on Pi 3 or Pi Zero 2 W) — the first-boot installer runs on its own (no SSH), shows progress on HDMI if a screen is attached, then reboots once. The HDMI progress display shows the expected total time so you know whether 8 minutes in is "almost there" or "barely halfway".
 
-**It worked when**: with a screen attached, the HDMI display shows the snapMULTI now-playing screen (cover art / spectrum). Either way, from another device open `http://<hostname>.local:8083/`, then open **Status** — every check should be green. Then cast something (see **After install** below).
+**It worked when**:
+- **Music Server / Server + Player** — from another device, `http://<hostname>.local:8083/` opens and its **Status** page is all green.
+- **Audio Player** — it has no web page of its own; it shows up as a speaker in the server's Snapweb (`http://<server>.local:1780`). With a screen, the player screen shows `<player IP> → <server>`; without one, you hear an ascending three-note chime after the reboot.
+
+Then cast something (see **After install** below). Full per-role check: [docs/INSTALL.md — Did it work?](docs/INSTALL.md#did-it-work--check-by-role)
 
 > **Detailed walk-through** with troubleshooting and the diagnostic-bundle recovery path: [docs/INSTALL.md](docs/INSTALL.md).
 > **Hardware policy** (validated vs experimental Pi/audio combinations): [docs/HARDWARE.md](docs/HARDWARE.md).
@@ -124,7 +128,7 @@ Replace `hostname` with what you set in Step 1.
 |--------|-----|
 | **Spotify** | Open app → select "*hostname* Spotify" (Premium) |
 | **AirPlay** | AirPlay icon → "*hostname* AirPlay" |
-| **Tidal** | Cast to "*hostname* Tidal" (ARM/Pi only, **enabled by default** — see [security note](docs/USAGE.md#tidal-connect-security-note) to opt-out) |
+| **Tidal** | Cast to "*hostname* Tidal" (ARM/Pi only, **enabled by default** — [how to turn it off](docs/ADVANCED.md#disabling-tidal-connect)) |
 | **Any app** | Stream raw PCM to port 4953 ([details](docs/USAGE.md#streaming-from-android-no-native-cast)) |
 
 ## Add speakers
@@ -135,21 +139,21 @@ Or any Linux box: `sudo apt install snapclient`.
 
 ## Updating
 
-snapMULTI updates by re-flashing, not by patching. The Pi runs a read-only filesystem (a power cut can't corrupt it), so there is no in-place upgrade — you write the latest release onto the SD again, exactly like the first time. It takes the same ~15-20 min on a Pi 4/5, and every setting (role, audio HAT, NAS path, network) is auto-detected on first boot, so you reconfigure nothing.
+snapMULTI updates by re-flashing, not by patching. The Pi runs a read-only filesystem (a power cut can't corrupt it), so there is no in-place upgrade — you write the latest release onto the SD again, like the first time: same Imager settings, same `prepare-sd` questions, the same ~15-20 min on a Pi 4/5. The server's `/status` page tells you when a new release is out (`Update available: … (reflash to apply)`).
 
-Before re-flashing, run `./scripts/backup-from-sd.sh` to preserve your MPD music index — otherwise the library re-scan starts from scratch.
+On a server, run `./scripts/backup-from-sd.sh` on your laptop against the **old** SD **before** flashing — it saves the MPD library index, myMPD playlists/settings and speaker groups so the new install picks them up. Step-by-step procedure (including Windows): [docs/ADVANCED.md — Updating by reflash](docs/ADVANCED.md#updating-by-reflash).
 
 ## If something fails
 
 **Installed but you can't reach it?** If the Pi finished but `http://<hostname>.local:8083/` won't load: find the Pi's IP address in your router's device list and use that instead. `.local` (mDNS) name resolution fails on some Windows setups and on guest / mesh / VLAN Wi-Fi that isolates clients — keep the Pi and your phone/laptop on the same ordinary network. More mDNS help: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
-If the first boot itself aborted: snapMULTI runs the install as a systemd service and captures everything as it goes. The cleanup trap writes a redacted diagnostic bundle to the SD card's **boot partition** (FAT32, readable from any computer — no SSH needed):
+If the first boot itself aborted: snapMULTI captures everything as the install goes. The cleanup trap writes a redacted diagnostic bundle to the SD card's **boot partition** (FAT32, readable from any computer — no SSH needed):
 
 ```
 /boot/firmware/snapmulti-diag-install-failed-<UTC-ts>.tar.gz
 ```
 
-Pull the SD out, plug it into your laptop, attach the bundle to a [GitHub issue](https://github.com/lollonet/snapMULTI/issues/new/choose). The bundle is anonymised (no MAC, no LAN IPs, no SSID, no passwords, no API tokens) — safe to share publicly. Common symptoms and the smoke test (`scripts/device-smoke.sh`): [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+Pull the SD out, plug it into your laptop, attach the bundle to a [GitHub issue](https://github.com/lollonet/snapMULTI/issues/new/choose). The bundle is filtered (private IPs, MAC addresses and recognised credentials are removed), but that is not a guarantee of anonymity — look through it before posting publicly ([what's inside](docs/TROUBLESHOOTING.md#when-in-doubt--grab-the-diagnostic-bundle)). Common symptoms and the smoke test (`scripts/device-smoke.sh`): [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ## Glossary
 
@@ -164,7 +168,7 @@ Quick definitions of terms you'll see in this README and the docs.
 | **mDNS** / `.local` | "Multicast DNS" — how devices announce themselves on the LAN without manual IP setup. `pi-server.local` resolves automatically on most networks |
 | **NAS** | Network-attached storage — a separate box (Synology, QNAP, custom) hosting your music library, mounted by snapMULTI over NFS or SMB |
 | **Read-only filesystem** | snapMULTI mounts the root filesystem read-only after install (overlayroot + fuse-overlayfs) so a power cut can't corrupt the SD card. Changes are wiped on reboot unless you toggle off RO mode |
-| **Diagnostic bundle** | Anonymised tarball on the SD's boot partition (`snapmulti-diag-*.tar.gz`) — written automatically when an install fails, attachable to a GitHub issue without leaking secrets |
+| **Diagnostic bundle** | Redacted tarball on the SD's boot partition (`snapmulti-diag-*.tar.gz`) — written automatically when an install fails; review it, then attach it to a GitHub issue |
 
 ## Documentation
 

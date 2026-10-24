@@ -220,23 +220,7 @@ Formato audio: 44100 Hz, 16-bit, stereo (codec FLAC predefinito).
 
 ### Configurazione di Rete
 
-**Porte necessarie:**
-
-| Porta | Protocollo | Direzione | Scopo |
-|-------|------------|-----------|-------|
-| 1704 | TCP | Server → Client | Streaming audio |
-| 1705 | TCP | Bidirezionale | Controllo JSON-RPC |
-| 1780 | HTTP | Bidirezionale | Interfaccia Snapweb + API HTTP |
-| 4953 | TCP | In entrata | Ingresso audio TCP (streaming ffmpeg/Android) |
-| 5000 | TCP | In entrata | AirPlay (shairport-sync RTSP) |
-| 5858 | TCP | In entrata | Copertine AirPlay (meta_shairport.py) |
-| 2019 | TCP | In entrata | Tidal Connect discovery (solo ARM) |
-| 6600 | TCP | Bidirezionale | Protocollo MPD (controllo client) |
-| 8000 | HTTP | Server → Client | Stream audio HTTP MPD |
-| 8082 | WebSocket | Server → Client | Servizio metadata (push info tracce) |
-| 8083 | HTTP | Server → Client | Servizio metadata (copertine, health) |
-| 8180 | HTTP | Bidirezionale | Interfaccia web myMPD |
-| 5353 | UDP | Multicast | Autodiscovery mDNS |
+**Porte:** la tabella completa delle porte (protocollo, direzione, servizio, scopo) sta in [USAGE.it.md — Porte](USAGE.it.md#porte). L'uso domestico tipico non richiede port forwarding — tutte le porte restano nella LAN.
 
 **Requisiti del router:**
 - Client e server devono essere sulla stessa sottorete (o mDNS deve essere inoltrato)
@@ -346,8 +330,8 @@ Queste combinazioni hardware sono state verificate end-to-end (firstboot → tes
 | Limitazione | Dettagli |
 |-------------|----------|
 | **Pi Zero 2 W come server** | 512 MB di RAM non possono contenere i container server (limiti 592M nel profilo minimal). Usare solo come client headless |
-| **Pi Zero 2 W con display** | 512 MB di RAM troppo stretti per fb-display + visualizer (limiti 352M). Usare Pi 3+ per client con display |
-| **Pi 3 1 GB — modalità entrambi con display** | Server (592M) + client display (352M) = limiti 944M su 1 GB — non supportato. Usare solo server o solo client, non entrambi |
+| **Pi Zero 2 W con display** | 512 MB di RAM troppo stretti per fb-display + visualizer (limiti 384M). Usare Pi 3+ per client con display |
+| **Pi 3 1 GB — modalità entrambi con display** | Server (592M) + client display (384M) = limiti 976M su 1 GB — non supportato. Usare solo server o solo client, non entrambi |
 | **Pi Zero W (v1) come server** | Troppo lento per shairport-sync + librespot contemporaneamente |
 | **librespot su ARMv6** | Non ufficialmente supportato su Pi Zero v1 / Pi 1 ([dettagli](https://github.com/librespot-org/librespot/pull/1457)). Cross-compilazione possibile ma non supportata |
 | **Audio 3.5mm su Pi** | Rumore di fondo percepibile; usa DAC HAT o DAC USB per qualità |

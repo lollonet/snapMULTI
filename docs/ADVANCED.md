@@ -9,6 +9,8 @@ Contents:
 - [Multi-room — adding speakers](#multi-room--adding-speakers)
 - [Music library on the network (NFS / SMB)](#music-library-on-the-network)
 - [Custom config — `.env` files](#custom-config--env-files)
+  - [Changing settings on a read-only Pi](#changing-settings-on-a-read-only-pi)
+  - [Disabling Tidal Connect](#disabling-tidal-connect)
 - [Read-only filesystem](#read-only-filesystem)
 - [Deployment without `prepare-sd`](#deployment-without-prepare-sd)
 - [MPD from the command line](#mpd-from-the-command-line)
@@ -42,74 +44,94 @@ If your library lives on a NAS (Synology, QNAP, generic Linux server, Windows sh
 | NFS | Linux / Synology / QNAP NAS, allow-list by IP | `prepare-sd.sh` writes a systemd `.mount`/`.automount` pair; no password |
 | SMB / CIFS | Windows share, Synology / QNAP with username + password | `prepare-sd.sh` writes the credentials temporarily into `install.conf` on the FAT32 boot partition. On first boot, `firstboot.sh` copies them to `/etc/snapmulti-smb-credentials` with root-only permissions and then removes them from `install.conf` |
 | USB | Drive plugged into the Pi | The first USB partition with a filesystem is auto-detected on first boot (`mount-music.sh` scans `/dev/sd?1`/`/dev/sd?`) and mounted at `/media/usb-music` via a systemd automount keyed on its UUID — no menu selection |
-| Local | Files copied into `/audio` on the Pi | Default for first-time users |
+| Local | A folder on the Pi itself | `MUSIC_PATH` in `/opt/snapmulti/.env` (default `/media/music`; MPD sees it as `/music`). Used by the "I'll set it up later" choice — copy files there, or point `MUSIC_PATH` at your own disk ([how to change settings](#changing-settings-on-a-read-only-pi)) |
 
 Path naming: NAS shares with **spaces** are rejected at install time (Synology defaults `Music Share` → rename on the NAS to `Music_Share`). See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if the mount silently fails post-install.
 
-> **Large libraries (>10 k tracks) — `MPD_START_PERIOD` and the install healthcheck window.**
-> The default install healthcheck budget (`max(MPD_START_PERIOD, 180s) + 120s grace`) does NOT cover a first cold scan of a large NFS/SMB library. When MPD doesn't bind port 6600 in time the install verifier returns non-zero, `firstboot.sh` writes `/var/lib/snapmulti-installer/.install-failed`, and the `[finalize]` step (which would enable `overlayroot=tmpfs`) **never runs**. The device then boots on plain ext4 — containers eventually come up (systemd `Restart=on-failure` recovers them), but the read-only root protection is missing. **Recovery (NFS/SMB libraries >~10 k tracks):** after the first failed boot, raise the budget directly in `/opt/snapmulti/.env` (`sudo sed -i 's/^MPD_START_PERIOD=.*/MPD_START_PERIOD=3600s/' /opt/snapmulti/.env`), clear `.install-failed`, and rerun `firstboot.sh`. `deploy.sh` derives `MPD_START_PERIOD` purely from `MUSIC_SOURCE` (300 s for `nfs`/`smb`/`network`, 30 s otherwise) and does NOT read `install.conf` for this value — a pre-set there is silently ignored. See [TROUBLESHOOTING.md — Install marked failed but containers run](TROUBLESHOOTING.md#install-marked-failed-but-containers-run) for the full recovery procedure.
+> **MPD rescan on big libraries.** A first scan of a 10 k+ song library over NFS can take hours. Run `scripts/backup-from-sd.sh` on the old SD card before reflashing — it extracts `mpd.db` so the next install loads the cached database in seconds instead of rescanning (see [Update strategy](#update-strategy)).
 
-> **MPD rescan on big libraries.** A first scan of a 10 k+ song library over NFS can take hours of D-state. Use `scripts/backup-from-sd.sh` on the old SD card before reflashing — it extracts `mpd.db` so MPD does fast incremental scans across reflashes. Skip the `MPD_START_PERIOD` bump above only if you have a `mpd.db` backup from a previous install (the cached db loads in seconds).
+### `MPD_START_PERIOD` — large libraries and the install healthcheck window <a id="mpd_start_period"></a>
 
-### `MPD_START_PERIOD` — extend the install-time MPD healthcheck window <a id="mpd_start_period"></a>
-
-The install verifier polls MPD healthcheck for up to `max(MPD_START_PERIOD, 180s) + 120s` healthcheck-stability grace. If MPD has not bound port 6600 in that window the install is marked failed.
-
-Defaults:
-
-| Setting | Default | Source |
-|---------|---------|--------|
-| `MPD_START_PERIOD` | `30s` | Sized for local USB / `/audio` libraries — covers a Pi 4 cold scan of ~5 k tracks |
-| install verifier floor | `180s` | Hardcoded in `verify_services` |
-| healthcheck stability grace | `120s` | Hardcoded in `verify_services` (covers Docker's 30 s health-probe interval + `verify_compose_stack` second-sample check) |
-
-`deploy.sh` derives `MPD_START_PERIOD` purely from `MUSIC_SOURCE` and writes it to `/opt/snapmulti/.env`. A value pre-set in `install.conf` is silently ignored, so the only effective override is to edit `.env` directly **after** the first failed boot:
-
-```sh
-# /opt/snapmulti/.env — written by deploy.sh; raise after first failed install
-sudo sed -i 's/^MPD_START_PERIOD=.*/MPD_START_PERIOD=3600s/' /opt/snapmulti/.env
-sudo rm /var/lib/snapmulti-installer/.install-failed
-sudo bash /boot/firmware/snapmulti/firstboot.sh   # idempotent — resumes from the failed phase
-```
-
-**Failure mode if you skip this**: `verify_services` exits non-zero → `.install-failed` marker → `setup_readonly_fs` never runs → overlay never activates at boot 2. systemd's `Restart=on-failure` still brings the containers up autonomously after the install gives up, so the device LOOKS healthy from the network — but the install is incomplete and root is on writable ext4. See [TROUBLESHOOTING.md — Install marked failed but containers run](TROUBLESHOOTING.md#install-marked-failed-but-containers-run) for the full recovery procedure.
+The first-boot install waits `max(MPD_START_PERIOD, 180s) + 120s` for MPD to bind port 6600. `deploy.sh` sets `MPD_START_PERIOD` from the music source only (300 s for NFS / SMB, 30 s otherwise) and ignores any value in `install.conf`. A first cold scan of a very large network library (> ~10 k tracks) can overrun that window: the install is then marked failed and read-only mode is never enabled, even though the containers come up later on their own. The symptom, the checks and the recovery (raise `MPD_START_PERIOD` in `.env`, clear the failure marker, rerun `firstboot.sh`) are in [TROUBLESHOOTING.md — Install marked failed but containers run](TROUBLESHOOTING.md#install-marked-failed-but-containers-run).
 
 ## Custom config — `.env` files
 
 | Path | What it controls |
 |------|------------------|
-| `/opt/snapmulti/.env` | Server: hostname, music source, container resource limits, optional Tidal name / Spotify name overrides |
+| `/opt/snapmulti/.env` | Server: hostname, music source, container resource limits, optional AirPlay / Spotify / Tidal name overrides |
 | `/opt/snapclient/.env` | Client: sound card override, latency, display profile, server hostname (for static-IP fallback) |
 
-To reload after editing:
+> **Edits on a read-only Pi are lost at the next reboot.** Read-only mode is on by default after a `prepare-sd` install: the whole root filesystem, `/opt` included, runs from RAM. Only the myMPD workdir and snapserver's `server.json` are backed up to the boot partition and restored at boot ([details](#read-only-filesystem)) — `.env` is not. Use the procedure below for every change you want to keep. A reflash also writes a fresh `.env`, so custom values must be re-applied after each reflash.
+
+### Changing settings on a read-only Pi
+
+1. Turn read-only mode off and reboot:
+
+   ```bash
+   sudo ro-mode disable && sudo reboot
+   ```
+
+2. Log back in and make the change:
+
+   ```bash
+   sudo nano /opt/snapmulti/.env        # Audio Player: /opt/snapclient/.env
+   ```
+
+3. Apply it. Use `up -d`, not `restart` — `restart` does not re-read `.env`:
+
+   ```bash
+   cd /opt/snapmulti && sudo docker compose up -d     # Audio Player: cd /opt/snapclient
+   ```
+
+4. Turn read-only mode back on and reboot:
+
+   ```bash
+   sudo ro-mode enable && sudo reboot
+   ```
+
+`ro-mode status` shows the current state. If you turned read-only mode off in the `prepare-sd` advanced menu, skip steps 1 and 4.
+
+Per-source device names, for example (step 2):
 
 ```bash
-sudo nano /opt/snapmulti/.env
-cd /opt/snapmulti && sudo docker compose up -d   # NOT restart — restart doesn't reload .env
-```
-
-Customise per-source device names without editing config files:
-
-```bash
+AIRPLAY_NAME="Living Room AirPlay"
 SPOTIFY_NAME="Living Room Spotify"
 TIDAL_NAME="Living Room Tidal"
 ```
 
 Full inline reference: [`config/snapserver.conf`](../config/snapserver.conf) is the authoritative parameter schema for snapserver itself.
 
+### Disabling Tidal Connect
+
+Tidal Connect is enabled by default on Raspberry Pi (ARM) installs. It runs a proprietary, unmaintained upstream binary — see the [security note](USAGE.md#tidal-connect-security-note). To turn it off, follow [Changing settings on a read-only Pi](#changing-settings-on-a-read-only-pi) and in steps 2–3:
+
+1. In `/opt/snapmulti/.env`, set `TIDAL_ENABLED=false` and remove `tidal` from the `COMPOSE_PROFILES=` line (leave it empty if `tidal` was the only entry). Removing it from `COMPOSE_PROFILES` alone is not enough: `deploy.sh` puts it back the next time it runs unless `TIDAL_ENABLED=false` is set.
+2. Stop the running container and apply:
+
+   ```bash
+   cd /opt/snapmulti
+   sudo docker compose rm -sf tidal-connect
+   sudo docker compose up -d
+   ```
+
+A reflash turns Tidal Connect back on; repeat these steps afterwards.
+
 ## Read-only filesystem
 
-After install completes, the rootfs is mounted read-only via overlayroot + fuse-overlayfs. Edits to `/etc`, `/opt`, etc. survive until reboot, then get wiped. Toggle for maintenance:
+After install completes, the rootfs is mounted read-only via overlayroot + fuse-overlayfs. Edits to `/etc`, `/opt`, etc. survive until reboot, then get wiped. Toggle for maintenance with the `ro-mode` helper (installed at `/usr/local/bin/ro-mode` on every device):
 
 ```bash
-sudo /opt/snapmulti/scripts/ro-mode.sh disable   # then reboot
-# make changes (apt install, edit configs outside /opt/snapmulti and /opt/snapclient)
-sudo /opt/snapmulti/scripts/ro-mode.sh enable    # then reboot
+sudo ro-mode disable && sudo reboot   # writable from the next boot
+# make changes (.env edits, apt install, config files)
+sudo ro-mode enable && sudo reboot    # read-only again
+ro-mode status                        # check the current state
 ```
+
+Step-by-step version for `.env` edits: [Changing settings on a read-only Pi](#changing-settings-on-a-read-only-pi).
 
 > **Exceptions — state that survives overlayroot wipes:** `snapmulti-state-backup.path` watches `myMPD state changes` (`/opt/snapmulti/mympd/workdir/state` — the change-frequent subdir myMPD writes to as the user touches playlists / settings / scripts). When the path unit triggers, the backup script snapshots the WHOLE myMPD workdir to `/boot/firmware/snapmulti-backup/` — state + config + smartpls + scripts + pics — not just the `state/` subdir it was triggered by, so user-customised smart playlists / themes / scripts survive a reflash. `snapmulti-state-backup.timer` is the safety net: it runs every 5 min and captures snapserver `server.json` (event-driven on that file is not viable — snapserver rewrites it every ~3 s to refresh client `lastSeen` heartbeats). `backup-snapmulti-state.sh` short-circuits on canonical equality (sort keys + strip `lastSeen` + sha256) so no-op ticks cost zero FAT32 writes. `snapmulti-backup.timer` separately backs up MPD `mpd.db` on boot/daily cadence. On every boot, `restore-snapmulti-state` (wired as `ExecStartPre` on `snapmulti-server.service`) copies the state backup back into `/opt/snapmulti/` before containers start. v0.7.9's `snapmulti-data-persistence.service` bind-mount approach was removed in v0.7.9.1 (see #527) — it was a no-op on tmpfs-mode overlayroot.
 
-`/boot/firmware/cmdline.txt` is owned by `scripts/common/cmdline-manager.sh` — don't hand-edit it. See ADR-003 for the rationale.
+`/boot/firmware/cmdline.txt` is managed by `scripts/common/cmdline-manager.sh` (it adds and removes `overlayroot=tmpfs`, the memory-cgroup flags and other tokens). Don't rewrite or reorder the file by hand. To add a kernel flag, use the same helper, as shown for [`ipv6.disable=1`](#ipv6-enabled-by-default).
 
 ## Deployment without `prepare-sd`
 
@@ -160,17 +182,32 @@ After install, systemd owns the container lifecycle (ADR-005). Docker `restart: 
 
 ## Update strategy
 
-- **Primary** (recommended): reflash the SD with the latest release. Backup MPD's library index first:
+snapMULTI updates by reflashing the SD card ([DEC-003](decisions/DEC-003-reflash-only-updates.md)) — the read-only root makes in-place patching impractical. To see whether a newer release exists, open the `/status` page: it shows `Update available: <current> -> <latest> (reflash to apply)` when there is one (the same line appears in `device-smoke.sh` output).
 
-  ```bash
-  ./scripts/backup-from-sd.sh         # extracts mpd.db from old SD before flashing
-  ```
+### Updating by reflash
 
-- **In-place** (advanced, unsupported): `cd /opt/snapmulti && sudo docker compose pull && sudo docker compose up -d`. Config drift between versions is your problem to resolve.
+Do the steps in this order — step 1 must happen **before** Imager overwrites the old card.
 
-Reflash-first is the project default ([DEC-003](decisions/DEC-003-reflash-only-updates.md)). All config auto-detects on first boot — same hostname / same music source / same HAT.
+1. **Save the server's state from the old SD** (Music Server / Server + Player only; an Audio Player has nothing to save). Shut the Pi down (`sudo poweroff`), put its SD card in your laptop, download and extract the new release, and from that folder run:
 
-After every reflash or in-place update, run the smoke test on the device to confirm the platform came back healthy: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server` (or `--client` / `--both`). It's the same release gate (ADR-005) that `fleet-smoke.sh` runs across multiple devices. Full description in [TROUBLESHOOTING.md — First check](TROUBLESHOOTING.md#first-check--run-the-smoke-test).
+   ```bash
+   ./scripts/backup-from-sd.sh                    # auto-detects the SD
+   ./scripts/backup-from-sd.sh /Volumes/bootfs    # or give the boot partition path
+   ```
+
+   It copies three things from the SD's `snapmulti-backup/` folder into the release folder: the MPD database (`mpd.db`, so a big library is not rescanned), the myMPD workdir (playlists, settings, smart playlists) and snapserver's `server.json` (speaker groups, names, volumes). `prepare-sd` puts them on the new card in step 3. `mpd.db` is reused only for NFS / SMB libraries; USB and local libraries are rescanned.
+
+   **Windows** (there is no PowerShell version of this script): open the SD's boot partition in File Explorer and copy from its `snapmulti-backup\` folder into the extracted release folder, keeping the same sub-paths — `mpd\data\mpd.db`, the whole `mympd\workdir\` folder, and `data\server.json` (whichever exist).
+
+2. **Flash** the card with Raspberry Pi Imager and enter the Imager settings again — hostname, username / password, WiFi, SSH. Keep the same hostname so speakers and apps find the device under the same name.
+3. **Run `prepare-sd`** from the new release folder and answer its menus again (role, audio output, music source and NAS details, advanced options). Nothing else carries over from the old install.
+4. **Boot** and wait the usual ~15-20 min on a Pi 4/5.
+5. **Re-apply any custom `.env` values** (device names, Tidal opt-out, boot-tone opt-out, …) — the new install writes a fresh `.env`. See [Changing settings on a read-only Pi](#changing-settings-on-a-read-only-pi).
+6. **Check the result**: `/status` all green, or run the smoke test on the device — `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server` (`--both` for Server + Player); on an Audio Player: `sudo bash /opt/snapclient/scripts/device-smoke.sh --client`. It's the same release gate (ADR-005) that `fleet-smoke.sh` runs across multiple devices. Full description in [TROUBLESHOOTING.md — First check](TROUBLESHOOTING.md#first-check--run-the-smoke-test).
+
+### In-place (advanced, unsupported)
+
+With read-only mode off ([how](#read-only-filesystem)): `cd /opt/snapmulti && sudo docker compose pull && sudo docker compose up -d`. This only re-pulls the image tag already pinned in `.env` (`IMAGE_TAG`); it does not update scripts, config files or systemd units. Config drift between versions is your problem to resolve.
 
 ## Release strategy & image-set pinning
 
@@ -246,15 +283,17 @@ After a deploy / reflash:
 
 ## Resource profiles
 
-`deploy.sh` (server) and `setup.sh` (client) auto-detect hardware and apply one of three profiles — **minimal**, **standard**, or **performance**. Limits can be overridden in `.env`.
+`deploy.sh` (server) and `setup.sh` (client) auto-detect hardware and apply one of three profiles — **minimal**, **standard**, or **performance**. Limits can be overridden in `.env` ([how](#changing-settings-on-a-read-only-pi)).
 
 ### Profile selection
 
-| Hardware | RAM | Profile |
-|----------|-----|---------|
-| Pi Zero 2 W, Pi 3 | < 2 GB | minimal |
-| Pi 4 2 GB | 2–4 GB | standard |
-| Pi 4 4 GB+, Pi 5, x86_64 | 4 GB+ | performance |
+The profile follows installed RAM, not the board name:
+
+| Profile | Typical hardware |
+|---------|------------------|
+| minimal | Pi 3, Pi Zero 2 W, anything under ~1.8 GB |
+| standard | ~2 GB boards (Pi 4 / Pi 5 2 GB) |
+| performance | 4 GB and up (Pi 4 / Pi 5 4–8 GB, x86_64) |
 
 ### Server memory limits
 
@@ -263,26 +302,26 @@ After a deploy / reflash:
 | snapserver | 128M | 192M | 256M |
 | shairport-sync | 48M | 64M | 96M |
 | librespot | 96M | 256M | 256M |
-| mpd | 128M | 256M | 384M |
+| mpd | 128M | 384M | 384M |
 | mympd | 32M | 64M | 256M |
 | metadata | 96M | 128M | 128M |
 | tidal-connect | 64M | 96M | 128M |
-| **Total** | **592M** | **1,056M** | **1,376M** |
+| **Total** | **592M** | **1,184M** | **1,504M** |
 
 ### Client memory limits
 
 | Service | minimal | standard | performance |
 |---------|---------|----------|-------------|
 | snapclient | 64M | 64M | 96M |
-| audio-visualizer | 96M | 128M | 192M |
+| audio-visualizer | 128M | 128M | 192M |
 | fb-display | 192M | 256M | 384M |
-| **Total** | **352M** | **448M** | **672M** |
+| **Total** | **384M** | **448M** | **672M** |
 
 `fb-display` footprint scales with resolution — 4K is noticeably heavier than 1080p. Headless clients (no display) run only `snapclient` and stay lightweight.
 
 ### Hardware compatibility matrix
 
-Assumes ~200 MB OS + Docker overhead. Percentages represent *limit ceilings*, not actual usage.
+Assumes ~200 MB OS + Docker overhead: % RAM = limits ÷ (RAM − 200 MB). Percentages represent *limit ceilings*, not actual usage.
 
 **Server-only** (all services including Tidal on ARM):
 
@@ -290,18 +329,18 @@ Assumes ~200 MB OS + Docker overhead. Percentages represent *limit ceilings*, no
 |----------|-----|---------|--------|-------|--------|
 | Pi Zero 2 W | 512M | minimal | 592M | 190% | **Not supported** |
 | Pi 3 1 GB | 1024M | minimal | 592M | 72% | Tight — works, no headroom for spikes |
-| Pi 4 2 GB | 2048M | standard | 1,056M | 57% | OK |
-| Pi 4 4 GB+ | 4096M | performance | 1,376M | 35% | OK |
-| Pi 5 | 4–8 GB | performance | 1,376M | 17–35% | OK |
+| Pi 4 / Pi 5 2 GB | 2048M | standard | 1,184M | 64% | OK |
+| Pi 4 / Pi 5 4 GB | 4096M | performance | 1,504M | 39% | OK |
+| Pi 4 / Pi 5 8 GB | 8192M | performance | 1,504M | 19% | OK |
 
 **Client with display:**
 
 | Hardware | RAM | Profile | Limits | % RAM | Status |
 |----------|-----|---------|--------|-------|--------|
-| Pi Zero 2 W | 512M | minimal | 352M | 113% | **Not supported** |
-| Pi 3 1 GB | 1024M | minimal | 352M | 43% | OK |
-| Pi 4 2 GB | 2048M | standard | 448M | 24% | OK |
-| Pi 4 4 GB+ | 4096M | performance | 672M | 17% | OK |
+| Pi Zero 2 W | 512M | minimal | 384M | 123% | **Not supported** |
+| Pi 3 1 GB | 1024M | minimal | 384M | 47% | OK |
+| Pi 4 / Pi 5 2 GB | 2048M | standard | 448M | 24% | OK |
+| Pi 4 / Pi 5 4 GB+ | 4096M+ | performance | 672M | ≤ 17% | OK |
 
 **Client headless** (snapclient only):
 
@@ -315,10 +354,10 @@ Assumes ~200 MB OS + Docker overhead. Percentages represent *limit ceilings*, no
 
 | Hardware | RAM | Profile | Server | Client | Total | % RAM | Status |
 |----------|-----|---------|--------|--------|-------|-------|--------|
-| Pi Zero 2 W | 512M | minimal | 592M | 352M | 944M | 303% | **Not supported** |
-| Pi 3 1 GB | 1024M | minimal | 592M | 352M | 944M | 115% | **Not supported** |
-| Pi 4 2 GB | 2048M | standard | 1,056M | 448M | 1,504M | 81% | Tight — works, limited headroom |
-| Pi 4 4 GB+ | 4096M | performance | 1,376M | 672M | 2,048M | 53% | OK |
+| Pi Zero 2 W | 512M | minimal | 592M | 384M | 976M | 313% | **Not supported** |
+| Pi 3 1 GB | 1024M | minimal | 592M | 384M | 976M | 118% | **Not supported** |
+| Pi 4 / Pi 5 2 GB | 2048M | standard | 1,184M | 448M | 1,632M | 88% | Tight — works, limited headroom |
+| Pi 4 / Pi 5 4 GB+ | 4096M+ | performance | 1,504M | 672M | 2,176M | ≤ 56% | OK |
 
 **Both mode** (server + headless client on same Pi):
 
@@ -326,14 +365,14 @@ Assumes ~200 MB OS + Docker overhead. Percentages represent *limit ceilings*, no
 |----------|-----|---------|--------|--------|-------|-------|--------|
 | Pi Zero 2 W | 512M | minimal | 592M | 64M | 656M | 210% | **Not supported** |
 | Pi 3 1 GB | 1024M | minimal | 592M | 64M | 656M | 80% | Tight — works, limited headroom |
-| Pi 4 2 GB | 2048M | standard | 1,056M | 64M | 1,120M | 61% | OK |
-| Pi 4 4 GB+ | 4096M | performance | 1,376M | 96M | 1,472M | 38% | OK |
+| Pi 4 / Pi 5 2 GB | 2048M | standard | 1,184M | 64M | 1,248M | 68% | OK |
+| Pi 4 / Pi 5 4 GB+ | 4096M+ | performance | 1,504M | 96M | 1,600M | ≤ 41% | OK |
 
-> Services rarely hit their limits simultaneously — limits exist to prevent runaway processes from starving the host. A 74% limit-to-RAM ratio on Pi 4 2 GB is safe in practice.
+> Services rarely hit their limits simultaneously — limits exist to prevent runaway processes from starving the host, so a ceiling above ~80% of RAM is a worst case, not expected usage.
 
 ## Firewall rules
 
-If the host runs `ufw` or an equivalent, open these ports on the **server** side (each port's purpose is defined in the container table in [USAGE.md](USAGE.md#architecture)):
+If the host runs `ufw` or an equivalent, open these ports on the **server** side (each port's direction and purpose is defined in [USAGE.md — Ports](USAGE.md#ports)):
 
 ```bash
 # Snapcast core
@@ -344,7 +383,7 @@ sudo ufw allow 1780/tcp   # HTTP API + Snapweb UI
 # Audio sources
 sudo ufw allow 4953/tcp   # TCP audio input (ffmpeg / Android streaming)
 sudo ufw allow 5000/tcp   # AirPlay (shairport-sync RTSP)
-sudo ufw allow 5858/tcp   # AirPlay cover art
+sudo ufw allow 5858/tcp   # AirPlay cover art (meta_shairport in snapserver)
 sudo ufw allow 2019/tcp   # Tidal Connect discovery (ARM only)
 # Spotify Connect uses a random TCP port for zeroconf — allow the ephemeral
 # range or use connection tracking:
@@ -363,7 +402,7 @@ sudo ufw allow 8083/tcp   # Metadata service (HTTP / cover art)
 sudo ufw allow 5353/udp   # mDNS (Avahi / Bonjour)
 ```
 
-Full port table (with direction and purpose): [USAGE.md](USAGE.md).
+Full port table (with direction and purpose): [USAGE.md — Ports](USAGE.md#ports).
 
 ## IPv6 enabled by default
 
@@ -379,18 +418,31 @@ DISABLE_IPV6=true ./scripts/prepare-sd.sh /Volumes/bootfs
 $env:DISABLE_IPV6='true'; .\scripts\prepare-sd.ps1 -Boot E:\
 ```
 
-To disable IPv6 on an already-installed device without reflashing: mount the boot partition, append `ipv6.disable=1` to `cmdline.txt`, reboot. `/boot/firmware/` is FAT32 and writable from any host. See ADR-008 for the full rationale (and ADR-007 for the historical context it supersedes).
+To disable IPv6 on an already-installed device without reflashing, add the token with the same helper `prepare-sd` uses (`cmdline.txt` must stay a single line; the helper takes care of that). The boot partition is outside the read-only overlay, so no `ro-mode` toggle is needed:
+
+```bash
+sudo mount -o remount,rw /boot/firmware
+sudo bash -c '. /opt/snapmulti/scripts/common/cmdline-manager.sh && cmdline_add_token ipv6.disable=1'
+# Audio Player: use /opt/snapclient/scripts/common/cmdline-manager.sh
+sudo mount -o remount,ro /boot/firmware
+sudo reboot
+```
+
+To undo, run the same commands with `cmdline_remove_token ipv6.disable=1`. See ADR-008 for the full rationale (and ADR-007 for the historical context it supersedes).
 
 ## Network QoS
 
-For congested networks or installs where the same Pi sees bulk file transfers, `deploy.sh` configures `cake` qdisc with DSCP EF marking on snapcast ports (1704/1705) so audio packets keep low-latency priority during contention:
+On a server install, `deploy.sh` gives Snapcast audio priority over bulk traffic on the default-route interface, when the kernel has the `sch_cake` module:
 
 ```bash
-# Applied automatically by deploy.sh on supported kernels
-tc qdisc add dev eth0 root cake bandwidth 100mbit
+# What deploy.sh runs (re-applied on every interface up by
+# /etc/NetworkManager/dispatcher.d/50-cake-qos)
+tc qdisc replace dev <iface> root cake diffserv4
+iptables -t mangle -A OUTPUT -p tcp --sport 1704 -j DSCP --set-dscp-class EF
+iptables -t mangle -A OUTPUT -p tcp --sport 1705 -j DSCP --set-dscp-class EF
 ```
 
-You can disable or tune via `.env` (`QOS_ENABLE=false`). On a quiet home LAN the effect is undetectable; under heavy parallel transfers it's the difference between glitch-free audio and dropouts.
+CAKE runs without a bandwidth limit; `diffserv4` puts the EF-marked Snapcast streaming (1704) and control (1705) packets in its highest-priority tin. There is no `.env` switch to turn it off. On a quiet home LAN the effect is undetectable; under heavy parallel transfers it's the difference between glitch-free audio and dropouts. `device-smoke.sh` checks both the CAKE qdisc and the DSCP marking in its QoS section.
 
 ## 4K @ 60Hz HDMI on Pi 4 client displays
 
