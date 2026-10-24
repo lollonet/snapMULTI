@@ -32,10 +32,10 @@ PI (boot 1 — cloud-init esegue l'hook installato)
    ├─ esegue setup.sh    (stack client)       │ rilevante per la
    ├─ esegue setup-zero2w.sh (client nativo)  ┘ modalità scelta
    ├─ fase readonly/finalize                  ┐ con ENABLE_READONLY=true:
-   │   ├─ install_initramfs_lzma_hook         │  il path server gira nel
-   │   ├─ refresh_overlayroot_modules_dep     │  finalize di firstboot;
-   │   └─ raspi-config nonint do_overlayfs 0  │  il path client/both gira
-   │                                          ┘  dentro setup.sh
+   │   ├─ install_initramfs_lzma_hook         │  ogni profilo, nel
+   │   ├─ refresh_overlayroot_modules_dep     │  finalize di firstboot,
+   │   └─ raspi-config nonint do_overlayfs 0  │  solo dopo che la
+   │                                          ┘  verifica è passata
    ├─ scrittori backup /boot/firmware attivati
    ├─ marker /var/lib/snapmulti-installer/.auto-installed
    └─ reboot
@@ -73,14 +73,18 @@ Le quattro modalità di installazione condividono lo stesso framework `firstboot
 - Copia l'albero snapMULTI sulla partizione boot della SD, poi strippa la spazzatura del lato host (`__pycache__`, `._*`, `.DS_Store`).
 - Scrive `install.conf` con modalità scelta, sorgente musicale, HAT audio.
 - Imprime `server/.version` + `client/VERSION` da `git describe --tags` così il dispositivo sa da che release è stato installato.
-- Patcha `runcmd` di cloud-init `user-data` così il Pi esegue `/boot/firmware/snapmulti/firstboot.sh` al primo boot.
-- Lo script gemello PowerShell (`prepare-sd.ps1`) fa lo stesso su Windows.
+- Patcha `runcmd` di cloud-init `user-data` così il Pi esegue `/boot/firmware/snapmulti/firstboot.sh` al primo boot. La nuova voce copia l'indentazione degli elementi `runcmd` esistenti (Imager li scrive in colonna 0). La patch è applicata a una copia temporanea, validata (una sola chiave `runcmd:`, hook presente, un'unica indentazione degli elementi, parsing YAML completo quando sono disponibili Python + PyYAML) e solo allora sostituisce `user-data`; l'originale intatto è conservato una volta come `user-data.snapmulti.bak`. Una scheda già patchata viene comunque validata.
+- Le schede del vecchio Imager con `firstrun.sh` ricevono un hook che prova prima `/boot/firmware/snapmulti/firstboot.sh` e poi `/boot/snapmulti/firstboot.sh`.
+- Aggiunge a `cmdline.txt` i token `systemd.mask=` per le unit swap / zram di Pi OS e per `NetworkManager-wait-online.service`.
+- Lo script gemello PowerShell (`prepare-sd.ps1`) fa lo stesso su Windows (Windows PowerShell 5.1: lo script è mantenuto puro ASCII). Inoltre riscrive ogni file di testo copiato e `install.conf` con fine riga LF e senza BOM; il `.gitattributes` del repo fissa LF per tutto ciò che gira sul Pi.
 
 ### 2. Pi: cloud-init → `firstboot.sh`
 
 - Il `runcmd` di cloud-init esegue `/boot/firmware/snapmulti/firstboot.sh` come root.
 - Il progresso è renderizzato su `/dev/tty1` (console HDMI) tramite `scripts/common/progress.sh` — TUI a schermo intero, solo ASCII, senza effetti quando lanciato via SSH.
-- Resiliente a fallimenti parziali: ogni fase scrive un file di stato (`.done-<fase>`) in `/var/lib/snapmulti-installer/` così un firstboot interrotto riprende invece di ripartire da zero al riavvio. Il completamento riuscito crea `/var/lib/snapmulti-installer/.auto-installed`; un fallimento parziale crea invece `.install-failed` — entrambi nella stessa directory, NON sulla partizione boot.
+- Resiliente a fallimenti parziali: ogni fase scrive un file di stato (`.done-<fase>`) in `/var/lib/snapmulti-installer/` così una nuova esecuzione riprende invece di ripartire da zero. Niente rilancia `firstboot.sh` in automatico — il `runcmd` di cloud-init gira una sola volta per istanza — quindi il recupero è un `sudo bash /boot/firmware/snapmulti/firstboot.sh` manuale (cancella da solo `.install-failed`) oppure un reflash. Il completamento riuscito crea `/var/lib/snapmulti-installer/.auto-installed`; un fallimento parziale crea invece `.install-failed` — entrambi nella stessa directory, NON sulla partizione boot.
+- Il trap di fallimento è installato prima del parsing di `install.conf`, così anche gli abort più precoci (`/boot/firmware/snapmulti` mancante, `install.conf` malformato, blocco server su Pi Zero 2 W) scrivono `.install-failed`, un pacchetto diagnostico e un messaggio su console con la procedura di recupero. Riproduce anche il tono discendente di **fail** tramite `play-smoke-tone.sh` quando è presente una scheda ALSA (best-effort, rispetta `TEST_TONE=false`), così le installazioni senza display falliscono in modo udibile.
+- Gli step apt di Docker CE attendono il lock di dpkg e ritentano fino a 3 volte; l'output di apt finisce nel log di installazione.
 
 ### 3. Pi: path server — `deploy.sh`
 
@@ -99,6 +103,7 @@ Modalità client / both (Pi 3 / 4 / 5). Step:
 - ALSA `/etc/asound.conf` scritta in base all'HAT rilevato.
 - **Tono di conferma HAT** — subito dopo il rilevamento, `setup.sh` riproduce un singolo tono da 1 secondo a 440 Hz (la nota "LA") sull'uscita ALSA appena configurata. È il primo segnale acustico che l'utente sente: conferma in un colpo solo che il DAC è stato rilevato, che ALSA è configurata e che l'amplificatore è acceso col volume ragionevole. Disattivabile con `TEST_TONE=false` in `install.conf` prima del flash.
 - Scoperta del server tramite mDNS (oppure forzatura con `SNAPSERVER_HOST`).
+- Preparazione read-only: con `ENABLE_READONLY=true` installa `fuse-overlayfs` e vi passa Docker prima del pull delle immagini. Sotto firstboot (`--auto`, `SNAPMULTI_DEFER_OVERLAYROOT=1`) si ferma lì: overlayroot viene attivato dal finalize di firstboot (fase 6) dopo la verifica del client, così un pull / una verifica falliti lasciano root e `/boot/firmware` scrivibili. Un `setup.sh` lanciato da solo continua ad attivare overlayroot in proprio.
 - Durante firstboot, `docker compose up -d` avvia SOLO `snapclient` con `COMPOSE_PROFILES=""`. Il profilo `framebuffer` (audio-visualizer + fb-display) è rinviato al `snapclient.service` post-riavvio, così la TUI di installazione su `/dev/tty3` non viene calpestata da fb-display che disegna su `/dev/fb0`. Dopo il riavvio, `snapclient.service` legge `.env` con `COMPOSE_PROFILES=framebuffer` e lo stack client completo parte.
 
 ### 5. Pi: path client-native — `setup-zero2w.sh`
@@ -111,6 +116,8 @@ Solo Pi Zero 2 W (il budget RAM esclude Docker). Step:
 
 ### 6. Pi: overlayroot + riavvio finale
 
+Gira nello step di finalize di `firstboot.sh` (`setup_readonly_fs`) per ogni profilo quando `ENABLE_READONLY=true`, dopo che tutte le verifiche di deploy / setup sono passate.
+
 - `install_initramfs_lzma_hook` installa `/etc/initramfs-tools/hooks/snapmulti-lzma` così kmod dentro initramfs può decomprimere `overlay.ko.xz`.
 - `refresh_overlayroot_modules_dep` lancia `depmod -a` per ogni kernel sotto `/lib/modules/*` (cattura il kernel next-boot installato da `apt full-upgrade` il cui modules.dep sarebbe altrimenti stale).
 - `raspi-config nonint do_overlayfs 0` scrive il token in cmdline.txt + `/etc/overlayroot.local.conf`.
@@ -122,7 +129,7 @@ Solo Pi Zero 2 W (il budget RAM esclude Docker). Step:
 `firstboot.sh` scrive `/var/lib/snapmulti-installer/.install-failed` se una fase aborta (NON sulla partizione boot — `/boot/firmware/` ospita gli artefatti diagnostici e di backup, non il marker). Cosa si avvia dopo dipende da **dove** nella pipeline è abortito: un fallimento PRIMA di `deploy.sh` / `setup.sh` (es. wait-network, install-deps, install Docker) lascia un dispositivo senza servizi snapMULTI installati e overlayroot disattivo — il dispositivo è raggiungibile via SSH ma non fa nulla. Un fallimento tardivo DOPO che `deploy.sh` ha wired lo stack server (es. timeout di `verify_services`, abort di finalize) lascia `snapmulti-server.service` già installato: il `Restart=on-failure` di systemd porta su i container in modo autonomo dopo che l'install si è arreso, mascherando il finalize mancato — un dispositivo che sembra sano sulla LAN ma in realtà ha overlayroot DISATTIVO. Le due cause comuni di fallimento tardivo:
 
 - **Libreria NFS / SMB grande eccede la finestra di healthcheck di `verify_services`** — `deploy.sh` deriva `MPD_START_PERIOD` da `MUSIC_SOURCE` (300 s per `nfs`/`smb`/`network`, 30 s altrimenti) e lo scrive in `.env`, ignorando qualsiasi valore pre-impostato in `install.conf`. Il recupero è una procedura a 3 step: (1) modifica `/opt/snapmulti/.env` direttamente per alzare il valore (`sudo sed -i 's/^MPD_START_PERIOD=.*/MPD_START_PERIOD=3600s/' /opt/snapmulti/.env`); (2) cancella il failure marker (`sudo rm /var/lib/snapmulti-installer/.install-failed`); (3) rilancia l'installer dalla copia sulla partizione boot (`sudo bash /boot/firmware/snapmulti/firstboot.sh`). `firstboot.sh` è idempotente — salta gli step che la run precedente ha completato e riprende dal punto di fallimento. Vedi [TROUBLESHOOTING.it.md — Install marcato fallito ma i container girano](TROUBLESHOOTING.it.md#install-marcato-fallito-ma-i-container-girano) per la procedura di recupero completa.
-- **Rate limit di Docker Hub** — `docker login` sul Pi prima del prossimo retry di firstboot.
+- **Rate limit di Docker Hub** — `docker login` sul Pi, poi rilancia `sudo bash /boot/firmware/snapmulti/firstboot.sh`.
 
 La pagina HTTP `/status` sul server (`http://<server>.local:8083/status`) e il pacchetto diagnostico (`/usr/local/bin/save-diagnostics`) sono le due superfici di debug per l'operatore. Vedi [TROUBLESHOOTING.it.md](TROUBLESHOOTING.it.md) per la tabella completa delle modalità di errore.
 
