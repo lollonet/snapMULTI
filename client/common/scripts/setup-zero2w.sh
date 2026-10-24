@@ -318,7 +318,18 @@ if _source_first_match "audio-hat-detect.sh"; then
         if [[ -n "$_hat_conf_file" ]]; then
             # shellcheck disable=SC1090
             source "$_hat_conf_file"
-            SOUNDCARD="${HAT_CARD_NAME:-$SOUNDCARD}"
+            # usb-audio / internal-audio carry only a placeholder card id
+            # ("USB" / "Headphones"). Resolve the real one exactly like
+            # setup.sh does: USB_CARD_ID from detect_hat or an `aplay -l`
+            # probe for USB DACs (ids like "Device", "DAC", "S2"), and the
+            # HDMI card for internal audio — the Zero 2W has no analog jack.
+            if command -v resolve_hat_card_name &>/dev/null; then
+                HAT_CARD_NAME=$(resolve_hat_card_name "$_hat_config" "$HAT_CARD_NAME" "$AUDIO_INTERNAL_OUTPUT")
+            fi
+            # plughw (not hw): lets ALSA convert format/rate for DACs that
+            # lack native S16_LE / 44.1 kHz. CARD= keeps snapclient's
+            # hardware-mixer card lookup working (DEC-006).
+            [[ -n "${HAT_CARD_NAME:-}" ]] && SOUNDCARD="plughw:CARD=${HAT_CARD_NAME},DEV=0"
             MIXER="${HAT_MIXER:-$MIXER}"
             ok "Loaded $_hat_conf_file (overlay=$HAT_OVERLAY, card=$HAT_CARD_NAME)"
         else
