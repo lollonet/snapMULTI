@@ -35,19 +35,37 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Copy updated docker-compose.yml
+      # docker-compose.yml bind-mounts these repo files into the containers.
+      # Shipping only the compose file left the device running a new compose
+      # against old (or missing) configs / bind-mounted scripts.
+      - name: Copy docker-compose.yml and bind-mounted files
         env:
           SSH_KEY: ${{ secrets.SSH_KEY }}
           HOST: ${{ secrets.HOST }}
           DEPLOY_USER: ${{ secrets.USER }}
         run: |
+          set -euo pipefail
+          FILES=(
+            docker-compose.yml
+            config
+            docker/metadata-service/metadata-service.py
+            scripts/common/container-manifest.txt
+            scripts/tidal
+          )
+          for f in "${FILES[@]}"; do
+            if [[ ! -e "$f" ]]; then
+              echo "ERROR: $f missing from checkout"
+              exit 1
+            fi
+          done
           KEY_FILE=$(mktemp)
           trap 'rm -f "$KEY_FILE"' EXIT
           echo "$SSH_KEY" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
-          ssh -i "$KEY_FILE" -o StrictHostKeyChecking=accept-new "${DEPLOY_USER}@${HOST}" "mkdir -p /tmp/snapmulti-deploy"
-          scp -i "$KEY_FILE" -o StrictHostKeyChecking=accept-new docker-compose.yml "${DEPLOY_USER}@${HOST}:/tmp/snapmulti-deploy/docker-compose.yml"
-          rm -f "$KEY_FILE"
+          SSH_OPTS=(-i "$KEY_FILE" -o StrictHostKeyChecking=accept-new)
+          ssh "${SSH_OPTS[@]}" "${DEPLOY_USER}@${HOST}" "rm -rf /tmp/snapmulti-deploy && mkdir -p /tmp/snapmulti-deploy"
+          tar -cf - "${FILES[@]}" \
+            | ssh "${SSH_OPTS[@]}" "${DEPLOY_USER}@${HOST}" "tar -xf - -C /tmp/snapmulti-deploy"
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@2ead5e36573838044bfdd81083b27846db753b4c # v1.2.5
@@ -67,9 +85,16 @@ jobs:
 
             echo "Deploying version: ${DEPLOY_VERSION}"
 
-            echo "Updating docker-compose.yml..."
-            sudo cp /tmp/snapmulti-deploy/docker-compose.yml /opt/snapmulti/docker-compose.yml
-            rm -rf /tmp/snapmulti-deploy
+            # Fail fast (before touching the running stack) if the upload
+            # is incomplete.
+            STAGE=/tmp/snapmulti-deploy
+            DEPLOY_FILES="docker-compose.yml config docker/metadata-service/metadata-service.py scripts/common/container-manifest.txt scripts/tidal"
+            for f in $DEPLOY_FILES; do
+              if [ ! -e "$STAGE/$f" ]; then
+                echo "ERROR: $STAGE/$f missing -- upload incomplete, aborting (running stack untouched)"
+                exit 1
+              fi
+            done
 
             echo "Logging in to Docker Hub..."
             if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
@@ -79,29 +104,51 @@ jobs:
             fi
             echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin || { echo "ERROR: Docker Hub login failed"; exit 1; }
 
-            echo "Ensuring COMPOSE_PROFILES=tidal on ARM (migration from pre-v0.3.5 .env)..."
+            echo "Updating docker-compose.yml and bind-mounted files..."
+            for f in $DEPLOY_FILES; do
+              sudo mkdir -p "/opt/snapmulti/$(dirname "$f")"
+              sudo cp -R "$STAGE/$f" "/opt/snapmulti/$(dirname "$f")/"
+            done
+            rm -rf "$STAGE"
+
+            # Tidal Connect (ARM-only) is on by default; TIDAL_ENABLED=false
+            # in .env is the explicit opt-out (same rule as deploy.sh).
             if [ "$(uname -m)" = "aarch64" ]; then
-              if ! grep -q "^COMPOSE_PROFILES=" .env 2>/dev/null; then
-                echo "COMPOSE_PROFILES=tidal" >> .env
-                echo "Migrated .env: added COMPOSE_PROFILES=tidal"
-              elif ! grep -q "^COMPOSE_PROFILES=.*tidal" .env; then
-                sed -i "s/^COMPOSE_PROFILES=/COMPOSE_PROFILES=tidal,/" .env
-                echo "Migrated .env: added tidal to existing COMPOSE_PROFILES"
-              fi
+              TIDAL_ENABLED_VAL=$(grep -m1 '^TIDAL_ENABLED=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"' \r" | tr '[:upper:]' '[:lower:]' || true)
+              CUR_PROFILES=$(grep -m1 '^COMPOSE_PROFILES=' .env 2>/dev/null | cut -d= -f2- | tr -d "\"' \r" || true)
+              case "$TIDAL_ENABLED_VAL" in
+                false|0|no|off)
+                  NEW_PROFILES=$(printf '%s' "$CUR_PROFILES" | tr ',' '\n' | grep -vx 'tidal' | grep -v '^$' | paste -sd, - || true)
+                  if grep -q '^COMPOSE_PROFILES=' .env 2>/dev/null && [ "$NEW_PROFILES" != "$CUR_PROFILES" ]; then
+                    sed -i "s/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=${NEW_PROFILES}/" .env
+                    echo "TIDAL_ENABLED=false: removed tidal from COMPOSE_PROFILES"
+                  fi
+                  docker rm -f tidal-connect >/dev/null 2>&1 || true
+                  ;;
+                *)
+                  echo "Ensuring COMPOSE_PROFILES=tidal on ARM (migration from pre-v0.3.5 .env)..."
+                  if ! grep -q "^COMPOSE_PROFILES=" .env 2>/dev/null; then
+                    echo "COMPOSE_PROFILES=tidal" >> .env
+                    echo "Migrated .env: added COMPOSE_PROFILES=tidal"
+                  elif ! printf ',%s,' "$CUR_PROFILES" | grep -q ',tidal,'; then
+                    sed -i "s/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=${CUR_PROFILES:+${CUR_PROFILES},}tidal/" .env
+                    echo "Migrated .env: added tidal to existing COMPOSE_PROFILES"
+                  fi
+                  ;;
+              esac
             fi
 
             echo "Creating required directories..."
             mkdir -p mympd/workdir mympd/cachedir audio artwork
 
-            echo "Stopping old containers..."
-            docker compose down --remove-orphans || true
-
-            echo "Pruning unused images to free tmpfs..."
-            docker image prune -af || true
-
+            # Pull BEFORE touching the running stack: if the pull fails the
+            # old containers and images stay in place and keep playing.
+            # Only dangling layers are pruned here (frees tmpfs on
+            # overlayroot) -- never images the running stack uses.
+            docker image prune -f || true
             echo "Pulling latest images..."
             # COMPOSE_PROFILES in .env controls ARM-only services (tidal-connect)
-            docker compose pull || { echo "ERROR: docker compose pull failed"; exit 1; }
+            docker compose pull || { echo "ERROR: docker compose pull failed -- running stack left untouched"; exit 1; }
 
             if mountpoint -q /media/root-ro 2>/dev/null; then
                 echo "Baking deployment to SD card lower layer..."
@@ -121,6 +168,14 @@ jobs:
                     /opt/snapmulti/.env \
                     /opt/snapmulti/docker-compose.yml \
                     "$BAKE_DIR/opt/snapmulti/"
+
+                # Persist the bind-mounted files shipped with this compose
+                # file, so the lower layer stays consistent with it.
+                for f in $DEPLOY_FILES; do
+                    [ "$f" = docker-compose.yml ] && continue
+                    sudo mkdir -p "$BAKE_DIR/opt/snapmulti/$(dirname "$f")"
+                    sudo rsync -a "/opt/snapmulti/$f" "$BAKE_DIR/opt/snapmulti/$(dirname "$f")/"
+                done
 
                 # Persist myMPD user state (UI customizations, playlists)
                 sudo rsync -a /opt/snapmulti/mympd/workdir/ \
@@ -154,8 +209,13 @@ jobs:
                 echo "WARNING: /media/root-ro not mounted -- skipping bake (non-overlayroot target)"
             fi
 
-            echo "Starting app containers..."
-            docker compose up -d || { echo "ERROR: docker compose up failed"; exit 1; }
+            echo "Recreating app containers..."
+            # up -d recreates only containers whose image/config changed;
+            # --remove-orphans drops services no longer in the compose file.
+            docker compose up -d --remove-orphans || { echo "ERROR: docker compose up failed"; exit 1; }
+
+            echo "Pruning images replaced by this deploy..."
+            docker image prune -f || true
 
             echo "Verifying deployment..."
             sleep 5
