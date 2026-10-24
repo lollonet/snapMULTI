@@ -78,6 +78,51 @@ get_hat_config() {
     esac
 }
 
+# hat_from_i2c_scan SCAN → echoes the HAT profile for an `i2cdetect -y 1`
+# table, or returns 1 when no supported chip answers. Pure (no I/O besides
+# stderr logging) so it can be unit-tested with captured scans.
+# Known addresses:
+#   0x4C-0x4F  PCM5122. The overlay must match the address: upstream
+#              hifiberry-dacplus-std (also allo-boss-dac-pcm512x-audio,
+#              justboom-dac) hard-codes pcm5122@4d, while iqaudio-dacplus
+#              (and rpi-dacplus, which includes it) uses pcm5122@4c — an
+#              IQaudio / RPi DAC+-family board at 0x4c never binds under the
+#              HiFiBerry overlay. 0x4e/0x4f have no upstream overlay in this
+#              family; they keep the previous hifiberry-dac-std fallback.
+#              NOTE: shared with TMP112, ADS1x1x, PCA9685 and other non-DAC
+#              chips — may false-positive on mixed I2C buses.
+#   0x1A       WM8960  (Waveshare WM8960)
+#   0x3B       WM8804  (HiFiBerry Digi, JustBoom Digi, Allo DigiOne)
+# Cells showing "UU" (address claimed by a bound driver) do not match:
+# with the overlay already loaded the ALSA-name path identifies the card.
+hat_from_i2c_scan() {
+    local scan="$1" addr result
+    for addr in 4c 4d 4e 4f; do
+        if grep -qE "(^[[:space:]]*[0-9a-f]0:[[:space:]]|[[:space:]])${addr}([[:space:]]|$)" <<<"$scan"; then
+            if [[ "$addr" == "4c" ]]; then
+                result="iqaudio-dac"
+            else
+                result="hifiberry-dac-std"
+            fi
+            echo "I2C: PCM5122 at 0x${addr} → ${result}" >&2
+            printf '%s\n' "$result"
+            return 0
+        fi
+    done
+    if grep -qE "(^[[:space:]]*10:[[:space:]]|[[:space:]])1a([[:space:]]|$)" <<<"$scan"; then
+        echo "I2C: WM8960 at 0x1a" >&2
+        printf 'waveshare-wm8960\n'
+        return 0
+    fi
+    # I2C alone cannot distinguish Digi-class boards that share WM8804.
+    if grep -qE "(^[[:space:]]*30:[[:space:]]|[[:space:]])3b([[:space:]]|$)" <<<"$scan"; then
+        echo "I2C: WM8804 at 0x3b" >&2
+        printf 'hifiberry-digi\n'
+        return 0
+    fi
+    return 1
+}
+
 detect_hat() {
     # Detect audio HAT automatically.
     # 1. Pi firmware reads HAT EEPROM at boot -> /proc/device-tree/hat/product
@@ -142,12 +187,7 @@ detect_hat() {
     # Many cheap HATs (InnoMaker, Waveshare, some Allo) ship without an EEPROM, so
     # the overlay is never loaded and aplay -l never shows the card. Raw I2C probing
     # identifies the chip regardless. modprobe i2c-dev persists until reboot.
-    # Known addresses:
-    #   0x4C-0x4F  PCM5122 (InnoMaker HiFi DAC, IQaudio DAC+, Allo Boss, JustBoom DAC, ...)
-    #              NOTE: shared with TMP112, ADS1x1x, PCA9685 and other non-DAC chips.
-    #              Safe on a bare Pi + DAC HAT; may false-positive on mixed I2C buses.
-    #   0x1A       WM8960  (Waveshare WM8960)
-    #   0x3B       WM8804  (HiFiBerry Digi, JustBoom Digi, Allo DigiOne — no EEPROM variants)
+    # Address → profile mapping lives in hat_from_i2c_scan (above).
     local i2cdetect_bin="" modprobe_bin=""
     i2cdetect_bin=$(command -v i2cdetect 2>/dev/null || true)
     [[ -z "$i2cdetect_bin" && -x /usr/sbin/i2cdetect ]] && i2cdetect_bin=/usr/sbin/i2cdetect
@@ -188,7 +228,7 @@ detect_hat() {
         sleep 1
     done
     if [[ -n "$i2cdetect_bin" ]]; then
-        local bus addr result="" found_bus=false
+        local bus result="" found_bus=false
         # Scan only bus 1 (GPIO header). Pi 4/400 have HDMI internal buses
         # (20, 21) and Pi 5 has buses (11, 12) with devices at 0x4C-0x4F
         # that false-positive as PCM5122 audio DACs.
@@ -199,23 +239,8 @@ detect_hat() {
             local scan
             scan=$(timeout 10 "$i2cdetect_bin" -y "$bus" 2>/dev/null) || continue
             echo "I2C bus $bus scan complete" >&2
-            # PCM5122 at 0x4C/0x4D/0x4E/0x4F → PCM5122-based DAC
-            for addr in 4c 4d 4e 4f; do
-                if echo "$scan" | grep -qE "(^[[:space:]]*[0-9a-f]0:[[:space:]]|[[:space:]])${addr}([[:space:]]|$)"; then
-                    echo "I2C: PCM5122 at 0x${addr} on bus ${bus} → hifiberry-dac-std" >&2
-                    result="hifiberry-dac-std"; break 2
-                fi
-            done
-            # WM8960 at 0x1A → Waveshare WM8960
-            if echo "$scan" | grep -qE "(^[[:space:]]*10:[[:space:]]|[[:space:]])1a([[:space:]]|$)"; then
-                echo "I2C: WM8960 at 0x1a on bus ${bus}" >&2
-                result="waveshare-wm8960"; break
-            fi
-            # WM8804 at 0x3B → generic digital HAT profile.
-            # I2C alone cannot distinguish Digi-class boards that share WM8804.
-            if echo "$scan" | grep -qE "(^[[:space:]]*30:[[:space:]]|[[:space:]])3b([[:space:]]|$)"; then
-                echo "I2C: WM8804 at 0x3b on bus ${bus}" >&2
-                result="hifiberry-digi"; break
+            if result=$(hat_from_i2c_scan "$scan"); then
+                break
             fi
         done
         $found_bus || echo "I2C: /dev/i2c-1 not available" >&2
