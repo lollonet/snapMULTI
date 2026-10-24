@@ -366,8 +366,12 @@ services:
   # unmaintained. The service is gated behind the Compose profile `tidal`, but
   # that profile is **enabled by default on ARM installs** — deploy.sh writes
   # COMPOSE_PROFILES=tidal to /opt/snapmulti/.env on Pi 3/4/5, so it is active
-  # out of the box. Opt OUT by removing `tidal` from COMPOSE_PROFILES if you
-  # don't accept the security trade-off. See docs/USAGE.md#tidal-connect-security-note.
+  # out of the box. Opt OUT if you don't accept the security trade-off: set
+  # TIDAL_ENABLED=false in .env, remove `tidal` from COMPOSE_PROFILES and run
+  # `docker rm -f tidal-connect`. TIDAL_ENABLED=false is what makes the
+  # opt-out stick: without it deploy.sh and the deploy workflow put `tidal`
+  # back into COMPOSE_PROFILES on the next run (with it, they strip it).
+  # See docs/USAGE.md#tidal-connect-security-note.
   tidal-connect:
     image: lollonet/snapmulti-tidal:${IMAGE_TAG:-latest}
     container_name: tidal-connect
