@@ -270,10 +270,10 @@ EOF
 # For: Pi 4 4GB+, Pi 5, systems with 8GB+ RAM
 # Measured baseline (idle): snapserver 87M, shairport 18M, librespot 22M,
 #   mpd 90M (6k songs), mympd 8M, metadata 52M, tidal 32M
-# First-boot cover-cache + WebradioDB build on large NFS libraries can
-#   overshoot the steady-state usage (observed: ~78k-song library reaches
-#   78M steady but >128M during transient build). mympd cap sized for the
-#   transient, not the steady baseline.
+# On large NFS libraries mympd peaks well above its steady-state usage
+#   (observed, ~78k songs: 78-108M steady, 180M while MPD rescans a
+#   retagged library, OOM-killed at both 128M and 192M). mympd cap sized
+#   for the peak, not the steady baseline.
 SNAPMULTI_PROFILE=performance
 SNAPSERVER_MEM_LIMIT=256M
 SNAPSERVER_MEM_RESERVE=128M
@@ -287,7 +287,7 @@ SPOTIFY_CPU_LIMIT=1.0
 MPD_MEM_LIMIT=384M
 MPD_MEM_RESERVE=192M
 MPD_CPU_LIMIT=2.0
-MYMPD_MEM_LIMIT=192M
+MYMPD_MEM_LIMIT=256M
 MYMPD_MEM_RESERVE=96M
 MYMPD_CPU_LIMIT=0.5
 METADATA_MEM_LIMIT=128M

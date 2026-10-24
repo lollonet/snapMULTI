@@ -264,7 +264,7 @@ Dopo deploy / reflash:
 | shairport-sync | 48M | 64M | 96M |
 | librespot | 96M | 256M | 256M |
 | mpd | 128M | 256M | 384M |
-| mympd | 32M | 64M | 128M |
+| mympd | 32M | 64M | 256M |
 | metadata | 96M | 128M | 128M |
 | tidal-connect | 64M | 96M | 128M |
 | **Totale** | **592M** | **1.056M** | **1.376M** |
