@@ -14,14 +14,20 @@
 #   1. Detect WiFi-only operation (no Ethernet carrier). On Ethernet
 #      hosts the script exits — wired networks don't have this failure
 #      mode and the watchdog would be noise.
-#   2. Ping the default gateway every WIFI_WATCHDOG_INTERVAL seconds.
-#   3. After WIFI_WATCHDOG_SOFT_FAILURES consecutive ping failures,
-#      issue an `nmcli connection down/up` on the WiFi connection.
+#   2. Ping the default gateway every WIFI_WATCHDOG_INTERVAL seconds. A
+#      gateway that ignores ICMP but is ARP-reachable on the WiFi
+#      interface counts as healthy.
+#   3. After WIFI_WATCHDOG_SOFT_FAILURES consecutive failures, issue an
+#      `nmcli connection down/up` on the WiFi connection.
 #      Re-association usually wakes the firmware.
 #   4. After WIFI_WATCHDOG_HARD_FAILURES consecutive failures (i.e. the
 #      soft recovery also failed), reboot. Resetting the chip via cold
 #      boot is the only deterministic fix when firmware is fully wedged.
-#   5. Reset the failure counter on every successful ping.
+#      Armed only after the gateway answered at least once since boot,
+#      so an unreachable/absent gateway causes at most one reboot instead
+#      of a reboot every ~10 min; while disarmed the soft recovery is
+#      retried once per HARD_FAILURES window.
+#   5. Reset the failure counter on every healthy probe.
 #
 # Configurable via /opt/snapmulti/.env (or /opt/snapclient/.env on
 # client-only installs). Sensible defaults baked in.
@@ -88,53 +94,55 @@ fi
 
 # ---------- Preflight: is this a WiFi host? --------------------------------
 
-# Skip on wired-only hosts. "Wired" means eth0 has an IPv4 address (DHCP
-# completed and the host is actually using Ethernet for connectivity).
-# Carrier alone is too loose: a cable can be plugged in without any IP
-# (carrier=1, no DHCP) while real traffic still goes via wlan0 — this is
-# the actual state observed on snapvideo 2026-05-31 (eth0 carrier=1
-# but `default via 192.168.63.1 dev wlan0` in the route table).
-#
-# Retry with a bounded wait so we don't race DHCP. The unit has
-# `After=NetworkManager.service network-online.target`, but on snapMULTI
-# `cmdline.txt` masks `NetworkManager-wait-online.service` (so the
-# target fires before NM has actually assigned an IP). Observed on
-# snapvideo 2026-05-31: the one-shot probe fired t+0 of boot, saw no
-# IP yet, fell through to the main loop → pinged the eth0 gateway via
-# `-I wlan0` (admin-disabled) → 10 × 60 s failures → systemctl reboot
-# → reboot loop every 10 min.
-# Only poll for DHCP if eth0 actually exists. On WiFi-only hosts
-# (Pi Zero 2 W, Pi 5 without Ethernet HAT, x86_64 with `en*` interface
-# names — see CLAUDE.md non-goal on universal hardware support) the
-# retry loop would add 30 s of blocked startup time for nothing.
-if ip link show eth0 &>/dev/null; then
-    for _ in $(seq 1 30); do
-        if ip -4 addr show eth0 2>/dev/null | grep -qE 'inet [0-9]'; then
-            log "exit: eth0 has an IPv4 address — WiFi watchdog not needed on wired hosts"
-            exit 0
-        fi
-        sleep 1
-    done
-fi
+preflight() {
+    # Skip on wired-only hosts. "Wired" means eth0 has an IPv4 address (DHCP
+    # completed and the host is actually using Ethernet for connectivity).
+    # Carrier alone is too loose: a cable can be plugged in without any IP
+    # (carrier=1, no DHCP) while real traffic still goes via wlan0 — this is
+    # the actual state observed on snapvideo 2026-05-31 (eth0 carrier=1
+    # but `default via 192.168.63.1 dev wlan0` in the route table).
+    #
+    # Retry with a bounded wait so we don't race DHCP. The unit has
+    # `After=NetworkManager.service network-online.target`, but on snapMULTI
+    # `cmdline.txt` masks `NetworkManager-wait-online.service` (so the
+    # target fires before NM has actually assigned an IP). Observed on
+    # snapvideo 2026-05-31: the one-shot probe fired t+0 of boot, saw no
+    # IP yet, fell through to the main loop → pinged the eth0 gateway via
+    # `-I wlan0` (admin-disabled) → 10 × 60 s failures → systemctl reboot
+    # → reboot loop every 10 min.
+    # Only poll for DHCP if eth0 actually exists. On WiFi-only hosts
+    # (Pi Zero 2 W, Pi 5 without Ethernet HAT, x86_64 with `en*` interface
+    # names — see CLAUDE.md non-goal on universal hardware support) the
+    # retry loop would add 30 s of blocked startup time for nothing.
+    if ip link show eth0 &>/dev/null; then
+        for _ in $(seq 1 30); do
+            if ip -4 addr show eth0 2>/dev/null | grep -qE 'inet [0-9]'; then
+                log "exit: eth0 has an IPv4 address — WiFi watchdog not needed on wired hosts"
+                exit 0
+            fi
+            sleep 1
+        done
+    fi
 
-# Defense in depth: if the WiFi radio is admin-disabled (operator ran
-# `nmcli radio wifi off`, e.g. to force single-mDNS during debugging),
-# there is no WiFi to watchdog. Without this check the script would
-# proceed to ping the default gateway with `-I wlan0` (DOWN), fail
-# every poll, and eventually reboot — same loop the eth0 retry above
-# guards against in the most common case, but this catches the
-# "Ethernet host with cable unplugged + radio off" edge.
-if command -v nmcli &>/dev/null && nmcli radio wifi 2>/dev/null | grep -qx disabled; then
-    log "exit: WiFi radio is admin-disabled (nmcli) — nothing to watchdog"
-    exit 0
-fi
+    # Defense in depth: if the WiFi radio is admin-disabled (operator ran
+    # `nmcli radio wifi off`, e.g. to force single-mDNS during debugging),
+    # there is no WiFi to watchdog. Without this check the script would
+    # proceed to ping the default gateway with `-I wlan0` (DOWN), fail
+    # every poll, and eventually reboot — same loop the eth0 retry above
+    # guards against in the most common case, but this catches the
+    # "Ethernet host with cable unplugged + radio off" edge.
+    if command -v nmcli &>/dev/null && nmcli radio wifi 2>/dev/null | grep -qx disabled; then
+        log "exit: WiFi radio is admin-disabled (nmcli) — nothing to watchdog"
+        exit 0
+    fi
 
-# WiFi interface must exist. Pi without WiFi (rare on snapMULTI hosts but
-# possible on x86 manual deploys) → no-op.
-if [[ ! -e "/sys/class/net/$WIFI_IFACE" ]]; then
-    log "exit: $WIFI_IFACE not present — skipping watchdog"
-    exit 0
-fi
+    # WiFi interface must exist. Pi without WiFi (rare on snapMULTI hosts but
+    # possible on x86 manual deploys) → no-op.
+    if [[ ! -e "/sys/class/net/$WIFI_IFACE" ]]; then
+        log "exit: $WIFI_IFACE not present — skipping watchdog"
+        exit 0
+    fi
+}
 
 # ---------- Target detection ----------------------------------------------
 
@@ -199,40 +207,93 @@ hard_recovery() {
     exit 0
 }
 
+# ---------- Health probe ---------------------------------------------------
+
+# True when the gateway's neighbour entry on the WiFi interface is
+# REACHABLE, i.e. it answered ARP within the last ~30 s. Proves the radio
+# and the AP are passing frames even when the gateway drops ICMP. Called
+# after a failed ping: the ping itself makes the kernel re-probe a STALE
+# entry (delay_first_probe_time is 5 s), so give that probe a moment.
+gateway_arp_reachable() {
+    local gw="$1"
+    sleep 2
+    ip -4 neigh show "$gw" dev "$WIFI_IFACE" 2>/dev/null | grep -qw REACHABLE
+}
+
+# One health check. Returns 0 when the WiFi path to the gateway works.
+# Sets PROBE_DESC for the failure log line.
+probe_gateway() {
+    local target
+    target=$(resolve_target)
+    if [[ -z "$target" ]]; then
+        # No default gateway — host still coming up (no DHCP lease) or the
+        # route is gone. Counts as a failure for soft recovery: this is the
+        # state a wedged radio produces.
+        PROBE_DESC="no default gateway"
+        return 1
+    fi
+    # `ping -c 1 -W 5` returns 0 on a single response, non-zero on
+    # timeout. We don't care about latency — a 5 s round-trip wedge
+    # is already an outage by snapcast's standards.
+    if ping -c 1 -W 5 -I "$WIFI_IFACE" "$target" >/dev/null 2>&1; then
+        return 0
+    fi
+    # Routers that drop ICMP still answer ARP: link up + gateway
+    # ARP-reachable means the radio is fine.
+    if gateway_arp_reachable "$target"; then
+        if ! $icmp_fallback_logged; then
+            log "ping to $target unanswered but gateway is ARP-reachable — treating as healthy (router may drop ICMP)"
+            icmp_fallback_logged=true
+        fi
+        return 0
+    fi
+    PROBE_DESC="$target via $WIFI_IFACE"
+    return 1
+}
+
 # ---------- Main loop -----------------------------------------------------
 
 failures=0
 soft_recovery_attempted=false
+# Hard-reboot escalation is armed only once the gateway has answered in
+# this boot (this process lifetime — the unit is ProtectSystem=strict, so
+# no /run flag; a service restart disarms, which is the safe direction).
+# Without it, a router that never answers ICMP/ARP, or an AP that is
+# switched off overnight, made the watchdog reboot every ~10 min forever:
+# after such a reboot the gateway has not been seen, so the box now stays
+# up and keeps retrying soft recovery until the network returns.
+gateway_seen=false
+icmp_fallback_logged=false
+PROBE_DESC=""
 
-log "starting (iface=$WIFI_IFACE, interval=${INTERVAL}s, soft=$SOFT_FAILURES, hard=$HARD_FAILURES)"
-
-while :; do
-    target=$(resolve_target)
-    if [[ -z "$target" ]]; then
-        # No default gateway yet — host is still coming up (no DHCP lease)
-        # or has lost the route entirely. Treat as a failure: this is the
-        # exact state we want to catch on a wedged radio.
-        log "no default gateway — counting as failure ($failures)"
-        failures=$((failures + 1))
-    else
-        # `ping -c 1 -W 5` returns 0 on a single response, non-zero on
-        # timeout. We don't care about latency — a 5 s round-trip wedge
-        # is already an outage by snapcast's standards.
-        if ping -c 1 -W 5 -I "$WIFI_IFACE" "$target" >/dev/null 2>&1; then
-            if (( failures > 0 )); then
-                log "ping ok ($target) — clearing failure counter (was $failures)"
-            fi
-            failures=0
-            soft_recovery_attempted=false
-        else
-            failures=$((failures + 1))
-            log "ping fail #$failures ($target via $WIFI_IFACE)"
+# One watchdog iteration: probe, update counters, escalate.
+watchdog_tick() {
+    if probe_gateway; then
+        if (( failures > 0 )); then
+            log "gateway reachable — clearing failure counter (was $failures)"
         fi
+        failures=0
+        soft_recovery_attempted=false
+        if ! $gateway_seen; then
+            gateway_seen=true
+            log "gateway reachable — hard-reboot escalation armed"
+        fi
+    else
+        failures=$((failures + 1))
+        log "probe fail #$failures ($PROBE_DESC)"
     fi
 
     if (( failures >= HARD_FAILURES )); then
-        hard_recovery
-        # hard_recovery does not return (systemctl reboot + exit).
+        if $gateway_seen; then
+            hard_recovery
+            # hard_recovery does not return (systemctl reboot + exit).
+        fi
+        if (( failures % HARD_FAILURES == 0 )); then
+            # Disarmed: never reboot, but retry the interface bounce once
+            # per HARD_FAILURES window in case the radio is the problem.
+            log "hard recovery disarmed: gateway not reachable since boot — no reboot, retrying soft recovery"
+            soft_recovery_attempted=false
+        fi
     fi
 
     if (( failures >= SOFT_FAILURES )) && ! $soft_recovery_attempted; then
@@ -245,6 +306,18 @@ while :; do
         # outcome.
         soft_recovery || true
     fi
+}
 
-    sleep "$INTERVAL"
-done
+main() {
+    preflight
+    log "starting (iface=$WIFI_IFACE, interval=${INTERVAL}s, soft=$SOFT_FAILURES, hard=$HARD_FAILURES)"
+    while :; do
+        watchdog_tick
+        sleep "$INTERVAL"
+    done
+}
+
+# Sourced by tests (functions only); executed by the systemd unit.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main
+fi
