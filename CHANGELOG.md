@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **fb-display keeps the HDMI panel off during standby** (#718). fb-display powered the panel off once and then only waited for audio; when the HDMI output came back on during standby (seen on a Pi 4 with the display output active again hours after the power-off), the panel stayed lit until the next track. While in standby it now repeats the power-off every 30 s. If a repeat fails it renders again, and the idle timer retries once and disables standby if that fails too. `fb_display.py` is bind-mounted: a reflash or a live update installs it, no image rebuild.
+- **MPD and myMPD see a NAS share that comes online after they start** (#723). `/music` was a plain bind, so each container kept the mount tree it saw at start: with the NAS unreachable at boot, the share mounted later by the systemd automount never reached them and every scan failed with `Failed to open /music: Symbolic link loop` until they were restarted. Both now mount `/music` with `rslave` propagation (shared `&music-volume` anchor in `docker-compose.yml`, still read-only, a missing path is still created). New `tests/test_compose_music_volume.sh`; TROUBLESHOOTING covers the symptom on older images.
+- **myMPD memory limit 192M → 256M on the performance profile** (#723). On a Pi 4 8GB with a ~78k-song NFS library myMPD was OOM-killed twice at 192M; it reached 180M while MPD rescanned a retagged library. ADVANCED's server memory table now matches `deploy.sh`. Applies on reflash.
 
 ## [0.8.7] — 2026-10-13
 
