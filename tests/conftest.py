@@ -35,6 +35,11 @@ def _reset_module_state():
         "artUrl": "",
         "duration": 0.0,
     }
+    meta_shairport.cover_version = 0
+    meta_shairport.cover_data = None
+    meta_shairport._in_bundle = False
+    meta_shairport._pict_in_bundle = False
+    meta_shairport._last_track_id = None
     yield
 
 
