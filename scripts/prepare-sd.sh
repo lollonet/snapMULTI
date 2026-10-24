@@ -1076,13 +1076,8 @@ if [[ -f "$FIRSTRUN" ]]; then
 elif [[ -f "$USERDATA" ]]; then
     # Modern Pi Imager (Bookworm+): boot partition is /boot/firmware
     HOOK="$HOOK_BOOKWORM"
-    # Keep the pristine Imager user-data once (a re-run must not overwrite
-    # it with an already-patched copy). cloud-init only reads user-data /
-    # meta-data / network-config, so the extra file is inert.
-    USERDATA_BAK="$USERDATA.snapmulti.bak"
-    if [[ ! -f "$USERDATA_BAK" ]]; then
-        cp "$USERDATA" "$USERDATA_BAK"
-    fi
+    # No backup copy: user-data carries the password hash and WiFi PSK, and
+    # the patch below only replaces the original after it validates.
     if grep -qF "snapmulti/firstboot.sh" "$USERDATA"; then
         echo "user-data already patched, validating ..."
         # Still validate: a card patched by an older prepare-sd may carry

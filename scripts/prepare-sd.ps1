@@ -1237,12 +1237,8 @@ if (Test-Path $firstrun) {
     # Modern Pi Imager (Bookworm+): boot partition is /boot/firmware
     $hook = $hookBookworm
     $udContent = [System.IO.File]::ReadAllText($userData)
-    # Keep the pristine Imager user-data once (a re-run must not overwrite
-    # it with an already-patched copy). cloud-init ignores the extra file.
-    $userDataBak = "$userData.snapmulti.bak"
-    if (-not (Test-Path $userDataBak)) {
-        Copy-Item $userData -Destination $userDataBak
-    }
+    # No backup copy: user-data carries the password hash and WiFi PSK, and
+    # the patch below only replaces the original after it validates.
     if ($udContent -match 'snapmulti/firstboot\.sh') {
         Write-Host 'user-data already patched, validating ...'
         # Still validate: a card patched by an older prepare-sd may carry

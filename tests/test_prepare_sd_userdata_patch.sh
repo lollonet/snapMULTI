@@ -184,11 +184,12 @@ fi
 echo ""
 echo "Testing prepare-sd.sh main-flow wiring..."
 main_flow=$(sed -n '/^elif \[\[ -f "\$USERDATA" \]\]; then/,/^else$/p' "$PREPARE_SD_SH")
-if grep -qF 'user-data.snapmulti.bak' <<<"$main_flow" || grep -qF 'USERDATA_BAK=' "$PREPARE_SD_SH"; then
-    echo "  PASS: original user-data is backed up before patching"
+# No credential-bearing copy of user-data may be left on the FAT partition.
+if ! grep -qF 'snapmulti.bak' "$PREPARE_SD_SH"; then
+    echo "  PASS: no user-data backup copy (it would duplicate credentials)"
     pass=$((pass + 1))
 else
-    echo "  FAIL: no user-data backup before patching"
+    echo "  FAIL: prepare-sd.sh leaves a user-data backup copy on the boot partition"
     fail=$((fail + 1))
 fi
 # The validation must run on BOTH paths (fresh patch and already-patched).

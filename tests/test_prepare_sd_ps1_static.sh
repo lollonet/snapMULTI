@@ -134,7 +134,8 @@ assert_contains "$content" 'function Test-UserDataRuncmd' "user-data validator e
 validate_calls=$(grep -cF 'Test-UserDataRuncmd -Content' <<<"$content" || true)
 assert_true "user-data validated on both the patch and the already-patched paths" \
     test "${validate_calls:-0}" -ge 2
-assert_contains "$content" '$userDataBak = "$userData.snapmulti.bak"' "original user-data backed up"
+assert_true "no user-data backup copy (it would duplicate credentials)" \
+    bash -c '! grep -qF "snapmulti.bak" "$1"' _ "$PS1_FILE"
 val_line=$(grep -nF 'Test-UserDataRuncmd -Content $patched' <<<"$content" | head -1 | cut -d: -f1 || true)
 write_line=$(grep -nF 'Move-Item -Path $userDataTmp -Destination $userData -Force' <<<"$content" | head -1 | cut -d: -f1 || true)
 assert_true "patched user-data validated before it replaces the original" \
