@@ -886,50 +886,33 @@ class TestStructuredSystemdRow:
 
 
 class TestEstimateElapsedCalibration:
-    """_estimate_elapsed must return None when metadata-service starts
-    mid-track for a non-MPD source.
+    """_estimate_elapsed must return None for a track that was already
+    playing when metadata-service started (non-MPD sources).
 
     The estimator tracks elapsed via local monotonic clock. Its "anchor for
-    track start" is the moment the controlscript first reports the track.
-    For MPD and Spotify that's fine because those sources report their own
+    track start" is the moment it sees the stream switch to the track. For
+    MPD and Spotify that's fine because those sources report their own
     elapsed independently. For AirPlay and Tidal we have no other source of
     truth — if metadata-service boots while a track is already playing, our
     "anchor" is wrong and the local-clock estimate is offset by however much
-    we missed at the start. Returning 0 (the legacy behaviour) made the
-    client UI render the progress bar at the start of a song that was
-    actually half-way through.
+    we missed at the start.
 
-    The fix: a track first observed within FRESH_START_GRACE_SEC of service
-    boot is assumed to be a track-change event we caught in time (legacy
-    behaviour preserved). A track first observed after that grace window is
-    treated as "already playing before we booted" and returns None. Clients
-    should treat None as "elapsed unknown".
+    A previous fix used a 5 s startup grace window, but the first poll always
+    lands <1 s after start, so every mid-track restart was still treated as
+    calibrated and emitted elapsed from 0 (these tests only passed because
+    they faked the service age). Now: the first track ever seen on a stream
+    is uncalibrated regardless of timing; a track change observed while the
+    service runs is calibrated. No faked service age is needed.
     """
 
-    def _service_aged(self, service, seconds: float) -> None:
-        """Move the service's start anchor backwards so it looks like the
-        service has been running for `seconds` seconds. Avoids time.sleep()
-        in tests."""
-        import time as _t
-
-        service._service_start = _t.monotonic() - seconds
-
-    def test_fresh_start_returns_zero_for_first_seen_track(self, service):
-        """Within the grace window, a track-change event is assumed real-time."""
-        # service just constructed → _service_start is now
-        elapsed = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
-        assert elapsed == 0
-
-    def test_cold_start_returns_none_for_first_seen_track(self, service):
-        """After the grace window, a track must be treated as pre-existing."""
-        self._service_aged(service, 10.0)  # 10s > _FRESH_START_GRACE_SEC
+    def test_first_sighting_right_after_start_is_uncalibrated(self, service):
+        """Service just constructed, first poll immediately: still None."""
         elapsed = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
         assert elapsed is None
 
-    def test_cold_start_subsequent_polls_still_none(self, service):
+    def test_first_sighting_subsequent_polls_still_none(self, service):
         """Once a stream/track is flagged uncalibrated, it stays uncalibrated
         until the next track change."""
-        self._service_aged(service, 10.0)
         first = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
         second = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
         third = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
@@ -937,22 +920,36 @@ class TestEstimateElapsedCalibration:
         assert second is None
         assert third is None
 
-    def test_cold_start_recovers_on_next_track_change(self, service):
+    def test_recovers_on_next_track_change(self, service):
         """A track change while the timer exists is observed in real time —
         we have an anchor for the new track. Calibration resumes."""
-        self._service_aged(service, 10.0)
         first = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
         assert first is None
-        # Track changes — we observed the transition, so the new track is
-        # calibrated even though service has been up for >grace.
         recovered = service._estimate_elapsed("AirPlay", "Song B|Artist", True)
         assert recovered == 0
 
-    def test_fresh_start_accumulates_correctly(self, service):
-        """A calibrated track should still accumulate elapsed via the legacy
+    def test_idle_at_start_then_track_starts_is_calibrated(self, service):
+        """Stream idle (no metadata) at startup, then a track appears: the
+        change was observed live, so elapsed counts from 0."""
+        idle = service._estimate_elapsed("AirPlay", "|", False)
+        assert idle is None
+        started = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
+        assert started == 0
+
+    def test_paused_track_at_start_resumed_stays_none(self, service):
+        """A track sitting paused at startup and resumed later still has no
+        anchor (it was paused mid-way)."""
+        paused = service._estimate_elapsed("Spotify", "Song A|Artist", False)
+        resumed = service._estimate_elapsed("Spotify", "Song A|Artist", True)
+        assert paused is None
+        assert resumed is None
+
+    def test_calibrated_track_accumulates_correctly(self, service):
+        """A calibrated track should still accumulate elapsed via the
         monotonic-clock path."""
         import time as _t
 
+        service._estimate_elapsed("AirPlay", "|", False)
         first = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
         assert first == 0
         # Move the timer's start backwards to simulate elapsed time
@@ -961,12 +958,9 @@ class TestEstimateElapsedCalibration:
         assert elapsed == 7
 
     def test_per_stream_calibration_independent(self, service):
-        """A cold-start uncalibrated AirPlay must NOT poison a fresh Tidal
-        timer that starts later — calibration is per-stream."""
-        self._service_aged(service, 10.0)
+        """An uncalibrated AirPlay must not affect Tidal — calibration is
+        per-stream."""
         ap = service._estimate_elapsed("AirPlay", "Song A|Artist A", True)
-        # service is now "old", but Tidal's first sighting still hits the
-        # cold-start branch. Both should be uncalibrated.
         td = service._estimate_elapsed("Tidal", "Song B|Artist B", True)
         assert ap is None
         assert td is None
@@ -980,7 +974,6 @@ class TestEstimateElapsedCalibration:
 
     def test_paused_then_resumed_during_uncalibrated_session_stays_none(self, service):
         """Pause/resume on an uncalibrated track returns None for all phases."""
-        self._service_aged(service, 10.0)
         playing = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
         paused = service._estimate_elapsed("AirPlay", "Song A|Artist", False)
         resumed = service._estimate_elapsed("AirPlay", "Song A|Artist", True)
@@ -1155,3 +1148,846 @@ class TestSystemVitals:
         assert 'class="vitals"' in html
         assert "62.0" in html
         assert "0.50" in html
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Audit regression tests (MPD protocol, artwork chain, SSRF redirects,
+# async enrichment, JSON-RPC ids, WebSocket input, playback routing)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class FakeMPDSocket:
+    """In-memory MPD server: replies are queued on sendall, drained by recv.
+
+    recv_size forces replies to straddle recv() boundaries so marker-scanning
+    parsers break the way they do on real sockets.
+    """
+
+    def __init__(
+        self,
+        image: bytes = b"",
+        version: str = "0.23.5",
+        chunk: int = 8192,
+        recv_size: int = 4096,
+        binarylimit: bool = True,
+        ack_at_offset: int | None = None,
+        close_at_offset: int | None = None,
+        status: dict | None = None,
+        song: dict | None = None,
+    ):
+        self.image = image
+        self.chunk = chunk
+        self.recv_size = recv_size
+        self.binarylimit = binarylimit
+        self.ack_at_offset = ack_at_offset
+        self.close_at_offset = close_at_offset
+        self.status = status or {}
+        self.song = song or {}
+        self.out = bytearray(f"OK MPD {version}\n".encode())
+        self.commands: list[str] = []
+        self.closed = False
+
+    def settimeout(self, _t):
+        pass
+
+    def close(self):
+        self.closed = True
+
+    def recv(self, n):
+        n = min(n, self.recv_size)
+        data = bytes(self.out[:n])
+        del self.out[:n]
+        return data
+
+    def _kv(self, d: dict) -> bytes:
+        return b"".join(f"{k}: {v}\n".encode() for k, v in d.items())
+
+    def sendall(self, data: bytes):
+        for line in data.decode().splitlines():
+            self.commands.append(line)
+            if line.startswith("binarylimit "):
+                if self.binarylimit:
+                    self.chunk = int(line.split()[1])
+                    self.out += b"OK\n"
+                else:
+                    self.out += b"ACK [5@0] {binarylimit} unknown command\n"
+            elif line.startswith("readpicture "):
+                offset = int(line.rsplit(" ", 1)[1])
+                if self.close_at_offset is not None and offset >= self.close_at_offset:
+                    return  # connection dies: nothing more to read
+                if self.ack_at_offset is not None and offset >= self.ack_at_offset:
+                    self.out += b"ACK [50@0] {readpicture} No file exists\n"
+                    continue
+                if not self.image:
+                    self.out += b"OK\n"
+                    continue
+                part = self.image[offset : offset + self.chunk]
+                self.out += (
+                    f"size: {len(self.image)}\ntype: image/jpeg\n"
+                    f"binary: {len(part)}\n".encode()
+                    + part
+                    + b"\nOK\n"
+                )
+            elif line == "status":
+                self.out += self._kv(self.status) + b"OK\n"
+            elif line == "currentsong":
+                self.out += self._kv(self.song) + b"OK\n"
+            else:
+                self.out += b"OK\n"
+
+
+def _hostile_image(size: int) -> bytes:
+    """Image bytes salted with every marker the old parser scanned for."""
+    import os as _os
+
+    body = bytearray(_os.urandom(size))
+    for pos, marker in (
+        (100, b"ACK"),
+        (5000, b"OK\n"),
+        (9000, b"binary: 12\n"),
+        (20000, b"\nACK [5@0] {x} y\n"),
+    ):
+        if pos + len(marker) < size:
+            body[pos : pos + len(marker)] = marker
+    body[:3] = b"\xff\xd8\xff"
+    return bytes(body)
+
+
+class TestMPDProtocolParsing:
+    def _serve(self, service, monkeypatch, sock):
+        monkeypatch.setattr(service, "_create_socket", lambda *a, **k: sock)
+        service._mpd_was_connected = True
+
+    def test_artwork_with_protocol_markers_in_bytes_is_complete(
+        self, service, monkeypatch
+    ):
+        image = _hostile_image(300_000)
+        sock = FakeMPDSocket(image=image, recv_size=1000, binarylimit=False)
+        self._serve(service, monkeypatch, sock)
+
+        name = service.fetch_mpd_artwork("Album/track.flac")
+
+        assert name.startswith("artwork_") and name.endswith(".jpg")
+        assert (service.artwork_dir / name).read_bytes() == image
+
+    def test_binarylimit_sent_on_new_mpd_reduces_round_trips(
+        self, service, monkeypatch
+    ):
+        image = _hostile_image(2_500_000)
+        sock = FakeMPDSocket(image=image, recv_size=65536)
+        self._serve(service, monkeypatch, sock)
+
+        name = service.fetch_mpd_artwork("Album/big.flac")
+
+        assert (service.artwork_dir / name).read_bytes() == image
+        assert sock.commands[0] == "binarylimit 1048576"
+        assert sum(c.startswith("readpicture") for c in sock.commands) == 3
+
+    def test_binarylimit_ack_is_ignored(self, service, monkeypatch):
+        image = _hostile_image(20_000)
+        sock = FakeMPDSocket(image=image, binarylimit=False)
+        self._serve(service, monkeypatch, sock)
+        assert service.fetch_mpd_artwork("a.flac")
+        assert sock.commands[0].startswith("binarylimit")
+
+    def test_old_mpd_gets_no_binarylimit(self, service, monkeypatch):
+        sock = FakeMPDSocket(image=_hostile_image(10_000), version="0.22.3")
+        self._serve(service, monkeypatch, sock)
+        assert service.fetch_mpd_artwork("a.flac")
+        assert not any(c.startswith("binarylimit") for c in sock.commands)
+
+    def test_ack_mid_image_writes_nothing(self, service, monkeypatch):
+        sock = FakeMPDSocket(image=_hostile_image(30_000), ack_at_offset=8192)
+        sock.binarylimit = False
+        self._serve(service, monkeypatch, sock)
+
+        assert service.fetch_mpd_artwork("a.flac") == ""
+        assert list(service.artwork_dir.glob("artwork_*")) == []
+
+    def test_connection_closed_mid_image_writes_nothing(self, service, monkeypatch):
+        sock = FakeMPDSocket(
+            image=_hostile_image(30_000), close_at_offset=16384, binarylimit=False
+        )
+        self._serve(service, monkeypatch, sock)
+
+        assert service.fetch_mpd_artwork("a.flac") == ""
+        assert list(service.artwork_dir.glob("artwork_*")) == []
+
+    def test_no_embedded_picture(self, service, monkeypatch):
+        sock = FakeMPDSocket(image=b"")
+        self._serve(service, monkeypatch, sock)
+        assert service.fetch_mpd_artwork("a.flac") == ""
+
+    def test_tag_values_spanning_recv_boundaries(self, service, monkeypatch):
+        sock = FakeMPDSocket(
+            recv_size=7,
+            status={"state": "play", "elapsed": "12.5", "duration": "255.0"},
+            song={
+                "file": "AC/DC/Back In Black/01.flac",
+                "Title": "BACK IN BLACK OK",
+                "Artist": "AC/DC",
+                "Album": "Back In Black",
+                "Date": "1980",
+                "Genre": "Rock",
+            },
+        )
+        self._serve(service, monkeypatch, sock)
+
+        meta = service.get_mpd_metadata()
+
+        assert meta["playing"] is True
+        assert meta["title"] == "BACK IN BLACK OK"
+        assert meta["album"] == "Back In Black"
+        assert meta["genre"] == "Rock"
+        assert meta["elapsed"] == 12
+        # No OriginalDate tag: local Date is used, so enrich_tags has nothing
+        # to look up for a fully tagged file.
+        assert meta["original_date"] == "1980"
+
+    def test_original_date_tag_is_read(self, service, monkeypatch):
+        sock = FakeMPDSocket(
+            status={"state": "play"},
+            song={
+                "file": "x.flac",
+                "Title": "T",
+                "Date": "2011-09-26",
+                "OriginalDate": "1979-11-30",
+                "Genre": "rock",
+            },
+        )
+        self._serve(service, monkeypatch, sock)
+        meta = service.get_mpd_metadata()
+        assert meta["original_date"] == "1979-11-30"
+
+        calls = []
+        monkeypatch.setattr(
+            service, "_make_api_request", lambda *a, **k: calls.append(a)
+        )
+        meta["artist"] = "Pink Floyd"
+        meta["album"] = "The Wall"
+        service.enrich_tags(meta)
+        assert calls == []
+
+
+class _FakeClock:
+    def __init__(self, module, monkeypatch, start: float = 1000.0):
+        self.now = start
+        monkeypatch.setattr(module.time, "monotonic", lambda: self.now)
+
+
+class TestArtworkFailureHandling:
+    def test_failed_download_expires(
+        self, service, metadata_service_module, monkeypatch
+    ):
+        clock = _FakeClock(metadata_service_module, monkeypatch)
+        service._mark_failed("https://x/a.jpg")
+        assert service._is_failed("https://x/a.jpg")
+        clock.now += metadata_service_module._FAIL_TTL_TRANSIENT + 1
+        assert not service._is_failed("https://x/a.jpg")
+
+    def _stub_network(self, module, service, monkeypatch, behaviour):
+        monkeypatch.setattr(
+            service, "_check_artwork_host", lambda host: ("93.184.216.34", True)
+        )
+
+        def fake_open(req, timeout):
+            return behaviour(req.full_url)
+
+        monkeypatch.setattr(module, "safe_urlopen", fake_open)
+
+    def test_404_is_permanent_timeout_is_transient(
+        self, service, metadata_service_module, monkeypatch
+    ):
+        import io
+        import urllib.error
+
+        module = metadata_service_module
+        clock = _FakeClock(module, monkeypatch)
+
+        def behaviour(url):
+            if "missing" in url:
+                raise urllib.error.HTTPError(url, 404, "nf", {}, io.BytesIO())
+            raise urllib.error.URLError(TimeoutError("timed out"))
+
+        self._stub_network(module, service, monkeypatch, behaviour)
+
+        assert service.download_artwork("https://caa.example/missing") == ""
+        assert service.download_artwork("https://caa.example/slow") == ""
+        perm = service._failed_downloads["https://caa.example/missing"]
+        trans = service._failed_downloads["https://caa.example/slow"]
+        assert perm - clock.now == module._FAIL_TTL_PERMANENT
+        assert trans - clock.now == module._FAIL_TTL_TRANSIENT
+
+        # After the transient window the URL is tried again.
+        clock.now += module._FAIL_TTL_TRANSIENT + 1
+        hits = []
+        self._stub_network(
+            module,
+            service,
+            monkeypatch,
+            lambda url: hits.append(url) or io.BytesIO(b"\xff\xd8\xffimage"),
+        )
+        assert service.download_artwork("https://caa.example/slow").startswith(
+            "artwork_"
+        )
+        assert hits == ["https://caa.example/slow"]
+        assert service.download_artwork("https://caa.example/missing") == ""
+
+    def test_oversized_download_rejected(
+        self, service, metadata_service_module, monkeypatch
+    ):
+        import io
+
+        module = metadata_service_module
+        self._stub_network(
+            module,
+            service,
+            monkeypatch,
+            lambda url: io.BytesIO(
+                b"x" * (module.MetadataService._MAX_ARTWORK_BYTES + 1)
+            ),
+        )
+        assert service.download_artwork("https://big.example/a.jpg") == ""
+        assert list(service.artwork_dir.glob("artwork_*")) == []
+
+    def _chain_service(self, service, monkeypatch, ok_urls, mb="https://caa/front"):
+        downloads = []
+
+        def fake_download(url, cache_key=""):
+            downloads.append(url)
+            return "artwork_ok.jpg" if url in ok_urls else ""
+
+        monkeypatch.setattr(service, "download_artwork", fake_download)
+        monkeypatch.setattr(service, "fetch_musicbrainz_artwork", lambda a, b: mb)
+        monkeypatch.setattr(
+            service, "_fetch_itunes_artwork", lambda a, b: "https://itunes/600.jpg"
+        )
+        monkeypatch.setattr(service, "fetch_artist_image", lambda a: "")
+        return downloads
+
+    def test_caa_404_falls_through_to_itunes(self, service, monkeypatch):
+        downloads = self._chain_service(
+            service, monkeypatch, ok_urls={"https://itunes/600.jpg"}
+        )
+        meta = {"playing": True, "source": "Tidal", "artist": "A", "album": "B"}
+
+        service.enrich_artwork(meta)
+
+        assert downloads == ["https://caa/front", "https://itunes/600.jpg"]
+        assert meta["artwork_source"] == "itunes"
+        assert meta["artwork"].endswith("/artwork/artwork_ok.jpg")
+
+    def test_source_url_failure_continues_down_the_chain(self, service, monkeypatch):
+        downloads = self._chain_service(
+            service, monkeypatch, ok_urls={"https://caa/front"}
+        )
+        meta = {
+            "playing": True,
+            "source": "Spotify",
+            "artist": "A",
+            "album": "B",
+            "artwork": "https://i.scdn.co/image/abc",
+        }
+
+        service.enrich_artwork(meta)
+
+        assert downloads[0] == "https://i.scdn.co/image/abc"
+        assert meta["artwork_source"] == "musicbrainz"
+
+    def test_lookup_error_is_retried_sooner_than_a_miss(
+        self, service, metadata_service_module, monkeypatch
+    ):
+        module = metadata_service_module
+        clock = _FakeClock(module, monkeypatch)
+        calls = []
+
+        def mb(artist, album):
+            calls.append("mb")
+            return None  # lookup failed (timeout / 503)
+
+        monkeypatch.setattr(service, "fetch_musicbrainz_artwork", mb)
+        monkeypatch.setattr(service, "_fetch_itunes_artwork", lambda a, b: "")
+
+        assert list(service._album_art_candidates("A", "B")) == []
+        assert list(service._album_art_candidates("A", "B")) == []
+        assert calls == ["mb"]
+        clock.now += module._NEG_TTL_ERROR + 1
+        assert list(service._album_art_candidates("A", "B")) == []
+        assert calls == ["mb", "mb"]
+
+
+class TestMusicBrainzLimiterAndCaches:
+    def test_every_musicbrainz_call_is_rate_limited(
+        self, service, metadata_service_module, monkeypatch
+    ):
+        import io
+
+        module = metadata_service_module
+        limited = []
+        monkeypatch.setattr(module, "_mb_rate_limit", lambda: limited.append(1))
+        monkeypatch.setattr(
+            module, "safe_urlopen", lambda req, timeout: io.BytesIO(b"{}")
+        )
+        service._make_api_request("https://musicbrainz.org/ws/2/artist/?query=x")
+        service._make_api_request("https://itunes.apple.com/search?term=x")
+        assert limited == [1]
+
+    def test_artist_image_error_not_cached_forever(
+        self, service, metadata_service_module, monkeypatch
+    ):
+        module = metadata_service_module
+        clock = _FakeClock(module, monkeypatch)
+        calls = []
+        monkeypatch.setattr(
+            service, "_make_api_request", lambda url, timeout=5: calls.append(url)
+        )
+        assert service.fetch_artist_image("Hole") == ""
+        assert service.fetch_artist_image("Hole") == ""
+        assert len(calls) == 1
+        clock.now += module._NEG_TTL_ERROR + 1
+        service.fetch_artist_image("Hole")
+        assert len(calls) == 2
+
+    def test_cache_reads_refresh_lru_position(self, service):
+        cache = service.artwork_cache
+        for i in range(service._cache_limit):
+            service._cache_set(cache, f"k{i}", f"v{i}")
+        assert service._cache_get(cache, "k0") == "v0"  # touch the oldest
+        service._cache_set(cache, "new", "v")
+        assert "k0" in cache
+        assert "k1" not in cache
+
+
+class TestSSRFRedirects:
+    def test_redirect_to_private_address_is_blocked(
+        self, metadata_service_module, monkeypatch
+    ):
+        import urllib.request
+
+        module = metadata_service_module
+        monkeypatch.setattr(
+            module.socket,
+            "getaddrinfo",
+            lambda host, *a, **k: [(2, 1, 6, "", ("192.168.1.10", 0))],
+        )
+        handler = module.SafeRedirectHandler()
+        req = urllib.request.Request("https://favicon.example/logo.png")
+        with pytest.raises(module.BlockedURLError):
+            handler.redirect_request(
+                req, None, 302, "Found", {}, "http://router.lan/admin"
+            )
+
+    def test_redirect_to_public_address_drops_pinned_host_header(
+        self, metadata_service_module, monkeypatch
+    ):
+        import urllib.request
+
+        module = metadata_service_module
+        monkeypatch.setattr(
+            module.socket,
+            "getaddrinfo",
+            lambda host, *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))],
+        )
+        handler = module.SafeRedirectHandler()
+        req = urllib.request.Request(
+            "http://93.184.216.34/a.png", headers={"Host": "cdn.example"}
+        )
+        new = handler.redirect_request(
+            req, None, 302, "Found", {}, "https://cdn2.example/a.png"
+        )
+        assert new is not None
+        assert new.get_header("Host") is None
+        assert handler.max_redirections == module._MAX_REDIRECTS
+
+    def test_real_redirect_into_lan_is_not_followed(self, service, monkeypatch):
+        """End to end: the first hop is a trusted local address (allowed, like
+        the AirPlay cover), but its 302 to another local URL is refused."""
+        import http.server
+        import threading
+
+        hits = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                hits.append(self.path)
+                if self.path == "/logo.png":
+                    self.send_response(302)
+                    self.send_header(
+                        "Location", f"http://127.0.0.1:{self.server.server_port}/secret"
+                    )
+                    self.end_headers()
+                else:
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b"\xff\xd8\xffsecret")
+
+            def log_message(self, *a):
+                pass
+
+        srv = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            port = srv.server_port
+            direct = service.download_artwork(f"http://127.0.0.1:{port}/direct.jpg")
+            assert direct.startswith("artwork_")
+            assert service.download_artwork(f"http://127.0.0.1:{port}/logo.png") == ""
+            assert "/secret" not in hits
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+
+class TestNetworkStateRefresh:
+    def test_external_host_re_resolved_after_loopback(
+        self, metadata_service_module, monkeypatch
+    ):
+        module = metadata_service_module
+        clock = _FakeClock(module, monkeypatch)
+        monkeypatch.delenv("EXTERNAL_HOST", raising=False)
+        answers = iter(["127.0.0.1", "192.168.1.50", "192.168.1.99"])
+        monkeypatch.setattr(module, "_resolve_external_host", lambda: next(answers))
+
+        assert module.get_external_host() == "127.0.0.1"
+        clock.now += module._EXTERNAL_HOST_LOOPBACK_TTL + 1
+        assert module.get_external_host() == "192.168.1.50"
+        clock.now += 1
+        assert module.get_external_host() == "192.168.1.50"  # cached
+        clock.now += module._EXTERNAL_HOST_TTL + 1
+        assert module.get_external_host() == "192.168.1.99"  # DHCP change
+
+    def test_explicit_external_host_never_re_resolved(
+        self, metadata_service_module, monkeypatch
+    ):
+        module = metadata_service_module
+        monkeypatch.setenv("EXTERNAL_HOST", "snap.lan")
+        monkeypatch.setattr(
+            module,
+            "_resolve_external_host",
+            lambda: pytest.fail("must not resolve"),
+        )
+        assert module.get_external_host() == "snap.lan"
+
+    def test_new_lan_ip_becomes_trusted_without_restart(
+        self, service, metadata_service_module, monkeypatch
+    ):
+        import subprocess as sp
+
+        module = metadata_service_module
+        monkeypatch.setattr(
+            module.socket,
+            "getaddrinfo",
+            lambda host, *a, **k: [(2, 1, 6, "", ("192.168.7.20", 0))],
+        )
+        monkeypatch.setattr(
+            module.subprocess,
+            "run",
+            lambda *a, **k: sp.CompletedProcess(a, 0, stdout="192.168.7.20\n"),
+        )
+        service._trusted_ips = {"127.0.0.1", "::1"}
+        service._trusted_ips_at = module.time.monotonic() - 10  # fresh-ish
+
+        ip, allowed = service._check_artwork_host("192.168.7.20")
+        assert allowed and ip == "192.168.7.20"
+
+
+class _FakeWS:
+    def __init__(self, messages=()):
+        self.sent: list[dict] = []
+        self._messages = list(messages)
+        self.remote_address = ("10.0.0.9", 5555)
+
+    async def send(self, text):
+        import json as _json
+
+        self.sent.append(_json.loads(text))
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._messages:
+            raise StopAsyncIteration
+        return self._messages.pop(0)
+
+
+def _airplay_server(title, artist="Artist", art=""):
+    meta = {"title": title, "artist": [artist], "album": "Album"}
+    if art:
+        meta["artUrl"] = art
+    return {
+        "groups": [
+            {
+                "stream_id": "AirPlay",
+                "clients": [{"id": "room", "host": {}, "config": {}}],
+            }
+        ],
+        "streams": [
+            {"id": "AirPlay", "status": "playing", "properties": {"metadata": meta}}
+        ],
+    }
+
+
+class TestAsyncEnrichment:
+    def _setup(self, module, service, monkeypatch, servers):
+        import threading
+
+        state = {"server": servers[0]}
+        monkeypatch.setattr(service, "get_server_status", lambda: state["server"])
+        gates: dict[str, threading.Event] = {}
+
+        def slow_enrich(base):
+            gate = gates.setdefault(base["title"], threading.Event())
+            assert gate.wait(5)
+            return {
+                "artwork": f"http://h:8083/artwork/{base['title']}.jpg",
+                "artwork_source": "itunes",
+            }
+
+        monkeypatch.setattr(service, "_enrich_sync", slow_enrich)
+        monkeypatch.setattr(service, "_write_stream_file", lambda *a: None)
+        ws = _FakeWS()
+        sc = module.SubscribedClient(ws, stream_id_direct="AirPlay")
+        module.ws_clients.clear()
+        module.ws_clients.add(sc)
+        return state, gates, ws
+
+    def test_text_is_broadcast_before_enrichment_finishes(
+        self, service, metadata_service_module, monkeypatch
+    ):
+        import asyncio
+        import threading
+
+        module = metadata_service_module
+        state, gates, ws = self._setup(
+            module, service, monkeypatch, [_airplay_server("Song A")]
+        )
+
+        async def scenario():
+            gates["Song A"] = threading.Event()
+            assert await service._poll_once()
+            # Title pushed immediately, artwork still pending.
+            assert ws.sent[-1]["title"] == "Song A"
+            assert ws.sent[-1]["artwork"] == ""
+            assert service.last_successful_poll_at > 0
+            gates["Song A"].set()
+            await service.streams["AirPlay"].enrich_task
+            assert ws.sent[-1]["title"] == "Song A"
+            assert ws.sent[-1]["artwork"].endswith("/Song A.jpg")
+
+        asyncio.run(scenario())
+        module.ws_clients.clear()
+
+    def test_late_result_never_overwrites_newer_track(
+        self, service, metadata_service_module, monkeypatch
+    ):
+        import asyncio
+        import threading
+
+        module = metadata_service_module
+        state, gates, ws = self._setup(
+            module, service, monkeypatch, [_airplay_server("Song A")]
+        )
+
+        async def scenario():
+            gates["Song A"] = threading.Event()
+            gates["Song B"] = threading.Event()
+            await service._poll_once()
+            sm = service.streams["AirPlay"]
+            task_a = sm.enrich_task
+            state["server"] = _airplay_server("Song B")
+            await service._poll_once()
+            assert ws.sent[-1]["title"] == "Song B"
+            # A's lookup completes late — its artwork must not show up on B.
+            gates["Song A"].set()
+            await asyncio.sleep(0.1)
+            assert task_a.cancelled() or task_a.done()
+            assert all(
+                not m.get("artwork", "").endswith("/Song A.jpg")
+                for m in ws.sent
+                if m.get("title") == "Song B"
+            )
+            gates["Song B"].set()
+            await sm.enrich_task
+            assert ws.sent[-1]["artwork"].endswith("/Song B.jpg")
+            # Same track keeps polling: no second enrichment is started.
+            task_b = sm.enrich_task
+            await service._poll_once()
+            assert sm.enrich_task is task_b
+
+        asyncio.run(scenario())
+        module.ws_clients.clear()
+
+    def test_elapsed_only_change_does_not_rewrite_stream_file(
+        self, service, metadata_service_module, monkeypatch
+    ):
+        import asyncio
+
+        module = metadata_service_module
+        writes = []
+        monkeypatch.setattr(
+            service, "_write_stream_file", lambda sid, m: writes.append(m)
+        )
+        sm = module.StreamMetadata("MPD")
+        sm.base = {"playing": False, "title": "T", "elapsed": 1}
+
+        async def scenario():
+            await service._publish_stream(sm, {})
+            sm.base = {"playing": False, "title": "T", "elapsed": 4}
+            await service._publish_stream(sm, {})
+            sm.base = {"playing": False, "title": "T2", "elapsed": 5}
+            await service._publish_stream(sm, {})
+
+        asyncio.run(scenario())
+        assert [w["elapsed"] for w in writes] == [1, 5]
+
+
+class TestArtworkPrune:
+    def test_runtime_prune_keeps_newest(
+        self, service, metadata_service_module, monkeypatch
+    ):
+        import os as _os
+
+        module = metadata_service_module
+        monkeypatch.setattr(module, "_ARTWORK_MAX_FILES", 5)
+        for i in range(8):
+            p = service.artwork_dir / f"artwork_{i:02d}.jpg"
+            p.write_bytes(b"x")
+            _os.utime(p, (1000 + i, 1000 + i))
+        (service.artwork_dir / "metadata_MPD.json").write_text("{}")
+
+        service._prune_artwork_dir(force=True)
+
+        left = sorted(p.name for p in service.artwork_dir.glob("artwork_*"))
+        assert left == [f"artwork_{i:02d}.jpg" for i in range(3, 8)]
+        assert (service.artwork_dir / "metadata_MPD.json").exists()
+
+
+class _FakeRPCSocket:
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.sent = []
+        self.closed = False
+
+    def sendall(self, data):
+        self.sent.append(data)
+
+    def recv(self, n):
+        if not self.replies:
+            raise TimeoutError("timed out")
+        return self.replies.pop(0)
+
+    def close(self):
+        self.closed = True
+
+
+class TestJsonRpcIds:
+    def test_reply_matched_by_id_skipping_notifications_and_stale(self, service):
+        import json as _json
+
+        sock = _FakeRPCSocket([])
+        service._snap_sock = sock
+
+        def reply_for(req_id, payload):
+            return (_json.dumps({"id": req_id, "result": payload}) + "\r\n").encode()
+
+        next_id = service._rpc_id + 1
+        sock.replies = [
+            b'{"jsonrpc":"2.0","method":"Client.OnVolumeChanged","params":{}}\r\n',
+            reply_for(next_id - 1, "stale"),
+            reply_for(next_id, "fresh"),
+        ]
+        msg = service.send_rpc_request(sock, "Server.GetStatus")
+        assert msg["result"] == "fresh"
+        assert _json.loads(sock.sent[0])["id"] == next_id
+
+    def test_timeout_closes_socket_so_late_reply_cannot_desync(self, service):
+        sock = _FakeRPCSocket([])
+        service._snap_sock = sock
+        assert service.send_rpc_request(sock, "Client.SetVolume", {}) is None
+        assert sock.closed
+        assert service._snap_sock is None
+        assert service._snap_buffer == b""
+
+
+class TestWebSocketInput:
+    def test_non_object_json_does_not_kill_handler(
+        self, metadata_service_module, monkeypatch, caplog
+    ):
+        import asyncio
+
+        module = metadata_service_module
+        monkeypatch.setattr(module, "_service", None)
+        ws = _FakeWS(['"xsubscribex"', "42", "[1,2]", "null", '{"subscribe":"room"}'])
+
+        with caplog.at_level("INFO"):
+            asyncio.run(module.ws_handler(ws))
+
+        # The handler survived the junk and processed the real subscribe.
+        assert "subscribed as 'room'" in caplog.text
+
+    def test_subscribe_burst_shares_one_status_call(self, service, monkeypatch):
+        import asyncio
+
+        calls = []
+
+        def status():
+            calls.append(1)
+            return {"groups": [], "streams": []}
+
+        monkeypatch.setattr(service, "get_server_status", status)
+
+        async def scenario():
+            await asyncio.gather(
+                *(service.get_server_status_throttled() for _ in range(10))
+            )
+
+        asyncio.run(scenario())
+        assert calls == [1]
+
+
+class TestTogglePlayRouting:
+    def _server(self, stream_id, can_control):
+        return {
+            "groups": [
+                {
+                    "stream_id": stream_id,
+                    "clients": [{"id": "room", "host": {"name": "room"}, "config": {}}],
+                }
+            ],
+            "streams": [
+                {
+                    "id": stream_id,
+                    "properties": {
+                        "canControl": can_control,
+                        "canPause": can_control,
+                        "canPlay": can_control,
+                    },
+                }
+            ],
+        }
+
+    def _wire(self, service, server):
+        calls = []
+        service._get_snap_socket = lambda: object()
+
+        def rpc(_sock, method, params=None):
+            calls.append((method, params))
+            if method == "Server.GetStatus":
+                return {"result": {"server": server}}
+            return {"result": "ok"}
+
+        service.send_rpc_request = rpc
+        return calls
+
+    def test_airplay_group_does_not_toggle_mpd(self, service):
+        calls = self._wire(service, self._server("AirPlay", False))
+        assert service.toggle_playback("room") is False
+        assert [m for m, _ in calls] == ["Server.GetStatus"]
+
+    def test_controllable_stream_gets_stream_control(self, service):
+        calls = self._wire(service, self._server("Spotify", True))
+        assert service.toggle_playback("room") is True
+        assert calls[-1] == (
+            "Stream.Control",
+            {"id": "Spotify", "command": "playPause"},
+        )

@@ -15,6 +15,7 @@ Replaces per-client metadata-service containers — N clients no longer make N r
 
 import asyncio
 import collections
+import concurrent.futures
 import hashlib
 import html
 import ipaddress
@@ -29,6 +30,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -90,16 +92,49 @@ def _resolve_external_host() -> str:
 
 # Lazy-evaluated to avoid blocking module import on slow DNS / reverse lookup
 # (observed: macOS dev hosts where socket.getfqdn() hangs ~30 s on stale
-# resolvers, blocking every pytest import). Resolution happens once on first
-# access; runtime Pi hosts hit LAN DNS so cost is sub-millisecond.
+# resolvers, blocking every pytest import). Runtime Pi hosts hit LAN DNS so
+# cost is sub-millisecond.
+#
+# Re-resolved with a TTL instead of once per process: the container can start
+# before DHCP/WiFi has an address (every artwork URL would then say
+# 127.0.0.1 until restart) and the LAN IP can change on a DHCP renewal. A
+# loopback result is retried sooner. An explicit EXTERNAL_HOST is never
+# re-resolved.
 _EXTERNAL_HOST: str | None = None
+_EXTERNAL_HOST_AT: float = 0.0
+_EXTERNAL_HOST_TTL = 60.0
+_EXTERNAL_HOST_LOOPBACK_TTL = 10.0
+_external_host_lock = threading.Lock()
+
+
+def _is_loopback_host(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host == "localhost"
 
 
 def get_external_host() -> str:
-    global _EXTERNAL_HOST
-    if _EXTERNAL_HOST is None:
-        _EXTERNAL_HOST = _resolve_external_host()
-    return _EXTERNAL_HOST
+    global _EXTERNAL_HOST, _EXTERNAL_HOST_AT
+    explicit = os.environ.get("EXTERNAL_HOST", "")
+    if explicit:
+        return explicit
+    with _external_host_lock:
+        now = time.monotonic()
+        if _EXTERNAL_HOST is not None:
+            ttl = (
+                _EXTERNAL_HOST_LOOPBACK_TTL
+                if _is_loopback_host(_EXTERNAL_HOST)
+                else _EXTERNAL_HOST_TTL
+            )
+            if now - _EXTERNAL_HOST_AT < ttl:
+                return _EXTERNAL_HOST
+        host = _resolve_external_host()
+        if _EXTERNAL_HOST is not None and host != _EXTERNAL_HOST:
+            logger.info("External host changed: %s -> %s", _EXTERNAL_HOST, host)
+        _EXTERNAL_HOST = host
+        _EXTERNAL_HOST_AT = now
+        return host
 
 
 _POLL_LOOP_MAX_ERRORS = 30
@@ -108,15 +143,35 @@ _POLL_LOOP_MAX_ERRORS = 30
 _mb_last_request: float = 0.0
 _mb_lock = threading.Lock()
 
-# Defensive lock for OrderedDict cache mutations. Today the only caller of
-# _cache_set is enrich_artwork / enrich_tags, both run SERIALLY by the poll
-# loop via `await loop.run_in_executor(...)` (no asyncio.gather, no
-# create_task on cache writers). So in current code there's no concurrent
-# write — the lock is cheap insurance against future code paths that might
-# parallelise enrich (e.g. asyncio.gather across streams). OrderedDict's
-# internal doubly-linked list pointers can be corrupted by concurrent
-# move_to_end / popitem, with crashes (KeyError) hard to reproduce.
+# Lock for OrderedDict cache reads/mutations. enrich_artwork / enrich_tags
+# run as background tasks on a small thread pool (one task per stream/track,
+# so several can run at once): OrderedDict's internal doubly-linked list
+# pointers can be corrupted by concurrent move_to_end / popitem, with crashes
+# (KeyError) hard to reproduce.
 _cache_lock = threading.Lock()
+
+# Negative-cache TTLs. A lookup that answered "no match" is retried after
+# _NEG_TTL_MISS; a lookup that failed (timeout, 5xx, DNS) after _NEG_TTL_ERROR.
+_NEG_TTL_MISS = 3600.0
+_NEG_TTL_ERROR = 600.0
+_NEG_PREFIX = "|failed|"
+
+# Failed artwork downloads: a transient failure (timeout, 5xx, blocked
+# address that may become trusted after a DHCP change) is retried after
+# _FAIL_TTL_TRANSIENT; a permanent one (404/410, bad scheme, oversized) after
+# _FAIL_TTL_PERMANENT. Never "forever" — a single CAA timeout used to hide an
+# album's cover until the container restarted.
+_FAIL_TTL_TRANSIENT = 600.0
+_FAIL_TTL_PERMANENT = 6 * 3600.0
+
+# Artwork directory cap. AirPlay writes one file per track; on read-only
+# installs the directory lives in RAM. Pruned at runtime, oldest first.
+_ARTWORK_MAX_FILES = 300
+_ARTWORK_MAX_BYTES = 50_000_000
+_ARTWORK_PRUNE_INTERVAL = 30.0
+
+# Max redirects followed by any external fetch (each hop is re-validated).
+_MAX_REDIRECTS = 5
 
 
 def _mb_rate_limit() -> None:
@@ -149,12 +204,196 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger("metadata-service")
 
 
+# ──────────────────────────────────────────────
+# MPD protocol (line-based, binary-safe)
+# ──────────────────────────────────────────────
+
+
+class MPDProtocolError(Exception):
+    """Malformed/truncated MPD reply or connection closed mid-reply."""
+
+
+class MPDCommandError(Exception):
+    """MPD answered a command with `ACK ...`."""
+
+
+class MPDConnection:
+    """Minimal MPD protocol reader over a connected socket.
+
+    Parses replies line by line on the text part only: `key: value` lines
+    until `OK` or a line starting with `ACK `. A `binary: N` line is followed
+    by exactly N raw bytes plus a trailing newline, read by length — never
+    scanned for markers. Substring checks on the raw stream (`b"ACK" in
+    data`, `b"OK\\n" in data`) used to stop early on image bytes or tag values
+    such as "BACK IN BLACK", truncating artwork and replies.
+    """
+
+    _MAX_LINE = 65536
+
+    def __init__(self, sock: socket.socket) -> None:
+        self.sock = sock
+        self.buf = bytearray()
+        self.version: tuple[int, ...] = ()
+
+    def _fill(self) -> None:
+        chunk = self.sock.recv(65536)
+        if not chunk:
+            raise MPDProtocolError("connection closed")
+        self.buf += chunk
+
+    def read_line(self) -> bytes:
+        while True:
+            idx = self.buf.find(b"\n")
+            if idx >= 0:
+                line = bytes(self.buf[:idx])
+                del self.buf[: idx + 1]
+                return line
+            if len(self.buf) > self._MAX_LINE:
+                raise MPDProtocolError("reply line too long")
+            self._fill()
+
+    def read_exact(self, size: int) -> bytes:
+        while len(self.buf) < size:
+            self._fill()
+        data = bytes(self.buf[:size])
+        del self.buf[:size]
+        return data
+
+    def read_greeting(self) -> str:
+        line = self.read_line()
+        if not line.startswith(b"OK MPD "):
+            raise MPDProtocolError(f"unexpected greeting {line[:40]!r}")
+        version = line[7:].decode("ascii", errors="replace").strip()
+        try:
+            self.version = tuple(int(p) for p in version.split("."))
+        except ValueError:
+            self.version = ()
+        return version
+
+    def command(
+        self, cmd: str, max_binary: int = 0
+    ) -> tuple[list[tuple[str, str]], bytes | None]:
+        """Send one command; return (key/value pairs, binary payload or None).
+
+        Raises MPDCommandError on ACK, MPDProtocolError on a malformed reply,
+        OSError/TimeoutError on socket failure.
+        """
+        self.sock.sendall(cmd.encode("utf-8") + b"\n")
+        pairs: list[tuple[str, str]] = []
+        binary: bytes | None = None
+        while True:
+            line = self.read_line()
+            if line == b"OK":
+                return pairs, binary
+            if line.startswith(b"ACK "):
+                raise MPDCommandError(line.decode("utf-8", errors="replace"))
+            key, sep, value = line.partition(b": ")
+            if not sep:
+                raise MPDProtocolError(f"malformed reply line {line[:80]!r}")
+            if key == b"binary":
+                try:
+                    size = int(value)
+                except ValueError as e:
+                    raise MPDProtocolError(f"bad binary size {value[:20]!r}") from e
+                if size < 0 or size > max_binary:
+                    raise MPDProtocolError(f"binary chunk size {size} out of range")
+                binary = self.read_exact(size)
+                if self.read_exact(1) != b"\n":
+                    raise MPDProtocolError("missing newline after binary chunk")
+                continue
+            pairs.append(
+                (
+                    key.decode("utf-8", errors="replace"),
+                    value.decode("utf-8", errors="replace"),
+                )
+            )
+
+
+# ──────────────────────────────────────────────
+# SSRF guard shared by every external fetch
+# ──────────────────────────────────────────────
+
+
+class BlockedURLError(urllib.error.URLError):
+    """URL rejected by the SSRF guard (scheme, restricted address)."""
+
+
+def _is_restricted_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+def _resolve_public_ip(url: str) -> str:
+    """Return a public IP for url's host, or raise BlockedURLError/OSError.
+
+    Used for redirect hops, where no local/trusted exemption applies: a
+    crowd-sourced favicon URL that 30x-redirects to 192.168.x.x or to this
+    host's own services must not be followed.
+    """
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise BlockedURLError(f"scheme {parsed.scheme!r} not allowed")
+    infos = socket.getaddrinfo(parsed.hostname or "", None, socket.AF_UNSPEC)
+    if not infos:
+        raise BlockedURLError(f"no address for {parsed.hostname!r}")
+    for _family, _, _, _, sockaddr in infos:
+        if _is_restricted_ip(ipaddress.ip_address(sockaddr[0])):
+            raise BlockedURLError(f"redirect to restricted address {sockaddr[0]}")
+    return infos[0][4][0]
+
+
+class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Re-validate every redirect hop with the SSRF guard and cap the count.
+
+    urllib follows 30x anywhere by default, so validating only the first
+    hostname let a public URL bounce the fetch into the LAN.
+    """
+
+    max_redirections = _MAX_REDIRECTS
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
+        _resolve_public_ip(newurl)
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is not None:
+            # A pinned-IP first hop sets an explicit Host header; it must not
+            # leak onto a different host.
+            new_req.remove_header("Host")
+        return new_req
+
+
+_safe_opener = urllib.request.build_opener(SafeRedirectHandler())
+
+
+def safe_urlopen(req: urllib.request.Request, timeout: float):
+    """urlopen() replacement used for all external fetches."""
+    return _safe_opener.open(req, timeout=timeout)
+
+
 class StreamMetadata:
     """Metadata state for a single stream."""
 
     def __init__(self, stream_id: str) -> None:
         self.stream_id = stream_id
+        # Last published snapshot (what clients have seen).
         self.current: dict[str, Any] = {}
+        # Latest text/position metadata from the poll (no network enrichment).
+        self.base: dict[str, Any] = {}
+        # Background enrichment (artwork + tags) for the track identified by
+        # enrich_key. enriched holds the fields it added/changed; None while
+        # the first lookup for that key is still running.
+        self.enrich_key: str = ""
+        self.enriched: dict[str, Any] | None = None
+        self.enrich_task: asyncio.Task | None = None
+        self.enrich_done_at: float = 0.0
+        # Serialises compose+broadcast between the poll loop and enrichment
+        # completions so a slower sender can't deliver an older snapshot last.
+        self.publish_lock = asyncio.Lock()
 
 
 class SubscribedClient:
@@ -203,7 +442,8 @@ class MetadataService:
         self.artist_image_cache: collections.OrderedDict[str, str] = (
             collections.OrderedDict()
         )
-        self._failed_downloads: collections.OrderedDict[str, None] = (
+        # url/cache_key -> monotonic expiry of the "don't retry" window
+        self._failed_downloads: collections.OrderedDict[str, float] = (
             collections.OrderedDict()
         )
         self._release_meta_cache: collections.OrderedDict[str, str] = (
@@ -213,30 +453,34 @@ class MetadataService:
         self._cache_limit = _MAX_CACHE_ENTRIES
 
         # Trusted IPs: local interfaces + snapserver — artwork from these is allowed
-        # even though they're private IPs (SSRF exemption for co-located services)
+        # even though they're private IPs (SSRF exemption for co-located services,
+        # e.g. the AirPlay cover served by meta_shairport on the LAN IP).
+        # Refreshed with a TTL: the container may start before DHCP, and the
+        # LAN IP can change at runtime.
         self._trusted_ips: set[str] = {"127.0.0.1", "::1"}
-        try:
-            for _fam, _, _, _, sa in socket.getaddrinfo(
-                self.snapserver_host, None, socket.AF_UNSPEC
-            ):
-                self._trusted_ips.add(sa[0])
-        except (socket.gaierror, OSError):
-            pass
-        # Get all local interface IPs (hostname resolution misses them on Debian)
-        try:
-            result = subprocess.run(
-                ["hostname", "-I"], capture_output=True, text=True, timeout=5
-            )
-            for ip_str in result.stdout.split():
-                self._trusted_ips.add(ip_str.strip())
-        except (subprocess.SubprocessError, OSError) as e:
-            logger.warning("Could not get hostname IPs for trusted list: %s", e)
+        self._trusted_ips_at: float = 0.0
+        self._trusted_ips_lock = threading.Lock()
+        self._refresh_trusted_ips()
         logger.info(f"Trusted IPs for artwork: {self._trusted_ips}")
+
+        # Background enrichment runs on its own small pool so slow WAN
+        # lookups can never starve the poll loop's snapserver round-trips
+        # (and with them the /health heartbeat).
+        self._enrich_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=3, thread_name_prefix="enrich"
+        )
+        self._last_server: dict = {}
+        self._artwork_last_prune: float = 0.0
+
+        # Shared Server.GetStatus snapshot for WebSocket subscribe bursts.
+        self._status_cache: tuple[float, dict] | None = None
+        self._status_lock = asyncio.Lock()
 
         # Snapserver persistent socket
         self._snap_sock: socket.socket | None = None
         self._snap_buffer: bytes = b""
         self._snap_lock = threading.Lock()
+        self._rpc_id: int = 0
         self._last_snap_response: float = 0.0
         self._snap_stale_threshold: float = 30.0
 
@@ -255,19 +499,13 @@ class MetadataService:
         # {stream_id: {"key": "title|artist", "start": monotonic,
         #              "accumulated": float, "calibrated": bool}}
         # "calibrated" is True only when we observed the track-change event
-        # in real time. False when we saw the track for the first time after
-        # service cold-start while it was already playing — in that case our
+        # in real time. False for the first track ever seen on a stream (it
+        # was already there when the service started) — in that case our
         # local-clock estimate would be offset by however much we missed.
         self._track_timers: dict[str, dict[str, Any]] = {}
 
         # Dedup: emit one log per (stream, track, source) transition — not per 3-s poll.
         self._last_artwork_log_key: dict[str, tuple[str, str]] = {}
-
-        # Service start anchor for the "cold-start mid-track" heuristic in
-        # _estimate_elapsed. A track first observed within FRESH_START_GRACE_SEC
-        # of service boot is assumed to be a track-change event we caught in
-        # time; observed after that, we admit we don't know the real elapsed.
-        self._service_start: float = time.monotonic()
 
     @staticmethod
     def _cache_set(
@@ -283,13 +521,86 @@ class MetadataService:
             while len(cache) > limit:
                 cache.popitem(last=False)
 
-    def _mark_failed(self, url: str) -> None:
-        """Record a failed download URL, bounded to _MAX_CACHE_ENTRIES."""
+    def _mark_failed(self, url: str, permanent: bool = False) -> None:
+        """Record a failed download with a retry TTL, bounded to _MAX_CACHE_ENTRIES."""
+        ttl = _FAIL_TTL_PERMANENT if permanent else _FAIL_TTL_TRANSIENT
         with _cache_lock:
-            self._failed_downloads[url] = None
+            self._failed_downloads[url] = time.monotonic() + ttl
             self._failed_downloads.move_to_end(url)
             while len(self._failed_downloads) > self._cache_limit:
                 self._failed_downloads.popitem(last=False)
+
+    def _is_failed(self, url: str) -> bool:
+        """True while url is inside its failure TTL window."""
+        with _cache_lock:
+            expiry = self._failed_downloads.get(url)
+            if expiry is None:
+                return False
+            if time.monotonic() >= expiry:
+                del self._failed_downloads[url]
+                return False
+            return True
+
+    @staticmethod
+    def _cache_get(cache: collections.OrderedDict, key: str) -> str | None:
+        """LRU read with negative-entry expiry. Thread-safe.
+
+        Returns None when the key is unknown or its negative entry expired
+        (caller should look it up), "" for a live negative entry, else the
+        cached value.
+        """
+        with _cache_lock:
+            value = cache.get(key)
+            if value is None:
+                return None
+            if value.startswith(_NEG_PREFIX):
+                try:
+                    expiry = float(value[len(_NEG_PREFIX) :])
+                except ValueError:
+                    expiry = 0.0
+                if time.monotonic() >= expiry:
+                    del cache[key]
+                    return None
+                cache.move_to_end(key)
+                return ""
+            cache.move_to_end(key)
+            return value
+
+    @classmethod
+    def _cache_set_negative(
+        cls, cache: collections.OrderedDict, key: str, ttl: float
+    ) -> None:
+        """Cache a miss/error that expires after ttl seconds."""
+        cls._cache_set(cache, key, f"{_NEG_PREFIX}{time.monotonic() + ttl}")
+
+    def _refresh_trusted_ips(self, force: bool = False) -> set[str]:
+        """Recompute local/snapserver IPs (TTL 60 s, or forced at most every 5 s)."""
+        with self._trusted_ips_lock:
+            age = time.monotonic() - self._trusted_ips_at
+            if self._trusted_ips_at and age < (5.0 if force else 60.0):
+                return self._trusted_ips
+            ips: set[str] = {"127.0.0.1", "::1"}
+            try:
+                for _fam, _, _, _, sa in socket.getaddrinfo(
+                    self.snapserver_host, None, socket.AF_UNSPEC
+                ):
+                    ips.add(sa[0])
+            except (socket.gaierror, OSError):
+                pass
+            # Get all local interface IPs (hostname resolution misses them on Debian)
+            try:
+                result = subprocess.run(
+                    ["hostname", "-I"], capture_output=True, text=True, timeout=5
+                )
+                for ip_str in result.stdout.split():
+                    ips.add(ip_str.strip())
+            except (subprocess.SubprocessError, OSError) as e:
+                logger.warning("Could not get hostname IPs for trusted list: %s", e)
+            if self._trusted_ips_at and ips != self._trusted_ips:
+                logger.info("Trusted IPs for artwork changed: %s", ips)
+            self._trusted_ips = ips
+            self._trusted_ips_at = time.monotonic()
+            return ips
 
     @staticmethod
     def _release_meta_cache_value(date: str, original_date: str, genre: str) -> str:
@@ -377,8 +688,17 @@ class MetadataService:
     def send_rpc_request(
         self, sock: socket.socket, method: str, params: dict | None = None
     ) -> dict | None:
+        """Send one JSON-RPC request and return the reply carrying its id.
+
+        Every request gets a fresh id and the reader skips notifications and
+        replies with other ids. On timeout / socket error the connection is
+        closed: a late reply left in the stream would otherwise be consumed
+        as the answer to the NEXT request, desynchronising every call after.
+        """
+        self._rpc_id = (getattr(self, "_rpc_id", 0) % 1_000_000_000) + 1
+        req_id = self._rpc_id
         request = {
-            "id": 1,
+            "id": req_id,
             "jsonrpc": "2.0",
             "method": method,
             "params": params or {},
@@ -387,8 +707,10 @@ class MetadataService:
             sock.sendall((json.dumps(request) + "\r\n").encode())
         except OSError as e:
             logger.warning(f"Failed to send RPC request: {e}")
+            self._drop_rpc_socket(sock)
             return None
 
+        deadline = time.monotonic() + 15.0
         while True:
             while b"\r\n" in self._snap_buffer:
                 line, self._snap_buffer = self._snap_buffer.split(b"\r\n", 1)
@@ -401,20 +723,47 @@ class MetadataService:
                         f"Malformed JSON from Snapserver: {line[:100]!r}: {e}"
                     )
                     continue
-                if "id" in msg:
-                    self._last_snap_response = time.monotonic()
+                if not isinstance(msg, dict):
+                    continue
+                self._last_snap_response = time.monotonic()
+                if msg.get("id") == req_id:
                     return msg
+                if "id" in msg:
+                    logger.debug(
+                        "Skipping JSON-RPC reply for id %r (waiting for %d)",
+                        msg.get("id"),
+                        req_id,
+                    )
+                # else: notification — ignore
+            if time.monotonic() > deadline:
+                logger.warning(f"Snapserver reply to {method} timed out")
+                self._drop_rpc_socket(sock)
+                return None
             try:
                 chunk = sock.recv(8192)
                 if not chunk:
+                    self._drop_rpc_socket(sock)
                     return None
                 self._snap_buffer += chunk
             except TimeoutError:
                 logger.warning("Snapserver socket timeout")
+                self._drop_rpc_socket(sock)
                 return None
             except OSError as e:
                 logger.warning(f"Snapserver socket error: {e}")
+                self._drop_rpc_socket(sock)
                 return None
+
+    def _drop_rpc_socket(self, sock: socket.socket) -> None:
+        """Close the persistent snapserver socket after a failed exchange."""
+        if sock is self._snap_sock:
+            self._close_snap_socket()
+        else:
+            try:
+                sock.close()
+            except Exception:
+                pass
+            self._snap_buffer = b""
 
     def get_server_status(self) -> dict | None:
         """Get full server status, with one retry on failure."""
@@ -575,35 +924,6 @@ class MetadataService:
     # MPD metadata
     # ──────────────────────────────────────────────
 
-    def _read_mpd_response(self, sock: socket.socket) -> bytes:
-        response = b""
-        while True:
-            chunk = sock.recv(4096)
-            if not chunk:
-                break
-            response += chunk
-            if b"OK\n" in response or b"ACK" in response:
-                break
-        return response
-
-    def _parse_mpd_response(self, response: bytes) -> dict[str, str]:
-        lines = response.decode("utf-8", errors="replace").split("\n")
-        return {
-            key: value
-            for line in lines
-            if ": " in line
-            for key, value in [line.split(": ", 1)]
-        }
-
-    def _read_mpd_greeting(self, sock: socket.socket, validate: bool = False) -> bool:
-        try:
-            greeting = sock.recv(1024)
-            if validate and not greeting.startswith(b"OK MPD"):
-                return False
-            return True
-        except OSError:
-            return False
-
     @staticmethod
     def _detect_codec(file_path: str, audio_fmt: str) -> str:
         if file_path.startswith(("http://", "https://")):
@@ -685,11 +1005,9 @@ class MetadataService:
                 self._mpd_was_connected = True
                 self._mpd_last_fail = 0.0
 
-            if not self._read_mpd_greeting(sock):
-                return {"playing": False, "source": "MPD"}
-
-            sock.sendall(b"status\n")
-            status = self._parse_mpd_response(self._read_mpd_response(sock))
+            conn = MPDConnection(sock)
+            conn.read_greeting()
+            status = dict(conn.command("status")[0])
 
             if status.get("state", "stop") != "play":
                 return {"playing": False, "source": "MPD"}
@@ -697,8 +1015,7 @@ class MetadataService:
             elapsed = float(status.get("elapsed", 0))
             duration = float(status.get("duration", 0))
 
-            sock.sendall(b"currentsong\n")
-            song = self._parse_mpd_response(self._read_mpd_response(sock))
+            song = dict(conn.command("currentsong")[0])
 
             title, artist, album = self._extract_radio_metadata(
                 html.unescape(song.get("Title", "")),
@@ -713,12 +1030,22 @@ class MetadataService:
             codec = self._detect_codec(file_path, audio_fmt)
             sample_rate, bit_depth = self._parse_audio_format(audio_fmt)
 
+            date = song.get("Date", "")
+            # OriginalDate is a standard MPD tag. When the file has no
+            # separate original-release tag, its Date is the best local
+            # answer — otherwise enrich_tags fired two MusicBrainz calls for
+            # nearly every tagged album just to fill this one field.
+            original_date = song.get("OriginalDate", "")
+            if not original_date and codec != "RADIO":
+                original_date = date
+
             return {
                 "playing": True,
                 "title": title,
                 "artist": artist,
                 "album": album,
-                "date": song.get("Date", ""),
+                "date": date,
+                "original_date": original_date,
                 "genre": song.get("Genre", ""),
                 "track": song.get("Track", ""),
                 "disc": song.get("Disc", ""),
@@ -746,7 +1073,11 @@ class MetadataService:
     # MPD embedded artwork
     # ──────────────────────────────────────────────
 
-    _MAX_MPD_ARTWORK_BYTES = 10_000_000
+    # Bigger images are pointless on 320-1080 px displays and cost a Pi Zero
+    # client ~2x their size in RAM while decoding.
+    _MAX_MPD_ARTWORK_BYTES = 5_000_000
+    # readpicture chunk size requested via `binarylimit` (MPD >= 0.22.4).
+    _MPD_BINARY_LIMIT = 1_048_576
 
     @staticmethod
     def _image_extension(data: bytes) -> str:
@@ -758,21 +1089,101 @@ class MetadataService:
             return ".webp"
         return ".jpg"
 
+    def _write_artwork_file(self, filename: str, data: bytes) -> bool:
+        """Atomically write an artwork file; prune the directory afterwards."""
+        local_path = self.artwork_dir / filename
+        tmp_path = local_path.parent / (local_path.name + ".tmp")
+        try:
+            with open(tmp_path, "wb") as f:
+                f.write(data)
+            tmp_path.rename(local_path)
+        except Exception as e:
+            logger.warning(f"Artwork write/rename failed: {e}")
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return False
+        self._prune_artwork_dir()
+        return True
+
+    def _find_cached_artwork(self, art_hash: str) -> str:
+        """Return an existing artwork_<hash>.* filename (touching it for LRU) or ""."""
+        for ext in (".jpg", ".png", ".gif", ".webp"):
+            cached = self.artwork_dir / f"artwork_{art_hash}{ext}"
+            try:
+                if cached.stat().st_size > 0:
+                    try:
+                        os.utime(cached)
+                    except OSError:
+                        pass
+                    return cached.name
+            except OSError:
+                continue
+        return ""
+
+    def _prune_artwork_dir(self, force: bool = False) -> None:
+        """Keep the newest _ARTWORK_MAX_FILES / _ARTWORK_MAX_BYTES artwork files.
+
+        Previously the directory was only pruned at boot (30-day mtime); an
+        AirPlay session writes one file per track and on read-only installs
+        the directory lives in RAM.
+        """
+        now = time.monotonic()
+        if not force and now - self._artwork_last_prune < _ARTWORK_PRUNE_INTERVAL:
+            return
+        self._artwork_last_prune = now
+        entries: list[tuple[float, int, Path]] = []
+        try:
+            for path in self.artwork_dir.glob("artwork_*"):
+                if path.suffix not in (".jpg", ".png", ".gif", ".webp"):
+                    continue
+                try:
+                    st = path.stat()
+                except OSError:
+                    continue
+                entries.append((st.st_mtime, st.st_size, path))
+        except OSError as e:
+            logger.debug("Artwork prune scan failed: %s", e)
+            return
+        entries.sort(key=lambda e: e[0], reverse=True)
+        total = 0
+        removed = 0
+        for index, (_mtime, size, path) in enumerate(entries):
+            total += size
+            if index < _ARTWORK_MAX_FILES and total <= _ARTWORK_MAX_BYTES:
+                continue
+            try:
+                path.unlink()
+                removed += 1
+            except OSError:
+                pass
+        if removed:
+            logger.info("Pruned %d old artwork file(s)", removed)
+
     def fetch_mpd_artwork(self, file_path: str) -> str:
-        """Fetch embedded cover art from MPD via readpicture. Returns artwork filename or ""."""
+        """Fetch embedded cover art from MPD via readpicture. Returns artwork filename or "".
+
+        Nothing is written unless the whole picture was received: a partial
+        image cached under artwork_<md5> would be served forever.
+        """
         if not file_path:
             return ""
 
         art_hash = hashlib.md5(f"mpd:{file_path}".encode()).hexdigest()
-        for ext in (".jpg", ".png", ".gif", ".webp"):
-            cached = self.artwork_dir / f"artwork_{art_hash}{ext}"
-            if cached.exists() and cached.stat().st_size > 0:
-                return f"artwork_{art_hash}{ext}"
+        cached = self._find_cached_artwork(art_hash)
+        if cached:
+            return cached
 
         # Skip artwork fetch if MPD is known to be down
         if not self._mpd_was_connected and self._mpd_last_fail > 0:
             if time.monotonic() - self._mpd_last_fail < self._mpd_retry_interval:
                 return ""
+
+        if any(c in file_path for c in "\n\r\t\x00"):
+            logger.warning("Rejected file path with control characters")
+            return ""
+        safe_path = file_path.replace("\\", "\\\\").replace('"', '\\"')
 
         sock = self._create_socket(
             self.mpd_host, self.mpd_port, timeout=2, log_errors=False
@@ -782,100 +1193,64 @@ class MetadataService:
 
         try:
             sock.settimeout(10)
-            if not self._read_mpd_greeting(sock, validate=True):
-                return ""
+            conn = MPDConnection(sock)
+            conn.read_greeting()
+            if conn.version >= (0, 22, 4):
+                try:
+                    conn.command(f"binarylimit {self._MPD_BINARY_LIMIT}")
+                except MPDCommandError:
+                    pass  # unsupported — default 8 KiB chunks
 
-            if any(c in file_path for c in "\n\r\t\x00"):
-                logger.warning("Rejected file path with control characters")
-                return ""
-            safe_path = file_path.replace("\\", "\\\\").replace('"', '\\"')
-
-            image_data = b""
-            offset = 0
-
+            image = bytearray()
+            total: int | None = None
             while True:
-                cmd = f'readpicture "{safe_path}" {offset}\n'
-                sock.sendall(cmd.encode())
-
-                header = b""
-                while (
-                    b"binary:" not in header
-                    and b"OK\n" not in header
-                    and b"ACK" not in header
-                ):
-                    chunk = sock.recv(4096)
-                    if not chunk:
-                        return ""
-                    header += chunk
-
-                if b"ACK" in header or b"binary:" not in header:
-                    break
-
-                bin_size = 0
-                for line in header.split(b"\n"):
-                    if line.startswith(b"binary: "):
-                        try:
-                            bin_size = int(line.split(b": ", 1)[1])
-                        except (ValueError, IndexError):
-                            bin_size = 0
-                        break
-                else:
-                    break
-
-                if bin_size <= 0 or bin_size > self._MAX_MPD_ARTWORK_BYTES:
-                    break
-
-                bin_marker = f"binary: {bin_size}\n".encode()
-                marker_pos = header.find(bin_marker)
-                if marker_pos < 0:
-                    break
-                remaining = header[marker_pos + len(bin_marker) :]
-
-                while len(remaining) < bin_size:
-                    chunk = sock.recv(min(8192, bin_size - len(remaining)))
-                    if not chunk:
-                        return ""
-                    remaining += chunk
-
-                if len(image_data) + bin_size > self._MAX_MPD_ARTWORK_BYTES:
+                try:
+                    pairs, chunk = conn.command(
+                        f'readpicture "{safe_path}" {len(image)}',
+                        max_binary=self._MAX_MPD_ARTWORK_BYTES,
+                    )
+                except MPDCommandError as e:
+                    if image:
+                        logger.warning(f"MPD readpicture aborted mid-image: {e}")
+                    return ""
+                if chunk is None:
+                    # No embedded picture (bare OK). Mid-image = protocol error.
+                    if image:
+                        logger.warning("MPD readpicture ended before full image")
+                    return ""
+                fields = dict(pairs)
+                try:
+                    size = int(fields.get("size", "0"))
+                except ValueError:
+                    size = 0
+                if size <= 0 or not chunk:
+                    logger.warning("MPD readpicture returned an invalid chunk")
+                    return ""
+                if size > self._MAX_MPD_ARTWORK_BYTES:
                     logger.warning(
                         f"MPD artwork exceeded size limit ({self._MAX_MPD_ARTWORK_BYTES} bytes)"
                     )
                     return ""
-
-                image_data += remaining[:bin_size]
-                offset += bin_size
-
-                trail = remaining[bin_size:]
-                while b"OK\n" not in trail:
-                    chunk = sock.recv(1024)
-                    if not chunk:
-                        return ""
-                    trail += chunk
-
-            if len(image_data) > 0:
-                ext = self._image_extension(image_data)
-                filename = f"artwork_{art_hash}{ext}"
-                local_path = self.artwork_dir / filename
-                tmp_path = local_path.parent / (local_path.name + ".tmp")
-                try:
-                    with open(tmp_path, "wb") as f:
-                        f.write(image_data)
-                    tmp_path.rename(local_path)
-                except Exception as e:
-                    logger.warning(f"MPD artwork write/rename failed: {e}")
-                    try:
-                        tmp_path.unlink(missing_ok=True)
-                    except Exception:
-                        pass
+                if total is None:
+                    total = size
+                elif size != total:
+                    logger.warning("MPD artwork size changed between chunks")
                     return ""
-                logger.info(
-                    f"Got MPD artwork ({len(image_data)} bytes) for {file_path}"
-                )
-                return filename
+                image += chunk
+                if len(image) >= total:
+                    break
 
-            return ""
-        except OSError as e:
+            if len(image) != total:
+                logger.warning("MPD artwork length mismatch, discarding")
+                return ""
+
+            data = bytes(image)
+            filename = f"artwork_{art_hash}{self._image_extension(data)}"
+            if not self._write_artwork_file(filename, data):
+                return ""
+            logger.info(f"Got MPD artwork ({len(data)} bytes) for {file_path}")
+            return filename
+        except (MPDProtocolError, OSError) as e:
             logger.warning(f"MPD readpicture failed: {e}")
             return ""
         except Exception as e:
@@ -889,9 +1264,16 @@ class MetadataService:
     # ──────────────────────────────────────────────
 
     def _make_api_request(self, url: str, timeout: int = 5) -> dict | list | None:
+        """GET a JSON API. Returns None on ANY failure (treated as transient).
+
+        Every musicbrainz.org call goes through the shared 1 req/s limiter
+        here, so no call site can forget it.
+        """
         try:
+            if urllib.parse.urlparse(url).hostname == "musicbrainz.org":
+                _mb_rate_limit()
             req = urllib.request.Request(url, headers={"User-Agent": self.user_agent})
-            with urllib.request.urlopen(req, timeout=timeout) as response:
+            with safe_urlopen(req, timeout=timeout) as response:
                 return json.loads(response.read().decode())
         except Exception as e:
             logger.debug(f"API request failed for {url}: {e}")
@@ -902,8 +1284,9 @@ class MetadataService:
             return ""
 
         cache_key = f"radio|{station_name}"
-        if cache_key in self.artwork_cache:
-            return self.artwork_cache[cache_key]
+        cached = self._cache_get(self.artwork_cache, cache_key)
+        if cached is not None:
+            return cached
 
         clean_name = station_name
         for sep in ("(", "[", "-"):
@@ -915,8 +1298,8 @@ class MetadataService:
         query = urllib.parse.quote(clean_name)
         url = f"https://de1.api.radio-browser.info/json/stations/byname/{query}?limit=20&order=votes&reverse=true"
         data = self._make_api_request(url)
-        if not data or not isinstance(data, list):
-            self._cache_set(self.artwork_cache, cache_key, "")
+        if data is None or not isinstance(data, list):
+            self._cache_set_negative(self.artwork_cache, cache_key, _NEG_TTL_ERROR)
             return ""
 
         stream_domain = ""
@@ -932,6 +1315,8 @@ class MetadataService:
         best_url = ""
         best_score = -1
         for entry in data:
+            if not isinstance(entry, dict):
+                continue
             favicon = entry.get("favicon", "")
             if not favicon:
                 continue
@@ -945,26 +1330,34 @@ class MetadataService:
 
         if best_url:
             logger.info(f"Found radio logo for '{station_name}': {best_url}")
-        self._cache_set(self.artwork_cache, cache_key, best_url)
+            self._cache_set(self.artwork_cache, cache_key, best_url)
+        else:
+            self._cache_set_negative(self.artwork_cache, cache_key, _NEG_TTL_MISS)
         return best_url
 
-    def fetch_musicbrainz_artwork(self, artist: str, album: str) -> str:
-        _mb_rate_limit()
+    @staticmethod
+    def _clean_album(album: str) -> str:
+        """Remove a truncated parenthetical suffix ("Version 2.0 (20th Annivers")."""
+        if "(" in album and ")" not in album:
+            return album[: album.rfind("(")].rstrip()
+        return album
+
+    def fetch_musicbrainz_artwork(self, artist: str, album: str) -> str | None:
+        """Return a Cover Art Archive URL, "" when MusicBrainz has no match,
+        or None when the lookup itself failed (retry sooner)."""
         query = urllib.parse.quote(f'artist:"{artist}" AND release:"{album}"')
         url = f"https://musicbrainz.org/ws/2/release/?query={query}&fmt=json&limit=5"
         data = self._make_api_request(url)
+        cache_key = f"{artist}|{self._clean_album(album)}"
         if not data or not isinstance(data, dict):
-            return ""
+            return None
         for release in data.get("releases", []):
+            if not isinstance(release, dict):
+                continue
             score = release.get("score", 0)
             if score < 80:
                 continue
             # Cache release metadata (date, genre) for enrich_tags()
-            # Clean album name to match enrich_tags() cache key
-            clean = album
-            if "(" in clean and ")" not in clean:
-                clean = clean[: clean.rfind("(")].rstrip()
-            cache_key = f"{artist}|{clean}"
             date = release.get("date", "")
             original_date = ""
             tags = release.get("tags", [])
@@ -985,13 +1378,15 @@ class MetadataService:
             mbid = release.get("id")
             if mbid:
                 return f"https://coverartarchive.org/release/{mbid}/front-500"
+        if self._cache_get(self._release_meta_cache, cache_key) is None:
+            # Authoritative "no match": spare enrich_tags the same query.
+            self._cache_set_negative(self._release_meta_cache, cache_key, _NEG_TTL_MISS)
         return ""
 
     def fetch_musicbrainz_release_group_first_date(self, release_group_id: str) -> str:
         """Fetch the earliest known release date for a release group."""
         if not release_group_id:
             return ""
-        _mb_rate_limit()
         url = f"https://musicbrainz.org/ws/2/release-group/{release_group_id}?fmt=json"
         data = self._make_api_request(url)
         if not data or not isinstance(data, dict):
@@ -1020,52 +1415,46 @@ class MetadataService:
         if not artist or not album:
             return
 
-        # Clean album name: remove truncated parenthetical suffixes
-        # e.g. "Version 2.0 (20th Annivers" → "Version 2.0"
-        clean_album = album
-        if "(" in clean_album and ")" not in clean_album:
-            clean_album = clean_album[: clean_album.rfind("(")].rstrip()
-
+        clean_album = self._clean_album(album)
         cache_key = f"{artist}|{clean_album}"
-        cached = self._release_meta_cache.get(cache_key)
+        cached = self._cache_get(self._release_meta_cache, cache_key)
+        if cached == "":
+            return  # live negative entry
 
         if cached is None:
             # No cached data — trigger a MusicBrainz lookup
-            _mb_rate_limit()
             query = urllib.parse.quote(f'artist:"{artist}" AND release:"{clean_album}"')
             url = (
                 f"https://musicbrainz.org/ws/2/release/?query={query}&fmt=json&limit=5"
             )
             data = self._make_api_request(url)
-            if data and isinstance(data, dict):
-                for release in data.get("releases", []):
-                    if release.get("score", 0) >= 80:
-                        date = release.get("date", "")
-                        original_date = ""
-                        tags = release.get("tags", [])
-                        genre = tags[0].get("name", "") if tags else ""
-                        release_group = release.get("release-group", {})
-                        release_group_id = (
-                            release_group.get("id", "")
-                            if isinstance(release_group, dict)
-                            else ""
+            if not data or not isinstance(data, dict):
+                self._cache_set_negative(
+                    self._release_meta_cache, cache_key, _NEG_TTL_ERROR
+                )
+                return
+            for release in data.get("releases", []):
+                if isinstance(release, dict) and release.get("score", 0) >= 80:
+                    date = release.get("date", "")
+                    original_date = ""
+                    tags = release.get("tags", [])
+                    genre = tags[0].get("name", "") if tags else ""
+                    release_group = release.get("release-group", {})
+                    release_group_id = (
+                        release_group.get("id", "")
+                        if isinstance(release_group, dict)
+                        else ""
+                    )
+                    if release_group_id:
+                        original_date = self.fetch_musicbrainz_release_group_first_date(
+                            release_group_id
                         )
-                        if release_group_id:
-                            original_date = (
-                                self.fetch_musicbrainz_release_group_first_date(
-                                    release_group_id
-                                )
-                            )
-                        cached = self._release_meta_cache_value(
-                            date, original_date, genre
-                        )
-                        self._cache_set(self._release_meta_cache, cache_key, cached)
-                        break
+                    cached = self._release_meta_cache_value(date, original_date, genre)
+                    self._cache_set(self._release_meta_cache, cache_key, cached)
+                    break
             if cached is None:
-                self._cache_set(
-                    self._release_meta_cache,
-                    cache_key,
-                    self._release_meta_cache_value("", "", ""),
+                self._cache_set_negative(
+                    self._release_meta_cache, cache_key, _NEG_TTL_MISS
                 )
                 return
 
@@ -1098,45 +1487,46 @@ class MetadataService:
         return base_url
 
     def fetch_artist_image(self, artist: str) -> str:
-        if not artist or artist in self.artist_image_cache:
-            return self.artist_image_cache.get(artist, "")
+        if not artist:
+            return ""
+        cached = self._cache_get(self.artist_image_cache, artist)
+        if cached is not None:
+            return cached
+
+        def _miss(transient: bool) -> str:
+            self._cache_set_negative(
+                self.artist_image_cache,
+                artist,
+                _NEG_TTL_ERROR if transient else _NEG_TTL_MISS,
+            )
+            return ""
 
         query = urllib.parse.quote(f'artist:"{artist}"')
         url = f"https://musicbrainz.org/ws/2/artist/?query={query}&fmt=json&limit=1"
         data = self._make_api_request(url)
-        if (
-            not data
-            or not isinstance(data, dict)
-            or not (artists := data.get("artists", []))
-        ):
-            self._cache_set(self.artist_image_cache, artist, "")
-            return ""
+        if not data or not isinstance(data, dict):
+            return _miss(transient=True)
+        artists = data.get("artists", [])
+        if not artists or not isinstance(artists[0], dict):
+            return _miss(transient=False)
 
         artist_mbid = artists[0].get("id")
         if not artist_mbid:
-            self._cache_set(self.artist_image_cache, artist, "")
-            return ""
-
-        _mb_rate_limit()
+            return _miss(transient=False)
 
         url = f"https://musicbrainz.org/ws/2/artist/{artist_mbid}?inc=url-rels&fmt=json"
         data = self._make_api_request(url)
         if not data or not isinstance(data, dict):
-            self._cache_set(self.artist_image_cache, artist, "")
-            return ""
+            return _miss(transient=True)
 
         wikidata_id = self._get_wikidata_id_from_relations(data.get("relations", []))
         if not wikidata_id:
-            self._cache_set(self.artist_image_cache, artist, "")
-            return ""
-
-        _mb_rate_limit()
+            return _miss(transient=False)
 
         url = f"https://www.wikidata.org/wiki/Special:EntityData/{wikidata_id}.json"
         data = self._make_api_request(url)
         if not data or not isinstance(data, dict):
-            self._cache_set(self.artist_image_cache, artist, "")
-            return ""
+            return _miss(transient=True)
 
         entity = data.get("entities", {}).get(wikidata_id, {})
         image_claims = entity.get("claims", {}).get("P18", [])
@@ -1152,63 +1542,55 @@ class MetadataService:
             logger.info(f"Found artist image for {artist}")
             return image_url
 
-        self._cache_set(self.artist_image_cache, artist, "")
-        return ""
+        return _miss(transient=False)
 
-    def fetch_album_artwork(self, artist: str, album: str) -> tuple[str, str]:
-        """Fetch album artwork. Returns (url, source) tuple."""
+    def _album_art_candidates(self, artist: str, album: str):
+        """Yield (url, source) album-art candidates lazily, best first.
+
+        Each provider's lookup result is cached separately (misses/errors
+        with a TTL), so when a candidate's DOWNLOAD fails the caller simply
+        moves on to the next provider: a MusicBrainz release without a CAA
+        front image (404) now falls through to iTunes instead of straight to
+        the artist photo.
+        """
         if not artist or not album:
-            return "", ""
-
-        cache_key = f"{artist}|{album}"
-        if cache_key in self.artwork_cache:
-            cached = self.artwork_cache[cache_key]
-            # Expired failed lookup — retry after 1 hour
-            if cached.startswith("|failed|"):
-                try:
-                    failed_at = int(cached.split("|")[2])
-                    if time.monotonic() - failed_at < 3600:
-                        return "", ""
-                except (IndexError, ValueError):
-                    pass
-                self.artwork_cache.pop(cache_key, None)
-            elif "|" in cached:
-                url, source = cached.split("|", 1)
-                return url, source
-            elif cached:
-                return cached, ""  # old-format entry — source unknown
-            else:
-                return "", ""
-
-        # Priority: MusicBrainz (album-specific, scored) then iTunes
-        artwork_url = self.fetch_musicbrainz_artwork(artist, album)
-        if artwork_url:
-            self._cache_set(self.artwork_cache, cache_key, f"{artwork_url}|musicbrainz")
-            logger.info("Found MusicBrainz artwork for %s - %s", artist, album)
-            return artwork_url, "musicbrainz"
-
-        artwork_url = self._fetch_itunes_artwork(artist, album)
-        if artwork_url:
-            self._cache_set(self.artwork_cache, cache_key, f"{artwork_url}|itunes")
-            logger.info("Found iTunes artwork for %s - %s", artist, album)
-            return artwork_url, "itunes"
-
-        # Cache miss with TTL — retry after 1 hour (don't cache failures forever)
-        self._cache_set(
-            self.artwork_cache, cache_key, f"|failed|{int(time.monotonic())}"
+            return
+        providers = (
+            ("musicbrainz", self.fetch_musicbrainz_artwork),
+            ("itunes", self._fetch_itunes_artwork),
         )
-        return "", ""
+        for source, lookup in providers:
+            cache_key = f"{source}|{artist}|{album}"
+            url = self._cache_get(self.artwork_cache, cache_key)
+            if url is None:
+                url = lookup(artist, album)
+                if url:
+                    self._cache_set(self.artwork_cache, cache_key, url)
+                    logger.info("Found %s artwork for %s - %s", source, artist, album)
+                else:
+                    self._cache_set_negative(
+                        self.artwork_cache,
+                        cache_key,
+                        _NEG_TTL_ERROR if url is None else _NEG_TTL_MISS,
+                    )
+            if url:
+                yield url, source
 
-    def _fetch_itunes_artwork(self, artist: str, album: str) -> str:
+    def _fetch_itunes_artwork(self, artist: str, album: str) -> str | None:
+        """Return a 600x600 artwork URL, "" for no match, None on lookup failure."""
         query = urllib.parse.quote(f"{artist} {album}")
         url = f"https://itunes.apple.com/search?term={query}&media=music&entity=album&limit=10"
         data = self._make_api_request(url)
-        if not data or not isinstance(data, dict) or data.get("resultCount", 0) == 0:
+        if not data or not isinstance(data, dict):
+            return None
+        if data.get("resultCount", 0) == 0:
             return ""
 
         album_lower = album.lower().strip()
         artist_lower = artist.lower().strip()
-        for result in data["results"]:
+        for result in data.get("results", []):
+            if not isinstance(result, dict):
+                continue
             name = result.get("collectionName", "").lower().strip()
             result_artist = result.get("artistName", "").lower().strip()
             album_ok = name == album_lower or name.startswith(album_lower + " (")
@@ -1222,7 +1604,41 @@ class MetadataService:
     # Artwork download with SSRF protection
     # ──────────────────────────────────────────────
 
-    _MAX_ARTWORK_BYTES = 10_000_000
+    # 5 MB: bigger covers are pointless on 320-1080 px displays and cost a
+    # Pi Zero client ~2x their size in RAM to decode (peak ~20 MB here at
+    # the old 10 MB cap, in a 128M container).
+    _MAX_ARTWORK_BYTES = 5_000_000
+
+    # HTTP statuses that will not fix themselves within minutes.
+    _PERMANENT_HTTP_ERRORS = {400, 401, 403, 404, 405, 410, 414, 451}
+
+    def _check_artwork_host(self, hostname: str) -> tuple[str | None, bool]:
+        """SSRF guard for the FIRST hop. Returns (ip_to_connect, allowed).
+
+        Private/loopback addresses are only allowed when they belong to this
+        host or the snapserver (co-located services such as meta_shairport's
+        cover server). Redirect hops get the stricter SafeRedirectHandler
+        check with no local exemption.
+        """
+        infos = socket.getaddrinfo(hostname or "", None, socket.AF_UNSPEC)
+        for attempt in (0, 1):
+            trusted = self._refresh_trusted_ips(force=attempt == 1)
+            blocked_addr = None
+            for _family, _, _, _, sockaddr in infos:
+                addr = sockaddr[0]
+                if not _is_restricted_ip(ipaddress.ip_address(addr)):
+                    return addr, True
+                if addr in trusted:
+                    logger.debug(f"Allowing artwork from trusted local IP: {addr}")
+                    return addr, True
+                blocked_addr = addr
+                break
+            if blocked_addr is None:
+                return None, False
+            # Maybe our own address changed (DHCP renew, late WiFi) — retry
+            # once with a freshly computed trusted list.
+        logger.warning(f"Blocked artwork download to restricted IP: {blocked_addr}")
+        return None, False
 
     def download_artwork(self, url: str, cache_key: str = "") -> str:
         """Download artwork, save to artwork dir. Returns filename or "".
@@ -1231,66 +1647,40 @@ class MetadataService:
             url: The URL to download from.
             cache_key: Optional override for the cache hash. Use when the same
                 URL serves different content (e.g. shairport-sync /cover.jpg).
+
+        Failures are remembered with a TTL (transient: timeout/5xx/blocked;
+        permanent: 404 & co.) so a broken URL isn't hammered every poll, but
+        is retried later instead of never.
         """
         fail_key = cache_key or url
-        if not url or fail_key in self._failed_downloads:
+        if not url or self._is_failed(fail_key):
             return ""
 
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme not in ("http", "https"):
             logger.warning(f"Rejected artwork URL with scheme: {parsed.scheme}")
-            self._mark_failed(fail_key)
+            self._mark_failed(fail_key, permanent=True)
             return ""
 
-        # Block private/loopback IPs (SSRF protection)
-        # Exception: allow IPs belonging to this host (snapserver, shairport-sync,
-        # and other co-located services serve artwork on local interfaces).
+        url_hash = hashlib.md5((cache_key or url).encode()).hexdigest()
+        # Check if already downloaded with any extension
+        existing = self._find_cached_artwork(url_hash)
+        if existing:
+            return existing
+
+        # Block private/loopback IPs (SSRF protection).
         # Resolve once and connect to the resolved IP to prevent DNS rebinding
-        resolved_ip = None
         try:
-            blocked_addr = None
-            for _family, _, _, _, sockaddr in socket.getaddrinfo(
-                parsed.hostname or "", None, socket.AF_UNSPEC
-            ):
-                addr = sockaddr[0]
-                ip = ipaddress.ip_address(addr)
-                if (
-                    ip.is_private
-                    or ip.is_loopback
-                    or ip.is_link_local
-                    or ip.is_multicast
-                    or ip.is_reserved
-                ):
-                    if addr in self._trusted_ips:
-                        logger.debug(f"Allowing artwork from trusted local IP: {addr}")
-                        resolved_ip = addr
-                        break
-                    else:
-                        blocked_addr = addr
-                        break
-                else:
-                    resolved_ip = addr
-                    break
-            if blocked_addr:
-                logger.warning(
-                    f"Blocked artwork download to restricted IP: {blocked_addr}"
-                )
-                self._mark_failed(fail_key)
-                return ""
+            resolved_ip, allowed = self._check_artwork_host(parsed.hostname or "")
         except (socket.gaierror, ValueError, OSError) as e:
             logger.warning(f"Cannot resolve artwork host {parsed.hostname}: {e}")
             self._mark_failed(fail_key)
             return ""
+        if not allowed:
+            self._mark_failed(fail_key)
+            return ""
 
         try:
-            url_hash = hashlib.md5((cache_key or url).encode()).hexdigest()
-
-            # Check if already downloaded with any extension
-            for ext in (".jpg", ".png", ".gif", ".webp"):
-                existing = self.artwork_dir / f"artwork_{url_hash}{ext}"
-                if existing.exists() and existing.stat().st_size > 0:
-                    return existing.name
-
             # Use resolved IP to prevent DNS rebinding (TOCTOU).
             # Only for HTTP — HTTPS certificate checks protect against rebinding.
             if resolved_ip and parsed.hostname and parsed.scheme == "http":
@@ -1304,80 +1694,102 @@ class MetadataService:
                 req = urllib.request.Request(
                     url, headers={"User-Agent": self.user_agent}
                 )
-            with urllib.request.urlopen(req, timeout=5) as response:
-                data = b""
+            with safe_urlopen(req, timeout=5) as response:
+                data = bytearray()
                 dl_start = time.monotonic()
-                while len(data) < self._MAX_ARTWORK_BYTES:
+                while len(data) <= self._MAX_ARTWORK_BYTES:
                     if time.monotonic() - dl_start > 15:
                         logger.warning("Artwork download total timeout (15s)")
                         self._mark_failed(fail_key)
                         return ""
-                    chunk = response.read(8192)
+                    chunk = response.read(65536)
                     if not chunk:
                         break
                     data += chunk
 
-                if len(data) >= self._MAX_ARTWORK_BYTES:
-                    logger.warning(
-                        f"Artwork exceeded size limit ({self._MAX_ARTWORK_BYTES} bytes)"
-                    )
-                    self._mark_failed(fail_key)
-                    return ""
+            if len(data) > self._MAX_ARTWORK_BYTES:
+                logger.warning(
+                    f"Artwork exceeded size limit ({self._MAX_ARTWORK_BYTES} bytes)"
+                )
+                self._mark_failed(fail_key, permanent=True)
+                return ""
+            if not data:
+                logger.warning("Downloaded empty artwork")
+                self._mark_failed(fail_key)
+                return ""
 
-                if len(data) > 0:
-                    ext = self._image_extension(data)
-                    filename = f"artwork_{url_hash}{ext}"
-                    local_path = self.artwork_dir / filename
-                    tmp_path = local_path.parent / (local_path.name + ".tmp")
-                    with open(tmp_path, "wb") as f:
-                        f.write(data)
-                    tmp_path.rename(local_path)
-                    logger.info(
-                        f"Downloaded artwork ({len(data)} bytes) to {local_path}"
-                    )
-                    return filename
-                else:
-                    logger.warning("Downloaded empty artwork")
-                    self._mark_failed(fail_key)
-                    return ""
+            payload = bytes(data)
+            filename = f"artwork_{url_hash}{self._image_extension(payload)}"
+            if not self._write_artwork_file(filename, payload):
+                return ""
+            logger.info(f"Downloaded artwork ({len(payload)} bytes) to {filename}")
+            return filename
+        except urllib.error.HTTPError as e:
+            permanent = e.code in self._PERMANENT_HTTP_ERRORS
+            logger.warning(f"Artwork download HTTP {e.code} for {url}")
+            self._mark_failed(fail_key, permanent=permanent)
+            return ""
+        except BlockedURLError as e:
+            logger.warning(f"Artwork redirect blocked for {url}: {e.reason}")
+            self._mark_failed(fail_key)
+            return ""
         except Exception as e:
             logger.error(f"Failed to download artwork: {e}")
             self._mark_failed(fail_key)
-            try:
-                for tmp in self.artwork_dir.glob(f"artwork_{url_hash}*.tmp"):
-                    tmp.unlink(missing_ok=True)
-            except Exception:
-                pass
             return ""
 
     # ──────────────────────────────────────────────
     # Playback control (bidirectional)
     # ──────────────────────────────────────────────
 
-    def toggle_playback(self) -> bool:
-        """Toggle play/pause via MPD."""
-        sock = self._create_socket(self.mpd_host, self.mpd_port, log_errors=False)
-        if not sock:
-            return False
-        try:
-            if not self._read_mpd_greeting(sock):
+    def toggle_playback(self, client_id: str) -> bool:
+        """Toggle play/pause on the stream the client's group is playing.
+
+        Routed through snapserver `Stream.Control` so it reaches whichever
+        source is actually active (MPD, Spotify, ...). It used to toggle MPD
+        unconditionally, starting MPD on top of an AirPlay/Spotify session.
+        Streams that don't advertise control (AirPlay, Tidal) are ignored.
+        """
+        with self._snap_lock:
+            sock = self._get_snap_socket()
+            if not sock:
                 return False
-            sock.sendall(b"status\n")
-            status = self._parse_mpd_response(self._read_mpd_response(sock))
-            state = status.get("state", "stop")
-            if state == "play":
-                sock.sendall(b"pause 1\n")
-                logger.info("MPD: paused")
-            else:
-                sock.sendall(b"play\n")
-                logger.info("MPD: playing")
-            self._read_mpd_response(sock)
-            return True
-        except Exception as e:
-            logger.warning(f"MPD playback toggle failed: {e}")
+            status = self.send_rpc_request(sock, "Server.GetStatus")
+            server = (status or {}).get("result", {}).get("server")
+            if not server:
+                return False
+
+            candidate = self._build_client_lookup(server).get(client_id)
+            if candidate is None:
+                logger.warning(f"toggle_play: client '{client_id}' not found")
+                return False
+            stream_id = candidate[1]
+            stream = next(
+                (s for s in server.get("streams", []) if s.get("id") == stream_id),
+                None,
+            )
+            props = (stream or {}).get("properties", {}) or {}
+            if not (
+                props.get("canControl")
+                and (props.get("canPause") or props.get("canPlay"))
+            ):
+                logger.info(
+                    f"toggle_play ignored: stream '{stream_id}' does not accept "
+                    "playback control"
+                )
+                return False
+
+            sock = self._get_snap_socket()
+            if not sock:
+                return False
+            response = self.send_rpc_request(
+                sock, "Stream.Control", {"id": stream_id, "command": "playPause"}
+            )
+            if response and "result" in response:
+                logger.info(f"toggle_play: playPause sent to stream '{stream_id}'")
+                return True
+            logger.warning(f"toggle_play on '{stream_id}' failed: {response}")
             return False
-        finally:
-            sock.close()
 
     def set_client_volume(self, client_id: str, volume: int) -> bool:
         """Set volume for a specific client (0-100)."""
@@ -1441,27 +1853,23 @@ class MetadataService:
             logger.debug(f"go-librespot API unavailable: {e}")
             return None
 
-    # Grace window after service start during which a first-time-seen track
-    # is assumed to be a track-change event observed in real time (calibrated).
-    # After this window, a first-time-seen track is treated as "already playing
-    # when we booted" and we admit we don't know its real elapsed (uncalibrated).
-    # 5 s comfortably covers normal startup poll cycles (3 s default) without
-    # mis-flagging a true track-change as cold-start.
-    _FRESH_START_GRACE_SEC: float = 5.0
-
     def _estimate_elapsed(
         self, stream_id: str, track_key: str, is_playing: bool
     ) -> int | None:
         """Estimate elapsed seconds for sources without native position reporting.
 
         Returns:
-            int: estimated elapsed seconds when the timer is calibrated
-                 (track-change observed in real time, or service freshly started).
-            None: when the track was already playing before metadata-service
-                  started polling — i.e. we have no anchor for "track start"
-                  and any local-clock estimate would be wrong. Clients should
-                  treat None as "elapsed unknown" and render the progress bar
-                  accordingly.
+            int: estimated elapsed seconds when the timer is calibrated, i.e.
+                 we watched the stream switch to this track in real time.
+            None: for the first track ever seen on a stream — it was already
+                  there when metadata-service started polling, so we have no
+                  anchor for "track start" and any local-clock estimate would
+                  be wrong. Clients should treat None as "elapsed unknown"
+                  and render the progress bar accordingly.
+
+        A startup grace window used to mark first sightings as calibrated,
+        but the first poll always lands <1 s after start, so after a
+        mid-track restart every stream emitted elapsed counting from 0.
 
         Tracks play/pause transitions per stream. Resets when track_key changes.
         """
@@ -1469,11 +1877,10 @@ class MetadataService:
         timer = self._track_timers.get(stream_id)
 
         if timer is None or timer["key"] != track_key:
-            # First time we see this track. Decide calibration based on
-            # whether the service has been running long enough that any
-            # in-progress track must have started before our boot.
-            within_grace = (now - self._service_start) <= self._FRESH_START_GRACE_SEC
-            calibrated = (timer is not None) or within_grace
+            # Calibrated only if we saw a different track (or "no track")
+            # on this stream before — i.e. the change happened while we
+            # were watching.
+            calibrated = timer is not None
             self._track_timers[stream_id] = {
                 "key": track_key,
                 "start": now if is_playing else 0.0,
@@ -1583,85 +1990,90 @@ class MetadataService:
     def enrich_artwork(self, metadata: dict[str, Any]) -> None:
         """Fetch/download artwork for a metadata dict. Mutates in place.
 
-        Priority chain:
-        1. Embedded art (MPD) / Snapcast HTTP art URL
-        2. MusicBrainz Cover Art Archive (album-specific, score >= 80)
-        3. iTunes Search API (album-specific, validated)
-        4. Radio-Browser logo (radio streams only)
-        5. artist_image (generic artist photo — last resort)
+        Priority chain — every step that yields a URL is downloaded right
+        away and, if the download fails, the chain CONTINUES (a failing
+        Spotify/AirPlay URL or a CAA 404 no longer ends the search):
+        1. Snapcast artUrl from the source plugin (Spotify, AirPlay, ...)
+        2. Embedded art (MPD readpicture)
+        3. MusicBrainz Cover Art Archive (album-specific, score >= 80)
+        4. iTunes Search API (album-specific, validated)
+        5. Radio-Browser logo (radio streams only)
         6. Default radio placeholder (radio streams only)
+        7. artist_image (generic artist photo — last resort)
         """
         if not metadata.get("playing"):
             return
 
-        artwork_url = metadata.get("artwork", "")
-        artwork_source = "snapcast" if artwork_url else ""
+        source_url = metadata.get("artwork", "") or ""
         is_radio = metadata.get("codec") == "RADIO"
+        artwork_source = ""
+        local_file = ""
+        metadata["artwork"] = ""
 
-        # For MPD files, try embedded cover art first
-        if not artwork_url and metadata.get("source") == "MPD" and not is_radio:
-            mpd_art = self.fetch_mpd_artwork(metadata.get("file", ""))
-            if mpd_art:
-                metadata["artwork"] = self._artwork_url(mpd_art)
+        # 1. Source-provided URL
+        if source_url:
+            cache_key = ""
+            if "/cover.jpg" in source_url and metadata.get("title"):
+                # meta_shairport serves every track at /cover.jpg (newer
+                # builds add a per-picture ?v= query); keying on the track
+                # as well keeps two tracks from sharing one cached file.
+                cache_key = (
+                    f"{source_url}|{metadata.get('title', '')}"
+                    f"|{metadata.get('artist', '')}"
+                )
+            local_file = self.download_artwork(source_url, cache_key=cache_key)
+            if local_file:
+                artwork_source = "snapcast"
+
+        # 2. MPD embedded cover art
+        if not local_file and metadata.get("source") == "MPD" and not is_radio:
+            local_file = self.fetch_mpd_artwork(metadata.get("file", ""))
+            if local_file:
                 artwork_source = "embedded"
-                artwork_url = None  # skip further lookups
 
-        if not artwork_url and not metadata.get("artwork"):
+        if not local_file:
             logger.debug(
                 "No artwork from source for %s - %s (%s), trying fallback",
                 metadata.get("artist"),
                 metadata.get("album"),
                 metadata.get("source"),
             )
-            if is_radio and metadata.get("station_name"):
-                artwork_url = self.fetch_radio_logo(
-                    metadata["station_name"], metadata.get("file", "")
-                )
-                if artwork_url:
-                    artwork_source = "radio-browser"
-            elif metadata.get("artist") and metadata.get("album"):
-                artwork_url, artwork_source = self.fetch_album_artwork(
-                    metadata["artist"], metadata["album"]
-                )
+            if is_radio:
+                # 5. Radio-Browser logo
+                if metadata.get("station_name"):
+                    logo_url = self.fetch_radio_logo(
+                        metadata["station_name"], metadata.get("file", "")
+                    )
+                    if logo_url:
+                        local_file = self.download_artwork(logo_url)
+                        if local_file:
+                            artwork_source = "radio-browser"
+            else:
+                # 3./4. Album lookups, next provider on download failure
+                for url, source in self._album_art_candidates(
+                    metadata.get("artist", ""), metadata.get("album", "")
+                ):
+                    local_file = self.download_artwork(url)
+                    if local_file:
+                        artwork_source = source
+                        break
 
-        # Download external artwork locally
-        if artwork_url:
-            cache_key = ""
-            if "/cover.jpg" in artwork_url and metadata.get("title"):
-                cache_key = (
-                    f"{artwork_url}|{metadata.get('title', '')}"
-                    f"|{metadata.get('artist', '')}"
-                )
-            local_file = self.download_artwork(artwork_url, cache_key=cache_key)
-            metadata["artwork"] = self._artwork_url(local_file) if local_file else ""
-
-        # Fallback: radio logo
-        if not metadata.get("artwork") and is_radio and metadata.get("station_name"):
-            logo_url = self.fetch_radio_logo(
-                metadata["station_name"], metadata.get("file", "")
-            )
-            if logo_url:
-                local_file = self.download_artwork(logo_url)
-                if local_file:
-                    metadata["artwork"] = self._artwork_url(local_file)
-                    artwork_source = "radio-browser"
-
-        # Final radio fallback
-        if not metadata.get("artwork") and is_radio:
+        if local_file:
+            metadata["artwork"] = self._artwork_url(local_file)
+        elif is_radio:
+            # 6. Final radio fallback
             metadata["artwork"] = (
                 f"http://{get_external_host()}:{HTTP_PORT}/defaults/default-radio.png"
             )
             artwork_source = "default"
 
-        # Artist image (not for radio) — download through SSRF-safe pipeline
+        # 7. Artist image (not for radio) — download through SSRF-safe pipeline
         if not is_radio and metadata.get("artist"):
             artist_image_url = self.fetch_artist_image(metadata["artist"])
             if artist_image_url:
                 cached = self.download_artwork(artist_image_url)
                 if cached:
-                    artist_image_served = (
-                        f"http://{get_external_host()}:{HTTP_PORT}/artwork/{cached}"
-                    )
+                    artist_image_served = self._artwork_url(cached)
                     metadata["artist_image"] = artist_image_served
                     # Last resort: use artist_image as artwork if nothing else found
                     if not metadata.get("artwork"):
@@ -1704,164 +2116,15 @@ class MetadataService:
     # ──────────────────────────────────────────────
 
     async def poll_loop(self) -> None:
-        """Main loop: poll Snapserver, enrich metadata, broadcast to clients."""
-        loop = asyncio.get_running_loop()
+        """Main loop: poll Snapserver, broadcast text metadata, enrich in background."""
         consecutive_errors = 0
-        server_info_counter = 0
+        self._server_info_counter = 0
 
         while True:
             try:
-                server = await loop.run_in_executor(None, self.get_server_status)
-                if not server:
+                if not await self._poll_once():
                     await asyncio.sleep(5)
                     continue
-
-                # Mark this iteration as a healthy round-trip with snapserver.
-                # /health uses this timestamp to differentiate "container alive
-                # AND talking to snapserver" from "container alive, snapserver
-                # silent for N seconds". `time` already imported at module top.
-                self.last_successful_poll_at = time.time()
-
-                # Rebuild client → stream mapping (only if changed)
-                new_map = self._build_client_stream_map(server)
-                if new_map != self._client_stream_map:
-                    self._client_stream_map = new_map
-
-                # Update subscribed clients' stream_id, track switches
-                stream_switched_clients: list[SubscribedClient] = []
-                for sc in ws_clients.copy():
-                    if sc.is_stream_subscriber:
-                        continue  # Fixed stream_id; _resolve_client_stream("") must not be called
-                    resolved = self._resolve_client_stream(sc.client_id)
-                    if resolved and resolved != sc.stream_id:
-                        logger.info(
-                            f"Client '{sc.client_id}' switched: "
-                            f"{sc.stream_id} -> {resolved}"
-                        )
-                        sc.stream_id = resolved
-                        stream_switched_clients.append(sc)
-                    elif resolved:
-                        sc.stream_id = resolved
-
-                # Process each stream
-                for stream in server.get("streams", []):
-                    stream_id = stream.get("id", "")
-                    if not stream_id:
-                        continue
-
-                    if stream_id not in self.streams:
-                        self.streams[stream_id] = StreamMetadata(stream_id)
-                    sm = self.streams[stream_id]
-
-                    metadata = await loop.run_in_executor(
-                        None, self._extract_stream_metadata, stream
-                    )
-
-                    # Enrich MPD stream with richer metadata
-                    if metadata.get("source") == "MPD":
-                        mpd_meta = await loop.run_in_executor(
-                            None, self.get_mpd_metadata
-                        )
-                        if mpd_meta.get("playing"):
-                            if not mpd_meta.get("title") and mpd_meta.get(
-                                "station_name"
-                            ):
-                                mpd_meta["title"] = mpd_meta["station_name"]
-                            metadata = mpd_meta
-
-                    # Enrich non-MPD streams with position data
-                    if metadata.get("source") != "MPD":
-                        track_key = (
-                            f"{metadata.get('title', '')}|{metadata.get('artist', '')}"
-                        )
-                        is_playing = metadata.get("playing", False) and track_key != "|"
-
-                        if stream_id == "Spotify" and is_playing:
-                            # Accurate position from go-librespot API
-                            spotify_pos = await loop.run_in_executor(
-                                None, self.get_spotify_position
-                            )
-                            if spotify_pos is not None:
-                                metadata["elapsed"] = spotify_pos[0]
-                                metadata["duration"] = spotify_pos[1]
-
-                        # AirPlay, Tidal, etc.: estimate from local clock.
-                        # estimated is None when the track was already playing
-                        # before metadata-service started — we have no reliable
-                        # anchor for "track start" so emitting a wrong elapsed
-                        # would mislead the client UI (progress bar at 0:00
-                        # when the song is half-way through). Drop the field
-                        # entirely so the client renders elapsed as unknown.
-                        estimated = self._estimate_elapsed(
-                            stream_id, track_key, is_playing
-                        )
-                        if is_playing and metadata.get("elapsed", 0) <= 0:
-                            if estimated is None:
-                                metadata.pop("elapsed", None)
-                            else:
-                                metadata["elapsed"] = estimated
-
-                    # Enrich with artwork and tags
-                    await loop.run_in_executor(None, self.enrich_artwork, metadata)
-                    await loop.run_in_executor(None, self.enrich_tags, metadata)
-
-                    # Check for changes
-                    changed = self._metadata_changed(metadata, sm.current)
-                    volatile_changed = not changed and any(
-                        metadata.get(f) != sm.current.get(f)
-                        for f in self._VOLATILE_FIELDS
-                    )
-
-                    if changed:
-                        title = metadata.get("title", "N/A")
-                        artist = metadata.get("artist", "N/A")
-                        logger.info(f"[{stream_id}] Updated: {title} - {artist}")
-
-                    if changed or volatile_changed:
-                        sm.current = metadata
-                        # Write per-stream metadata.json (atomic)
-                        meta_file = self.artwork_dir / f"metadata_{stream_id}.json"
-                        try:
-                            tmp_file = meta_file.parent / (meta_file.name + ".tmp")
-                            with open(tmp_file, "w") as f:
-                                json.dump(self._output_metadata(metadata), f, indent=2)
-                            tmp_file.rename(meta_file)
-                        except Exception as e:
-                            logger.error(
-                                f"Failed to write metadata for {stream_id}: {e}"
-                            )
-                            try:
-                                tmp_file.unlink(missing_ok=True)
-                            except Exception:
-                                pass
-
-                        # Broadcast to subscribed clients
-                        await self._broadcast_to_stream(stream_id, metadata, server)
-
-                # Send current metadata to clients that just switched streams
-                stream_switch_failures: set[SubscribedClient] = set()
-                for sc in stream_switched_clients:
-                    sm = self.streams.get(sc.stream_id)
-                    if sm and sm.current:
-                        volume_info = self._find_client_volume(server, sc.client_id)
-                        output = {
-                            **self._output_metadata(sm.current),
-                            "volume": volume_info.get("percent", 100),
-                            "muted": volume_info.get("muted", False),
-                        }
-                        try:
-                            await sc.websocket.send(json.dumps(output))
-                        except Exception:
-                            stream_switch_failures.add(sc)
-                if stream_switch_failures:
-                    async with ws_clients_lock:
-                        ws_clients.difference_update(stream_switch_failures)
-
-                server_info_counter += 1
-                if server_info_counter >= 20:  # ~60s at 3s poll interval
-                    server_info_counter = 0
-                    await self._broadcast_server_info(server)
-
                 consecutive_errors = 0
 
             except Exception as e:
@@ -1876,6 +2139,279 @@ class MetadataService:
                 )
 
             await asyncio.sleep(3)
+
+    async def _poll_once(self) -> bool:
+        """One poll cycle. Returns False when snapserver could not be reached.
+
+        Only fast, local work happens here (snapserver status, MPD status,
+        go-librespot position). Artwork/tag enrichment — which can take
+        5-30 s on a slow WAN — runs as a background task per stream/track
+        and re-broadcasts when it lands, so title/artist are pushed at once
+        and the /health heartbeat never waits on the internet.
+        """
+        loop = asyncio.get_running_loop()
+        server = await loop.run_in_executor(None, self.get_server_status)
+        if not server:
+            return False
+
+        # Mark this iteration as a healthy round-trip with snapserver.
+        # /health uses this timestamp to differentiate "container alive
+        # AND talking to snapserver" from "container alive, snapserver
+        # silent for N seconds". `time` already imported at module top.
+        self.last_successful_poll_at = time.time()
+        self._last_server = server
+        self._status_cache = (time.monotonic(), server)
+
+        # Rebuild client → stream mapping (only if changed)
+        new_map = self._build_client_stream_map(server)
+        if new_map != self._client_stream_map:
+            self._client_stream_map = new_map
+
+        # Update subscribed clients' stream_id, track switches
+        stream_switched_clients: list[SubscribedClient] = []
+        for sc in ws_clients.copy():
+            if sc.is_stream_subscriber:
+                continue  # Fixed stream_id; _resolve_client_stream("") must not be called
+            resolved = self._resolve_client_stream(sc.client_id)
+            if resolved and resolved != sc.stream_id:
+                logger.info(
+                    f"Client '{sc.client_id}' switched: {sc.stream_id} -> {resolved}"
+                )
+                sc.stream_id = resolved
+                stream_switched_clients.append(sc)
+            elif resolved:
+                sc.stream_id = resolved
+
+        # Process each stream
+        for stream in server.get("streams", []):
+            stream_id = stream.get("id", "")
+            if not stream_id:
+                continue
+
+            if stream_id not in self.streams:
+                self.streams[stream_id] = StreamMetadata(stream_id)
+            sm = self.streams[stream_id]
+
+            metadata = self._extract_stream_metadata(stream)
+
+            # Enrich MPD stream with richer metadata
+            if metadata.get("source") == "MPD":
+                mpd_meta = await loop.run_in_executor(None, self.get_mpd_metadata)
+                if mpd_meta.get("playing"):
+                    if not mpd_meta.get("title") and mpd_meta.get("station_name"):
+                        mpd_meta["title"] = mpd_meta["station_name"]
+                    metadata = mpd_meta
+
+            # Enrich non-MPD streams with position data
+            if metadata.get("source") != "MPD":
+                track_key = f"{metadata.get('title', '')}|{metadata.get('artist', '')}"
+                is_playing = metadata.get("playing", False) and track_key != "|"
+
+                if stream_id == "Spotify" and is_playing:
+                    # Accurate position from go-librespot API
+                    spotify_pos = await loop.run_in_executor(
+                        None, self.get_spotify_position
+                    )
+                    if spotify_pos is not None:
+                        metadata["elapsed"] = spotify_pos[0]
+                        metadata["duration"] = spotify_pos[1]
+
+                # AirPlay, Tidal, etc.: estimate from local clock.
+                # estimated is None when the track was already playing
+                # before metadata-service started — we have no reliable
+                # anchor for "track start" so emitting a wrong elapsed
+                # would mislead the client UI (progress bar at 0:00
+                # when the song is half-way through). Drop the field
+                # entirely so the client renders elapsed as unknown.
+                estimated = self._estimate_elapsed(stream_id, track_key, is_playing)
+                if is_playing and metadata.get("elapsed", 0) <= 0:
+                    if estimated is None:
+                        metadata.pop("elapsed", None)
+                    else:
+                        metadata["elapsed"] = estimated
+
+            # No await between storing the base and publishing it: an
+            # enrichment completing in between would otherwise be
+            # overwritten by an older snapshot.
+            sm.base = metadata
+            self._schedule_enrichment(sm)
+            await self._publish_stream(sm, server)
+
+        # Send current metadata to clients that just switched streams
+        stream_switch_failures: set[SubscribedClient] = set()
+        for sc in stream_switched_clients:
+            sm = self.streams.get(sc.stream_id)
+            if sm and sm.current:
+                volume_info = self._find_client_volume(server, sc.client_id)
+                output = {
+                    **self._output_metadata(sm.current),
+                    "volume": volume_info.get("percent", 100),
+                    "muted": volume_info.get("muted", False),
+                }
+                try:
+                    await sc.websocket.send(json.dumps(output))
+                except Exception:
+                    stream_switch_failures.add(sc)
+        if stream_switch_failures:
+            async with ws_clients_lock:
+                ws_clients.difference_update(stream_switch_failures)
+
+        self._server_info_counter = getattr(self, "_server_info_counter", 0) + 1
+        if self._server_info_counter >= 20:  # ~60s at 3s poll interval
+            self._server_info_counter = 0
+            await self._broadcast_server_info(server)
+        return True
+
+    # ──────────────────────────────────────────────
+    # Background enrichment
+    # ──────────────────────────────────────────────
+
+    # A finished enrichment that found no artwork is retried after this many
+    # seconds while the same track keeps playing (failure caches have TTLs).
+    _ENRICH_RETRY_SEC: float = 120.0
+
+    @staticmethod
+    def _enrich_key(metadata: dict[str, Any]) -> str:
+        """Identity of the track as far as enrichment is concerned."""
+        return "\x1f".join(
+            str(metadata.get(k, ""))
+            for k in (
+                "source",
+                "title",
+                "artist",
+                "album",
+                "artwork",
+                "file",
+                "station_name",
+                "codec",
+            )
+        )
+
+    def _enrich_sync(self, base: dict[str, Any]) -> dict[str, Any]:
+        """Run artwork + tag enrichment on a copy; return only what changed."""
+        enriched = dict(base)
+        self.enrich_artwork(enriched)
+        self.enrich_tags(enriched)
+        return {k: v for k, v in enriched.items() if k not in base or base.get(k) != v}
+
+    def _schedule_enrichment(self, sm: StreamMetadata) -> None:
+        """Start (at most) one background enrichment for sm's current track."""
+        base = sm.base
+        if not base.get("playing"):
+            return
+        key = self._enrich_key(base)
+        if sm.enrich_key == key:
+            if sm.enrich_task is not None and not sm.enrich_task.done():
+                return  # already in flight for this track
+            if sm.enriched is not None:
+                has_artwork = bool({**base, **sm.enriched}.get("artwork"))
+                recent = time.monotonic() - sm.enrich_done_at < self._ENRICH_RETRY_SEC
+                if has_artwork or recent:
+                    return
+            # Finished without artwork long enough ago — retry (keep the
+            # previous result visible meanwhile).
+        else:
+            if sm.enrich_task is not None and not sm.enrich_task.done():
+                sm.enrich_task.cancel()
+            sm.enrich_key = key
+            sm.enriched = None
+        sm.enrich_task = asyncio.create_task(self._run_enrichment(sm, key, dict(base)))
+
+    async def _run_enrichment(
+        self, sm: StreamMetadata, key: str, base: dict[str, Any]
+    ) -> None:
+        loop = asyncio.get_running_loop()
+        try:
+            delta = await loop.run_in_executor(
+                self._enrich_executor, self._enrich_sync, base
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(f"[{sm.stream_id}] Enrichment failed: {e}")
+            delta = {}
+        if sm.enrich_key != key:
+            return  # track changed while we were looking — drop stale result
+        sm.enriched = delta
+        sm.enrich_done_at = time.monotonic()
+        if sm.base and self._enrich_key(sm.base) == key:
+            await self._publish_stream(sm, self._last_server)
+
+    def _compose_metadata(self, sm: StreamMetadata) -> dict[str, Any]:
+        """Current snapshot = latest poll data + enrichment for that track."""
+        base = sm.base
+        if not base.get("playing"):
+            return dict(base)
+        if sm.enriched is not None and sm.enrich_key == self._enrich_key(base):
+            return {**base, **sm.enriched}
+        # Enrichment pending: don't leak the raw source artUrl (LAN-only
+        # plugin URLs, not yet re-hosted); clients show artwork once ready.
+        pending = dict(base)
+        pending["artwork"] = ""
+        return pending
+
+    async def _publish_stream(self, sm: StreamMetadata, server: dict) -> None:
+        """Compose, detect changes, persist and broadcast one stream's state."""
+        async with sm.publish_lock:
+            metadata = self._compose_metadata(sm)
+            stream_id = sm.stream_id
+
+            # Check for changes
+            changed = self._metadata_changed(metadata, sm.current)
+            volatile_changed = not changed and any(
+                metadata.get(f) != sm.current.get(f) for f in self._VOLATILE_FIELDS
+            )
+            if not (changed or volatile_changed):
+                return
+
+            if changed:
+                title = metadata.get("title", "N/A")
+                artist = metadata.get("artist", "N/A")
+                logger.info(f"[{stream_id}] Updated: {title} - {artist}")
+
+            # elapsed ticks every poll while playing — broadcast it, but only
+            # rewrite metadata_<stream>.json when something else changed.
+            write_file = changed or any(
+                metadata.get(f) != sm.current.get(f)
+                for f in self._VOLATILE_FIELDS - {"elapsed"}
+            )
+            sm.current = metadata
+            if write_file:
+                self._write_stream_file(stream_id, metadata)
+
+            # Broadcast to subscribed clients
+            await self._broadcast_to_stream(stream_id, metadata, server)
+
+    def _write_stream_file(self, stream_id: str, metadata: dict) -> None:
+        """Write per-stream metadata_<stream>.json (atomic)."""
+        meta_file = self.artwork_dir / f"metadata_{stream_id}.json"
+        tmp_file = meta_file.parent / (meta_file.name + ".tmp")
+        try:
+            with open(tmp_file, "w") as f:
+                json.dump(self._output_metadata(metadata), f, indent=2)
+            tmp_file.rename(meta_file)
+        except Exception as e:
+            logger.error(f"Failed to write metadata for {stream_id}: {e}")
+            try:
+                tmp_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    async def get_server_status_throttled(self, max_age: float = 1.0) -> dict | None:
+        """Server.GetStatus shared across callers, at most ~once per max_age.
+
+        A burst of WebSocket subscribes (or a client spamming `subscribe`)
+        used to trigger one snapserver round-trip each.
+        """
+        async with self._status_lock:
+            cached = self._status_cache
+            if cached is not None and time.monotonic() - cached[0] < max_age:
+                return cached[1]
+            loop = asyncio.get_running_loop()
+            server = await loop.run_in_executor(None, self.get_server_status)
+            if server:
+                self._status_cache = (time.monotonic(), server)
+            return server
 
     async def _broadcast_to_stream(
         self, stream_id: str, metadata: dict, server: dict
@@ -1914,13 +2450,15 @@ class MetadataService:
         """Handle control commands from a subscribed client."""
         try:
             cmd = json.loads(message)
+            if not isinstance(cmd, dict):
+                return
             cmd_type = cmd.get("cmd")
             logger.info(f"Control command from {client_id}: {cmd_type}")
 
             loop = asyncio.get_running_loop()
 
             if cmd_type == "toggle_play":
-                await loop.run_in_executor(None, self.toggle_playback)
+                await loop.run_in_executor(None, self.toggle_playback, client_id)
             elif cmd_type == "volume":
                 delta = cmd.get("delta", 0)
                 if isinstance(delta, (int, float)) and delta:
@@ -1961,6 +2499,10 @@ async def ws_handler(websocket: Any) -> None:
                 data = json.loads(message)
             except json.JSONDecodeError:
                 continue
+            # Valid JSON that isn't an object ("subscribe", 42, [...]) used
+            # to raise TypeError on `"subscribe" in data` and kill the handler.
+            if not isinstance(data, dict):
+                continue
 
             # Subscription message
             if "subscribe" in data:
@@ -1979,10 +2521,7 @@ async def ws_handler(websocket: Any) -> None:
                 # Resolve stream and send current metadata immediately
                 if _service:
                     stream_id = _service._resolve_client_stream(client_id)
-                    loop = asyncio.get_running_loop()
-                    server = await loop.run_in_executor(
-                        None, _service.get_server_status
-                    )
+                    server = await _service.get_server_status_throttled()
                     if stream_id:
                         sc.stream_id = stream_id
                         sm = _service.streams.get(stream_id)
@@ -2025,10 +2564,7 @@ async def ws_handler(websocket: Any) -> None:
                         await websocket.send(
                             json.dumps(_service._output_metadata(sm.current))
                         )
-                    loop = asyncio.get_running_loop()
-                    server = await loop.run_in_executor(
-                        None, _service.get_server_status
-                    )
+                    server = await _service.get_server_status_throttled()
                     if server:
                         await websocket.send(
                             json.dumps(_service._build_server_info(server))
@@ -3399,6 +3935,7 @@ async def main() -> None:
                 pass
 
     _service = MetadataService()
+    _service._prune_artwork_dir(force=True)
 
     logger.info("Starting snapMULTI Metadata Service")
     logger.info(f"  Snapserver: {SNAPSERVER_HOST}:{SNAPSERVER_RPC_PORT}")
