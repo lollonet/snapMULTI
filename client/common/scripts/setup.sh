@@ -269,7 +269,7 @@ _overlayroot_active() {
 # asound.conf still naming the old card. First boot is unaffected: the
 # overlay only activates after the install's final reboot. Under firstboot
 # (PROGRESS_MANAGED) keep the previous behaviour and only warn.
-if _overlayroot_active; then
+if _overlayroot_active /proc/mounts; then
     if [[ "$ALLOW_OVERLAYROOT" == true ]]; then
         echo "[WARN] Read-only mode is active (--allow-overlayroot): changes outside /boot/firmware are lost at reboot."
     elif [[ -n "${PROGRESS_MANAGED:-}" ]]; then

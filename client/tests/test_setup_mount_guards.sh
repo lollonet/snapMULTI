@@ -86,10 +86,10 @@ check_not "unreadable mounts table → inactive"           _overlayroot_active "
 
 echo ""
 echo "Testing the overlayroot guard block..."
-# Extract the guard (from `if _overlayroot_active; then` to its closing
+# Extract the guard (from `if _overlayroot_active /proc/mounts; then` to its closing
 # `fi` at column 0) and run it with a stubbed detector.
 GUARD="$WORK/guard.sh"
-awk '/^if _overlayroot_active; then$/ {c=1} c {print} c && /^fi$/ {exit}' "$SETUP_SH" > "$GUARD"
+awk '/^if _overlayroot_active \/proc\/mounts; then$/ {c=1} c {print} c && /^fi$/ {exit}' "$SETUP_SH" > "$GUARD"
 if [[ ! -s "$GUARD" ]]; then
     echo "  FAIL: overlayroot guard block not found in setup.sh"
     exit 1
