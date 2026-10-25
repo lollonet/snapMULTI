@@ -111,6 +111,8 @@ Comandi avanzati (MPD CLI, switch sorgente via JSON-RPC, `.env` personalizzato):
 
 Snapcast, AirPlay, Spotify e Tidal si annunciano sulla LAN tramite l'`avahi-daemon` **dell'host** (socket D-Bus bind-mounted nei container che lo richiedono). Requisito host: `systemctl is-active avahi-daemon` deve restituire `active`. **Non eseguire avahi-daemon dentro i container** — la porta 5353 va in conflitto con l'host.
 
+Sulle installazioni server e both l'host pubblica anche la pagina iniziale (HTTP del metadata-service, porta 8083, `/` reindirizza a `/status`) come `_http._tcp` **"snapMULTI on &lt;hostname&gt;"**, tramite un file di servizio Avahi statico `/etc/avahi/services/snapmulti-http.service` scritto da `deploy.sh` (le installazioni solo client non lo ricevono). Lo stesso URL compare nella schermata di login della console HDMI tramite `/etc/issue.d/snapmulti.issue` (`http://<hostname>.local:8083/` e la forma IPv4).
+
 Snapcast 0.35.x esce dal suo poll loop Avahi su `AVAHI_CLIENT_FAILURE` senza retry. A partire da v0.7.5 le unit systemd non usano più `PartOf=avahi-daemon.service` — quel cascade era troppo aggressivo (qualunque restart di avahi sull'host smontava l'intero stack Compose). Il recovery è ora esplicito e operator-driven: `scripts/common/system-tune.sh::tune_avahi_daemon` riavvia `avahi-daemon` e poi esplicitamente `snapmulti-server.service` + `snapclient.service` così le connessioni libavahi-client dentro snapcast vengono ristabilite. `ExecStop` di routine è `docker compose stop -t 5` (non distruttivo), così un ciclo clean start è 2–5 s invece dei 30–40 s di teardown del precedente modello `compose down`.
 
 Verifica rapida:
@@ -118,6 +120,7 @@ Verifica rapida:
 ```bash
 avahi-browse -r _snapcast._tcp --terminate
 avahi-browse -r _raop._tcp --terminate
+avahi-browse -r _http._tcp --terminate   # "snapMULTI on <hostname>" (server)
 ss -tlnp | grep -E '1704|1705|1780'
 ```
 

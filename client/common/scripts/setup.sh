@@ -32,6 +32,8 @@ SECONDS=0
 #
 # Optional flags:
 #   --no-readonly  Disable read-only filesystem (default: enabled)
+#   --allow-overlayroot  Run even while the read-only overlay is active
+#                  (changes to /etc and systemd are then lost at reboot)
 # ============================================
 AUTO_MODE=false
 AUTO_CONFIG=""
@@ -41,6 +43,9 @@ ENABLE_READONLY=true
 #   that sets ENABLE_READONLY=true silently undoes a CLI --no-readonly.
 CLI_READONLY_OVERRIDE=""
 NEEDS_REBOOT=false
+# --allow-overlayroot: run even while the read-only overlay is active
+# (see the overlayroot guard after the root check).
+ALLOW_OVERLAYROOT=false
 
 # Argument parsing: flags can appear in any order; the first non-flag
 # positional is the auto-config path. The previous parser only captured
@@ -59,6 +64,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-readonly)
             CLI_READONLY_OVERRIDE=false
+            shift
+            ;;
+        --allow-overlayroot)
+            ALLOW_OVERLAYROOT=true
             shift
             ;;
         --*)
@@ -244,6 +253,40 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# True when / is the overlayroot (read-only mode active): root mounted as
+# fstype "overlay" — the same test `ro-mode status` uses. Optional $1
+# reads a mounts table other than /proc/mounts (tests).
+_overlayroot_active() {
+    local mounts="${1:-/proc/mounts}"
+    awk '$2 == "/" { fs = $3 } END { exit !(fs == "overlay") }' "$mounts" 2>/dev/null
+}
+
+# Refuse to re-run while read-only mode is active. Under overlayroot only
+# /boot/firmware (remounted rw below) and the bind-mounted data dirs reach
+# the SD card; /etc/asound.conf, /etc/modules-load.d, systemd units and
+# .env land in the RAM upper layer and vanish at reboot. A re-run after a
+# HAT swap would leave config.txt pointing at the new overlay but
+# asound.conf still naming the old card. First boot is unaffected: the
+# overlay only activates after the install's final reboot. Under firstboot
+# (PROGRESS_MANAGED) keep the previous behaviour and only warn.
+if _overlayroot_active /proc/mounts; then
+    if [[ "$ALLOW_OVERLAYROOT" == true ]]; then
+        echo "[WARN] Read-only mode is active (--allow-overlayroot): changes outside /boot/firmware are lost at reboot."
+    elif [[ -n "${PROGRESS_MANAGED:-}" ]]; then
+        echo "[WARN] Read-only mode is active during an automated run: changes outside /boot/firmware are lost at reboot."
+    else
+        echo "ERROR: Read-only mode (overlayroot) is active." >&2
+        echo "  Changes to /etc/asound.conf, systemd units and kernel modules would only live" >&2
+        echo "  in RAM and be lost at the next reboot, leaving a half-applied configuration." >&2
+        echo "  Disable it first, reboot, then re-run setup.sh:" >&2
+        echo "    sudo ro-mode disable && sudo reboot" >&2
+        echo "  (setup.sh turns read-only mode back on at the end unless declined / --no-readonly)." >&2
+        echo "  To run anyway, pass --allow-overlayroot." >&2
+        trap - EXIT
+        exit 1
+    fi
+fi
+
 # Get the script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
@@ -402,9 +445,8 @@ echo "[INFO] HAT decision: config=$HAT_CONFIG overlay=${HAT_OVERLAY:-<none>} car
 # ran in USB branch, so USB_CARD_ID is empty — probe `aplay -l` here
 # too so the manual path matches the auto path.
 if [[ "${HAT_CONFIG:-}" == "usb-audio" ]]; then
-    if [[ -z "${USB_CARD_ID:-}" ]] && command -v aplay &>/dev/null; then
-        USB_CARD_ID=$(aplay -l 2>/dev/null \
-            | awk -F'[ :]+' '/USB/ && /^card [0-9]+/ {print $3; exit}' || true)
+    if [[ -z "${USB_CARD_ID:-}" ]]; then
+        USB_CARD_ID=$(detect_usb_card_id || true)
         if [[ -n "$USB_CARD_ID" ]]; then
             echo "Probed USB ALSA card id (manual select path): $USB_CARD_ID"
         fi
@@ -415,32 +457,16 @@ if [[ "${HAT_CONFIG:-}" == "usb-audio" ]]; then
     fi
 fi
 
-# Override HAT_CARD_NAME with the real ALSA card name when the user picked
-# "No HAT — use Pi built-in audio" in prepare-sd's audio menu. The static
-# `Headphones` in internal-audio.conf is correct only for Pi 3/4 on older
-# kernels; Bookworm/Trixie expose HDMI as `vc4-hdmi-0`/`vc4-hdmi-1` and Pi
-# 5 has no analog jack at all. detect_internal_card_name walks `aplay -L`
-# and returns the first real match. AUDIO_INTERNAL_OUTPUT comes from
-# install.conf (set when AUDIO_HAT=internal-audio).
-if [[ "${HAT_CONFIG:-}" == "internal-audio" ]] && [[ -n "${AUDIO_INTERNAL_OUTPUT:-}" ]]; then
-    if declare -F detect_internal_card_name &>/dev/null; then
-        _internal_card=$(detect_internal_card_name "$AUDIO_INTERNAL_OUTPUT" 2>/dev/null || true)
-        # Fallback chain: if jack was requested but not present (Pi 5),
-        # automatically retry as hdmi rather than leave the operator with
-        # an unbound card and a non-starting snapclient. The retry is
-        # logged so the diagnostic bundle reflects what actually happened.
-        if [[ -z "$_internal_card" && "$AUDIO_INTERNAL_OUTPUT" == "jack" ]]; then
-            echo "[WARN] AUDIO_INTERNAL_OUTPUT=jack requested but no Headphones card found (likely Pi 5). Falling back to HDMI."
-            _internal_card=$(detect_internal_card_name hdmi 2>/dev/null || true)
-        fi
-        if [[ -n "$_internal_card" ]]; then
-            echo "Overriding HAT_CARD_NAME=$HAT_CARD_NAME with detected built-in card: $_internal_card (mode=$AUDIO_INTERNAL_OUTPUT)"
-            HAT_CARD_NAME="$_internal_card"
-        else
-            echo "[WARN] detect_internal_card_name returned empty for mode=$AUDIO_INTERNAL_OUTPUT — keeping default HAT_CARD_NAME=$HAT_CARD_NAME"
-        fi
-        unset _internal_card
-    fi
+# Override HAT_CARD_NAME with the real ALSA card id for the built-in
+# output. The static `Headphones` in internal-audio.conf exists only on
+# boards with an analog jack (Pi 3/4); Pi 5 has none, and HDMI cards are
+# `vc4hdmi0`/`vc4hdmi1` (KMS) or `b1` (legacy). resolve_hat_card_name
+# (audio-hat-detect.sh, shared with setup-zero2w.sh) reads the real ids
+# from `aplay -L`. AUDIO_INTERNAL_OUTPUT (jack|hdmi) comes from
+# install.conf when the user picked "No HAT"; when empty (auto-detect
+# fell back to internal audio) the jack is tried first, then HDMI.
+if [[ "${HAT_CONFIG:-}" == "internal-audio" ]]; then
+    HAT_CARD_NAME=$(resolve_hat_card_name internal-audio "$HAT_CARD_NAME" "${AUDIO_INTERNAL_OUTPUT:-}")
 fi
 
 # Validate required HAT configuration variables
@@ -864,6 +890,25 @@ _play_test_tone() {
 # Step 8: Configure Boot Settings (Idempotent)
 # ============================================
 progress 5 "Updating boot settings..."
+
+# True when DIR is a mount point whose options contain a standalone `ro`.
+# Matches the options field exactly: vfat's `errors=remount-ro` (present
+# on every rw /boot/firmware) must NOT count — a word-boundary grep on
+# `mount` output did, so writable installs got remounted rw and then
+# forced read-only by the EXIT trap. Uses findmnt when available, else
+# /proc/mounts (last entry for DIR wins). Optional $2 reads another
+# mounts table instead (tests).
+_mount_is_ro() {
+    local dir="$1" mounts="${2:-}" opts=""
+    if [[ -z "$mounts" ]] && command -v findmnt &>/dev/null; then
+        opts=$(findmnt -rno OPTIONS --mountpoint "$dir" 2>/dev/null | tail -n 1 || true)
+    fi
+    if [[ -z "$opts" ]]; then
+        opts=$(awk -v d="$dir" '$2 == d { o = $4 } END { print o }' "${mounts:-/proc/mounts}" 2>/dev/null || true)
+    fi
+    [[ ",$opts," == *",ro,"* ]]
+}
+
 _apply_boot_config() {
 BOOT_CONFIG=""
 if [ -f /boot/firmware/config.txt ]; then
@@ -883,7 +928,7 @@ fi
 # Use a global + EXIT trap (not RETURN) so set -e failures still restore ro.
 _BOOT_REMOUNT_DIR=""
 _boot_dir=$(dirname "${BOOT_CONFIG:-${CMDLINE:-}}" 2>/dev/null || echo "")
-if [[ -n "$_boot_dir" ]] && mount | grep -q "$_boot_dir.*\bro\b"; then
+if [[ -n "$_boot_dir" ]] && _mount_is_ro "$_boot_dir"; then
     mount -o remount,rw "$_boot_dir" 2>/dev/null || { echo "ERROR: Cannot remount $_boot_dir rw"; exit 1; }
     _BOOT_REMOUNT_DIR="$_boot_dir"
     # Chain with existing EXIT trap (_setup_failure_dump) instead of replacing it
@@ -1223,9 +1268,9 @@ if [[ "$HAS_DISPLAY" == true ]]; then
 else
     DOCKER_COMPOSE_PROFILES=""
     echo "No display detected -- headless mode (audio only)"
-    # Headless: use ALSA hw plugin with explicit CARD=/DEV= parameters.
+    # Headless: use ALSA plughw with explicit CARD=/DEV= parameters.
     #
-    # Why this exact form (hw:CARD=NAME,DEV=0):
+    # Why this exact form (plughw:CARD=NAME,DEV=0):
     # 1. snapclient 0.35.0 translates bare "default" to "sysdefault" which
     #    opens card 0 (HDMI on Pi Zero 2W) — error 524 when headless. So
     #    we can't use "default".
@@ -1238,7 +1283,13 @@ else
     # 3. The hw:CARD=NAME,DEV=0 form is an ALSA-recognized alias of
     #    hw:NAME,0 (verified via aplay -L) and contains the literal
     #    "CARD=" that snapcast's parser needs to extract the card index.
-    SOUNDCARD_VALUE="hw:CARD=${HAT_CARD_NAME:-Headphones},DEV=0"
+    # 4. plughw rather than hw: hw opens the device raw, so a DAC without
+    #    native S16_LE / 44.1 kHz (many USB DACs, 48 kHz-only codecs) either
+    #    fails to open or plays at the wrong speed. plughw adds ALSA's
+    #    format/rate/channel conversion only when needed. The mixer lookup
+    #    is unaffected: snapcast splits on ':' and reads CARD= from the
+    #    right-hand side, so "plughw:CARD=X,DEV=0" yields the same card.
+    SOUNDCARD_VALUE="plughw:CARD=${HAT_CARD_NAME:-Headphones},DEV=0"
 fi
 MIXER_VALUE="${HAT_MIXER:-software}"
 
@@ -1638,6 +1689,18 @@ if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
         printf '%s\n' "$(date -u +%FT%TZ)" > "$_switch_checkpoint"
     fi
 
+    # Under firstboot (--auto + SNAPMULTI_DEFER_OVERLAYROOT=1) stop here:
+    # Docker is on fuse-overlayfs, which is all the image pull needs.
+    # firstboot arms overlayroot itself (setup_readonly_fs) once its client
+    # verify has passed, so a failed pull/verify does not leave a tmpfs
+    # overlay root and a read-only /boot/firmware behind. Standalone runs
+    # keep arming it here.
+    if [[ "$AUTO_MODE" == true && "${SNAPMULTI_DEFER_OVERLAYROOT:-0}" == "1" ]]; then
+        log_progress "Read-only filesystem: Docker prepared; overlayroot is armed by firstboot after verification"
+        echo ""
+        return 0
+    fi
+
     # ro-mode helper + SSH key persistence (raspi-config call below has rollback)
     local _ro_mode_script=""
     if [[ -f "$COMMON_DIR/scripts/ro-mode.sh" ]]; then
@@ -1767,12 +1830,13 @@ if ! pull_compose_images log_progress 1024; then
     stop_progress_animation
     echo ""
     echo "WARNING: Failed to pull some container images"
-    echo "  firstboot will retry on next boot, or run manually:"
+    echo "  Nothing retries this automatically. To finish the install, run:"
     echo "  cd $INSTALL_DIR && docker compose pull"
-    # Don't exit 1 — let firstboot retry. After a Docker storage driver
-    # switch (readonly mode), images were wiped and the pull may fail
-    # due to rate limits or network issues. On next boot, fuse-overlayfs
-    # is already configured so no wipe happens, and the pull retries.
+    # Don't exit here — finish the remaining steps, then exit 1 at the end
+    # (see "Setup Incomplete" below) so firstboot records the failure.
+    # Nothing re-runs firstboot by itself (cloud-init runcmd runs once);
+    # re-running firstboot.sh resumes from the last completed step, and
+    # fuse-overlayfs is already configured by then, so no image wipe.
     PULL_FAILED=true
 else
     PULL_FAILED=false
@@ -1785,7 +1849,7 @@ echo ""
 # Re-runs on overlayroot: persists images so tmpfs doesn't fill on next boot.
 # ============================================
 if [[ "$PULL_FAILED" == "true" ]]; then
-    echo "Skipping bake — images incomplete (will retry on next boot)"
+    echo "Skipping bake — images incomplete (re-run after a successful pull)"
 elif mountpoint -q /media/root-ro 2>/dev/null; then
     log_progress "Baking Docker images to SD card..."
     BAKE_DIR=$(mktemp -d /tmp/snapclient-bake-XXXXX)
@@ -1852,15 +1916,18 @@ progress_complete
 _elapsed="$((SECONDS / 60))m$((SECONDS % 60))s"
 
 # Exit early with clear error if pull failed — don't show success banner.
-# firstboot won't mark .done-setup, so it retries on next boot
-# (fuse-overlayfs already configured, no wipe)
+# firstboot then does not mark the setup step done. Nothing re-runs it on
+# its own: re-running firstboot.sh resumes from the last completed step
+# (fuse-overlayfs already configured, no wipe); otherwise reflash.
 if [[ "${PULL_FAILED:-false}" == "true" ]]; then
     echo "========================================="
     echo "Setup Incomplete ($_elapsed)"
     echo "========================================="
     echo ""
-    echo "WARNING: Image pull failed — will retry on next boot"
-    echo "  To retry manually: cd $INSTALL_DIR && docker compose pull"
+    echo "WARNING: Image pull failed — the client is not ready yet."
+    echo "  To retry: cd $INSTALL_DIR && docker compose pull"
+    echo "  Or resume the install: sudo bash /boot/firmware/snapmulti/firstboot.sh"
+    echo "  (resumes from the last completed step), or reflash the SD card."
     exit 1
 fi
 

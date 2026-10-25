@@ -541,6 +541,72 @@ AVEOF
     fi
 }
 
+# ── Server discoverability (server installs only) ─────────────────
+# Publishes the server landing page (metadata-service HTTP, port 8083,
+# `/` redirects to /status) as an mDNS `_http._tcp` service named
+# "snapMULTI on <hostname>", so it shows up in browsers / network
+# browsers that list Bonjour web services, and prints its URL on the
+# HDMI console login screen via agetty's /etc/issue.d (`\n` = hostname,
+# `\4` = IPv4 address; ASCII only for the framebuffer font).
+#
+# Called from deploy.sh only (deploy.sh runs on server and both
+# installs, never on client-only ones). Idempotent: files are rewritten
+# only when their content differs. Paths are overridable for tests.
+SNAPMULTI_HTTP_PORT=8083
+
+install_server_discovery() {
+    local avahi_dir="${AVAHI_SERVICES_DIR:-/etc/avahi/services}"
+    local issue_dir="${ISSUE_D_DIR:-/etc/issue.d}"
+    local svc="$avahi_dir/snapmulti-http.service"
+    local issue="$issue_dir/snapmulti.issue"
+    local want
+
+    # Only when avahi is installed (its services dir exists): the
+    # daemon picks up new/changed service files on its own (inotify);
+    # the reload covers builds without inotify support.
+    if [[ -d "$avahi_dir" ]]; then
+        want=$(cat <<EOF
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<!-- Installed by snapMULTI deploy.sh: server landing page / status. -->
+<service-group>
+  <name replace-wildcards="yes">snapMULTI on %h</name>
+  <service>
+    <type>_http._tcp</type>
+    <port>${SNAPMULTI_HTTP_PORT}</port>
+    <txt-record>path=/</txt-record>
+  </service>
+</service-group>
+EOF
+)
+        if [[ "$(cat "$svc" 2>/dev/null)" != "$want" ]]; then
+            if printf '%s\n' "$want" > "$svc"; then
+                chmod 644 "$svc" 2>/dev/null || true
+                systemctl reload avahi-daemon 2>/dev/null || true
+                ok "mDNS: published _http._tcp \"snapMULTI on $(hostname)\" (port ${SNAPMULTI_HTTP_PORT})"
+            else
+                warn "mDNS: could not write $svc"
+            fi
+        fi
+    fi
+
+    # Console hint on the HDMI login screen. /etc/issue.d is read by
+    # agetty (util-linux >= 2.35, bookworm/trixie); create it if absent.
+    want=$(printf '%s\n' \
+        "snapMULTI server - open in a browser on the same network:" \
+        "  http://\\n.local:${SNAPMULTI_HTTP_PORT}/   or   http://\\4:${SNAPMULTI_HTTP_PORT}/")
+    if mkdir -p "$issue_dir" 2>/dev/null \
+        && [[ "$(cat "$issue" 2>/dev/null)" != "$want" ]]; then
+        # Trailing blank line separates the hint from the login prompt.
+        if printf '%s\n\n' "$want" > "$issue"; then
+            chmod 644 "$issue" 2>/dev/null || true
+            ok "Console: server URL added to the login screen ($issue)"
+        else
+            warn "Console: could not write $issue"
+        fi
+    fi
+}
+
 # ── Avahi host-name reclaim ────────────────────────────────────────
 # When another responder answers for <host>.local while Avahi probes —
 # typically a record a router or Mac still caches from an earlier boot

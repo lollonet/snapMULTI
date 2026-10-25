@@ -18,7 +18,21 @@ assert_contains() {
     fi
 }
 
-content="$(cat "$PS1_FILE")"
+# Strip CR: .gitattributes checks *.ps1 out with CRLF line endings.
+content="$(tr -d '\r' < "$PS1_FILE")"
+PREP_SH="$SCRIPT_DIR/../scripts/prepare-sd.sh"
+REPO_ROOT="$SCRIPT_DIR/.."
+
+assert_true() {
+    local desc="$1"; shift
+    if "$@"; then
+        echo "  PASS: $desc"
+        pass=$((pass + 1))
+    else
+        echo "  FAIL: $desc"
+        fail=$((fail + 1))
+    fi
+}
 
 echo "Testing prepare-sd.ps1 parity guards..."
 
@@ -75,6 +89,93 @@ assert_contains "$content" "'release-manifest.json'" \
     "release-manifest.json appears in verifyrequiredBase list"
 assert_contains "$content" "'common/release-manifest.sh'" \
     "common/release-manifest.sh appears in verifyrequiredBase list"
+
+# -- Windows PowerShell 5.1 compatibility (#Requires -Version 5.1) ---------
+# PS 5.1 reads a BOM-less script as cp1252: the UTF-8 em-dash byte 0x94
+# becomes U+201D, which the parser treats as a closing quote. Any
+# non-ASCII byte is therefore a latent parse error on stock Windows.
+assert_true "prepare-sd.ps1 is pure ASCII (PS 5.1 reads BOM-less files as cp1252)" \
+    bash -c "! LC_ALL=C grep -qP '[^\x00-\x7F]' '$PS1_FILE'"
+# Join-Path with more than one child path is PowerShell 6+ only.
+assert_true "no multi-child Join-Path (PowerShell 6+ only)" \
+    bash -c "! grep -qE \"Join-Path +[^ ()|]+ +'[^']*' +'\" '$PS1_FILE'"
+for construct in ' ?? ' '-AsHashtable' '-AdditionalChildPath' '-AsByteStream' 'utf8NoBOM' 'ForEach-Object -Parallel'; do
+    if grep -qF -- "$construct" <<<"$content"; then
+        echo "  FAIL: PS 6+/7-only construct found: '$construct'"
+        fail=$((fail + 1))
+    else
+        echo "  PASS: no PS 6+/7-only construct '$construct'"
+        pass=$((pass + 1))
+    fi
+done
+
+# -- Line endings / BOM on staged files ------------------------------------
+assert_contains "$content" 'function Convert-StagedTextToLf' "CRLF->LF normaliser for staged files exists"
+assert_contains "$content" 'Convert-StagedTextToLf -Root $Dest' "staged files are normalised to LF"
+assert_contains "$content" '$confContent = $confContent.Replace("`r`n", "`n")' "install.conf here-string written with LF"
+norm_line=$(grep -nF 'Convert-StagedTextToLf -Root $Dest' <<<"$content" | head -1 | cut -d: -f1 || true)
+copy_line=$(grep -nF "'both'   { Copy-ServerFiles -Dest \$Dest; Copy-ClientFiles -Dest \$Dest }" <<<"$content" | head -1 | cut -d: -f1 || true)
+assert_true "normalisation runs after the mode-specific copies" \
+    test -n "$norm_line" -a -n "$copy_line" -a "${norm_line:-0}" -gt "${copy_line:-0}"
+attrs="$REPO_ROOT/.gitattributes"
+assert_true ".gitattributes exists" test -f "$attrs"
+for rule in '*.sh        text eol=lf' '*.py        text eol=lf' '*.service   text eol=lf' '*.ps1 text eol=crlf' '*.wav  binary'; do
+    if grep -qF -- "$rule" "$attrs" 2>/dev/null; then
+        echo "  PASS: .gitattributes has '$rule'"
+        pass=$((pass + 1))
+    else
+        echo "  FAIL: .gitattributes missing '$rule'"
+        fail=$((fail + 1))
+    fi
+done
+
+# -- user-data patch: indentation-aware, validated before write, on rerun ---
+assert_contains "$content" 'function Test-UserDataRuncmd' "user-data validator exists"
+validate_calls=$(grep -cF 'Test-UserDataRuncmd -Content' <<<"$content" || true)
+assert_true "user-data validated on both the patch and the already-patched paths" \
+    test "${validate_calls:-0}" -ge 2
+assert_true "no user-data backup copy (it would duplicate credentials)" \
+    bash -c '! grep -qF "snapmulti.bak" "$1"' _ "$PS1_FILE"
+val_line=$(grep -nF 'Test-UserDataRuncmd -Content $patched' <<<"$content" | head -1 | cut -d: -f1 || true)
+write_line=$(grep -nF 'Move-Item -Path $userDataTmp -Destination $userData -Force' <<<"$content" | head -1 | cut -d: -f1 || true)
+assert_true "patched user-data validated before it replaces the original" \
+    test -n "$val_line" -a -n "$write_line" -a "${val_line:-0}" -lt "${write_line:-0}"
+assert_contains "$content" '$child = $Matches[1]' "runcmd entry inherits the existing item indent"
+
+# -- cmdline.txt swap/zram masks: parity with prepare-sd.sh SWAP_MASK_UNITS -
+sh_units=$(sed -n '/^    SWAP_MASK_UNITS=(/,/^    )/p' "$PREP_SH" | grep -oE '[A-Za-z0-9@.-]+\.(service|swap|timer)' | sort)
+ps_units=$(sed -n '/^    \$swapMaskUnits = @(/,/^    )/p' <<<"$content" | grep -oE "'[A-Za-z0-9@.-]+'" | tr -d "'" | sort)
+assert_true "ps1 masks the same swap/zram units as prepare-sd.sh" \
+    test -n "$sh_units" -a "$sh_units" = "$ps_units"
+assert_contains "$content" 'foreach ($unit in ($swapMaskUnits + $bootMaskUnits))' "swap masks are written to cmdline.txt"
+
+# -- verify lists: parity with prepare-sd.sh ---------------------------------
+sh_list() { sed -n "/^    for f in $1\\/docker-compose.yml/,/; do\$/p" "$PREP_SH" | grep -oE "$1/[A-Za-z0-9_./-]+" | sort -u; }
+ps_list() { sed -n "/^            '$1\\/docker-compose.yml',/,/^        )) {/p" <<<"$content" | grep -v '^\s*#' | grep -oE "$1/[A-Za-z0-9_./-]+" | sort -u; }
+for mode in server client; do
+    a=$(sh_list "$mode"); b=$(ps_list "$mode")
+    if [[ -n "$a" && "$a" == "$b" ]]; then
+        echo "  PASS: $mode verify list identical in prepare-sd.sh and prepare-sd.ps1"
+        pass=$((pass + 1))
+    else
+        echo "  FAIL: $mode verify list differs:"
+        diff <(echo "$a") <(echo "$b") | sed 's/^/        /' || true
+        fail=$((fail + 1))
+    fi
+done
+sh_base=$(sed -n '/^for f in install.conf/,/; do$/p' "$PREP_SH" | grep -oE '(common/[A-Za-z0-9_./-]+|install\.conf|firstboot\.sh|release-manifest\.json)' | sort -u)
+ps_base=$(sed -n '/^    \$requiredBase = @(/,/^    )/p' <<<"$content" | grep -v '^\s*#' | grep -oE "'[^']+'" | tr -d "'" | sort -u)
+if [[ -n "$sh_base" && "$sh_base" == "$ps_base" ]]; then
+    echo "  PASS: base verify list identical in prepare-sd.sh and prepare-sd.ps1"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: base verify list differs:"
+    diff <(echo "$sh_base") <(echo "$ps_base") | sed 's/^/        /' || true
+    fail=$((fail + 1))
+fi
+
+# -- Next steps print the known hostname ------------------------------------
+assert_contains "$content" "Pattern '^hostname:\\s*(\\S+)'" "hostname read from user-data for Next steps"
 
 echo ""
 if [[ "$fail" -gt 0 ]]; then
