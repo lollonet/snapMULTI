@@ -17,6 +17,8 @@
 #   - `manifest` job builds the multi-arch tag from gate.outputs.image_set
 #     too, and force_rebuild dispatches republish <image_set> (never
 #     :latest) in build, build-client and manifest
+#   - every snapcast tag ref resolved with ls-remote is peeled (^{}), so
+#     SNAPCAST_SHA is the commit the Dockerfile's HEAD check compares to
 
 set -euo pipefail
 
@@ -157,6 +159,15 @@ done
 # manifest job (values go through env: — workflow-injection hygiene).
 assert "! printf '%s' \"\$manifest_section\" | awk '/^ *run: \\|/{r=1; next} r && /^ *- name:/{r=0} r' | grep -q '\\\${{'" \
     "manifest job run scripts take step outputs via env, not inline \${{ }}"
+
+# An annotated tag resolves to the tag object, not the commit; the
+# Dockerfile's `test "$(git rev-parse HEAD)" = "$SNAPCAST_SHA"` then fails
+# on every tag push while PR CI (build-test.yml) stays green.
+tag_refs=$(grep -cE 'REF="refs/tags/' "$WF" || true)
+assert "(( ${tag_refs:-0} >= 2 ))" \
+    "build and build-client both resolve a snapcast tag ref ($tag_refs found)"
+assert "! grep -E 'REF=\"refs/tags/' '$WF' | grep -vqF '^{}\"'" \
+    "every snapcast tag ref is peeled with ^{}"
 
 echo
 echo "## Summary"
