@@ -7,6 +7,11 @@
 # Avahi client fails with "Access denied" and the service is never announced.
 # The &fifo-security anchor carries the setting; a service that sets its own
 # security_opt must repeat it.
+#
+# Exempt: tidal-connect. It runs a proprietary binary as root, only on ARM,
+# and the supported ARM OS (Raspberry Pi OS) does not enforce AppArmor, so
+# unconfined would buy nothing there and drop confinement where it applies.
+EXEMPT=" tidal-connect "
 
 set -euo pipefail
 
@@ -35,6 +40,10 @@ for compose in "$SCRIPT_DIR/../docker-compose.yml" "$SCRIPT_DIR/../contrib/tidal
         continue
     fi
     for svc in $dbus_services; do
+        if [[ "$EXEMPT" == *" $svc "* ]]; then
+            echo "  SKIP: $svc (exempt, see header)"
+            continue
+        fi
         if awk -F'\t' -v s="$svc" '$1 == s && ($2 ~ /apparmor=unconfined/ || $2 ~ /<<: \*fifo-security/) {found=1} END {exit !found}' <<< "$lines"; then
             echo "  PASS: $svc mounts D-Bus and runs apparmor=unconfined"
             pass=$((pass + 1))
