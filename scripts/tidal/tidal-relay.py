@@ -46,6 +46,10 @@ HEARTBEAT_PATH = "/tmp/tidal-relay.alive"
 CHUNK = 4096  # ~23 ms of 44100:16:2
 META_MAX_BYTES = 64 * 1024
 CONNECT_TIMEOUT = 3.0
+# A send that makes no progress this long means the server is gone without
+# a RST (power loss, cable pull): reconnect and drain instead of letting the
+# FIFO fill and stall the Tidal app.
+SEND_TIMEOUT = 2.0
 RETRY_SECONDS = 2.0
 META_POLL_SECONDS = 1.0
 META_RESEND_SECONDS = 60.0  # re-push unchanged metadata after a server restart
@@ -198,20 +202,33 @@ def read_limited(conn: socket.socket, limit: int) -> bytes | None:
             return None
 
 
+_meta_lock = threading.Lock()
+
+
+def handle_metadata(conn: socket.socket, addr: str, path: str) -> None:
+    with conn:
+        conn.settimeout(5.0)
+        try:
+            payload = read_limited(conn, META_MAX_BYTES)
+        except OSError:
+            return
+        with _meta_lock:
+            ok = payload is not None and write_metadata(path, payload)
+        if not ok:
+            log(f"metadata from {addr}: rejected (too large or not a JSON object)")
+
+
 def serve_metadata(srv: socket.socket, path: str, allow: list) -> None:
+    # One thread per connection: an idle peer cannot hold up real updates.
     while True:
         conn, (addr, _port) = srv.accept()
-        with conn:
-            if not peer_allowed(addr, allow):
-                log(f"metadata: refused {addr}")
-                continue
-            conn.settimeout(5.0)
-            try:
-                payload = read_limited(conn, META_MAX_BYTES)
-            except OSError:
-                continue
-            if payload is None or not write_metadata(path, payload):
-                log(f"metadata from {addr}: rejected (too large or not a JSON object)")
+        if not peer_allowed(addr, allow):
+            log(f"metadata: refused {addr}")
+            conn.close()
+            continue
+        threading.Thread(
+            target=handle_metadata, args=(conn, addr, path), daemon=True
+        ).start()
 
 
 def run_receive() -> None:
@@ -241,9 +258,13 @@ def run_receive() -> None:
 
 def connect(host: str, port: int) -> socket.socket:
     sock = socket.create_connection((host, port), timeout=CONNECT_TIMEOUT)
-    sock.settimeout(None)
+    sock.settimeout(SEND_TIMEOUT)
     sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    if hasattr(socket, "TCP_USER_TIMEOUT"):  # Linux: unacked data limit
+        sock.setsockopt(
+            socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT, int(SEND_TIMEOUT * 1000)
+        )
     return sock
 
 

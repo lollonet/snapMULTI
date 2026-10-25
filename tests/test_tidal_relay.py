@@ -211,3 +211,67 @@ class TestSender:
 
         threading.Thread(target=writer, daemon=True).start()
         assert done.wait(10), "Tidal-side writer blocked: sender did not drain the FIFO"
+
+
+class TestDeadServer:
+    def test_connect_bounds_sends(self):
+        srv = _listener()
+        sock = relay.connect("127.0.0.1", srv.getsockname()[1])
+        try:
+            assert sock.gettimeout() == relay.SEND_TIMEOUT
+            if hasattr(socket, "TCP_USER_TIMEOUT"):
+                got = sock.getsockopt(socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT)
+                assert got == int(relay.SEND_TIMEOUT * 1000)
+        finally:
+            sock.close()
+            srv.close()
+
+    def test_sender_abandons_a_server_that_stops_reading(self, tmp_path, monkeypatch):
+        # A server that accepts but never reads stands in for one that died
+        # without a RST: the send stalls, and the sender must give up on it
+        # instead of letting the FIFO fill and block the Tidal app.
+        monkeypatch.setattr(relay, "SEND_TIMEOUT", 0.3)
+        monkeypatch.setattr(relay, "RETRY_SECONDS", 0.2)
+        fifo = tmp_path / "tidal_fifo"
+        relay.ensure_fifo(str(fifo))
+        fd = os.open(fifo, os.O_RDWR)
+        srv = _listener()
+        srv.settimeout(10)
+        port = srv.getsockname()[1]
+        threading.Thread(
+            target=relay.pump_audio, args=(fd, "127.0.0.1", port), daemon=True
+        ).start()
+        stalled, _ = srv.accept()
+
+        def writer():
+            wfd = os.open(fifo, os.O_WRONLY)
+            try:
+                for _ in range(512):  # 8 MiB, enough to fill every buffer
+                    os.write(wfd, b"\x00" * 16384)
+            except OSError:
+                pass
+
+        threading.Thread(target=writer, daemon=True).start()
+        second, _ = srv.accept()  # the sender reconnected after the stall
+        for s in (stalled, second, srv):
+            s.close()
+
+
+class TestMetadataConcurrency:
+    def test_idle_peer_does_not_block_updates(self, tmp_path):
+        target = tmp_path / "tidal-metadata.json"
+        srv = _listener()
+        port = srv.getsockname()[1]
+        threading.Thread(
+            target=relay.serve_metadata, args=(srv, str(target), []), daemon=True
+        ).start()
+        idle = socket.create_connection(("127.0.0.1", port))
+        try:
+            start = time.monotonic()
+            relay.push_metadata("127.0.0.1", port, b'{"title": "Next"}')
+            while not target.exists() and time.monotonic() - start < 3:
+                time.sleep(0.02)
+            assert json.loads(target.read_text()) == {"title": "Next"}
+            assert time.monotonic() - start < 2  # not after the idle peer's 5 s timeout
+        finally:
+            idle.close()

@@ -137,7 +137,7 @@ Serve un Pi 3/4/5 con Raspberry Pi OS **a 64 bit** e Docker (va bene un Audio Pl
    Poi riattiva la modalità read-only (`sudo ro-mode enable && sudo reboot`). I container ripartono da soli a ogni avvio.
 3. Nell'app Tidal, trasmetti a `<hostname del satellite> Tidal` (o `TIDAL_NAME`). In Snapweb, metti le stanze sullo stream **Tidal**.
 
-**Verifica:** `docker logs tidal-relay` sul satellite mostra `audio: connected to <server>:4954`; sul server, `docker logs tidal-relay` mostra `audio sender connected`. Finché il server non è raggiungibile il satellite scarta l'audio (l'app Tidal continua a riprodurre nel silenzio) e ritenta la connessione ogni 2 s.
+**Verifica:** `docker logs tidal-relay` sul satellite mostra `audio: connected to <server>:4954`; sul server, `docker logs tidal-relay` mostra `audio sender connected`. Finché il server non è raggiungibile il satellite scarta l'audio (l'app Tidal continua a riprodurre nel silenzio) e ritenta la connessione ogni 2 s; un server che sparisce senza chiudere la connessione (corrente staccata, cavo scollegato) viene rilevato in circa 2 s.
 
 Non far girare `tidal-connect` sul server e un satellite contemporaneamente: scriverebbero entrambi sullo stesso stream `Tidal`.
 
