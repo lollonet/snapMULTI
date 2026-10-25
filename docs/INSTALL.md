@@ -17,7 +17,7 @@ Already comfortable with Raspberry Pi Imager and terminals? This is the whole in
 5. From the snapMULTI folder, run `./scripts/prepare-sd.sh` on macOS/Linux or `.\scripts\prepare-sd.ps1` on Windows.
 6. Choose what this Pi should do: **Audio Player**, **Music Server**, or **Server + Player**.
 7. Eject the SD, boot the Pi, and wait roughly 15-20 minutes on a Pi 4/5 (longer on Pi 3 or Pi Zero 2 W). It installs, verifies, then reboots once. The HDMI progress display surfaces the expected total time alongside elapsed so you know how far along you are.
-8. Open `http://<hostname>.local:8083/` — the start page links to Snapweb, myMPD, status, and API endpoints.
+8. Check it worked. **Music Server / Server + Player:** open `http://<hostname>.local:8083/` — the start page links to Snapweb, myMPD, status, and API endpoints; **Status** should be all green. **Audio Player:** it has no web page of its own — it shows up as a speaker in the server's Snapweb (`http://<server>.local:1780`). Details per role: [Did it work?](#did-it-work--check-by-role)
 
 If any step is unclear, continue with the detailed walkthrough below. If first boot fails, recover the diagnostic bundle from the SD card as described in [TROUBLESHOOTING.md — When in doubt](TROUBLESHOOTING.md#when-in-doubt--grab-the-diagnostic-bundle).
 
@@ -131,7 +131,7 @@ Pick one of the two options. If you are not a developer, use **Option A — Down
 
 > Prefer the tagged release ZIP over the green **Code → Download ZIP** button on the repo home page — the latter ships the `main` branch, which may include unreleased work-in-progress.
 
-### Option B — Clone with Git (recommended for updates)
+### Option B — Clone with Git (if you already use Git or want to contribute)
 
 You need Git installed on your computer.
 
@@ -154,7 +154,7 @@ git clone https://github.com/lollonet/snapMULTI.git
 cd snapMULTI
 ```
 
-> The repository includes both server and client software in a single monorepo.
+> The repository includes both server and client software in a single monorepo. A clone does not change how you update: updates are always a reflash ([ADVANCED.md — Update strategy](ADVANCED.md#update-strategy)); `git pull` just gets you the new release files for that reflash.
 
 ### Open a terminal in the snapMULTI folder
 
@@ -188,15 +188,19 @@ If auto-detection fails (multiple SD cards, unusual mount point):
 
 ### Windows (PowerShell)
 
-Open PowerShell as your regular user (not Administrator). If you haven't run scripts before:
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
+Open PowerShell as your regular user (not Administrator) in the snapMULTI folder. Windows blocks scripts that came out of a downloaded ZIP, and `Set-ExecutionPolicy RemoteSigned` on its own does **not** lift that block. Pick one:
 
-Then:
 ```powershell
+# Option 1 — one-off bypass for this run only (nothing to undo)
+powershell -ExecutionPolicy Bypass -File .\scripts\prepare-sd.ps1
+
+# Option 2 — unblock the extracted folder once, then run normally
+Get-ChildItem -Recurse | Unblock-File
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # only if scripts were never allowed on this PC
 .\scripts\prepare-sd.ps1
 ```
+
+A `git clone` has no "downloaded from the internet" mark, so Option 2's `Unblock-File` step is not needed there.
 
 If auto-detection fails:
 ```powershell
@@ -343,7 +347,10 @@ snapMULTI Auto-Install
 [ ] Verifying health...
 ```
 
-The Pi **reboots automatically** when installation is complete. After the reboot, the display goes dark (normal — no desktop on Lite OS).
+The Pi **reboots automatically** when installation is complete. After the reboot, what the screen shows depends on the role:
+
+- **Music Server** — the text console login prompt (no desktop on Lite OS). On server installs the login screen shows the address to open, `http://<hostname>.local:8083/`, and the Pi's IP.
+- **Audio Player / Server + Player** — the snapMULTI player screen ("Ready to Play" until something plays). Its bottom bar shows `<player IP> → <server>`. With nothing playing, the panel switches off after ~15 seconds; it wakes up as soon as audio starts.
 
 > If the HDMI stays blank throughout: the installation is still running in the background — `firstboot.sh` is launched by `cloud-init` `runcmd` and does not need a display. **The green ACT LED on the Pi will flash irregularly throughout the 15-20 min Pi 4/5 window — that's SD-card activity, your sign the install is making progress.** Wait the full window; to check progress without a screen, `ssh <username>@<hostname>.local` and tail either log: `sudo tail -f /var/log/snapmulti-install.log` (snapMULTI's own structured log) or `sudo journalctl -u cloud-final.service -f` (the cloud-init unit that runs `firstboot.sh`).
 
@@ -369,15 +376,15 @@ If you don't hear it, the install still continues — but check power, volume, a
 
 > **Hostname placeholder.** From here on, `<hostname>.local` means the hostname you set in Imager at Step 1c. If you set `myradio`, use `myradio.local` everywhere `<hostname>.local` appears below.
 
-### Beginner check — open the start page
+### Did it work? — check by role
 
-From another computer or phone on the same network, open:
+| You installed | It worked when |
+|---------------|----------------|
+| **Music Server** or **Server + Player** | From a phone or computer on the same network, open `http://<hostname>.local:8083/` and then **Status** — every check is green. The server also appears as "snapMULTI on `<hostname>`" in Bonjour / network-browser apps. On a Music Server with a screen attached, the console login screen shows the same address and the Pi's IP |
+| **Audio Player** with a screen | The HDMI screen shows the player screen with `<player IP> → <server>` in the bottom bar, and the speaker is listed in the server's Snapweb (`http://<server>.local:1780`) |
+| **Audio Player** without a screen | You heard the 1-second test tone during install and the ascending three-note chime after the reboot (= all checks passed, see [audible cues](TROUBLESHOOTING.md#health-check-tones)). The speaker is listed in the server's Snapweb (`http://<server>.local:1780`) — play something to hear it |
 
-```
-http://<hostname>.local:8083/
-```
-
-Open **Status** from that page. If every check is green, the platform is healthy. If the start page does not open, try the same URL with the Pi's IP address instead of `<hostname>.local`.
+An Audio Player has no web page of its own (port 8083 exists only on the server). If the server's start page does not open, try the same URL with the Pi's IP address instead of `<hostname>.local`.
 
 ### Find the Pi on your network
 
@@ -395,7 +402,7 @@ ssh <username>@<hostname>.local
 
 > **Windows users:** Use Windows Terminal, PowerShell, or [PuTTY](https://putty.org) with `<hostname>.local` as the host.
 
-> **If `.local` doesn't resolve:** Use the IP address instead. Find it in your router or mesh-WiFi app under connected devices / DHCP clients, or check the HDMI output after reboot — the Pi prints its IP on the console.
+> **If `.local` doesn't resolve:** Use the IP address instead. Find it in your router or mesh-WiFi app under connected devices / DHCP clients, or check the HDMI screen after the reboot — the server's console login screen and the player screen's bottom bar both show it (see [What you'll see on HDMI](#what-youll-see-on-hdmi)).
 
 ### Advanced check — running containers
 
@@ -413,7 +420,7 @@ mpd                Up X minutes (healthy)
 mympd              Up X minutes (healthy)
 metadata           Up X minutes (healthy)
 ```
-On Raspberry Pi (ARM — Pi 3 B+ / 4 / 5): `tidal-connect` also appears (enabled by default on ARM installs; remove `tidal` from `COMPOSE_PROFILES` in `/opt/snapmulti/.env` to opt out).
+On Raspberry Pi (ARM — Pi 3 B+ / 4 / 5): `tidal-connect` also appears (enabled by default on ARM installs; to opt out see [ADVANCED.md — Disabling Tidal Connect](ADVANCED.md#disabling-tidal-connect)).
 
 **Audio Player (option 1)** — expected output:
 ```
@@ -481,21 +488,13 @@ If **Status** is green and the web interfaces load — your server is ready. Try
 |------|----------|
 | `/opt/snapmulti/` | Server: Docker Compose files, config, data |
 | `/opt/snapclient/` | Client: Docker Compose files, audio config |
-| `/opt/snapmulti/.env` | Server settings (edit to change config) |
-| `/opt/snapclient/.env` | Client settings (edit to change config) |
+| `/opt/snapmulti/.env` | Server settings |
+| `/opt/snapclient/.env` | Client settings |
 
-To change settings after install:
-```bash
-sudo nano /opt/snapmulti/.env      # or /opt/snapclient/.env for speaker Pi
-cd /opt/snapmulti
-sudo docker compose up -d           # NOT restart — restart doesn't reload .env
-```
+To change settings after install, follow [ADVANCED.md — Changing settings on a read-only Pi](ADVANCED.md#changing-settings-on-a-read-only-pi). The Pi runs read-only by default, so a plain edit of `.env` is lost at the next reboot.
 
 ---
 
 ## Network requirements
 
-- The Pi and your phone/computer must be on the **same subnet** (same router) for mDNS (`.local` hostnames) and auto-discovery to work
-- Most home networks work out of the box — no port forwarding or firewall changes needed
-- For the full list of ports and firewall rules, see [Advanced Guide — Firewall rules](ADVANCED.md#firewall-rules)
-- mDNS uses UDP 5353 — if you have multiple VLANs, you'll need an mDNS repeater or set static IPs in `.env`
+The Pi and your phone/computer must be on the same network (same router, no guest Wi-Fi or VLAN isolation) for `.local` names and auto-discovery to work. Details — router requirements, VLANs / mDNS, ports: [HARDWARE.md — Network Requirements](HARDWARE.md#network-requirements).

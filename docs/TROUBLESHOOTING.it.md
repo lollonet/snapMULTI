@@ -6,7 +6,7 @@ Guida per sintomi quando qualcosa di snapMULTI non funziona. Per l'installazione
 
 ## In caso di dubbio — prendi il pacchetto diagnostico
 
-Se `firstboot.sh` si interrompe, la trap di cleanup scrive un tarball anonimizzato sulla **partizione FAT32 di boot** della SD — leggibile da qualsiasi computer senza SSH:
+Se `firstboot.sh` si interrompe, la trap di cleanup scrive un tarball filtrato sulla **partizione FAT32 di boot** della SD — leggibile da qualsiasi computer senza SSH:
 
 ```
 /boot/firmware/snapmulti-diag-install-failed-<UTC-ts>.tar.gz
@@ -14,13 +14,17 @@ Se `firstboot.sh` si interrompe, la trap di cleanup scrive un tarball anonimizza
 
 Cosa contiene: l'ultima ora di log di installazione, l'output del rilevamento hardware (modello, HAT audio, rete), il nome dello step fallito, i log dei container. **Ogni file viene filtrato prima dell'archiviazione**, inclusi il JSON dello smoke test e lo stato Docker. Il filtro rimuove indirizzi IPv4 privati, indirizzi MAC e credenziali/SSID nei formati riconosciuti, preservando la struttura JSON. Richiede Python 3; se il filtro fallisce, non viene creato un nuovo archivio. Non è una garanzia di anonimato completo: possono restare nomi dei dispositivi, percorsi, indirizzi IPv6 e formati di log non riconosciuti. Controlla il contenuto prima di allegarlo a una [issue GitHub](https://github.com/lollonet/snapMULTI/issues/new/choose) pubblica. La partizione boot resta accessibile indipendentemente da overlayroot; è per questo che scriviamo lì invece che in `/var/log`.
 
-Lo puoi anche generare manualmente su un device in esecuzione per supporto:
+Lo puoi anche generare manualmente su un device in esecuzione per supporto. Il modo più semplice per portarlo fuori dal Pi è la stessa partizione boot:
 
 ```bash
-sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp
+sudo mount -o remount,rw /boot/firmware    # dopo l'install la partizione boot è in sola lettura
+sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash
+sudo poweroff
 ```
 
-Su un device solo-player (Audio Player) lo script si trova invece in `/opt/snapclient/scripts/diagnostic.sh`. Stesse regole di anonimizzazione.
+Poi estrai la SD, inseriscila nel computer e copia `snapmulti-diag-crash-<UTC-ts>.tar.gz` dalla partizione `bootfs`. Su un device solo-player (Audio Player) lo script si trova invece in `/opt/snapclient/scripts/diagnostic.sh`. Stesse regole di filtraggio. (A tuo agio con SSH? Funziona anche `--out-dir /tmp` più `scp`.)
+
+**Hai sentito un tono discendente durante un'installazione headless?** Su un Pi senza schermo, un bitono discendente mentre l'installazione è ancora in corso significa che l'installazione è fallita (è lo stesso segnale "fail" descritto in [Segnali audio del risultato](#toni-test-salute)). Aspetta un minuto che venga scritto il pacchetto, poi spegni, estrai la SD e invia il pacchetto diagnostico dalla sua partizione boot come descritto sopra.
 
 > **Non ti senti a tuo agio con i comandi da terminale?** Fermati qui: allega il pacchetto diagnostico a una issue GitHub e descrivi cosa hai visto su HDMI / LED / app del router. I comandi sotto sono utili, ma il pacchetto diagnostico è il percorso di supporto principale.
 
@@ -29,19 +33,21 @@ Su un device solo-player (Audio Player) lo script si trova invece in `/opt/snapc
 Prima di addentrarti nei singoli sintomi, esegui il controllo di salute generale sul device:
 
 ```bash
-sudo bash /opt/snapmulti/scripts/device-smoke.sh --server   # oppure --client, o --both
+sudo bash /opt/snapmulti/scripts/device-smoke.sh --server    # Music Server (--both su Server + Player)
+sudo bash /opt/snapclient/scripts/device-smoke.sh --client   # Audio Player
 ```
 
 Verifica stato mount root + overlayroot, storage driver Docker, unit systemd richieste, conteggio container previsti / attivi / healthy, annuncio mDNS, raggiungibilità TCP/RPC di Snapcast, moduli kernel audio rispetto all'HAT configurato, QoS, mount musica e salute dei timer (un modulo per sottosistema in `scripts/smoke/`). Se tutte le sezioni sono verdi, la piattaforma è sana — concentrati a monte (rete, app di cast, account). Se qualcosa è rosso, il check fallito ti dice quale sottosistema controllare. Lo stesso script è il release gate (ADR-005) e quello che `fleet-smoke.sh` esegue su più device.
 
-Output JSON per script / dashboard: `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server --json`.
+Output JSON per script / dashboard: aggiungi `--json` (es. `sudo bash /opt/snapmulti/scripts/device-smoke.sh --server --json`).
 
 ### Segnali audio del risultato — `--tone` <a id="toni-test-salute"></a>
 
 Aggiungi `--tone` per riprodurre un breve segnale audio alla fine dell'esecuzione (utile per installazioni server headless senza HDMI):
 
 ```bash
-sudo bash /opt/snapmulti/scripts/device-smoke.sh --both --tone
+sudo bash /opt/snapmulti/scripts/device-smoke.sh --both --tone      # Server + Player
+sudo bash /opt/snapclient/scripts/device-smoke.sh --client --tone   # Audio Player
 ```
 
 | Segnale | Significato |
@@ -53,7 +59,7 @@ sudo bash /opt/snapmulti/scripts/device-smoke.sh --both --tone
 
 I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot-smoke.service`), così un Pi senza presidio segnala l'esito del riavvio in modo udibile. Tieni il volume moderato — il segnale si ripete a ogni accensione.
 
-**Opt-out multi-stanza:** sentire 5 stanze in sequenza al boot è una pessima UX. Imposta `SNAPMULTI_BOOT_SMOKE_TONES=off` in `/opt/snapmulti/.env` (server) o `/opt/snapclient/.env` (client) per silenziare il tono al boot mantenendo `--tone` manuale funzionante. `TEST_TONE=false` in `install.conf` silenzia tutto (tono di installazione + tono di boot + manuale). I segnali non si attivano mai sopra uno stream Snapcast attivo.
+**Opt-out multi-stanza:** sentire 5 stanze in sequenza al boot è una pessima UX. Imposta `SNAPMULTI_BOOT_SMOKE_TONES=off` in `/opt/snapmulti/.env` (server) o `/opt/snapclient/.env` (client) per silenziare i segnali di risultato di quel device — sia il segnale al boot **sia** le esecuzioni manuali di `device-smoke.sh --tone` (su Server + Player decide il `.env` del server). Su un Pi read-only segui [Modificare le impostazioni su un Pi read-only](ADVANCED.it.md#modificare-le-impostazioni-su-un-pi-read-only), altrimenti l'impostazione sparisce al riavvio successivo. `TEST_TONE=false` in `install.conf` silenzia tutto (tono di installazione + tono di boot + manuale). Un'esecuzione manuale con `--tone` resta muta mentre uno stream Snapcast è in riproduzione; il segnale al boot non lo controlla, quindi può suonare sopra la musica ripartita al boot (a meno che il player tenga il DAC in esclusiva, nel qual caso semplicemente non si sente).
 
 ---
 
@@ -68,7 +74,7 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 2. Dal laptop: `ping <hostname>.local`. Se risponde, la rete è OK.
 3. Se SSH funziona: `ssh <username>@<hostname>.local`, poi `sudo tail -f /var/log/snapmulti-install.log` per vedere l'install in tempo reale (oppure `sudo journalctl -u cloud-final.service -f` per la vista dall'unit di cloud-init).
 
-**Se è ancora bloccato.** Estrai la SD e cerca `snapmulti-diag-install-failed-*.tar.gz` sulla partizione boot — significa che l'install si è arreso. Allegalo a una issue GitHub. Se non esiste nessun pacchetto diagnostico e il Pi è completamente irraggiungibile dopo 20 minuti, la SD è la causa più comune (usa SanDisk / Samsung A1 o migliore — vedi [HARDWARE.it.md](HARDWARE.it.md#se-non-sai-cosa-comprareusare)).
+**Se è ancora bloccato.** Estrai la SD e cerca `snapmulti-diag-install-failed-*.tar.gz` sulla partizione boot — significa che l'install si è arreso. Allegalo a una issue GitHub. Un'installazione fallita non riparte da sola al boot successivo (cloud-init avvia l'installer una sola volta), quindi spegnere e riaccendere non la sistema. Per recuperare, riflasha la SD (la via più semplice), oppure — se sei a tuo agio con SSH — rilancia l'installer a mano come mostrato in [Install marcato fallito ma i container girano](#install-marcato-fallito-ma-i-container-girano). Se non esiste nessun pacchetto diagnostico e il Pi è completamente irraggiungibile dopo 20 minuti, la SD è la causa più comune (usa SanDisk / Samsung A1 o migliore — vedi [HARDWARE.it.md](HARDWARE.it.md#se-non-sai-cosa-comprareusare)).
 
 ## Il device non compare in rete / `.local` non risolve
 
@@ -77,12 +83,12 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 **Causa probabile.** Disallineamento nella configurazione WiFi di Imager (paese sbagliato, SSID 5 GHz su una scheda solo 2,4 GHz, canale DFS che il Pi non riesce a usare al primo boot), oppure il telefono / laptop è su una rete diversa dal Pi (WiFi ospiti, VLAN separata), oppure il router non inoltra l'mDNS.
 
 **Cosa provare.**
-1. Usa l'IP direttamente. Lo trovi nella lista client DHCP del router, o collega l'HDMI: il Pi stampa l'IP sulla console dopo il boot.
+1. Usa l'IP direttamente. Lo trovi nella lista client DHCP del router, o collega l'HDMI: su un'installazione server, la schermata di login della console HDMI mostra l'indirizzo (`http://<hostname>.local:8083/` e l'IP). Su un Audio Player con schermo, la barra in basso della schermata del player mostra `<IP del player> → <server>` (il pannello si spegne dopo ~15 s senza riproduzione e si riaccende quando parte l'audio). Il server compare anche nelle app Bonjour / di esplorazione rete come "snapMULTI on `<hostname>`".
 2. Verifica che entrambi i device siano sulla stessa sottorete — `192.168.x.y` sul Pi vs `192.168.x.z` sul laptop, stessi primi tre ottetti.
 3. Sul Pi Zero 2 W: conferma che Imager abbia un SSID 2,4 GHz, non 5 GHz (il radio del Zero 2 W non fa 5 GHz).
 4. Su un Pi 4 / 5 bloccato su un canale 5 GHz DFS: riflasha con un SSID 2,4 GHz oppure un canale 5 GHz non-DFS (36–48).
 
-**Se è ancora bloccato.** Se hai l'HDMI: fai login, esegui `ip addr` e `iwgetid -r` per verificare che il Pi sia in WiFi. Se `ip addr` non mostra un indirizzo su `wlan0`, le credenziali WiFi in Imager erano sbagliate — riflasha. Se `iwgetid` mostra l'SSID giusto ma `ip addr` non mostra l'indirizzo, hai un problema DHCP sul router.
+**Se è ancora bloccato.** Se hai l'HDMI: fai login, esegui `ip addr` e `iwgetid -r` per verificare che il Pi sia in WiFi. Se `ip addr` non mostra un indirizzo su `wlan0`, le credenziali WiFi in Imager erano sbagliate — riflasha. Se `iwgetid` mostra l'SSID giusto ma `ip addr` non mostra l'indirizzo, hai un problema DHCP sul router. Il watchdog WiFi riavvia un Pi solo-WiFi soltanto dopo che il gateway ha risposto almeno una volta dall'avvio; un Pi il cui WiFi non è mai partito riceve solo riavvii dell'interfaccia, quindi spegnilo e riaccendilo.
 
 ## Console di emergenza / root bloccato
 
@@ -93,9 +99,9 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 **Cosa provare.**
 1. Collega display HDMI + tastiera USB al Pi per una console locale. Username e password sono quelli impostati in Imager.
 2. Da lì: `sudo ro-mode disable && sudo reboot` se servono modifiche persistenti (vedi [ADVANCED.it.md — Filesystem read-only](ADVANCED.it.md#filesystem-read-only)).
-3. Se il Pi non arriva mai al login: estrai la SD, apri la **partizione boot** sul laptop, modifica `user-data` per resettare le credenziali, reinserisci e accendi.
+3. Se il Pi non arriva mai al login, o non conosci le credenziali: riflasha. Modificare `user-data` sulla partizione boot di un Pi già installato non ha effetto — cloud-init lo applica solo al primissimo boot di un'immagine nuova.
 
-**Se è ancora bloccato.** Riflasha con Imager — snapMULTI è reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)), e l'install dura circa 15-20 min su Pi 4/5. Per preservare l'indice della libreria musicale, estrai prima l'SD ed esegui `./scripts/backup-from-sd.sh` dal bundle snapMULTI sul tuo computer (host-side — legge l'SD montata; vedi "Pre-warm del prossimo reflash" più sotto).
+**Se è ancora bloccato.** Riflasha con Imager — snapMULTI è reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)), e l'install dura circa 15-20 min su Pi 4/5. Per conservare l'indice della libreria musicale, le playlist myMPD e i gruppi di altoparlanti, esegui prima `./scripts/backup-from-sd.sh` sul tuo computer con la vecchia SD — vedi [ADVANCED.it.md — Aggiornare con un reflash](ADVANCED.it.md#aggiornare-con-un-reflash) per i passi in ordine (Windows incluso).
 
 ## Niente audio
 
@@ -105,11 +111,11 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 
 **Cosa provare.**
 1. Sul device client: `docker exec snapclient snapclient --list` (oppure `snapclient --list` sull'install nativa del Pi Zero 2 W) per elencare le card. Quella giusta è quella che corrisponde al tuo HAT (es. `sndrpihifiberry`).
-2. Imposta `SOUNDCARD` in `/opt/snapclient/.env` con quel nome (senza underscore — è il nome esatto dell'env-var che `docker-compose.yml` legge), poi `cd /opt/snapclient && sudo docker compose up -d` (NON `restart` — non rilegge `.env`).
+2. Imposta `SOUNDCARD` in `/opt/snapclient/.env` con quel nome (senza underscore — è il nome esatto dell'env-var che `docker-compose.yml` legge), poi `cd /opt/snapclient && sudo docker compose up -d` (NON `restart` — non rilegge `.env`). Per conservare la modifica dopo un riavvio, falla con la modalità read-only disattivata: [Modificare le impostazioni su un Pi read-only](ADVANCED.it.md#modificare-le-impostazioni-su-un-pi-read-only).
 3. Controlla il mixer hardware: `alsamixer -c 0`, F6 per scegliere la card, alza il master e tutti i controlli "Digital" / "Speaker".
 4. Verifica che l'HAT sia rilevato: `aplay -l` deve mostrare il tuo DAC; `dmesg | grep -i 'snd\|hifiberry\|wm8'` deve mostrare il caricamento del driver.
 
-**Se è ancora bloccato.** Esegui il test di salute (ha un controllo `audio_modules` che segnala disallineamenti fra moduli kernel e HAT). Se `config.txt` non ha `dtoverlay=hifiberry-*` ecc., rilancia `setup.sh` e conferma che il rilevamento HAT scelga il modello giusto — le schede senza EEPROM richiedono una scelta manuale.
+**Se è ancora bloccato.** Esegui il test di salute (ha un controllo `audio_modules` che segnala disallineamenti fra moduli kernel e HAT). Se `config.txt` non ha `dtoverlay=hifiberry-*` ecc., rilancia `setup.sh` e conferma che il rilevamento HAT scelga il modello giusto — le schede senza EEPROM richiedono una scelta manuale. `setup.sh` si rifiuta di girare con la modalità read-only attiva (le sue modifiche andrebbero perse al riavvio): esegui prima `sudo ro-mode disable && sudo reboot`. Lo stesso vale se colleghi uno schermo HDMI a un player installato headless: lo schermo resta spento finché non rilanci `setup.sh` con lo schermo collegato (o riflashi la scheda), perché il visualizzatore ha bisogno di un instradamento audio che un'installazione headless non configura.
 
 ## L'audio va e viene, o un client è connesso ma muto
 
@@ -134,7 +140,7 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 **Cosa provare.**
 1. Sul server: `systemctl is-active avahi-daemon` — deve dire `active`. Poi `avahi-browse -r _snapcast._tcp --terminate` — deve elencare l'hostname del server. Se elenca `<hostname>-2.local`, Avahi ha perso un conflitto di nome (di solito un record che il router o un Mac tiene ancora in cache da un avvio precedente); `snapmulti-avahi-name.timer` riprende il nome entro 15 minuti, oppure lancia subito `sudo /usr/local/bin/snapmulti-avahi-name.sh`. Se il nome torna sempre `-2`, un altro dispositivo in rete usa lo stesso hostname.
 2. Sul client: `avahi-browse -r _snapcast._tcp --terminate` — deve elencare il server. Se non lo fa, l'mDNS non attraversa la rete.
-3. Come workaround, imposta un server statico nel `.env` del client: `SNAPSERVER_HOST=<server-ip>` e `cd /opt/snapclient && sudo docker compose up -d`.
+3. Come workaround, imposta un server statico nel `.env` del client: `SNAPSERVER_HOST=<server-ip>` e `cd /opt/snapclient && sudo docker compose up -d` (con la modalità read-only disattivata, altrimenti si perde al riavvio — vedi [Modificare le impostazioni su un Pi read-only](ADVANCED.it.md#modificare-le-impostazioni-su-un-pi-read-only)).
 
 **Se è ancora bloccato.** La causa più comune è un router che non inoltra l'mDNS tra SSID / VLAN (mesh router e rete ospiti sono tipici). Metti server e client sullo stesso SSID, oppure installa un ripetitore mDNS sul router (DD-WRT, OpenWrt, UniFi lo supportano tutti).
 
@@ -148,7 +154,7 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 1. Conferma che il container sia up: `cd /opt/snapmulti && docker compose ps` — `librespot` (Spotify), `shairport-sync` (AirPlay), `tidal-connect` (Tidal, solo ARM) tutti `healthy`.
 2. Dal server: `avahi-browse -r _spotify-connect._tcp --terminate`, `avahi-browse -r _raop._tcp --terminate` (AirPlay) — deve elencare il server.
 3. Telefono e server sullo stesso SSID WiFi? Le reti ospiti e le VLAN bloccano il rilevamento automatico.
-4. Tidal Connect è solo ARM ed è **abilitato di default sugli install ARM**. Se non appare: conferma che il Pi sia ARM (`uname -m` restituisce `aarch64`), controlla che `COMPOSE_PROFILES` contenga `tidal` in `/opt/snapmulti/.env` e verifica che il container `tidal-connect` sia `healthy`. Vedi [USAGE.it.md — Nota sicurezza Tidal Connect](USAGE.it.md#nota-sicurezza-tidal-connect) per la disclosure e il path di disabilitazione.
+4. Tidal Connect è solo ARM ed è **abilitato di default sugli install ARM**. Se non appare: conferma che il Pi sia ARM (`uname -m` restituisce `aarch64`), controlla che `COMPOSE_PROFILES` contenga `tidal` in `/opt/snapmulti/.env` e verifica che il container `tidal-connect` sia `healthy`. Vedi [USAGE.it.md — Nota sicurezza Tidal Connect](USAGE.it.md#nota-sicurezza-tidal-connect) per la disclosure e [ADVANCED.it.md — Disattivare Tidal Connect](ADVANCED.it.md#disattivare-tidal-connect) per la disattivazione.
 5. Spotify Connect richiede **Premium** — gli account Free non mostrano il device.
 
 **Se è ancora bloccato.** Riavvia il container in questione: `cd /opt/snapmulti && sudo docker compose up -d --force-recreate librespot` (o `shairport-sync` / `tidal-connect`). Poi ri-controlla con `avahi-browse`. Vedi anche la sezione "Gli speaker non trovano il server" qui sopra per il triage mDNS dettagliato.
@@ -180,7 +186,7 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 3. Verifica che il path non abbia **spazi** lato NAS. Rinomina `Music Share` → `Music_Share`.
 4. Per SMB, le credenziali persistenti vivono in `/etc/snapmulti-smb-credentials` (root-only, su ext4). Vengono scritte anche dentro `install.conf` sulla partizione FAT32 di boot durante `prepare-sd.sh` e `firstboot.sh`, poi rimosse una volta che `mount-music` le ha copiate in `/etc/snapmulti-smb-credentials`.
 
-**Se è ancora bloccato.** Riflasha l'SD con il path NAS corretto — snapMULTI è reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)) e un install fresco dura circa 15-20 min su Pi 4/5. È possibile un recupero manuale senza reflash, ma non è ufficialmente supportato; richiede di modificare a mano `/etc/snapmulti-smb-credentials` e le unit systemd `.mount`/`.automount`. La scansione MPD su NFS è lenta alla prima esecuzione — vedi [ADVANCED.it.md — Libreria musicale](ADVANCED.it.md#libreria-musicale-in-rete) per il trucco del backup `mpd.db`.
+**Se è ancora bloccato.** Riflasha l'SD con il path NAS corretto — snapMULTI è reflash-first by design ([DEC-003](decisions/DEC-003-reflash-only-updates.md)) e un install fresco dura circa 15-20 min su Pi 4/5. È possibile un recupero manuale senza reflash, ma non è ufficialmente supportato; richiede di modificare a mano `/etc/snapmulti-smb-credentials` e le unit systemd `.mount`/`.automount`. La scansione MPD su NFS è lenta alla prima esecuzione — il backup di `mpd.db` descritto in [ADVANCED.it.md — Aggiornare con un reflash](ADVANCED.it.md#aggiornare-con-un-reflash) la evita al prossimo reflash.
 
 ## Install marcato fallito ma i container girano <a id="install-marcato-fallito-ma-i-container-girano"></a>
 
@@ -199,7 +205,7 @@ ls /boot/firmware/snapmulti-diag-install-failed-*.tar.gz 2>/dev/null
 
 Se tutti e quattro segnalano "non fatto", l'install genuinamente non è stato completato.
 
-**Cosa provare — retry manuale senza reflash (è l'unico path che davvero cambia la finestra healthcheck MPD).** `deploy.sh` deriva `MPD_START_PERIOD` puramente da `MUSIC_SOURCE` (300 s per `nfs`/`smb`/`network`, 30 s altrimenti) e NON legge `install.conf` per questo valore — mettere `MPD_START_PERIOD=3600s` in `install.conf` PRIMA del flash viene silenziosamente ignorato. L'unico modo per alzare davvero il budget è modificare `.env` DOPO il primo boot fallito, cancellare il failure marker e rilanciare `firstboot.sh`. Il valore di 1 ora basta empiricamente per scan NFS a freddo fino a ~100 k tracce su Pi 4. Estrai prima il pacchetto diagnostico dalla SD fallita (`/boot/firmware/snapmulti-diag-install-failed-*.tar.gz`) per la issue GitHub. L'installer salta le operazioni una volta che `.install-failed` esiste; rimuovilo e rilancia direttamente lo script (`firstboot.sh` è idempotente — salta gli step già fatti e riprende dal punto di fallimento):
+**Cosa provare — retry manuale senza reflash (è l'unico path che davvero cambia la finestra healthcheck MPD).** `deploy.sh` deriva `MPD_START_PERIOD` puramente da `MUSIC_SOURCE` (300 s per `nfs`/`smb`/`network`, 30 s altrimenti) e NON legge `install.conf` per questo valore — mettere `MPD_START_PERIOD=3600s` in `install.conf` PRIMA del flash viene silenziosamente ignorato. L'unico modo per alzare davvero il budget è modificare `.env` DOPO il primo boot fallito e rilanciare `firstboot.sh` a mano — non riparte da solo. A questo punto il root è ancora scrivibile (l'install fallito non ha mai attivato la modalità read-only), quindi la modifica resta. Il valore di 1 ora basta empiricamente per scan NFS a freddo fino a ~100 k tracce su Pi 4. Estrai prima il pacchetto diagnostico dalla SD fallita (`/boot/firmware/snapmulti-diag-install-failed-*.tar.gz`) per la issue GitHub. `firstboot.sh` è idempotente — salta le fasi già fatte (checkpoint in `/var/lib/snapmulti-installer/`) e riprende dal punto di fallimento; cancella anche `.install-failed` da solo, il `rm` esplicito qui sotto serve solo a rendere evidente lo stato:
 
 ```bash
 # Alza prima la finestra healthcheck di MPD se la causa era una scansione NFS lenta
@@ -231,7 +237,7 @@ docker exec mpd mpc status | head
 **Cosa provare.**
 
 1. **Aspetta.** La prima scansione finisce tra minuti (libreria piccola) e diverse ore (50 k+ tracce su NFS lento). Una volta completata, il tono al prossimo boot sarà **pass** (ascendente).
-2. **Pre-warm del prossimo reflash.** Il timer di backup del device copia già `mpd.db` sulla partizione boot dell'SD. Prima del reflash, estrai l'SD, montala sul tuo Mac/PC ed esegui `./scripts/backup-from-sd.sh` **dal bundle snapMULTI su quel computer** (non sul Pi — lo script è host-side e legge l'SD appena montata). Copia `mpd.db` nel bundle, e `prepare-sd.sh` lo re-stagea sulla nuova SD, così il nuovo install carica il database cached in secondi invece di rescansionare tutta la share NFS. Vedi [ADVANCED.it.md — Libreria musicale in rete](ADVANCED.it.md#libreria-musicale-in-rete).
+2. **Pre-warm del prossimo reflash.** Il timer di backup del device copia già `mpd.db` sulla partizione boot dell'SD. Prima del reflash, esegui `./scripts/backup-from-sd.sh` **sul tuo computer** con la vecchia SD montata (non sul Pi); `prepare-sd.sh` poi rimette il database sulla nuova SD, così il nuovo install lo carica in secondi invece di rescansionare tutta la share NFS. Passi in ordine (Windows incluso): [ADVANCED.it.md — Aggiornare con un reflash](ADVANCED.it.md#aggiornare-con-un-reflash).
 
 **Se è ancora bloccato.** Se `docker exec mpd mpc status` NON mostra `Updating DB` E mpd resta `unhealthy` per più di un'ora, hai un problema vero — controlla `docker logs mpd` e la raggiungibilità del NAS ([Libreria NAS vuota o non si monta](#libreria-nas-vuota-o-non-si-monta-nfs--smb)).
 
@@ -294,15 +300,7 @@ Sintomi che **non** dipendono dall'IPv6 attivo:
 - App di casting AirPlay / Tidal / Spotify non vede il device → stesso check con `_airplay._tcp`, `_tidalconnect._tcp`, `_spotify-connect._tcp`.
 - `apt-get update` lento → se hai scelto l'opt-in `DISABLE_IPV6=true` allora `/etc/apt/apt.conf.d/99force-ipv4` si installa da solo; con il default IPv6-on, apt funziona dual-stack e nessun force-IPv4 config viene scritto.
 
-Per disabilitare IPv6 su un device (rete legacy, router advertisement bacati, ecc.):
-
-```bash
-# Monta la partizione di boot da un altro host (FAT32, fuori da overlayroot)
-# Aggiungi `ipv6.disable=1` a cmdline.txt
-# Riavvia il Pi
-```
-
-Per un'installazione fresca, imposta `DISABLE_IPV6=true` prima di lanciare `prepare-sd.sh` / `prepare-sd.ps1` (vedi [ADVANCED.it.md](ADVANCED.it.md#ipv6-attivato-per-default)).
+Per disabilitare IPv6 su un device (rete legacy, router advertisement bacati, ecc.), aggiungi `ipv6.disable=1` a `cmdline.txt` con l'helper di snapMULTI — i comandi sono in [ADVANCED.it.md — IPv6 attivato per default](ADVANCED.it.md#ipv6-attivato-per-default). Per un'installazione fresca, imposta `DISABLE_IPV6=true` prima di lanciare `prepare-sd.sh` / `prepare-sd.ps1` (stessa sezione).
 
 ## Log che servono
 
@@ -322,7 +320,7 @@ cat /var/log/snapmulti-install.log
 http://<server>:8083/status
 ```
 
-Per creare un pacchetto diagnostico portabile e anonimizzato da allegare a una segnalazione bug: `sudo /opt/snapmulti/scripts/diagnostic.sh --reason crash --out-dir /tmp` (sui device solo-player: `/opt/snapclient/scripts/diagnostic.sh`).
+Per un pacchetto diagnostico filtrato da allegare a una segnalazione bug (controllalo prima di pubblicarlo), vedi [In caso di dubbio — prendi il pacchetto diagnostico](#in-caso-di-dubbio--prendi-il-pacchetto-diagnostico).
 
 ## Ancora bloccato?
 
