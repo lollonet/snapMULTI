@@ -68,10 +68,10 @@ jobs:
         run: echo "TAG=test-$(basename ${{ matrix.dockerfile }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Get latest snapcast commit SHA
-        if: matrix.dockerfile == 'Dockerfile.snapserver'
+        if: matrix.dockerfile == 'Dockerfile.snapserver' || matrix.dockerfile == 'client/common/docker/snapclient/Dockerfile'
         id: snapcast
         run: |
-          SHA=$(git ls-remote https://github.com/badaix/snapcast.git HEAD | cut -f1)
+          SHA=$(git ls-remote https://github.com/badaix/snapcast.git refs/tags/v0.35.0 | cut -f1)
           if [[ -z "$SHA" ]]; then
             echo "ERROR: Failed to fetch snapcast HEAD commit"
             exit 1
