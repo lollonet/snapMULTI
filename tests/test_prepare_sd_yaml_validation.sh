@@ -37,10 +37,10 @@ assert() {
 
 echo "== prepare-sd.sh: post-patch YAML sanity =="
 
-assert 'grep -qE "_runcmd_count=\\\$\\(grep -cE \"\\^\\[\\[:space:\\]\\]\\*runcmd:\" \"\\\$USERDATA\"" "$PREP_SH"' \
-       'sh: counts runcmd: occurrences post-patch'
+assert 'grep -qE "runcmd_count=\\\$\\(grep -cE \"\\^\\[\\[:space:\\]\\]\\*runcmd:\" \"\\\$file\"" "$PREP_SH"' \
+       'sh: validate_user_data counts runcmd: occurrences'
 
-assert 'grep -qF "ERROR: user-data has \${_runcmd_count} runcmd: blocks after patch (expected 1)" "$PREP_SH"' \
+assert 'grep -qF "ERROR: user-data has \${runcmd_count} runcmd: blocks (expected 1)" "$PREP_SH"' \
        'sh: errors loudly on double runcmd block'
 
 assert 'grep -qE "command -v python3 .* python3 -c \"import yaml\"" "$PREP_SH"' \
@@ -52,27 +52,28 @@ assert 'grep -qF "with open(sys.argv[1]) as fh:" "$PREP_SH" && grep -qF "yaml.sa
 assert 'grep -qF "First boot will fail with cloud-init unable to parse user-data." "$PREP_SH"' \
        'sh: error message names the actual downstream failure'
 
-# Pin the placement: validation must come AFTER the grep that verifies the
-# hook string is present (otherwise we error out before knowing the patch
-# even attempted) and BEFORE the meta-data refresh block.
-_check_line=$(grep -nE "_runcmd_count=\\\$\\(grep" "$PREP_SH" | head -1 | cut -d: -f1)
-_patched_line=$(grep -nF '  user-data patched.' "$PREP_SH" | head -1 | cut -d: -f1)
-_metadata_line=$(grep -nF "Refresh cloud-init meta-data" "$PREP_SH" | head -1 | cut -d: -f1)
-assert '[[ -n "$_check_line" && -n "$_patched_line" && -n "$_metadata_line" && \
-        "$_check_line" -gt "$_patched_line" && "$_check_line" -lt "$_metadata_line" ]]' \
-       'sh: validation block sits between "patched." print and meta-data refresh'
+# Pin the placement: the gate runs on the patched TEMP copy, after the
+# patch and before the real user-data is replaced, and all of it sits
+# before the meta-data refresh block.
+_check_line=$(grep -nE 'if ! validate_user_data "\$USERDATA_TMP"' "$PREP_SH" | head -1 | cut -d: -f1 || true)
+_patch_line=$(grep -nE 'if ! patch_user_data_runcmd "\$USERDATA_TMP"' "$PREP_SH" | head -1 | cut -d: -f1 || true)
+_patched_line=$(grep -nF '  user-data patched.' "$PREP_SH" | head -1 | cut -d: -f1 || true)
+_metadata_line=$(grep -nF "Refresh cloud-init meta-data" "$PREP_SH" | head -1 | cut -d: -f1 || true)
+assert '[[ -n "$_check_line" && -n "$_patch_line" && -n "$_patched_line" && -n "$_metadata_line" && \
+        "$_check_line" -gt "$_patch_line" && "$_check_line" -lt "$_patched_line" && \
+        "$_patched_line" -lt "$_metadata_line" ]]' \
+       'sh: validation runs between the temp-copy patch and the "patched." print, before meta-data refresh'
 
 echo
 echo "== prepare-sd.ps1: post-patch YAML sanity (Windows mirror) =="
 
-assert 'grep -qF "runcmdMatches = \[regex\]::Matches(\$udContent, \"(?m)^[\\s]*runcmd:\")" "$PREP_PS1" || \
-        grep -qF "runcmdMatches = [regex]::Matches(\$udContent, '"'"'(?m)^[\s]*runcmd:'"'"')" "$PREP_PS1"' \
+assert 'grep -qF "runcmdMatches = [regex]::Matches(\$Content, '"'"'(?m)^[\s]*runcmd:'"'"')" "$PREP_PS1"' \
        'ps1: counts runcmd: matches via [regex]::Matches'
 
 assert 'grep -qF "runcmd: blocks after patch (expected 1)" "$PREP_PS1"' \
        'ps1: error message mirrors bash version'
 
-assert 'grep -qF "Inspect '"'"'\$userData'"'"' for a malformed YAML structure." "$PREP_PS1"' \
+assert 'grep -qF "Inspect '"'"'\$userData'"'"' for a malformed YAML structure" "$PREP_PS1"' \
        'ps1: error message names the file to inspect'
 
 # Both scripts must agree on what counts as "correct" — exactly 1 runcmd block.

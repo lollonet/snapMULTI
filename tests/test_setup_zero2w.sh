@@ -8,7 +8,8 @@
 #   3. The systemd drop-in path uses the canonical .service.d/ pattern
 #      and declares restart limits.
 #   4. The script exits non-zero on snapclient install failure so
-#      firstboot.sh's retry-on-next-boot pattern fires.
+#      firstboot.sh records the failure, and tells the operator how to
+#      recover (nothing re-runs firstboot automatically).
 #   5. --help invocation returns 0 (script is callable without root).
 
 set -euo pipefail
@@ -62,9 +63,13 @@ for k in "StartLimitBurst=5" "StartLimitIntervalSec=300" "Restart=on-failure"; d
         "drop-in declares $k"
 done
 
-# 5. Exit 1 on install failure (firstboot retry trigger)
-assert 'grep -qF "firstboot will retry on next boot" "$SETUP"' \
-    "logs firstboot-retry intent on install failure"
+# 5. Exit 1 on install failure, with accurate recovery advice. Nothing
+#    re-runs firstboot by itself (cloud-init runcmd runs once); the operator
+#    re-runs firstboot.sh (resumes from the last completed step) or reflashes.
+assert '! grep -qF "retry on next boot" "$SETUP"' \
+    "no false 'retry on next boot' promise"
+assert 'grep -qF "sudo bash /boot/firmware/snapmulti/firstboot.sh" "$SETUP"' \
+    "install failure names the manual firstboot.sh re-run"
 exit_lines=$(grep -cE "^[[:space:]]+exit 1" "$SETUP" || true)
 assert "[[ \"$exit_lines\" -ge 1 ]]" \
     "has >= 1 'exit 1' bailout site — got $exit_lines"

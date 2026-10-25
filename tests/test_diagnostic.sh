@@ -278,5 +278,39 @@ assert 'grep -qF "\$SNAP_BOOT/client/scripts/diagnostic.sh" "$FIRSTBOOT"' \
     "firstboot.sh lookup includes \$SNAP_BOOT/client/scripts/diagnostic.sh (client SD path)"
 
 echo
+echo "=== Read-only boot partition is remounted rw for the run ==="
+# After install /boot/firmware is mounted ro; the `-w` fallback used to
+# drop the bundle on /boot of the root fs (RAM under overlayroot). Run
+# only the remount block + cleanup with stubbed findmnt/mount/flock/id.
+RO_DIR=$(mktemp -d /tmp/diag-test-ro-XXXXXX)
+mkdir -p "$RO_DIR/bin" "$RO_DIR/boot"
+cat > "$RO_DIR/bin/findmnt" <<EOF
+#!/usr/bin/env bash
+case "\$*" in
+    *TARGET*)  echo "$RO_DIR/boot" ;;
+    *OPTIONS*) echo "\${STUB_OPTS:-ro,relatime,errors=remount-ro}" ;;
+esac
+EOF
+printf '#!/usr/bin/env bash\necho "mount $*" >> "%s/calls"\n' "$RO_DIR" > "$RO_DIR/bin/mount"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$RO_DIR/bin/flock"
+printf '#!/usr/bin/env bash\necho 0\n' > "$RO_DIR/bin/id"
+chmod +x "$RO_DIR/bin/"*
+awk '/^_DIAG_REMOUNTED=""/{f=1} f{print} /^unset _diag_mount/{f=0}' "$DIAG" > "$RO_DIR/block.sh"
+awk '/^cleanup\(\) \{/{f=1} f{print} f && /^\}/{f=0}' "$DIAG" >> "$RO_DIR/block.sh"
+run_ro_block() {
+    rm -f "$RO_DIR/calls"
+    # shellcheck disable=SC2016
+    STUB_OPTS="$1" PATH="$RO_DIR/bin:$PATH" OUT_DIR="$RO_DIR/boot" WORK_DIR="$RO_DIR/work" \
+        bash -c 'set -euo pipefail; source "$0"; cleanup' "$RO_DIR/block.sh" 2>/dev/null || true
+    cat "$RO_DIR/calls" 2>/dev/null || true
+}
+ro_calls=$(run_ro_block "ro,relatime,errors=remount-ro")
+assert_contains "$ro_calls" "remount,rw $RO_DIR/boot" "ro boot mount remounted rw before writing"
+assert_contains "$ro_calls" "remount,ro $RO_DIR/boot" "boot mount put back ro on exit"
+rw_calls=$(run_ro_block "rw,relatime,errors=remount-ro")
+assert "[[ -z \"$rw_calls\" ]]" "rw boot mount (errors=remount-ro option) left untouched"
+rm -rf "$RO_DIR"
+
+echo
 echo "Results: $pass passed, $fail failed"
 exit $(( fail > 0 ? 1 : 0 ))

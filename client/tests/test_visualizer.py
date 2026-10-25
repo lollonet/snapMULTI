@@ -256,3 +256,43 @@ class TestConstants:
 
     def test_window_size_matches_fft(self):
         assert len(visualizer.WINDOW) == visualizer.FFT_SIZE
+
+
+class _StopReader(BaseException):
+    """Ends read_loopback_and_broadcast (not caught by its `except Exception`)."""
+
+
+class TestReadFailureResetsState:
+    """A failed ALSA read must reset the module-level ring buffer state."""
+
+    def test_reset_analysis_state(self):
+        visualizer._ring_pos = 123
+        visualizer._dc_estimate = 0.5
+        visualizer.audio_ring[:] = 1.0
+        visualizer.prev_db[:] = 0.0
+        visualizer.reset_analysis_state()
+        assert visualizer._ring_pos == 0
+        assert visualizer._dc_estimate == 0.0
+        assert not visualizer.audio_ring.any()
+        assert (visualizer.prev_db == visualizer.NOISE_FLOOR).all()
+
+    def test_read_failure_resets_ring_position(self, monkeypatch):
+        opens = {"n": 0}
+
+        def fake_open():
+            opens["n"] += 1
+            if opens["n"] > 1:
+                raise _StopReader
+            return object(), MagicMock()
+
+        monkeypatch.setattr(visualizer, "open_alsa_capture", fake_open)
+        monkeypatch.setattr(visualizer, "alsa_read_frames", lambda *a: None)
+        monkeypatch.setattr(visualizer, "broadcast", AsyncMock())
+        visualizer._ring_pos = 123
+        visualizer.audio_ring[:] = 1.0
+
+        with pytest.raises(_StopReader):
+            asyncio.run(visualizer.read_loopback_and_broadcast())
+
+        assert visualizer._ring_pos == 0
+        assert not visualizer.audio_ring.any()
