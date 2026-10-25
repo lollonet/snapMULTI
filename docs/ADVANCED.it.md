@@ -62,7 +62,7 @@ L'install al primo boot aspetta `max(MPD_START_PERIOD, 180s) + 120s` che MPD apr
 | `/opt/snapmulti/.env` | Server: hostname, sorgente musica, limiti risorse container, override opzionali nomi AirPlay / Spotify / Tidal |
 | `/opt/snapclient/.env` | Client: override sound card, latenza, profilo display, hostname del server (per fallback IP statico) |
 
-> **Su un Pi read-only le modifiche si perdono al riavvio successivo.** La modalità read-only è attiva di default dopo un'installazione con `prepare-sd`: tutto il filesystem root, `/opt` compresa, gira in RAM. Solo la directory di lavoro di myMPD e il `server.json` di snapserver vengono salvati sulla partizione boot e ripristinati al boot ([dettagli](#filesystem-read-only)) — `.env` no. Usa la procedura qui sotto per ogni modifica che vuoi conservare. Anche un reflash scrive un `.env` nuovo, quindi i valori personalizzati vanno riapplicati dopo ogni reflash.
+> **Su un Pi read-only le modifiche si perdono al riavvio successivo.** La modalità read-only è attiva di default dopo un'installazione con `prepare-sd`: tutto il filesystem root, `/opt` compresa, gira in RAM. Solo la directory di lavoro di myMPD, il `server.json` di snapserver e il database di MPD vengono salvati sulla partizione boot e ripristinati al boot ([dettagli](#filesystem-read-only)) — `.env` no. Usa la procedura qui sotto per ogni modifica che vuoi conservare. Anche un reflash scrive un `.env` nuovo, quindi i valori personalizzati vanno riapplicati dopo ogni reflash.
 
 ### Modificare le impostazioni su un Pi read-only
 
@@ -78,11 +78,15 @@ L'install al primo boot aspetta `max(MPD_START_PERIOD, 180s) + 120s` che MPD apr
    sudo nano /opt/snapmulti/.env        # Audio Player: /opt/snapclient/.env
    ```
 
-3. Applicala. Usa `up -d`, non `restart` — `restart` non rilegge `.env`:
+   Su un Audio Player Pi Zero 2 W non c'è Docker: le sue impostazioni sono la riga `SNAPCLIENT_OPTS` in `/etc/default/snapclient` (per esempio `--soundcard`).
+
+3. Applicala. Usa `up -d`, non `restart` — `restart` non rilegge `.env`. Per un limite di memoria (`*_MEM_LIMIT`) usa `up -d --force-recreate`, che ricrea sempre i container con il nuovo limite:
 
    ```bash
    cd /opt/snapmulti && sudo docker compose up -d     # Audio Player: cd /opt/snapclient
    ```
+
+   Pi Zero 2 W: `sudo systemctl restart snapclient`.
 
 4. Riattiva la modalità read-only e riavvia:
 
@@ -90,7 +94,7 @@ L'install al primo boot aspetta `max(MPD_START_PERIOD, 180s) + 120s` che MPD apr
    sudo ro-mode enable && sudo reboot
    ```
 
-`ro-mode status` mostra lo stato attuale. Se hai disattivato la modalità read-only nel menu avanzato di `prepare-sd`, salta i passi 1 e 4.
+`ro-mode status` mostra lo stato attuale. Se hai disattivato la modalità read-only nel menu avanzato di `prepare-sd`, salta i passi 1 e 4. Se dopo il passo 4 un container si riavvia in loop, vedi [Risoluzione problemi](TROUBLESHOOTING.it.md#loop-di-riavvio-dopo-read-only).
 
 Nomi dei dispositivi per sorgente, per esempio (passo 2):
 
@@ -137,13 +141,13 @@ Serve un Pi 3/4/5 con Raspberry Pi OS **a 64 bit** e Docker (va bene un Audio Pl
    Poi riattiva la modalità read-only (`sudo ro-mode enable && sudo reboot`). I container ripartono da soli a ogni avvio.
 3. Nell'app Tidal, trasmetti a `<hostname del satellite> Tidal` (o `TIDAL_NAME`). In Snapweb, metti le stanze sullo stream **Tidal**.
 
-**Verifica:** `docker logs tidal-relay` sul satellite mostra `audio: connected to <server>:4954`; sul server, `docker logs tidal-relay` mostra `audio sender connected`. Finché il server non è raggiungibile il satellite scarta l'audio (l'app Tidal continua a riprodurre nel silenzio) e ritenta la connessione ogni 2 s; un server che sparisce senza chiudere la connessione (corrente staccata, cavo scollegato) viene rilevato in circa 2 s.
+**Verifica:** `docker logs tidal-relay` sul satellite mostra `audio: connected to <server>:4954`; sul server, `docker logs tidal-relay` mostra `audio sender connected`. Finché il server non è raggiungibile il satellite scarta l'audio (l'app Tidal continua a riprodurre nel silenzio) e ritenta la connessione ogni 2–5 s; un server che sparisce senza chiudere la connessione (corrente staccata, cavo scollegato) viene rilevato in circa 2 s.
 
 Non far girare `tidal-connect` sul server e un satellite contemporaneamente: scriverebbero entrambi sullo stesso stream `Tidal`.
 
 ## Filesystem read-only
 
-Dopo che l'installazione si completa, il rootfs viene montato in sola lettura via overlayroot + fuse-overlayfs. Le modifiche a `/etc`, `/opt`, ecc. sopravvivono fino al riavvio, poi vengono cancellate. Per maintenance usa l'helper `ro-mode` (installato in `/usr/local/bin/ro-mode` su ogni dispositivo):
+Dopo che l'installazione si completa, il rootfs viene montato in sola lettura via overlayroot + fuse-overlayfs. Le modifiche a `/etc`, `/opt`, ecc. sopravvivono fino al riavvio, poi vengono cancellate. Per maintenance usa l'helper `ro-mode` (installato in `/usr/local/bin/ro-mode` su ogni dispositivo installato con la modalità read-only attiva, quella di default):
 
 ```bash
 sudo ro-mode disable && sudo reboot   # scrivibile dal prossimo boot
@@ -154,7 +158,7 @@ ro-mode status                        # controlla lo stato attuale
 
 Versione passo-passo per le modifiche a `.env`: [Modificare le impostazioni su un Pi read-only](#modificare-le-impostazioni-su-un-pi-read-only).
 
-> **Eccezioni — stato che sopravvive alla pulizia overlayroot:** `snapmulti-state-backup.path` vigila i cambiamenti dello stato myMPD (`/opt/snapmulti/mympd/workdir/state` — la sottodirectory che cambia spesso, in cui myMPD scrive quando l'utente tocca playlist / impostazioni / script). Quando la `.path` unit si attiva, lo script di backup copia l'INTERA directory di lavoro myMPD su `/boot/firmware/snapmulti-backup/` — state + config + smartpls + scripts + pics — non solo la sottodirectory `state/` da cui è stata innescata, così le playlist intelligenti, i temi e gli script personalizzati dall'utente sopravvivono a un reflash. `snapmulti-state-backup.timer` è la rete di sicurezza: gira ogni 5 min e cattura `server.json` di snapserver (l'attivazione event-driven su quel file non è praticabile — snapserver lo riscrive ogni ~3 s per rinfrescare gli heartbeat `lastSeen` dei client). `backup-snapmulti-state.sh` si interrompe su uguaglianza canonica (ordinamento chiavi + rimozione `lastSeen` + sha256) così i tick a vuoto costano zero scritture sulla FAT32. `snapmulti-backup.timer` salva separatamente MPD `mpd.db` al boot e con cadenza giornaliera. Ad ogni boot, `restore-snapmulti-state` (collegato come `ExecStartPre` di `snapmulti-server.service`) ricopia il backup in `/opt/snapmulti/` prima che i container partano. L'approccio bind-mount di `snapmulti-data-persistence.service` di v0.7.9 è stato rimosso in v0.7.9.1 (vedi #527) — era un no-op su overlayroot in modalità tmpfs.
+> **Eccezioni — stato che sopravvive alla pulizia overlayroot:** `snapmulti-state-backup.path` vigila i cambiamenti dello stato myMPD (`/opt/snapmulti/mympd/workdir/state` — la sottodirectory che cambia spesso, in cui myMPD scrive quando l'utente tocca playlist / impostazioni / script). Quando la `.path` unit si attiva, lo script di backup copia l'INTERA directory di lavoro myMPD su `/boot/firmware/snapmulti-backup/` — state + config + smartpls + scripts + pics — non solo la sottodirectory `state/` da cui è stata innescata, così le playlist intelligenti, i temi e gli script personalizzati dall'utente sopravvivono a un reflash. `snapmulti-state-backup.timer` è la rete di sicurezza: gira ogni 5 min e cattura `server.json` di snapserver (l'attivazione event-driven su quel file non è praticabile — snapserver lo riscrive ogni ~3 s per rinfrescare gli heartbeat `lastSeen` dei client). `backup-snapmulti-state.sh` si interrompe su uguaglianza canonica (ordinamento chiavi + rimozione `lastSeen` + sha256) così i tick a vuoto costano zero scritture sulla FAT32. `snapmulti-backup.timer` salva separatamente MPD `mpd.db` al boot e con cadenza giornaliera; non scrive se il database non è cambiato e non sostituisce mai un backup buono con una copia danneggiata. Ad ogni boot, `restore-snapmulti-state` (collegato come `ExecStartPre` di `snapmulti-server.service`) ricopia il backup dello stato e `mpd.db` in `/opt/snapmulti/` prima che i container partano, così dopo un riavvio resta l'ultima libreria scansionata invece di quella del giorno dell'installazione. Un backup di `mpd.db` danneggiato viene saltato e MPD riscansiona. L'approccio bind-mount di `snapmulti-data-persistence.service` di v0.7.9 è stato rimosso in v0.7.9.1 (vedi #527) — era un no-op su overlayroot in modalità tmpfs.
 
 `/boot/firmware/cmdline.txt` è gestito da `scripts/common/cmdline-manager.sh` (aggiunge e rimuove `overlayroot=tmpfs`, i flag del memory cgroup e altri token). Non riscriverlo né riordinarlo a mano. Per aggiungere un flag del kernel usa lo stesso helper, come mostrato per [`ipv6.disable=1`](#ipv6-attivato-per-default).
 

@@ -30,7 +30,7 @@ Environment variables:
 import ipaddress
 import json
 import os
-import select
+import queue
 import socket
 import stat
 import sys
@@ -44,6 +44,7 @@ META_PATH = os.environ.get("TIDAL_RELAY_META_FILE", "/audio/tidal-metadata.json"
 HEARTBEAT_PATH = "/tmp/tidal-relay.alive"
 
 CHUNK = 4096  # ~23 ms of 44100:16:2
+QUEUE_CHUNKS = 16  # ~370 ms, what the 64 KiB pipe buffer holds
 META_MAX_BYTES = 64 * 1024
 CONNECT_TIMEOUT = 3.0
 # A send that makes no progress this long means the server is gone without
@@ -54,6 +55,9 @@ RETRY_SECONDS = 2.0
 META_POLL_SECONDS = 1.0
 META_RESEND_SECONDS = 60.0  # re-push unchanged metadata after a server restart
 HEARTBEAT_SECONDS = 15.0
+# Threads that must live as long as the process (see exit_on_thread_crash).
+# A per-connection handler that dies only drops its own connection.
+WORKER_THREADS = frozenset({"fifo-reader", "metadata-watch", "metadata-accept"})
 
 
 def log(msg: str) -> None:
@@ -177,7 +181,7 @@ def write_metadata(path: str, payload: bytes) -> bool:
     """Validate the bridge JSON and replace the file atomically."""
     try:
         data = json.loads(payload)
-    except ValueError:
+    except (ValueError, RecursionError):  # RecursionError: deeply nested
         return False
     if not isinstance(data, dict):
         return False
@@ -212,8 +216,12 @@ def handle_metadata(conn: socket.socket, addr: str, path: str) -> None:
             payload = read_limited(conn, META_MAX_BYTES)
         except OSError:
             return
-        with _meta_lock:
-            ok = payload is not None and write_metadata(path, payload)
+        try:
+            with _meta_lock:
+                ok = payload is not None and write_metadata(path, payload)
+        except OSError as e:
+            log(f"metadata from {addr}: cannot write {path}: {e}")
+            return
         if not ok:
             log(f"metadata from {addr}: rejected (too large or not a JSON object)")
 
@@ -239,7 +247,10 @@ def run_receive() -> None:
     log(f"receiving PCM on :{AUDIO_PORT} -> {FIFO_PATH}, metadata on :{META_PORT}")
     threading.Thread(target=heartbeat, daemon=True).start()
     threading.Thread(
-        target=serve_metadata, args=(meta_srv, META_PATH, allow), daemon=True
+        target=serve_metadata,
+        args=(meta_srv, META_PATH, allow),
+        name="metadata-accept",
+        daemon=True,
     ).start()
     audio = AudioReceiver(FIFO_PATH)
     while True:
@@ -268,19 +279,32 @@ def connect(host: str, port: int) -> socket.socket:
     return sock
 
 
-def drain(fd: int, seconds: float) -> None:
-    """Discard PCM for `seconds` so the Tidal app never blocks on the FIFO."""
-    deadline = time.monotonic() + seconds
+def read_fifo(fd: int, chunks: queue.Queue) -> None:
+    """Read the FIFO nonstop; drop PCM the network cannot take right now.
+
+    The Tidal app blocks as soon as the pipe buffer is full, so this loop
+    never waits on the network: a slow connect, a stalled send or a dead
+    server turns into dropped chunks here, never into back-pressure on the
+    FIFO.
+    """
     while True:
-        left = deadline - time.monotonic()
-        if left <= 0:
+        data = os.read(fd, CHUNK)
+        if data:
+            try:
+                chunks.put_nowait(data)
+            except queue.Full:
+                pass
+
+
+def discard_queued(chunks: queue.Queue) -> None:
+    while True:
+        try:
+            chunks.get_nowait()
+        except queue.Empty:
             return
-        ready, _, _ = select.select([fd], [], [], left)
-        if ready:
-            os.read(fd, CHUNK)
 
 
-def pump_audio(fd: int, host: str, port: int) -> None:
+def send_audio(chunks: queue.Queue, host: str, port: int) -> None:
     connected = False
     while True:
         try:
@@ -289,20 +313,28 @@ def pump_audio(fd: int, host: str, port: int) -> None:
             if connected:
                 log(f"audio: lost {host}:{port} ({e}), retrying")
             connected = False
-            drain(fd, RETRY_SECONDS)
+            time.sleep(RETRY_SECONDS)
             continue
         if not connected:
             log(f"audio: connected to {host}:{port}")
         connected = True
+        # PCM queued while disconnected is stale: resume with live audio.
+        discard_queued(chunks)
         try:
             while True:
-                data = os.read(fd, CHUNK)
-                if data:
-                    sock.sendall(data)
+                sock.sendall(chunks.get())
         except OSError as e:
             log(f"audio: send failed ({e}), reconnecting")
         finally:
             sock.close()
+
+
+def pump_audio(fd: int, host: str, port: int) -> None:
+    chunks = queue.Queue(maxsize=QUEUE_CHUNKS)
+    threading.Thread(
+        target=read_fifo, args=(fd, chunks), name="fifo-reader", daemon=True
+    ).start()
+    send_audio(chunks, host, port)
 
 
 def push_metadata(host: str, port: int, payload: bytes) -> None:
@@ -346,12 +378,31 @@ def run_send() -> None:
     log(f"sending {FIFO_PATH} -> {host}:{AUDIO_PORT}, metadata -> {host}:{META_PORT}")
     threading.Thread(target=heartbeat, daemon=True).start()
     threading.Thread(
-        target=watch_metadata, args=(host, META_PORT, META_PATH), daemon=True
+        target=watch_metadata,
+        args=(host, META_PORT, META_PATH),
+        name="metadata-watch",
+        daemon=True,
     ).start()
     pump_audio(fd, host, AUDIO_PORT)
 
 
+def exit_on_thread_crash(args: threading.ExceptHookArgs) -> None:
+    """A dead worker thread exits the process so Docker restarts it.
+
+    Without this the heartbeat thread keeps the container healthy while
+    the thread that moves audio or metadata is gone. Only WORKER_THREADS
+    qualify: a peer must not be able to restart the relay by crashing the
+    thread that handles its own connection.
+    """
+    if args.thread is None or args.thread.name not in WORKER_THREADS:
+        threading.__excepthook__(args)
+        return
+    log(f"thread {args.thread.name} died: {args.exc_type.__name__}: {args.exc_value}")
+    os._exit(1)
+
+
 def main() -> None:
+    threading.excepthook = exit_on_thread_crash
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode == "send":
         run_send()
