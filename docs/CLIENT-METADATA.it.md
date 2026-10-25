@@ -130,7 +130,8 @@ quelle source queste chiavi sono **del tutto assenti dal payload**, non vuote o 
 zero. Leggile con un default (es. `payload.get("bitrate", 0)`), mai
 `payload["bitrate"]`. `date` può comunque essere valorizzata via arricchimento
 MusicBrainz per qualsiasi source; `original_date` è la data di pubblicazione
-originale quando esiste un tag separato — spesso coincide con `date`.
+originale quando esiste un tag separato — spesso coincide con `date` (un file
+MPD senza tag `OriginalDate` riporta qui la sua `date`).
 
 Le URL `artwork` / `artist_image` incorporano l'hostname che il
 metadata-service vede di se stesso. Se il client vive su un segmento di rete
@@ -141,7 +142,13 @@ con il `<SERVER>` a cui sei connesso. Non modificare il path.
 
 I campi possono essere mancanti, vuoti o null.
 
-- `artwork` — il lookup dell'artwork può essere ancora in corso.
+- `artwork` — il lookup dell'artwork può essere ancora in corso. I
+  metadata testuali vengono inviati appena cambia la traccia, con
+  `"artwork": ""` mentre il lookup della copertina gira in background;
+  un secondo messaggio porta l'URL `artwork` (ed eventuali `date` /
+  `genre` arricchiti) quando il lookup termina — di solito ben sotto il
+  secondo per artwork in cache, fino a decine di secondi con una
+  connessione internet lenta.
 - `artist_image` — immagine di fallback opzionale.
 - `elapsed` / `duration` — non tutti gli stream espongono una timeline.
 - `date`, `original_date`, `genre`, `artwork_source` — solo informativi.
@@ -153,10 +160,11 @@ riavviato mentre una traccia era già in corso. Non c'è API nativa di
 position per queste sorgenti, quindi il service può solo stimare
 elapsed contando dal momento in cui ha osservato la traccia per la
 prima volta. Se boota mid-track, non ha un anchor per "track start" e
-emetterebbe un valore sbagliato — quindi omette il campo del tutto. I
-client dovrebbero renderizzare "elapsed sconosciuto" (es. progress bar
-indeterminata o `--:--`), non 0:00. Il campo riappare al cambio di
-traccia successivo. MPD e Spotify non incontrano mai questo caso
+emetterebbe un valore sbagliato — quindi omette il campo del tutto.
+Vale per la prima traccia che il service vede su ogni stream dopo
+l'avvio, per quanto presto dopo l'avvio sia. I client dovrebbero
+renderizzare "elapsed sconosciuto" (es. progress bar indeterminata o
+`--:--`), non 0:00. Il campo riappare al cambio di traccia successivo. MPD e Spotify non incontrano mai questo caso
 perché riportano position nativamente.
 
 Se `playing: false`, mantieni i metadata ultimi noti visibili se utile, ma
@@ -186,29 +194,32 @@ Su 404 per un artwork, trattalo come transiente: riprova una volta dopo
 
 ### Note artwork specifiche per source
 
-- **MPD / Spotify**: gli URL artwork puntano sempre alla cache di
-  metadata-service in `http://<SERVER>:8083/artwork/artwork_<md5>.jpg`.
-  Catena di lookup standard (embedded → snapcast → MusicBrainz →
-  iTunes → fallback).
-- **Tidal**: nessun artwork viene pubblicato. Il binario sorgente Tidal
-  espone i metadata tramite una TUI curses che non trasporta URL di
-  artwork, quindi il campo `artwork` è sempre mancante per gli stream
-  Tidal. I client devono cadere in fallback su `artist_image` o sul
-  placeholder incluso senza tentare alcun lookup esterno.
-- **AirPlay**: l'artwork embedded inviato sullo stream metadata AirPlay
-  è decodificato da `meta_shairport.py` e servito da un **server HTTP
-  interno separato**, NON da metadata-service. L'URL punta a
-  `http://<COVER_ART_HOST>:<COVER_ART_PORT>/cover.jpg`, dove
-  `COVER_ART_PORT` di default è `5858` e `COVER_ART_HOST` viene letto
-  dall'env var omonima sul container snapserver (settato in
-  `docker-compose.yml`, override in `.env`). Quando `COVER_ART_HOST`
-  non è settato, il bridge cade in fallback su rilevamento via route
-  kernel — funziona su host LAN single-NIC ma può scegliere
-  l'interfaccia sbagliata su multi-NIC, VPN o reti sandboxed. Su reti
-  non triviali, gli operatori dovrebbero settare `COVER_ART_HOST`
-  esplicitamente all'hostname/IP del server raggiungibile dai client.
-  Assicurati che la porta 5858 sia aperta sul firewall dell'host se
-  presente.
+Per ogni source l'URL `artwork` punta alla cache di metadata-service in
+`http://<SERVER>:8083/artwork/artwork_<md5>.<ext>`. Il service prova, in
+ordine: la copertina della source (`artUrl` Snapcast), l'artwork embedded
+(file MPD), MusicBrainz / Cover Art Archive, iTunes, il logo Radio-Browser
+e il placeholder di default (solo radio), poi la foto dell'artista. Se un
+download fallisce (timeout, 404) si passa al passo successivo; i
+fallimenti vengono ritentati dopo qualche minuto invece che mai.
+
+- **MPD**: prima l'artwork embedded, poi il lookup MusicBrainz → iTunes
+  dai tag artista/album del file.
+- **Spotify**: l'URL della copertina fornito da go-librespot, ri-ospitato
+  su `:8083`; MusicBrainz → iTunes se non si riesce a scaricarlo.
+- **Tidal**: il binario Tidal non espone artwork, quindi la copertina
+  arriva dal lookup MusicBrainz → iTunes su artista/album. Può mancare
+  per release che quei servizi non conoscono; cadi in fallback su
+  `artist_image` o sul placeholder incluso.
+- **AirPlay**: la copertina inviata dal sender AirPlay è decodificata da
+  `meta_shairport.py`, scaricata da metadata-service dal server interno
+  di meta_shairport (`:5858/cover.jpg?v=<n>`, un URL per immagine) e
+  ri-ospitata su `:8083`. I client non devono mai raggiungere la porta
+  5858. Al cambio traccia arriva prima il testo e la copertina segue
+  appena il sender consegna l'immagine; una traccia senza immagine
+  passa per la catena di lookup sopra. Su host multi-NIC, VPN o
+  sandboxed gli operatori possono impostare `COVER_ART_HOST` (container
+  snapserver, via `.env`) all'indirizzo che metadata-service deve usare
+  per raggiungere meta_shairport.
 
 ## Controllo trasporto
 
@@ -237,7 +248,7 @@ Esempi concreti dai source di snapMULTI:
 
 - **MPD**: `canControl: true`, `canSeek: true`, `canPlay/Pause/GoNext/GoPrevious: true`. Transport completo supportato.
 - **Spotify** (`meta_go-librespot.py`): `canControl: true`. Play/pause/next/previous/seek tutti bidirezionali.
-- **AirPlay** (`meta_shairport.py`): controllo limitato — il sender AirPlay (iPhone/Mac) è autoritativo; il server inoltra solo ciò che shairport-sync espone.
+- **AirPlay** (`meta_shairport.py`): `canControl: false`, ogni `can*` false. Il sender AirPlay (iPhone/Mac) è l'unica superficie di controllo; nascondi i controlli di trasporto.
 - **Tidal** (`meta_tidal.py`): `canControl: false` sempre. Il source Tidal usa un binary proprietario il cui control surface è l'app Tidal mobile/desktop — non c'è API che il controlscript possa chiamare. I client DEVONO nascondere i controlli play/pause/next/previous quando lo stream attivo è Tidal, altrimenti tapparli non fa nulla e confonde l'utente.
 
 Molti stream sono controllati dalla loro app nativa e possono riportare
@@ -247,8 +258,12 @@ Il volume è specifico del client. Usa lo stato client/group Snapcast da
 `Server.GetStatus` e i metodi Snapcast JSON-RPC per i cambi di volume.
 
 Il metadata-service ha anche un supporto di controllo limitato e legacy via
-WebSocket per i client sottoscritti, ma i nuovi client dovrebbero preferire
+WebSocket per i client sottoscritti (`{"cmd":"toggle_play"}`,
+`{"cmd":"volume","delta":N}`), ma i nuovi client dovrebbero preferire
 Snapserver JSON-RPC per un comportamento di controllo esplicito.
+`toggle_play` invia `playPause` (`Stream.Control`) allo stream che il
+gruppo del client sta riproducendo, ed è ignorato per gli stream che non
+dichiarano il controllo (AirPlay, Tidal).
 
 ### Forma della risposta Server.GetStatus (subset)
 
