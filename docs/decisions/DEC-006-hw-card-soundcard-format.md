@@ -53,6 +53,10 @@ For HATs whose `audio-hats/*.conf` declares `HAT_MIXER="hardware:Digital"` (HiFi
 
 For HATs with `HAT_MIXER="software"` (USB audio, internal-audio, hifiberry-digi, justboom-digi, allo-digione, innomaker-dac-pro), the new soundcard form is also a valid PCM device — software mixer path unaffected.
 
+## Amendment (2026-10): `plughw:CARD=NAME,DEV=0`
+
+Headless installs now use `plughw:CARD=NAME,DEV=0` instead of `hw:`. Raw `hw:` gives snapclient no format or rate conversion, so DACs without native S16_LE / 44.1 kHz support (many USB DACs are S24/S32-only or 48 kHz-only) failed with "can't set format" or played at the wrong speed. The mixer reasoning above is unchanged: snapcast splits on the first `:`, the card part still carries the literal `CARD=NAME`, so the hardware mixer resolves to the same `hw:<idx>`. The Pi Zero 2 W native install uses the same form with the detected card id.
+
 ## Why
 
 - `hw:NAME,0` and `hw:CARD=NAME,DEV=0` are functionally identical at the ALSA level (verified via `aplay -L` and direct test)

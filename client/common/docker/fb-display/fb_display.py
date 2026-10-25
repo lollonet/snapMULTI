@@ -581,14 +581,18 @@ def precompute_colors() -> None:
 
 
 def create_background() -> Image.Image:
-    """Create gradient background image."""
-    img = Image.new("RGB", (WIDTH, HEIGHT))
-    draw = ImageDraw.Draw(img)
-    for y in range(HEIGHT):
-        t = y / HEIGHT
-        color = lerp_color(BG_TOP, BG_BOTTOM, t)
-        draw.line([(0, y), (WIDTH, y)], fill=color)
-    return img
+    """Return a fresh copy of the gradient background (computed once per size)."""
+    size = (WIDTH, HEIGHT)
+    if _bg_cache["size"] != size or _bg_cache["img"] is None:
+        img = Image.new("RGB", size)
+        draw = ImageDraw.Draw(img)
+        for y in range(HEIGHT):
+            t = y / HEIGHT
+            color = lerp_color(BG_TOP, BG_BOTTOM, t)
+            draw.line([(0, y), (WIDTH, y)], fill=color)
+        _bg_cache["size"] = size
+        _bg_cache["img"] = img
+    return _bg_cache["img"].copy()
 
 
 def compute_layout() -> dict:
@@ -851,34 +855,98 @@ def _display_release_year(meta: dict) -> str:
     return ""
 
 
+# Last artwork URL that failed to decode, and when — avoids re-downloading a
+# broken file on every base-frame rebuild for the same track.
+_failed_artwork: tuple[str, float] = ("", 0.0)
+_FAILED_ARTWORK_RETRY_S = 60.0
+
+
+def _drop_artwork_cache(url: str) -> None:
+    """Forget the cached artwork (bad image) and remember the URL as failed."""
+    global cached_artwork, cached_artwork_url, _failed_artwork
+    cached_artwork = None
+    cached_artwork_url = ""
+    _art_resized_cache.clear()
+    _failed_artwork = (url, time.monotonic())
+
+
 def fetch_artwork(url: str) -> Image.Image | None:
-    """Fetch and cache artwork image."""
+    """Fetch and cache artwork image.
+
+    The image is fully decoded here: Image.open() is lazy, so a truncated
+    download used to be cached and then raise OSError on every later
+    resize() — 50 render-loop errors later the container exited. Decoding
+    up front turns a bad file into "no artwork" once.
+    """
     global cached_artwork, cached_artwork_url
     if url == cached_artwork_url and cached_artwork is not None:
         return cached_artwork
+    failed_url, failed_at = _failed_artwork
+    if url == failed_url and time.monotonic() - failed_at < _FAILED_ARTWORK_RETRY_S:
+        return None
     try:
         full_url = url
         if url.startswith("/"):
             full_url = f"http://{metadata_host}:{METADATA_HTTP_PORT}{url}"
         resp = requests.get(full_url, timeout=3)
         if resp.status_code == 200:
-            cached_artwork = Image.open(io.BytesIO(resp.content))
+            img = Image.open(io.BytesIO(resp.content))
+            img.load()  # force decode now: truncated/corrupt files fail here
+            cached_artwork = img
             cached_artwork_url = url
+            _art_resized_cache.clear()
             return cached_artwork
         elif resp.status_code != 404:
             logger.debug(f"Artwork fetch returned {resp.status_code}: {url}")
     except requests.exceptions.RequestException as e:
         logger.debug(f"Artwork fetch failed: {e}")
     except Exception as e:
-        logger.warning(f"Unexpected error fetching artwork: {e}")
+        logger.warning(f"Unusable artwork {url}: {e}")
+        _drop_artwork_cache(url)
     return None
+
+
+# ---- Static asset caches (base-frame rebuild optimisation) ----
+# render_base_frame() runs on every metadata change, including volume
+# steps. The gradient background and the resized logo / brand / standby /
+# artwork images only change with the render size or the source image, so
+# they are computed once and reused.
+_bg_cache: dict = {"size": None, "img": None}
+_asset_resized_cache: dict[tuple, Image.Image] = {}
+_art_resized_cache: dict[tuple, Image.Image] = {}
+_ASSET_CACHE_MAX = 16
+
+
+def _resized_asset(key: tuple, img: Image.Image, size: tuple[int, int]) -> Image.Image:
+    """Return `img` resized to `size` (LANCZOS), cached under (key, size)."""
+    ck = (key, size)
+    cached = _asset_resized_cache.get(ck)
+    if cached is None:
+        if len(_asset_resized_cache) >= _ASSET_CACHE_MAX:
+            _asset_resized_cache.pop(next(iter(_asset_resized_cache)))
+        cached = img.resize(size, Image.LANCZOS)
+        _asset_resized_cache[ck] = cached
+    return cached
+
+
+def _resized_artwork(url: str, img: Image.Image, size: int) -> Image.Image:
+    """Artwork resized to the art square, cached for the current artwork."""
+    ck = (url, size)
+    cached = _art_resized_cache.get(ck)
+    if cached is None:
+        _art_resized_cache.clear()  # single slot: only the current artwork
+        cached = img.resize((size, size), Image.LANCZOS)
+        _art_resized_cache[ck] = cached
+    return cached
 
 
 def render_base_frame() -> Image.Image:
     """Render static content: background, album art, track info.
 
-    Called only when metadata changes.
+    Called when metadata changes, and when the status line (LAN IP /
+    vitals) changes (see _refresh_status_line).
     """
+    global _status_text_drawn
     bg = create_background()
     draw = ImageDraw.Draw(bg)
     L = layout
@@ -906,17 +974,28 @@ def render_base_frame() -> Image.Image:
         if artwork_url:
             art_img = fetch_artwork(artwork_url)
             if art_img:
-                resized = art_img.resize((L["art_size"], L["art_size"]), Image.LANCZOS)
-                bg.paste(resized, (L["art_x"], L["art_y"]))
+                # A bad image must cost one missing cover, not the render
+                # loop: drop it and keep the empty art panel instead.
+                try:
+                    resized = _resized_artwork(artwork_url, art_img, L["art_size"])
+                    bg.paste(resized, (L["art_x"], L["art_y"]))
+                except Exception as e:
+                    logger.warning(f"Dropping unusable artwork {artwork_url}: {e}")
+                    _drop_artwork_cache(artwork_url)
     else:
         # Standby mode: show standby artwork
         standby_path = "/app/public/standby.png"
         if os.path.exists(standby_path):
             try:
-                standby_img = Image.open(standby_path)
-                resized = standby_img.resize(
-                    (L["art_size"], L["art_size"]), Image.LANCZOS
-                )
+                key = ("standby", standby_path, os.path.getmtime(standby_path))
+                ck = (key, (L["art_size"], L["art_size"]))
+                resized = _asset_resized_cache.get(ck)
+                if resized is None:
+                    with Image.open(standby_path) as standby_img:
+                        standby_img.load()
+                        resized = _resized_asset(
+                            key, standby_img, (L["art_size"], L["art_size"])
+                        )
                 bg.paste(resized, (L["art_x"], L["art_y"]))
             except Exception as e:
                 logger.info(f"Failed to load standby image: {e}")
@@ -1076,7 +1155,9 @@ def render_base_frame() -> Image.Image:
 
     # Bottom bar: logo (left) + snapMULTI brand image
     if _logo_img is not None:
-        logo_resized = _logo_img.resize((L["logo_size"], L["logo_size"]), Image.LANCZOS)
+        logo_resized = _resized_asset(
+            ("logo", id(_logo_img)), _logo_img, (L["logo_size"], L["logo_size"])
+        )
         bg.paste(logo_resized, (L["logo_x"], L["logo_y"]), logo_resized)
 
         # Brand text image next to logo
@@ -1084,29 +1165,17 @@ def render_base_frame() -> Image.Image:
             # Scale brand image to match logo height
             brand_h = L["logo_size"]
             brand_w = int(_brand_img.width * brand_h / _brand_img.height)
-            brand_resized = _brand_img.resize((brand_w, brand_h), Image.LANCZOS)
+            brand_resized = _resized_asset(
+                ("brand", id(_brand_img)), _brand_img, (brand_w, brand_h)
+            )
             brand_x = L["logo_x"] + L["logo_size"] + 8
             brand_y = L["logo_y"]
             bg.paste(brand_resized, (brand_x, brand_y), brand_resized)
 
-    # Bottom bar: status line (LAN IP → server  client_ver  /  server_ver)
-    # APP_VERSION already carries its own "v" prefix (from git describe, e.g. "v0.2.4").
-    # srv_ver is prefixed inline as "srv X.Y.Z" — asymmetry is intentional.
-    srv_ver = server_info.get("server_version", "")
-    ver_parts = []
-    if APP_VERSION:
-        ver_parts.append(APP_VERSION)
-    if srv_ver and srv_ver != "unknown":
-        ver_parts.append(f"srv {srv_ver}")
-    ver_suffix = "  •  " + "  /  ".join(ver_parts) if ver_parts else ""
-    status_text = f"{get_lan_ip()}  →  {snapserver_display}{ver_suffix}"
-    # System vitals (temp · load · resync) appended next to the version. The
-    # line is re-centered below from its full width, so appending shifts the
-    # whole line to stay centered automatically.
-    vitals = get_vitals()
-    if vitals:
-        status_text = f"{status_text}  •  {vitals}"
-    status_font_size = max(10, L["clock_h"] // 3)
+    # Bottom bar: status line (LAN IP → server, versions, vitals)
+    status_text = _build_status_text()
+    _status_text_drawn = status_text
+    status_font_size = _status_font_size()
     status_font = _get_font(status_font_size)
     bbox = draw.textbbox((0, 0), status_text, font=status_font)
     status_w = bbox[2] - bbox[0]
@@ -1124,6 +1193,54 @@ def render_base_frame() -> Image.Image:
     return bg
 
 
+# Status line text last drawn into a base frame (see _refresh_status_line).
+_status_text_drawn: str = ""
+_STATUS_REFRESH_S = 30.0  # matches the LAN IP cache TTL
+
+
+def _build_status_text() -> str:
+    """Bottom status line: LAN IP → server, versions, vitals.
+
+    APP_VERSION already carries its own "v" prefix (from git describe, e.g.
+    "v0.2.4"); srv_ver is prefixed inline as "srv X.Y.Z" — asymmetry is
+    intentional. System vitals (temp · load · resync) are appended last; the
+    line is centred from its full width when drawn.
+    """
+    srv_ver = server_info.get("server_version", "")
+    ver_parts = []
+    if APP_VERSION:
+        ver_parts.append(APP_VERSION)
+    if srv_ver and srv_ver != "unknown":
+        ver_parts.append(f"srv {srv_ver}")
+    ver_suffix = "  •  " + "  /  ".join(ver_parts) if ver_parts else ""
+    status_text = f"{get_lan_ip()}  →  {snapserver_display}{ver_suffix}"
+    vitals = get_vitals()
+    if vitals:
+        status_text = f"{status_text}  •  {vitals}"
+    return status_text
+
+
+def _status_font_size() -> int:
+    return max(10, layout["clock_h"] // 3)
+
+
+def _write_status_strip(frame: Image.Image) -> None:
+    """Write only the status-line rows of `frame` to the framebuffer.
+
+    Used when the LAN IP / vitals change while the rest of the screen is
+    unchanged: no full-frame write, so the spectrum does not flicker. The
+    strip spans the full width and is cut from a freshly rendered base frame,
+    so logo / knob pixels inside it are rewritten identically.
+    """
+    L = layout
+    y0 = max(0, L["status_y"] - 2)
+    y1 = min(HEIGHT, L["status_y"] + int(_status_font_size() * 1.6) + 2)
+    if y1 <= y0:
+        return
+    strip = np.array(frame.crop((0, y0, WIDTH, y1)).convert("RGB"), dtype=np.uint8)
+    write_region_to_fb_fast(_rgb_to_fb_native(strip), 0, y0)
+
+
 def extract_spectrum_bg() -> None:
     """Extract the spectrum region from base frame in both RGB and native FB format."""
     global spectrum_bg_np, spectrum_bg_fb
@@ -1136,8 +1253,13 @@ def extract_spectrum_bg() -> None:
             L["spec_y"] + L["spec_h"],
         )
     )
-    spectrum_bg_np = np.array(region.convert("RGB"), dtype=np.uint8)
-    spectrum_bg_fb = _rgb_to_fb_native(spectrum_bg_np)
+    bg_np = np.array(region.convert("RGB"), dtype=np.uint8)
+    bg_fb = _rgb_to_fb_native(bg_np)
+    # Publish both under the band lock so the render thread never sees one
+    # without the other.
+    with _band_lock:
+        spectrum_bg_np = bg_np
+        spectrum_bg_fb = bg_fb
 
 
 def _render_volume_knob(vol: int, muted: bool) -> Image.Image:
@@ -1183,6 +1305,27 @@ def _render_volume_knob(vol: int, muted: bool) -> Image.Image:
     return img
 
 
+def _clock_background(x: int, y: int, w: int, h: int) -> Image.Image:
+    """Background for the clock box: the matching base-frame pixels.
+
+    A flat BG_TOP fill showed as a dark box over the BG_BOTTOM end of the
+    gradient. Falls back to the gradient colour at `y` before the first
+    base frame exists.
+    """
+    frame = base_frame
+    if (
+        frame is not None
+        and frame.size == (WIDTH, HEIGHT)
+        and x >= 0
+        and y >= 0
+        and x + w <= WIDTH
+        and y + h <= HEIGHT
+    ):
+        return frame.crop((x, y, x + w, y + h)).convert("RGB")
+    color = lerp_color(BG_TOP, BG_BOTTOM, min(max(y / max(HEIGHT, 1), 0.0), 1.0))
+    return Image.new("RGB", (w, h), color)
+
+
 def render_clock() -> tuple[np.ndarray, int, int] | None:
     """Render small date+time text. Returns (fb_pixels, width, height)."""
     L = layout
@@ -1207,13 +1350,19 @@ def render_clock() -> tuple[np.ndarray, int, int] | None:
     text_h = bbox[3] - bbox[1]
 
     pad_x, pad_y = 4, 2
-    img_w = text_w + pad_x * 2
-    img_h = text_h + pad_y * 2
+    # The box never shrinks: a narrower/shorter string (proportional font,
+    # "Wed" → "Fri") would otherwise leave the previous text's edges on
+    # screen. It is invisible anyway — its background comes from the base
+    # frame, not a flat colour.
+    img_w = min(WIDTH, max(text_w + pad_x * 2, _clock_cache.get("box_w", 0)))
+    img_h = max(text_h + pad_y * 2, _clock_cache.get("box_h", 0))
+    _clock_cache["box_w"] = img_w
+    _clock_cache["box_h"] = img_h
 
-    img = Image.new("RGB", (img_w, img_h), BG_TOP)
+    img = _clock_background((WIDTH - img_w) // 2, L["clock_y"], img_w, img_h)
     draw = ImageDraw.Draw(img)
 
-    text_x = pad_x
+    text_x = (img_w - text_w) // 2 - bbox[0]
     text_y = pad_y - bbox[1]
     draw.text((text_x, text_y), display_str, fill=(140, 150, 160), font=font)
 
@@ -1352,11 +1501,12 @@ def render_progress_overlay() -> tuple[np.ndarray, int, int, int, int] | None:
     return fb_pixels, img_w, img_h, overlay_x, overlay_y
 
 
-def render_spectrum() -> np.ndarray:
+def render_spectrum() -> np.ndarray | None:
     """Render spectrum bars in native FB format (RGB565 or BGRA32).
 
     Works directly in framebuffer pixel format to avoid per-frame RGB→RGB565
-    conversion overhead.
+    conversion overhead. Returns None when there is no spectrum background
+    yet (e.g. resize_bands() dropped it after the render loop checked).
     """
     global display_bands, peak_bands, peak_time
 
@@ -1364,18 +1514,23 @@ def render_spectrum() -> np.ndarray:
         return _render_spectrum_locked()
 
 
-def _render_spectrum_locked() -> np.ndarray:
+def _render_spectrum_locked() -> np.ndarray | None:
     """Inner render, called with _band_lock held."""
     global display_bands, peak_bands, peak_time, _spectrum_work_buf
 
+    # Snapshot shared state once: resize_bands() replaces both on the event
+    # loop thread, and this runs in the executor.
     L = layout
+    bg_fb = spectrum_bg_fb
+    if bg_fb is None or not L:
+        return None
     now = time.monotonic()
 
     # Restore spectrum background into pre-allocated buffer (avoids .copy() allocation)
-    if _spectrum_work_buf is None or _spectrum_work_buf.shape != spectrum_bg_fb.shape:
-        _spectrum_work_buf = spectrum_bg_fb.copy()
+    if _spectrum_work_buf is None or _spectrum_work_buf.shape != bg_fb.shape:
+        _spectrum_work_buf = bg_fb.copy()
     else:
-        _spectrum_work_buf[:] = spectrum_bg_fb
+        _spectrum_work_buf[:] = bg_fb
     buf = _spectrum_work_buf
 
     pad = L["pad"]
@@ -1627,7 +1782,8 @@ def _render_and_write_frame(is_playing: bool, draw_spectrum: bool = True) -> Non
     # Spectrum — only while playing; idle leaves the static idle logo in place
     if draw_spectrum:
         spec_fb = render_spectrum()
-        write_region_to_fb_fast(spec_fb, layout["right_x"], layout["spec_y"])
+        if spec_fb is not None:
+            write_region_to_fb_fast(spec_fb, layout["right_x"], layout["spec_y"])
 
     # Clock — rendered every call but only written when dirty (once/second)
     clock_result = render_clock()
@@ -1680,15 +1836,40 @@ def _should_reassert_standby(now: float, last_assert: float, interval: float) ->
 def _render_idle_logo() -> None:
     """Draw the snapMULTI logo centred in the spectrum region (static, once)
     when idle — nicer than an empty black panel, and no per-frame CPU."""
-    if spectrum_bg_np is None or _logo_img is None or not layout:
+    bg_np = spectrum_bg_np  # snapshot: resize_bands() may reset it concurrently
+    L = layout
+    if bg_np is None or _logo_img is None or not L:
         return
-    base = Image.fromarray(spectrum_bg_np.copy(), "RGB")
+    base = Image.fromarray(bg_np.copy(), "RGB")
     lh = max(1, int(base.height * 0.55))
     lw = max(1, int(_logo_img.width * lh / _logo_img.height))
-    logo = _logo_img.resize((lw, lh), Image.LANCZOS)
+    logo = _resized_asset(("idle-logo", id(_logo_img)), _logo_img, (lw, lh))
     base.paste(logo, ((base.width - lw) // 2, (base.height - lh) // 2), logo)
     fb = _rgb_to_fb_native(np.array(base, dtype=np.uint8))
-    write_region_to_fb_fast(fb, layout["right_x"], layout["spec_y"])
+    write_region_to_fb_fast(fb, L["right_x"], L["spec_y"])
+
+
+async def _refresh_status_line() -> bool:
+    """Redraw the status line if its text (LAN IP / vitals) changed.
+
+    The status line is part of the base frame, which used to be rebuilt only
+    on metadata changes — the 30 s LAN IP refresh never reached the screen
+    while idle. Re-renders the base frame off-thread and writes only the
+    status strip. Returns True when the strip was written.
+    """
+    global base_frame
+    loop = asyncio.get_event_loop()
+    status = await loop.run_in_executor(None, _build_status_text)
+    if status == _status_text_drawn:
+        return False
+    version = metadata_version
+    new_base = await loop.run_in_executor(None, render_base_frame)
+    if version != metadata_version or base_frame_version != metadata_version:
+        return False  # metadata changed meanwhile — the full rebuild draws it
+    base_frame = new_base
+    await loop.run_in_executor(None, _write_status_strip, new_base)
+    logger.info("Status line updated")
+    return True
 
 
 async def render_loop() -> None:
@@ -1704,6 +1885,7 @@ async def render_loop() -> None:
     standby_failed = False  # panel rejected FBIOBLANK — disable standby, no retry/spam
     idle_logo_shown = False
     last_active = time.monotonic()
+    last_status_check = last_active
 
     while True:
         try:
@@ -1781,11 +1963,27 @@ async def render_loop() -> None:
                 _clock_cache["dirty"] = True
                 _progress_cache["dirty"] = True
                 idle_logo_shown = False  # full redraw wiped it; re-draw if idle
+                _clock_cache["time_str"] = None  # re-cut clock bg from new frame
                 logger.info("Base frame updated (metadata changed)")
+            elif spectrum_bg_fb is None and base_frame is not None:
+                # resize_bands() (band count from the visualizer changed)
+                # drops the spectrum background; only a metadata change used
+                # to rebuild it, freezing clock/spectrum until the next track.
+                # The base frame does not depend on the band count — re-cut.
+                extract_spectrum_bg()
+                idle_logo_shown = False
+                logger.info("Spectrum background re-extracted (band count changed)")
 
             if spectrum_bg_np is None or spectrum_bg_fb is None:
                 await asyncio.sleep(0.1)
                 continue
+
+            # LAN IP / vitals live in the base frame; refresh just that strip
+            # when they change, so a DHCP change shows up while idle too.
+            if start - last_status_check >= _STATUS_REFRESH_S:
+                last_status_check = start
+                if await _refresh_status_line():
+                    _clock_cache["time_str"] = None  # strip may overlap the clock box
 
             # Determine adaptive FPS (spectrum_active/active computed above)
             if spectrum_active:
@@ -1827,16 +2025,23 @@ async def render_loop() -> None:
             if sleep_time > 0:
                 await asyncio.sleep(sleep_time)
             consecutive_errors = 0
-        except (OSError, ValueError, RuntimeError) as e:
+        except Exception as e:
+            # Any per-frame failure is logged and the loop carries on: an
+            # uncaught exception here used to end the render task (frozen
+            # screen) and a streak of asset errors exited the container.
+            # Only a persistent OSError streak (framebuffer/device trouble,
+            # which a container restart can fix) still exits.
             consecutive_errors += 1
-            if consecutive_errors >= _RENDER_MAX_ERRORS:
+            if isinstance(e, OSError) and consecutive_errors >= _RENDER_MAX_ERRORS:
                 logger.critical(
                     f"Render loop: {consecutive_errors} consecutive errors, exiting"
                 )
                 sys.exit(1)
-            logger.error(
-                f"Render loop error ({consecutive_errors}/{_RENDER_MAX_ERRORS}): {e}"
-            )
+            msg = f"Render loop error ({consecutive_errors} consecutive): {e}"
+            if consecutive_errors == 1 or consecutive_errors % _RENDER_MAX_ERRORS == 0:
+                logger.exception(msg)  # with traceback, not on every repeat
+            else:
+                logger.error(msg)
             await asyncio.sleep(1)
 
 

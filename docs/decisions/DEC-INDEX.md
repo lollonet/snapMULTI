@@ -22,4 +22,4 @@ Both are accepted contracts — break them only with a new decision recorded her
 | DEC-003 | [Reflash-only update strategy](DEC-003-reflash-only-updates.md) | Accepted | 2026-04-24 |
 | DEC-004 | [Multi-Server Failover via discover-server.sh rewrite](DEC-004-multi-server-failover-design.md) | Accepted | 2026-04-28 |
 | DEC-005 | [`_log` writes to stderr in scripts called via `$()`](DEC-005-log-stderr-convention.md) | Accepted | 2026-04-28 |
-| DEC-006 | [Use `hw:CARD=NAME,DEV=0` for headless client SOUNDCARD](DEC-006-hw-card-soundcard-format.md) | Accepted | 2026-04-27 |
+| DEC-006 | [Use `hw:CARD=NAME,DEV=0` for headless client SOUNDCARD](DEC-006-hw-card-soundcard-format.md) (amended 2026-10: `plughw:`) | Accepted | 2026-04-27 |

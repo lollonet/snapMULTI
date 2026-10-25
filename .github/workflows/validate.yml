@@ -214,6 +214,11 @@ jobs:
           bash client/tests/test_entrypoint.sh
           bash client/tests/test_resource_profiles.sh
           bash client/tests/test_pull_hardening.sh
+          bash client/tests/test_internal_card_detect.sh
+          bash client/tests/test_hat_i2c_scan.sh
+          bash client/tests/test_discover_server.sh
+          bash client/tests/test_display_detect.sh
+          bash client/tests/test_setup_mount_guards.sh
 
       - name: Validate systemd drop-in syntax
         run: |
