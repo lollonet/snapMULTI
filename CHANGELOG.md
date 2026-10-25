@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Tidal on non-ARM servers through a Pi satellite (draft)**. Tidal Connect only runs on ARM, so x86_64 servers had no Tidal. A Pi on the LAN can now run `tidal-connect` with `contrib/tidal-satellite/docker-compose.yml`; its `tidal-relay` sends the PCM (TCP 4954) and the metadata bridge JSON (TCP 4955) to the server's new opt-in `tidal-relay` service (profile `tidal-relay`), which writes them into the existing `tidal_fifo` and `tidal-metadata.json`. The stream is the usual **Tidal** source with metadata; `snapserver.conf` is unchanged. LAN peers only by default (`TIDAL_RELAY_ALLOW` narrows it); while the server is unreachable the satellite discards audio instead of stalling the Tidal app. Not wired into `prepare-sd`. New `scripts/tidal/tidal-relay.py` (stdlib only, runs in the metadata image), `tests/test_tidal_relay.py`; ADVANCED "Tidal on a non-ARM server".
 - **The server's web page is discoverable**. `deploy.sh` (server and both installs) now publishes the landing page on port 8083 as an mDNS `_http._tcp` service "snapMULTI on &lt;hostname&gt;" (`/etc/avahi/services/snapmulti-http.service`) and shows `http://<hostname>.local:8083/` plus the IPv4 URL on the HDMI console login screen (`/etc/issue.d/snapmulti.issue`). Idempotent; client-only installs are untouched. Applies on reflash. New `tests/test_server_discovery.sh`.
 
 ### Changed

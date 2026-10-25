@@ -11,6 +11,7 @@ Indice:
 - [Configurazione personalizzata — file `.env`](#configurazione-personalizzata--file-env)
   - [Modificare le impostazioni su un Pi read-only](#modificare-le-impostazioni-su-un-pi-read-only)
   - [Disattivare Tidal Connect](#disattivare-tidal-connect)
+  - [Tidal su un server non ARM](#tidal-su-un-server-non-arm)
 - [Filesystem read-only](#filesystem-read-only)
 - [Deploy senza `prepare-sd`](#deploy-senza-prepare-sd)
 - [MPD da riga di comando](#mpd-da-riga-di-comando)
@@ -115,6 +116,30 @@ Tidal Connect è attivo di default sulle installazioni Raspberry Pi (ARM). Esegu
    ```
 
 Un reflash riattiva Tidal Connect; ripeti questi passi dopo.
+
+### Tidal su un server non ARM
+
+Il binario di Tidal Connect esiste solo per ARM, quindi un server x86_64 non può eseguire `tidal-connect`. Può farlo al suo posto un Raspberry Pi in LAN, che lo inoltra: il Pi compare nell'app Tidal e il server lo riproduce come la sua normale sorgente **Tidal**, con i metadati del brano. Funzione in bozza — non integrata in `prepare-sd`.
+
+Serve un Pi 3/4/5 con Raspberry Pi OS **a 64 bit** e Docker (va bene un Audio Player esistente). Invia PCM grezzo 44,1 kHz/16 bit (~1,4 Mbit/s) al server sulla porta TCP 4954 e i metadati sulla 4955.
+
+1. **Server** — segui [Modificare le impostazioni su un Pi read-only](#modificare-le-impostazioni-su-un-pi-read-only) e nei passi 2–3 aggiungi `tidal-relay` a `COMPOSE_PROFILES` in `/opt/snapmulti/.env` (es. `COMPOSE_PROFILES=tidal-relay`), poi `cd /opt/snapmulti && sudo docker compose up -d`. Il relay accetta connessioni solo da indirizzi della LAN; per accettare soltanto il satellite imposta anche `TIDAL_RELAY_ALLOW=<IP del satellite>`.
+2. **Pi satellite** — con la modalità read-only disattivata (`sudo ro-mode disable && sudo reboot` se è un dispositivo snapMULTI), scarica i file della release e avvia i due container:
+
+   ```bash
+   sudo git clone https://github.com/lollonet/snapMULTI.git /opt/tidal-satellite
+   cd /opt/tidal-satellite/contrib/tidal-satellite
+   sudo cp .env.example .env
+   sudo nano .env        # TIDAL_RELAY_SERVER=<IP del server>, IMAGE_TAG = l'IMAGE_TAG del server
+   sudo docker compose up -d
+   ```
+
+   Poi riattiva la modalità read-only (`sudo ro-mode enable && sudo reboot`). I container ripartono da soli a ogni avvio.
+3. Nell'app Tidal, trasmetti a `<hostname del satellite> Tidal` (o `TIDAL_NAME`). In Snapweb, metti le stanze sullo stream **Tidal**.
+
+**Verifica:** `docker logs tidal-relay` sul satellite mostra `audio: connected to <server>:4954`; sul server, `docker logs tidal-relay` mostra `audio sender connected`. Finché il server non è raggiungibile il satellite scarta l'audio (l'app Tidal continua a riprodurre nel silenzio) e ritenta la connessione ogni 2 s.
+
+Non far girare `tidal-connect` sul server e un satellite contemporaneamente: scriverebbero entrambi sullo stesso stream `Tidal`.
 
 ## Filesystem read-only
 
@@ -387,6 +412,7 @@ sudo ufw allow 4953/tcp   # Ingresso audio TCP (ffmpeg / Android streaming)
 sudo ufw allow 5000/tcp   # AirPlay (shairport-sync RTSP)
 sudo ufw allow 5858/tcp   # Copertine AirPlay (meta_shairport in snapserver)
 sudo ufw allow 2019/tcp   # Tidal Connect discovery (solo ARM)
+# sudo ufw allow 4954:4955/tcp   # Relay del satellite Tidal (solo con il profilo tidal-relay)
 # Spotify Connect usa una porta TCP casuale per il discovery zeroconf —
 # consenti il range effimero o usa connection tracking:
 # sudo ufw allow proto tcp from 192.168.0.0/16 to any port 30000:65535

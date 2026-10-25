@@ -18,6 +18,7 @@ Server stack (7 containers, host networking):
 | `shairport-sync` | AirPlay receiver (FIFO out) | 5000 |
 | `librespot` | Spotify Connect (FIFO out) | 24879 (localhost only) + ephemeral |
 | `tidal-connect` | Tidal Connect, ARM only (FIFO out) | 2019 |
+| `tidal-relay` | Optional (`tidal-relay` profile): Tidal from a Pi satellite for non-ARM servers — see [ADVANCED.md](ADVANCED.md#tidal-on-a-non-arm-server) | 4954, 4955 |
 | `metadata` | Cover art + track info | 8082 (WS), 8083 (HTTP) — see [CLIENT-METADATA.md](CLIENT-METADATA.md) for integration patterns |
 
 Audio chain: source → FIFO pipe in `/audio/` → snapserver → FLAC over network → snapclient → ALSA out. Unified format `44100:16:2` (44.1 kHz / 16-bit / stereo) across all sources, no resampling.
@@ -38,6 +39,8 @@ All server containers use host networking, so these are ports on the server's ow
 | 5858 | HTTP | Inbound | snapserver (`meta_shairport.py`) | AirPlay cover art |
 | 5000 | TCP | Inbound | shairport-sync | AirPlay (RTSP) |
 | 2019 | TCP | Inbound | tidal-connect | Tidal Connect discovery (ARM only) |
+| 4954 | TCP | Inbound | tidal-relay | Tidal satellite PCM (`tidal-relay` profile only) |
+| 4955 | TCP | Inbound | tidal-relay | Tidal satellite metadata (`tidal-relay` profile only) |
 | 24879 | WebSocket | Localhost only | librespot | go-librespot API for Spotify metadata / control |
 | ephemeral | TCP | Inbound | librespot | Spotify Connect zeroconf (random port) |
 | 6600 | TCP | Bidirectional | mpd | MPD protocol (client control) |
