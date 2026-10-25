@@ -59,6 +59,40 @@ persist_overlayroot_disabled() {
     fi
 }
 
+# Remove the overlayroot activation files from the lower root of a live
+# overlay. overlayroot reads <lower>/etc/overlayroot.local.conf at boot even
+# when cmdline.txt has no overlayroot= token, so a copy left there keeps
+# tmpfs mode on. The lower layer is mounted ro while the overlay is active:
+# remount it rw for the removal. Returns 1 when the file survives.
+clear_lower_overlayroot() {
+    local lower="${1:-/media/root-ro}"
+    local conf="$lower/etc/overlayroot.local.conf"
+    local opts was_ro=false
+
+    [[ -d "$lower/etc" ]] || return 0
+
+    opts=$(findmnt -rno OPTIONS "$lower" 2>/dev/null || true)
+    if [[ ",$opts," == *,ro,* ]]; then
+        if ! mount -o remount,rw "$lower"; then
+            warn "overlayroot: cannot remount $lower read-write"
+            return 1
+        fi
+        was_ro=true
+    fi
+
+    rm -f "$conf" "$lower/etc/systemd/system.conf.d/overlayfs-workaround.conf"
+    sync
+    # EBUSY is expected while the overlay is live; the reboot drops the mount.
+    if [[ "$was_ro" == true ]]; then
+        mount -o remount,ro "$lower" 2>/dev/null || true
+    fi
+
+    if [[ -e "$conf" ]]; then
+        warn "overlayroot: $conf is still present, read-only mode would stay on after reboot"
+        return 1
+    fi
+}
+
 # Install /etc/initramfs-tools/hooks/snapmulti-lzma so the next
 # update-initramfs bundles liblzma.so.5 into the generated image. Required
 # because kmod inside initramfs is linked against liblzma and needs it to
