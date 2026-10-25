@@ -63,6 +63,7 @@ services:
     restart: unless-stopped
     read_only: true
     security_opt:
+      - apparmor=unconfined  # Required for D-Bus access (Avahi zeroconf)
       - no-new-privileges=true
     cap_drop:
       - ALL
