@@ -185,18 +185,15 @@ detect_hardware_profile() {
 # Resource Profiles
 #######################################
 
-apply_resource_profile() {
-    local profile="$1"
-
-    info "Applying '$profile' resource profile..."
-
-    case "$profile" in
+# Print the hardware-profile .env block for a profile, BEGIN..END
+# marker lines inclusive. Returns 1 for an unknown profile.
+resource_profile_block() {
+    case "$1" in
         minimal)
-            cat >> "$ENV_FILE" <<'EOF'
-
+            cat <<'EOF'
 # Hardware Profile: BEGIN
 # Profile: minimal (auto-detected)
-# For: Pi Zero 2 W, Pi 3, systems with <2GB RAM
+# For: Pi Zero 2 W, Pi 3, Pi 4/5 1GB, systems with <2GB RAM
 # Measured baseline (idle): snapserver 87M, shairport 18M, librespot 22M,
 #   mpd 90M (6k songs), mympd 8M, metadata 52M, tidal 32M
 SNAPMULTI_PROFILE=minimal
@@ -225,11 +222,10 @@ TIDAL_CPU_LIMIT=0.3
 EOF
             ;;
         standard)
-            cat >> "$ENV_FILE" <<'EOF'
-
+            cat <<'EOF'
 # Hardware Profile: BEGIN
 # Profile: standard (auto-detected)
-# For: Pi 4 2GB, systems with 2-4GB RAM
+# For: Pi 4/5 2GB, systems with 2-8GB RAM
 # Measured baseline (idle): snapserver 87M, shairport 18M, librespot 22M,
 #   mpd 90M (6k songs), mympd 8M, metadata 52M, tidal 32M
 # 2026-05-12 fleet measurements (pi4-test, NFS library): MPD steady-state
@@ -263,11 +259,10 @@ TIDAL_CPU_LIMIT=0.5
 EOF
             ;;
         performance)
-            cat >> "$ENV_FILE" <<'EOF'
-
+            cat <<'EOF'
 # Hardware Profile: BEGIN
 # Profile: performance (auto-detected)
-# For: Pi 4 4GB+, Pi 5, systems with 8GB+ RAM
+# For: Pi 4/5 4GB+, systems with 8GB+ RAM
 # Measured baseline (idle): snapserver 87M, shairport 18M, librespot 22M,
 #   mpd 90M (6k songs), mympd 8M, metadata 52M, tidal 32M
 # On large NFS libraries mympd peaks well above its steady-state usage
@@ -300,10 +295,61 @@ TIDAL_CPU_LIMIT=0.5
 EOF
             ;;
         *)
-            error "Unknown profile: $profile"
-            exit 1
+            return 1
             ;;
     esac
+}
+
+# Print the hardware-profile block currently in .env (empty if none).
+current_profile_block() {
+    awk '/^# Hardware Profile: BEGIN/{on=1} on{print} /^# Hardware Profile: END/{if (on) exit}' \
+        "$ENV_FILE" 2>/dev/null || true
+}
+
+# Write the profile block into .env. An existing block is replaced IN
+# PLACE, so keys the user put after it (later keys win in a Compose
+# .env) keep overriding the profile values; without a block the new one
+# is appended. Keys outside the block are never touched.
+apply_resource_profile() {
+    local profile="$1"
+
+    info "Applying '$profile' resource profile..."
+
+    local block
+    if ! block=$(resource_profile_block "$profile"); then
+        error "Unknown profile: $profile"
+        exit 1
+    fi
+
+    if grep -q '^# Hardware Profile: BEGIN' "$ENV_FILE" 2>/dev/null; then
+        # Log every value that changes, so a hand-edited in-block limit
+        # being reset to the profile default is visible in the deploy log.
+        local old_block key val old_val
+        old_block=$(current_profile_block)
+        while IFS='=' read -r key val; do
+            [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || continue
+            old_val=$(printf '%s\n' "$old_block" | grep -m1 "^${key}=" | cut -d= -f2- || true)
+            if [[ "$old_val" != "$val" ]]; then
+                info "  $key: ${old_val:-<unset>} -> $val"
+            fi
+        done <<< "$block"
+
+        local block_file
+        block_file=$(mktemp)
+        printf '%s\n' "$block" > "$block_file"
+        # cat > (not mv) keeps the .env inode, owner and mode.
+        awk -v bf="$block_file" '
+            /^# Hardware Profile: BEGIN/ {
+                if (!done) { while ((getline l < bf) > 0) print l; done = 1 }
+                skip = 1; next
+            }
+            skip && /^# Hardware Profile: END/ { skip = 0; next }
+            !skip { print }
+        ' "$ENV_FILE" > "${ENV_FILE}.tmp" && cat "${ENV_FILE}.tmp" > "$ENV_FILE"
+        rm -f "${ENV_FILE}.tmp" "$block_file"
+    else
+        printf '\n%s\n' "$block" >> "$ENV_FILE"
+    fi
 
     # Warn if memory reserves exceed available RAM
     local total_reserve_mb=0
@@ -461,6 +507,10 @@ QEOF
 
     # Boot-time tuning service (shared function from system-tune.sh)
     install_boot_tune_service "$SCRIPT_DIR/boot-tune.sh"
+
+    # mDNS _http._tcp for the landing page + URL on the console login
+    # screen (server installs only — client-only installs never run deploy.sh)
+    install_server_discovery
 
     ok "System dependencies ready"
 }
@@ -626,6 +676,73 @@ create_directories() {
 # Environment Configuration
 #######################################
 
+# Set by setup_env when TIDAL_ENABLED=false; start_services then removes
+# a tidal-connect container left over from before the opt-out.
+TIDAL_OPTED_OUT=false
+
+# Set KEY=VALUE in .env (replace or append).
+# awk -v avoids sed metacharacter corruption; temp-file mv is atomic
+persist_env_kv() {
+    local key="$1" value="$2"
+    if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+        awk -v k="$key" -v v="$value" '
+            BEGIN { pat = "^" k "=" }
+            $0 ~ pat { print k "=" v; next }
+            { print }
+        ' "$ENV_FILE" > "${ENV_FILE}.tmp" \
+            && mv -- "${ENV_FILE}.tmp" "$ENV_FILE"
+    else
+        printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+    fi
+}
+
+# Comma-separated COMPOSE_PROFILES value from .env (quotes/CR/spaces stripped).
+_compose_profiles() {
+    grep -m1 '^COMPOSE_PROFILES=' "$ENV_FILE" 2>/dev/null \
+        | cut -d= -f2- | tr -d "\"' \r" || true
+}
+
+# Ensure COMPOSE_PROFILES includes a profile.
+ensure_profile() {
+    local profile="$1" current
+    if ! grep -q '^COMPOSE_PROFILES=' "$ENV_FILE" 2>/dev/null; then
+        printf '\n# Docker Compose profiles\nCOMPOSE_PROFILES=%s\n' "$profile" >> "$ENV_FILE"
+    else
+        current=$(_compose_profiles)
+        if [[ ",${current}," == *",${profile},"* ]]; then
+            return 0
+        fi
+        persist_env_kv "COMPOSE_PROFILES" "${current:+${current},}${profile}"
+    fi
+    info "Enabled profile: $profile"
+}
+
+# Drop a profile from COMPOSE_PROFILES (no-op when absent).
+remove_compose_profile() {
+    local profile="$1" current kept="" p
+    grep -q '^COMPOSE_PROFILES=' "$ENV_FILE" 2>/dev/null || return 0
+    current=$(_compose_profiles)
+    [[ ",${current}," == *",${profile},"* ]] || return 0
+    local IFS=','
+    for p in $current; do
+        [[ -n "$p" && "$p" != "$profile" ]] && kept="${kept:+${kept},}${p}"
+    done
+    persist_env_kv "COMPOSE_PROFILES" "$kept"
+    info "Disabled profile: $profile"
+}
+
+# True when the operator opted out of Tidal Connect (TIDAL_ENABLED=false
+# / 0 / no / off in .env, case-insensitive).
+tidal_opted_out() {
+    local v
+    v=$(grep -m1 '^TIDAL_ENABLED=' "$ENV_FILE" 2>/dev/null \
+        | cut -d= -f2- | tr -d "\"' \r" | tr '[:upper:]' '[:lower:]' || true)
+    case "$v" in
+        false|0|no|off) return 0 ;;
+    esac
+    return 1
+}
+
 setup_env() {
     local profile="$1"
 
@@ -638,22 +755,27 @@ setup_env() {
     real_gid="$(id -g "$real_user")"
 
     if [[ -f "$ENV_FILE" ]]; then
-        # Check if profile already set
+        # Re-deploy over an existing .env. No early return here: the
+        # COMPOSE_PROFILES and release-identity steps below must run on
+        # every deploy, or a git pull + redeploy keeps a stale IMAGE_TAG.
         if grep -q "# Hardware Profile: BEGIN" "$ENV_FILE"; then
             local current_profile
-            current_profile=$(grep "# Profile:" "$ENV_FILE" | awk '{print $3}')
-            if [[ "$current_profile" == "$profile" ]]; then
-                info "Profile '$profile' already configured"
-                return 0
-            else
+            current_profile=$(grep -m1 "^# Profile:" "$ENV_FILE" | awk '{print $3}')
+            if [[ "$current_profile" != "$profile" ]]; then
                 warn "Existing profile: $current_profile, updating to: $profile"
-                sed -i.bak '/# Hardware Profile: BEGIN/,/# Hardware Profile: END/d' "$ENV_FILE"
-                rm -f "$ENV_FILE.bak"
+                apply_resource_profile "$profile"
+            elif [[ "$(current_profile_block)" != "$(resource_profile_block "$profile")" ]]; then
+                # Same profile, but this release ships different limits
+                # (or the block was hand-edited): refresh it.
+                info "Profile '$profile' limits differ from this release — refreshing"
+                apply_resource_profile "$profile"
+            else
+                info "Profile '$profile' already configured"
             fi
         else
             info "Existing .env found, adding hardware profile"
+            apply_resource_profile "$profile"
         fi
-        apply_resource_profile "$profile"
     else
         # Auto-detect timezone
         local tz_detected
@@ -772,69 +894,57 @@ EOF
         apply_resource_profile "$profile"
     fi
 
-    # Ensure COMPOSE_PROFILES includes required profiles
-    ensure_profile() {
-        local profile="$1"
-        if ! grep -q '^COMPOSE_PROFILES=' "$ENV_FILE" 2>/dev/null; then
-            printf '\n# Docker Compose profiles\nCOMPOSE_PROFILES=%s\n' "$profile" >> "$ENV_FILE"
-        elif ! grep -q "^COMPOSE_PROFILES=.*${profile}" "$ENV_FILE"; then
-            sed -i "s/^COMPOSE_PROFILES=\(.*\)/COMPOSE_PROFILES=\1,${profile}/" "$ENV_FILE"
-        else
-            return 0
-        fi
-        info "Enabled profile: $profile"
-    }
-
-    # Tidal Connect is ARM-only
-    if [[ "$IS_ARM" == "true" ]]; then
-        ensure_profile "tidal"
-    else
+    # Tidal Connect is ARM-only, on by default, off with TIDAL_ENABLED=false.
+    # The opt-out is an explicit .env key because merely removing `tidal`
+    # from COMPOSE_PROFILES used to be undone here on the next deploy.
+    if [[ "$IS_ARM" != "true" ]]; then
         info "Tidal Connect skipped (ARM-only, current arch: $(uname -m))"
+    elif tidal_opted_out; then
+        TIDAL_OPTED_OUT=true
+        remove_compose_profile "tidal"
+        info "Tidal Connect disabled (TIDAL_ENABLED=false in .env)"
+    else
+        ensure_profile "tidal"
     fi
 
     # Persist release identity (SNAPMULTI_RELEASE + SNAPMULTI_IMAGE_SET
     # + IMAGE_TAG). Values come from firstboot via env vars — deploy
     # does NOT re-read install.conf or the manifest (firstboot is
-    # authoritative for the precedence chain). The IMAGE_TAG line is
-    # always written via derive_image_tag so a stale value in an
-    # existing .env is overwritten coherently instead of being trusted
-    # as input to the chain.
+    # authoritative for the precedence chain). Whenever any of them is
+    # provided, all three are written together via derive_image_tag, so
+    # a stale value in an existing .env is overwritten coherently instead
+    # of being trusted as input to the chain. A bare manual re-run (none
+    # provided) keeps the identity already recorded in .env rather than
+    # blanking SNAPMULTI_RELEASE while leaving an old IMAGE_TAG behind.
     local _release="${SNAPMULTI_RELEASE:-}"
     local _image_set="${SNAPMULTI_IMAGE_SET:-}"
-    local _coherent_tag
-    _coherent_tag=$(derive_image_tag "${IMAGE_TAG:-}" "$_image_set")
+    local _explicit_tag="${IMAGE_TAG:-}"
+    if [[ -n "$_release" || -n "$_image_set" || -n "$_explicit_tag" ]]; then
+        local _coherent_tag
+        _coherent_tag=$(derive_image_tag "$_explicit_tag" "$_image_set")
 
-    # awk -v avoids sed metacharacter corruption; temp-file mv is atomic
-    persist_env_kv() {
-        local key="$1" value="$2"
-        if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
-            awk -v k="$key" -v v="$value" '
-                BEGIN { pat = "^" k "=" }
-                $0 ~ pat { print k "=" v; next }
-                { print }
-            ' "$ENV_FILE" > "${ENV_FILE}.tmp" \
-                && mv -- "${ENV_FILE}.tmp" "$ENV_FILE"
-        else
-            printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+        # Empty values are still written (downstream readers treat empty
+        # as "unknown").
+        persist_env_kv "SNAPMULTI_RELEASE" "$_release"
+        persist_env_kv "SNAPMULTI_IMAGE_SET" "$_image_set"
+
+        # IMAGE_TAG=latest is the implicit default in docker-compose.yml,
+        # so it is only written when a line already exists (to replace a
+        # stale pin) — otherwise the key stays absent.
+        if [[ "$_coherent_tag" != "latest" ]] || grep -q '^IMAGE_TAG=' "$ENV_FILE" 2>/dev/null; then
+            persist_env_kv "IMAGE_TAG" "$_coherent_tag"
+            info "IMAGE_TAG=$_coherent_tag"
         fi
-    }
-
-    # SNAPMULTI_RELEASE / SNAPMULTI_IMAGE_SET always persisted so smoke
-    # and diagnostic surface the live release identity; empty values are
-    # still written (downstream readers treat empty as "unknown").
-    persist_env_kv "SNAPMULTI_RELEASE" "$_release"
-    persist_env_kv "SNAPMULTI_IMAGE_SET" "$_image_set"
-
-    # IMAGE_TAG only persisted when non-default (preserves the existing
-    # "latest is the implicit default in docker-compose.yml" pattern).
-    if [[ "$_coherent_tag" != "latest" ]]; then
-        persist_env_kv "IMAGE_TAG" "$_coherent_tag"
-        info "IMAGE_TAG=$_coherent_tag"
-    fi
-    if [[ -n "$_release" || -n "$_image_set" ]]; then
-        info "Release $_release (images $_image_set)"
+        if [[ -n "$_release" || -n "$_image_set" ]]; then
+            info "Release $_release (images $_image_set)"
+        fi
+    else
+        grep -q '^SNAPMULTI_RELEASE=' "$ENV_FILE" 2>/dev/null || persist_env_kv "SNAPMULTI_RELEASE" ""
+        grep -q '^SNAPMULTI_IMAGE_SET=' "$ENV_FILE" 2>/dev/null || persist_env_kv "SNAPMULTI_IMAGE_SET" ""
+        info "No release identity provided — keeping SNAPMULTI_RELEASE / IMAGE_TAG already in .env"
     fi
 }
+
 
 #######################################
 # Configuration Validation
@@ -972,6 +1082,14 @@ start_services() {
     # Explicit deploys request recreation even for nonzero memory-limit
     # changes that Compose may not detect. The unit consumes the request
     # after restore; ordinary service restarts do not request recreation.
+    # Compose leaves containers of a disabled profile running (restart:
+    # unless-stopped keeps them across reboots), so honour the opt-out.
+    if [[ "$TIDAL_OPTED_OUT" == "true" ]] \
+        && docker container inspect tidal-connect >/dev/null 2>&1; then
+        info "Removing tidal-connect container (TIDAL_ENABLED=false)"
+        docker rm -f tidal-connect >/dev/null 2>&1 || warn "Could not remove tidal-connect container"
+    fi
+
     info "Launching docker compose (containers will start and become healthy in 30-60s)..."
     if systemctl list-unit-files snapmulti-server.service --no-legend 2>/dev/null | grep -q snapmulti-server.service; then
         if ! touch /run/snapmulti-server-recreate; then
@@ -1372,9 +1490,9 @@ main() {
                 echo "             (default: auto-detect from hardware)"
                 echo ""
                 echo "Profiles:"
-                echo "  minimal      Pi Zero 2 W, Pi 3, <2GB RAM"
-                echo "  standard     Pi 4 2GB, 2-4GB RAM"
-                echo "  performance  Pi 4 4GB+, Pi 5, 8GB+ RAM"
+                echo "  minimal      Pi Zero 2 W, Pi 3, Pi 4/5 1GB, other <2GB RAM"
+                echo "  standard     Pi 4/5 2GB, other 2-8GB RAM"
+                echo "  performance  Pi 4/5 4GB+, other 8GB+ RAM"
                 exit 0
                 ;;
             *)

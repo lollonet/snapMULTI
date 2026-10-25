@@ -144,6 +144,7 @@ jobs:
           # script-only release publishes the manifest's image_set
           # (e.g. 0.7.7), not the just-cut release tag (e.g. v0.7.8).
           GATE_IMAGE_SET: ${{ needs.gate.outputs.image_set }}
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             # Tagged release: push :latest + :<image_set> from manifest.
@@ -156,6 +157,15 @@ jobs:
             {
               echo "tag="
               echo "label=dev"
+            } >> "$GITHUB_OUTPUT"
+          elif [[ "$FORCE_REBUILD" == "true" ]]; then
+            # Emergency republish (CVE, deleted tag) dispatched from a
+            # branch: push :<image_set> (what devices pull) + :manual,
+            # never :latest (that stays reserved for tagged releases).
+            echo "::warning::force_rebuild from $GITHUB_REF republishes image set $GATE_IMAGE_SET from this ref (dispatch from the release tag to rebuild exactly the released code)"
+            {
+              echo "tag=$GATE_IMAGE_SET"
+              echo "label=manual"
             } >> "$GITHUB_OUTPUT"
           else
             # Manual dispatch without santcasp: push :manual (badaix)
@@ -312,6 +322,7 @@ jobs:
           # vX.Y.Z+1 with image_set=X.Y.Z keeps publishing X.Y.Z client
           # images (parity with the server build job).
           GATE_IMAGE_SET: ${{ needs.gate.outputs.image_set }}
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             {
@@ -322,6 +333,12 @@ jobs:
             {
               echo "tag="
               echo "label=dev"
+            } >> "$GITHUB_OUTPUT"
+          elif [[ "$FORCE_REBUILD" == "true" ]]; then
+            # Same emergency-republish rule as the server build job.
+            {
+              echo "tag=$GATE_IMAGE_SET"
+              echo "label=manual"
             } >> "$GITHUB_OUTPUT"
           else
             {
@@ -386,21 +403,28 @@ jobs:
             ${{ steps.version.outputs.tag && format('lollonet/snapclient-pi-fb-display:{0}', steps.version.outputs.tag) || '' }}
 
   manifest:
-    needs: [build, build-client]
+    needs: [gate, build, build-client]
     runs-on: snapcast-runner
     steps:
       - name: Determine image label
         id: version
         env:
           USE_SANTCASP: ${{ inputs.use_santcasp }}
+          # Must match the build jobs: they push <image_set>-<arch>, NOT
+          # <git tag>-<arch>. Deriving the tag from GITHUB_REF here made
+          # the multi-arch tag point at images that were never built.
+          GATE_IMAGE_SET: ${{ needs.gate.outputs.image_set }}
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
-            echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=$GATE_IMAGE_SET" >> "$GITHUB_OUTPUT"
             echo "label=latest" >> "$GITHUB_OUTPUT"
           elif [[ "$USE_SANTCASP" == "true" ]]; then
             echo "tag=" >> "$GITHUB_OUTPUT"
             echo "label=dev" >> "$GITHUB_OUTPUT"
+          elif [[ "$FORCE_REBUILD" == "true" ]]; then
+            echo "tag=$GATE_IMAGE_SET" >> "$GITHUB_OUTPUT"
+            echo "label=manual" >> "$GITHUB_OUTPUT"
           else
             echo "tag=" >> "$GITHUB_OUTPUT"
             echo "label=manual" >> "$GITHUB_OUTPUT"
@@ -416,9 +440,11 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Create multi-arch manifests
+        env:
+          LABEL: ${{ steps.version.outputs.label }}
+          VERSION: ${{ steps.version.outputs.tag }}
         run: |
-          LABEL="${{ steps.version.outputs.label }}"
-          VERSION="${{ steps.version.outputs.tag }}"
+          set -euo pipefail
 
           # Create :latest or :dev manifest for each image
           for image in snapmulti-server snapmulti-airplay snapmulti-metadata snapmulti-mpd; do

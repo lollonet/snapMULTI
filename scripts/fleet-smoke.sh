@@ -24,7 +24,7 @@ set -euo pipefail
 
 # ── Defaults ─────────────────────────────────────────────────────
 SERVER=""
-SSH_USER="${USER}"
+SSH_USER="${USER:-$(id -un)}"
 # ServerAliveInterval=15 + ServerAliveCountMax=3 = client-side keepalive
 # every 15 s, give up after 3 missed (~45 s) so a host whose TCP socket
 # stays open but whose remote `bash -s` is wedged does not hang the

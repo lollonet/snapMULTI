@@ -102,7 +102,7 @@ else
     # Extract persist_env_kv definition from deploy.sh and source it in
     # isolation (bash function definition fits in a few lines, no other
     # globals required).
-    persist_def=$(awk '/persist_env_kv\(\) \{/,/^    \}$/' "$DEPLOY")
+    persist_def=$(awk '/persist_env_kv\(\) \{/,/^ *\}$/' "$DEPLOY")
     eval "$persist_def"
 
     persist_env_kv "SNAPMULTI_RELEASE" "v0.7.7"

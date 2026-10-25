@@ -14,6 +14,9 @@
 #   - `build` job's image-tag computation reads gate.outputs.image_set
 #     (NOT github.ref_name) so script-only releases publish the
 #     manifest's image_set, not the just-cut tag
+#   - `manifest` job builds the multi-arch tag from gate.outputs.image_set
+#     too, and force_rebuild dispatches republish <image_set> (never
+#     :latest) in build, build-client and manifest
 
 set -euo pipefail
 
@@ -120,6 +123,40 @@ assert "printf '%s' \"\$client_section\" | grep -qE \"needs.gate.outputs.should_
 
 assert "printf '%s' \"\$client_section\" | grep -q 'GATE_IMAGE_SET'" \
     "build-client derives image tag from gate.outputs.image_set (parity with server build)"
+
+# manifest job: the multi-arch tag must be the gate's image_set (what the
+# build jobs pushed as <image_set>-<arch>), not the stripped git tag —
+# otherwise a script-only release / force_rebuild publishes a manifest
+# for images that were never built and the image_set tag devices pull is
+# never refreshed.
+manifest_section=$(awk '/^  manifest:/{found=1} found{print}' "$WF")
+assert "[[ -n \"\$manifest_section\" ]]" "manifest job present"
+assert "printf '%s' \"\$manifest_section\" | grep -qE '^    needs: \\[gate, build, build-client\\]'" \
+    "manifest job needs gate (to read image_set)"
+assert "printf '%s' \"\$manifest_section\" | grep -qE 'GATE_IMAGE_SET: \\\$\\{\\{ needs.gate.outputs.image_set \\}\\}'" \
+    "manifest job reads gate.outputs.image_set via env"
+assert "! printf '%s' \"\$manifest_section\" | grep -q 'GITHUB_REF#refs/tags/v'" \
+    "manifest job no longer derives the version from the git tag"
+assert "printf '%s' \"\$manifest_section\" | grep -qE 'tag=\\\$GATE_IMAGE_SET'" \
+    "manifest job publishes <image_set> for tagged releases"
+assert "printf '%s' \"\$manifest_section\" | grep -q 'label=latest'" \
+    "manifest job keeps :latest for tagged releases"
+
+# force_rebuild dispatched from a branch must republish <image_set> (the
+# documented CVE / deleted-tag recovery path) in all three jobs, and
+# must not move :latest.
+for job in build build-client manifest; do
+    section=$(awk -v j="  ${job}:" '$0 == j {found=1; print; next} found && /^  [a-z][a-z-]*:$/ {exit} found {print}' "$WF")
+    assert "printf '%s' \"\$section\" | grep -qE 'FORCE_REBUILD: \\\$\\{\\{ inputs.force_rebuild \\}\\}'" \
+        "$job: version step reads inputs.force_rebuild"
+    assert "printf '%s' \"\$section\" | awk '/FORCE_REBUILD\" == \"true\"/{f=1} f && /tag=\\\$GATE_IMAGE_SET/{t=1} f && /label=/{if (\$0 ~ /latest/) bad=1; exit} END{exit !(t && !bad)}'" \
+        "$job: force_rebuild publishes <image_set>, not :latest"
+done
+
+# No `${{ }}` expression interpolated directly into a run: script of the
+# manifest job (values go through env: — workflow-injection hygiene).
+assert "! printf '%s' \"\$manifest_section\" | awk '/^ *run: \\|/{r=1; next} r && /^ *- name:/{r=0} r' | grep -q '\\\${{'" \
+    "manifest job run scripts take step outputs via env, not inline \${{ }}"
 
 echo
 echo "## Summary"

@@ -8,9 +8,11 @@ Documentation=man:systemd.timer(5)
 # lastSeen heartbeats which would cause a backup loop). Also acts as a
 # safety net for myMPD subdirectory writes that .path units don't fire
 # on (systemd path units are not recursive). backup-snapmulti-state.sh
-# is idempotent and short-circuits on canonical equality (server.json
-# minus lastSeen), so a no-op tick costs only a JSON parse + hash —
-# zero FAT32 writes.
+# is idempotent: it compares server.json by canonical content (minus
+# lastSeen) and the myMPD workdir by a content hash (tar | sha256sum)
+# against what it last published, and only remounts the boot partition
+# rw when one of them changed. A no-op tick costs a JSON parse + a hash
+# of the workdir — zero FAT32 writes, no remount.
 OnBootSec=5min
 OnUnitActiveSec=5min
 Unit=snapmulti-state-backup.service
