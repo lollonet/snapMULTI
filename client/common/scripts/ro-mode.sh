@@ -167,11 +167,14 @@ SYSDEOF
             exit 1
         fi
         persist_overlayroot_disabled "" || true
-        persist_overlayroot_disabled "/media/root-ro" || true
+        # The lower layer holds the copies that survive the reboot; its
+        # overlayroot.local.conf alone would re-enable tmpfs mode.
+        if ! clear_lower_overlayroot /media/root-ro; then
+            echo "ERROR: Failed to disable read-only mode on the lower root (/media/root-ro)."
+            exit 1
+        fi
         # Remove trixie workaround AFTER disable succeeds.
-        # Delete from lower layer (/media/root-ro) so it persists after reboot.
         rm -f /etc/systemd/system.conf.d/overlayfs-workaround.conf
-        rm -f /media/root-ro/etc/systemd/system.conf.d/overlayfs-workaround.conf 2>/dev/null || true
         echo "Read-only mode disabled. Reboot to activate:"
         echo "  sudo reboot"
         ;;
