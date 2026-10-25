@@ -1,0 +1,47 @@
+# Line endings.
+#
+# Almost everything in this repo ends up on a Raspberry Pi: shell scripts,
+# Python, systemd units, configs and compose files are copied verbatim to
+# the SD card by prepare-sd.sh / prepare-sd.ps1. A CRLF there is fatal
+# (`set -euo pipefail\r` aborts firstboot.sh before it can draw the TUI or
+# write a failure marker). Git for Windows defaults to core.autocrlf=true,
+# so pin LF in every working tree regardless of the clone's settings.
+* text=auto eol=lf
+
+*.sh        text eol=lf
+*.py        text eol=lf
+*.conf      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.json      text eol=lf
+*.toml      text eol=lf
+*.txt       text eol=lf
+*.service   text eol=lf
+*.timer     text eol=lf
+*.path      text eol=lf
+*.template  text eol=lf
+*.example   text eol=lf
+*.md        text eol=lf
+*.svg       text eol=lf
+Dockerfile* text eol=lf
+# Extensionless executables staged to the device / run by git.
+scripts/common/initramfs-hooks/* text eol=lf
+scripts/git-hooks/*              text eol=lf
+
+# Windows-only entry point: CRLF is the native form for Windows
+# PowerShell 5.1 and editors on that side. Must stay pure ASCII
+# (enforced in CI) because PS 5.1 reads BOM-less files as cp1252.
+*.ps1 text eol=crlf
+
+# Binary assets.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.wav  binary
+*.mp3  binary
+*.flac binary
+*.db   binary
+*.gz   binary
+*.zip  binary

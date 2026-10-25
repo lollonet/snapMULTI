@@ -80,6 +80,23 @@ unset _DIAG_SELF_DIR
 # survives reboot and is reachable from a removed SD card — but on a
 # host with no /boot/firmware (dev machine, container) we still want
 # the bundle to land somewhere.
+#
+# After install the boot partition is normally mounted read-only. Without
+# a remount the `-w` test fails and the bundle lands on /boot of the
+# root fs — RAM under overlayroot, gone at reboot. When OUT_DIR sits on a
+# read-only mount and we are root, remount it rw for the run (serialised
+# with the backup scripts via their boot-write lock) and put it back on exit.
+_DIAG_REMOUNTED=""
+_diag_mount=$(findmnt -n -o TARGET --target "$OUT_DIR" 2>/dev/null || true)
+if [[ -n "$_diag_mount" && "$_diag_mount" != "/" && "$(id -u)" -eq 0 ]] \
+    && findmnt -n -o OPTIONS --target "$OUT_DIR" 2>/dev/null | tr ',' '\n' | grep -qx ro; then
+    { exec 9>/run/snapmulti-boot-write.lock; } 2>/dev/null || true
+    flock -w 60 9 2>/dev/null || true
+    if mount -o remount,rw "$_diag_mount" 2>/dev/null; then
+        _DIAG_REMOUNTED="$_diag_mount"
+    fi
+fi
+unset _diag_mount
 if ! mkdir -p "$OUT_DIR" 2>/dev/null || [[ ! -w "$OUT_DIR" ]]; then
     if [[ -d /boot && -w /boot ]]; then
         OUT_DIR="/boot"
@@ -129,7 +146,13 @@ mkdir -p "$STAGE_DIR"
 # so mid-collection errors don't abort the script under set -e and a
 # partial bundle is still useful. The trap removes the tmpfs work dir on
 # any exit path.
-cleanup() { rm -rf "$WORK_DIR" 2>/dev/null || true; }
+cleanup() {
+    rm -rf "$WORK_DIR" 2>/dev/null || true
+    if [[ -n "$_DIAG_REMOUNTED" ]]; then
+        sync
+        mount -o remount,ro "$_DIAG_REMOUNTED" 2>/dev/null || true
+    fi
+}
 trap cleanup EXIT INT TERM
 
 log() { echo "[diag] $*" >&2; }

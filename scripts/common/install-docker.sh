@@ -36,6 +36,69 @@ setup_docker_repo() {
         > /etc/apt/sources.list.d/docker.list
 }
 
+# Bounded wait for the dpkg frontend lock (unattended-upgrades, apt-daily,
+# cloud-init's own package runs). Reuses install-deps.sh's helper when the
+# caller sourced it; this file is also sourced on its own by deploy.sh and
+# client setup.sh, so keep a local fallback with the same 5-minute cap.
+_docker_apt_wait_lock() {
+    if declare -F _wait_for_apt_lock >/dev/null 2>&1; then
+        _wait_for_apt_lock
+        return 0
+    fi
+    command -v fuser >/dev/null 2>&1 || return 0
+    local deadline=$(( SECONDS + 300 ))
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+        (( SECONDS >= deadline )) && return 0
+        sleep 5
+    done
+}
+
+_docker_apt_msg() {
+    local level="$1"; shift
+    if [[ "$level" == "error" ]] && declare -F log_error >/dev/null 2>&1; then
+        log_error "$*"
+    elif declare -F log_warn >/dev/null 2>&1; then
+        log_warn "$*"
+    elif [[ "$level" == "error" ]]; then
+        echo "[ERROR] [docker] $*" >&2
+    else
+        echo "[WARN] [docker] $*" >&2
+    fi
+}
+
+# _docker_apt_run DESC CMD...
+#
+# Runs an apt command up to DOCKER_APT_ATTEMPTS times (default 3). Before
+# each attempt waits for the dpkg lock; between attempts runs the same
+# dpkg/apt recovery as install-deps.sh's _apt_install_with_recovery and
+# backs off. Command output goes to $UNIFIED_LOG (the install log) so the
+# real apt error is there for the diagnostic bundle; without an install
+# log the tail of a failed attempt is printed to stderr instead.
+_docker_apt_run() {
+    local desc="$1"; shift
+    local attempts="${DOCKER_APT_ATTEMPTS:-3}" attempt out rc
+    for (( attempt = 1; attempt <= attempts; attempt++ )); do
+        _docker_apt_wait_lock
+        rc=0
+        out=$("$@" 2>&1) || rc=$?
+        if [[ -n "${UNIFIED_LOG:-}" ]]; then
+            { printf '%s\n' "--- $desc (attempt $attempt/$attempts, rc=$rc) ---" "$out"; } \
+                >> "$UNIFIED_LOG" 2>/dev/null || true
+        fi
+        (( rc == 0 )) && return 0
+        _docker_apt_msg warn "$desc failed (attempt $attempt/$attempts, rc=$rc)"
+        if [[ -z "${UNIFIED_LOG:-}" ]]; then
+            printf '%s\n' "$out" | tail -n 20 >&2
+        fi
+        (( attempt < attempts )) || break
+        dpkg --configure -a >> "${UNIFIED_LOG:-/dev/null}" 2>&1 || true
+        apt-get -f install -y >> "${UNIFIED_LOG:-/dev/null}" 2>&1 || true
+        sleep $(( attempt * ${DOCKER_APT_BACKOFF:-10} ))
+    done
+    _docker_apt_msg error "$desc failed after $attempts attempts${UNIFIED_LOG:+ — apt output in $UNIFIED_LOG}"
+    return 1
+}
+
 install_docker_apt() {
     if ! setup_docker_repo; then
         return 1
@@ -44,7 +107,8 @@ install_docker_apt() {
     # Skip update when caller already refreshed metadata after adding the repo
     # (firstboot consolidates Debian + Docker into one apt-get update).
     if [[ "${SKIP_APT_UPDATE:-false}" != "true" ]]; then
-        apt-get update -qq
+        _docker_apt_run "apt-get update (Docker repo)" apt-get update || return 1
     fi
-    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    _docker_apt_run "apt-get install docker-ce" \
+        apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 }

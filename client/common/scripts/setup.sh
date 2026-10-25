@@ -1689,6 +1689,18 @@ if [[ "${ENABLE_READONLY:-false}" == "true" ]]; then
         printf '%s\n' "$(date -u +%FT%TZ)" > "$_switch_checkpoint"
     fi
 
+    # Under firstboot (--auto + SNAPMULTI_DEFER_OVERLAYROOT=1) stop here:
+    # Docker is on fuse-overlayfs, which is all the image pull needs.
+    # firstboot arms overlayroot itself (setup_readonly_fs) once its client
+    # verify has passed, so a failed pull/verify does not leave a tmpfs
+    # overlay root and a read-only /boot/firmware behind. Standalone runs
+    # keep arming it here.
+    if [[ "$AUTO_MODE" == true && "${SNAPMULTI_DEFER_OVERLAYROOT:-0}" == "1" ]]; then
+        log_progress "Read-only filesystem: Docker prepared; overlayroot is armed by firstboot after verification"
+        echo ""
+        return 0
+    fi
+
     # ro-mode helper + SSH key persistence (raspi-config call below has rollback)
     local _ro_mode_script=""
     if [[ -f "$COMMON_DIR/scripts/ro-mode.sh" ]]; then
