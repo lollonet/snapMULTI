@@ -285,23 +285,39 @@ class TestWriterNeverStalls:
 
 
 class TestWorkerFailure:
-    def test_crashed_thread_exits_the_process(self):
-        code = (
-            "import importlib.util, threading, time\n"
-            f"spec = importlib.util.spec_from_file_location('r', {str(_PATH)!r})\n"
-            "r = importlib.util.module_from_spec(spec); spec.loader.exec_module(r)\n"
-            "threading.excepthook = r.exit_on_thread_crash\n"
-            "def boom(): raise RuntimeError('worker bug')\n"
-            "threading.Thread(target=boom, daemon=True).start()\n"
-            "time.sleep(10)\n"
-        )
-        start = time.monotonic()
-        done = subprocess.run(
+    CODE = (
+        "import importlib.util, threading, time\n"
+        f"spec = importlib.util.spec_from_file_location('r', {str(_PATH)!r})\n"
+        "r = importlib.util.module_from_spec(spec); spec.loader.exec_module(r)\n"
+        "threading.excepthook = r.exit_on_thread_crash\n"
+        "def boom(): raise RuntimeError('worker bug')\n"
+        "threading.Thread(target=boom, name=NAME, daemon=True).start()\n"
+        "time.sleep(2)\n"
+    )
+
+    def _run(self, thread_name: str) -> subprocess.CompletedProcess:
+        code = self.CODE.replace("NAME", repr(thread_name))
+        return subprocess.run(
             [sys.executable, "-c", code], capture_output=True, text=True, timeout=20
         )
+
+    @pytest.mark.parametrize("name", sorted(relay.WORKER_THREADS))
+    def test_crashed_worker_exits_the_process(self, name):
+        done = self._run(name)
         assert done.returncode == 1
-        assert time.monotonic() - start < 5
         assert "worker bug" in done.stderr
+
+    def test_crashed_connection_handler_keeps_the_process(self):
+        # A LAN peer can crash its own handler (e.g. hostile JSON); that must
+        # not let it restart the relay at will.
+        done = self._run("Thread-7 (handle_metadata)")
+        assert done.returncode == 0
+
+    def test_deeply_nested_json_is_rejected(self, tmp_path):
+        target = tmp_path / "tidal-metadata.json"
+        payload = b"[" * 200000 + b"]" * 200000
+        assert not relay.write_metadata(str(target), payload)
+        assert not target.exists()
 
     def test_unwritable_metadata_path_is_logged_not_raised(self, tmp_path):
         a, b = socket.socketpair()

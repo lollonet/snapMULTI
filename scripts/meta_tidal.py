@@ -12,6 +12,7 @@ Environment variables:
 
 import fcntl
 import json
+import math
 import os
 import select
 import sys
@@ -138,7 +139,9 @@ def apply_metadata(data: dict) -> bool:
 
     try:
         dur_f = float(data.get("duration") or 0)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        dur_f = 0.0
+    if not math.isfinite(dur_f):  # inf / nan would not serialise as JSON
         dur_f = 0.0
     if dur_f != metadata["duration"]:
         metadata["duration"] = dur_f
@@ -197,7 +200,7 @@ def file_watch_thread() -> None:
             with _lock:
                 if apply_metadata(data):
                     send_properties()
-        except (json.JSONDecodeError, OSError, TypeError, AttributeError) as e:
+        except Exception as e:  # noqa: BLE001 — a bad file must never end the only metadata thread
             last_mtime = 0.0  # retry next poll
             if debug_mode:
                 sys.stderr.write(f"[DEBUG] meta_tidal: File read error: {e}\n")

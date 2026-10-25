@@ -55,6 +55,9 @@ RETRY_SECONDS = 2.0
 META_POLL_SECONDS = 1.0
 META_RESEND_SECONDS = 60.0  # re-push unchanged metadata after a server restart
 HEARTBEAT_SECONDS = 15.0
+# Threads that must live as long as the process (see exit_on_thread_crash).
+# A per-connection handler that dies only drops its own connection.
+WORKER_THREADS = frozenset({"fifo-reader", "metadata-watch", "metadata-accept"})
 
 
 def log(msg: str) -> None:
@@ -178,7 +181,7 @@ def write_metadata(path: str, payload: bytes) -> bool:
     """Validate the bridge JSON and replace the file atomically."""
     try:
         data = json.loads(payload)
-    except ValueError:
+    except (ValueError, RecursionError):  # RecursionError: deeply nested
         return False
     if not isinstance(data, dict):
         return False
@@ -244,7 +247,10 @@ def run_receive() -> None:
     log(f"receiving PCM on :{AUDIO_PORT} -> {FIFO_PATH}, metadata on :{META_PORT}")
     threading.Thread(target=heartbeat, daemon=True).start()
     threading.Thread(
-        target=serve_metadata, args=(meta_srv, META_PATH, allow), daemon=True
+        target=serve_metadata,
+        args=(meta_srv, META_PATH, allow),
+        name="metadata-accept",
+        daemon=True,
     ).start()
     audio = AudioReceiver(FIFO_PATH)
     while True:
@@ -325,7 +331,9 @@ def send_audio(chunks: queue.Queue, host: str, port: int) -> None:
 
 def pump_audio(fd: int, host: str, port: int) -> None:
     chunks = queue.Queue(maxsize=QUEUE_CHUNKS)
-    threading.Thread(target=read_fifo, args=(fd, chunks), daemon=True).start()
+    threading.Thread(
+        target=read_fifo, args=(fd, chunks), name="fifo-reader", daemon=True
+    ).start()
     send_audio(chunks, host, port)
 
 
@@ -370,7 +378,10 @@ def run_send() -> None:
     log(f"sending {FIFO_PATH} -> {host}:{AUDIO_PORT}, metadata -> {host}:{META_PORT}")
     threading.Thread(target=heartbeat, daemon=True).start()
     threading.Thread(
-        target=watch_metadata, args=(host, META_PORT, META_PATH), daemon=True
+        target=watch_metadata,
+        args=(host, META_PORT, META_PATH),
+        name="metadata-watch",
+        daemon=True,
     ).start()
     pump_audio(fd, host, AUDIO_PORT)
 
@@ -379,10 +390,14 @@ def exit_on_thread_crash(args: threading.ExceptHookArgs) -> None:
     """A dead worker thread exits the process so Docker restarts it.
 
     Without this the heartbeat thread keeps the container healthy while
-    the thread that moves audio or metadata is gone.
+    the thread that moves audio or metadata is gone. Only WORKER_THREADS
+    qualify: a peer must not be able to restart the relay by crashing the
+    thread that handles its own connection.
     """
-    name = args.thread.name if args.thread else "?"
-    log(f"thread {name} died: {args.exc_type.__name__}: {args.exc_value}")
+    if args.thread is None or args.thread.name not in WORKER_THREADS:
+        threading.__excepthook__(args)
+        return
+    log(f"thread {args.thread.name} died: {args.exc_type.__name__}: {args.exc_value}")
     os._exit(1)
 
 
