@@ -78,7 +78,10 @@ mympd_seed_line=$(grep -n 'SNAP_BOOT/server/mympd/workdir' "$FIRSTBOOT" | head -
 deploy_line=$(grep -n 'bash scripts/deploy.sh 2>&1' "$FIRSTBOOT" | head -1 | cut -d: -f1 || true)
 assert '[[ -n "$server_seed_line" && -n "$deploy_line" && "$server_seed_line" -lt "$deploy_line" ]]' "snapserver seed is writable before deploy can start Compose"
 assert '[[ -n "$mympd_seed_line" && -n "$deploy_line" && "$mympd_seed_line" -lt "$deploy_line" ]]' "myMPD seed is writable before deploy can start Compose"
-assert 'grep -B70 "SNAP_BOOT/server/data/server.json" "$FIRSTBOOT" | grep -q "install_profile_needs_server_stack"' "seed restore is limited to server and both profiles"
+# Capture first: `grep ... | grep -q` under pipefail fails at random when
+# grep -q exits early and the first grep dies of SIGPIPE (status 141).
+seed_context=$(grep -B70 "SNAP_BOOT/server/data/server.json" "$FIRSTBOOT" || true)
+assert 'grep -q "install_profile_needs_server_stack" <<<"$seed_context"' "seed restore is limited to server and both profiles"
 
 seed_block=$(awk '
     /# Full-reflash persistence seeds are independent/ {capture=1}
