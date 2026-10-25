@@ -9,6 +9,8 @@ import json
 import os
 import socket
 import stat
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -213,6 +215,120 @@ class TestSender:
         assert done.wait(10), "Tidal-side writer blocked: sender did not drain the FIFO"
 
 
+def _longest_write_stall(fifo: Path, total_chunks: int = 256) -> float:
+    """Write PCM-sized chunks as the Tidal app would; return the longest
+    time a single write blocked (the app stalls for that long)."""
+    wfd = os.open(fifo, os.O_WRONLY)
+    worst = 0.0
+    try:
+        for _ in range(total_chunks):
+            start = time.monotonic()
+            os.write(wfd, b"\x00" * 4096)
+            worst = max(worst, time.monotonic() - start)
+    finally:
+        os.close(wfd)
+    return worst
+
+
+class TestWriterNeverStalls:
+    # The pipe buffer holds ~0.37 s of PCM. Any network wait longer than
+    # that in the FIFO reader blocks the Tidal app; these servers make the
+    # network wait for 1 s and the writer must not notice.
+
+    def test_slow_connect_does_not_block_the_writer(self, tmp_path, monkeypatch):
+        def blackholed(host, port):
+            time.sleep(1.0)  # SYN to a powered-off host: connect times out
+            raise OSError("timed out")
+
+        monkeypatch.setattr(relay, "connect", blackholed)
+        monkeypatch.setattr(relay, "RETRY_SECONDS", 0.1)
+        fifo = tmp_path / "tidal_fifo"
+        relay.ensure_fifo(str(fifo))
+        fd = os.open(fifo, os.O_RDWR)
+        threading.Thread(
+            target=relay.pump_audio, args=(fd, "192.0.2.1", 4954), daemon=True
+        ).start()
+        assert _longest_write_stall(fifo) < 0.3
+
+    def test_stalled_send_does_not_block_the_writer(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(relay, "SEND_TIMEOUT", 1.0)
+        monkeypatch.setattr(relay, "RETRY_SECONDS", 0.1)
+        fifo = tmp_path / "tidal_fifo"
+        relay.ensure_fifo(str(fifo))
+        fd = os.open(fifo, os.O_RDWR)
+        srv = _listener()  # accepts, never reads: sends stall once buffers fill
+        port = srv.getsockname()[1]
+        threading.Thread(
+            target=relay.pump_audio, args=(fd, "127.0.0.1", port), daemon=True
+        ).start()
+        held = []
+
+        def accept_and_hold():
+            try:
+                while True:
+                    held.append(srv.accept())
+            except OSError:  # listener closed at the end of the test
+                pass
+
+        threading.Thread(target=accept_and_hold, daemon=True).start()
+        try:
+            assert _longest_write_stall(fifo, total_chunks=2048) < 0.3
+        finally:
+            srv.close()
+
+    def test_queued_audio_is_dropped_on_reconnect(self):
+        chunks = relay.queue.Queue(maxsize=relay.QUEUE_CHUNKS)
+        for _ in range(relay.QUEUE_CHUNKS):
+            chunks.put_nowait(b"stale")
+        relay.discard_queued(chunks)
+        assert chunks.empty()
+
+
+class TestWorkerFailure:
+    CODE = (
+        "import importlib.util, threading, time\n"
+        f"spec = importlib.util.spec_from_file_location('r', {str(_PATH)!r})\n"
+        "r = importlib.util.module_from_spec(spec); spec.loader.exec_module(r)\n"
+        "threading.excepthook = r.exit_on_thread_crash\n"
+        "def boom(): raise RuntimeError('worker bug')\n"
+        "threading.Thread(target=boom, name=NAME, daemon=True).start()\n"
+        "time.sleep(2)\n"
+    )
+
+    def _run(self, thread_name: str) -> subprocess.CompletedProcess:
+        code = self.CODE.replace("NAME", repr(thread_name))
+        return subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, timeout=20
+        )
+
+    @pytest.mark.parametrize("name", sorted(relay.WORKER_THREADS))
+    def test_crashed_worker_exits_the_process(self, name):
+        done = self._run(name)
+        assert done.returncode == 1
+        assert "worker bug" in done.stderr
+
+    def test_crashed_connection_handler_keeps_the_process(self):
+        # A LAN peer can crash its own handler (e.g. hostile JSON); that must
+        # not let it restart the relay at will.
+        done = self._run("Thread-7 (handle_metadata)")
+        assert done.returncode == 0
+
+    def test_deeply_nested_json_is_rejected(self, tmp_path):
+        target = tmp_path / "tidal-metadata.json"
+        payload = b"[" * 200000 + b"]" * 200000
+        assert not relay.write_metadata(str(target), payload)
+        assert not target.exists()
+
+    def test_unwritable_metadata_path_is_logged_not_raised(self, tmp_path):
+        a, b = socket.socketpair()
+        a.sendall(b'{"title": "Song"}')
+        a.shutdown(socket.SHUT_WR)
+        missing_dir = tmp_path / "gone" / "tidal-metadata.json"
+        relay.handle_metadata(b, "test", str(missing_dir))
+        a.close()
+        assert not missing_dir.exists()
+
+
 class TestDeadServer:
     def test_connect_bounds_sends(self):
         srv = _listener()
@@ -242,17 +358,25 @@ class TestDeadServer:
             target=relay.pump_audio, args=(fd, "127.0.0.1", port), daemon=True
         ).start()
         stalled, _ = srv.accept()
+        reconnected = threading.Event()
 
         def writer():
+            # Write nonstop, as Tidal does, until the socket buffers fill
+            # and the stalled send times out.
             wfd = os.open(fifo, os.O_WRONLY)
             try:
-                for _ in range(512):  # 8 MiB, enough to fill every buffer
+                while not reconnected.is_set():
                     os.write(wfd, b"\x00" * 16384)
             except OSError:
                 pass
+            finally:
+                os.close(wfd)
 
         threading.Thread(target=writer, daemon=True).start()
-        second, _ = srv.accept()  # the sender reconnected after the stall
+        try:
+            second, _ = srv.accept()  # the sender reconnected after the stall
+        finally:
+            reconnected.set()
         for s in (stalled, second, srv):
             s.close()
 

@@ -12,6 +12,7 @@ Environment variables:
 
 import fcntl
 import json
+import math
 import os
 import select
 import sys
@@ -20,6 +21,10 @@ from threading import Lock, Thread
 
 METADATA_FILE = os.environ.get("TIDAL_METADATA_FILE", "/audio/tidal-metadata.json")
 POLL_INTERVAL = 1.0
+# Ceiling of the retry backoff while the metadata file is missing. A Tidal
+# relay satellite creates it only when it pushes its first track, which
+# can be long after boot.
+MISSING_FILE_MAX_DELAY = 10.0
 
 debug_mode = "--debug" in sys.argv
 
@@ -132,8 +137,12 @@ def apply_metadata(data: dict) -> bool:
         metadata["album"] = album
         changed = True
 
-    duration = data.get("duration", 0)
-    dur_f = float(duration) if duration else 0.0
+    try:
+        dur_f = float(data.get("duration") or 0)
+    except (TypeError, ValueError, OverflowError):
+        dur_f = 0.0
+    if not math.isfinite(dur_f):  # inf / nan would not serialise as JSON
+        dur_f = 0.0
     if dur_f != metadata["duration"]:
         metadata["duration"] = dur_f
         changed = True
@@ -158,8 +167,8 @@ def apply_metadata(data: dict) -> bool:
 def file_watch_thread() -> None:
     """Background thread: poll metadata JSON file for changes.
 
-    On x86_64 deployments (no tidal-connect), the file never appears.
-    Backs off to 5-minute retries to avoid log noise.
+    On x86_64 deployments without a relay the file never appears; retries
+    back off up to MISSING_FILE_MAX_DELAY.
     """
     last_mtime = 0.0
     delay = POLL_INTERVAL
@@ -169,8 +178,8 @@ def file_watch_thread() -> None:
         try:
             stat = os.stat(METADATA_FILE)
         except FileNotFoundError:
-            if not ever_found and delay < 300:
-                delay = min(delay * 2, 300)
+            if not ever_found:
+                delay = min(delay * 2, MISSING_FILE_MAX_DELAY)
             time.sleep(delay)
             continue
 
@@ -191,7 +200,7 @@ def file_watch_thread() -> None:
             with _lock:
                 if apply_metadata(data):
                     send_properties()
-        except (json.JSONDecodeError, OSError, TypeError, AttributeError) as e:
+        except Exception as e:  # noqa: BLE001 — a bad file must never end the only metadata thread
             last_mtime = 0.0  # retry next poll
             if debug_mode:
                 sys.stderr.write(f"[DEBUG] meta_tidal: File read error: {e}\n")

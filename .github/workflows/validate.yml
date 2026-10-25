@@ -188,6 +188,19 @@ jobs:
           pip install numpy==2.4.3 Pillow==11.1.0 requests==2.32.3 websockets==14.1
           pytest client/tests/ -v --tb=short
 
+      - name: Report Python coverage (non-blocking baseline)
+        run: |
+          pip install pytest-cov==6.0.0
+          pytest tests/ client/tests/ --cov=docker/metadata-service --cov=scripts --cov=client/common/docker --cov-report=term-missing --cov-report=xml:coverage.xml || echo 'Coverage baseline incomplete; existing test jobs remain authoritative'
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: python-coverage
+          path: coverage.xml
+          if-no-files-found: ignore
+
       - name: Server bash tests
         run: |
           echo "Running server shell tests..."

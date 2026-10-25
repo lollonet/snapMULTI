@@ -62,7 +62,7 @@ The first-boot install waits `max(MPD_START_PERIOD, 180s) + 120s` for MPD to bin
 | `/opt/snapmulti/.env` | Server: hostname, music source, container resource limits, optional AirPlay / Spotify / Tidal name overrides |
 | `/opt/snapclient/.env` | Client: sound card override, latency, display profile, server hostname (for static-IP fallback) |
 
-> **Edits on a read-only Pi are lost at the next reboot.** Read-only mode is on by default after a `prepare-sd` install: the whole root filesystem, `/opt` included, runs from RAM. Only the myMPD workdir and snapserver's `server.json` are backed up to the boot partition and restored at boot ([details](#read-only-filesystem)) — `.env` is not. Use the procedure below for every change you want to keep. A reflash also writes a fresh `.env`, so custom values must be re-applied after each reflash.
+> **Edits on a read-only Pi are lost at the next reboot.** Read-only mode is on by default after a `prepare-sd` install: the whole root filesystem, `/opt` included, runs from RAM. Only the myMPD workdir, snapserver's `server.json` and the MPD database are backed up to the boot partition and restored at boot ([details](#read-only-filesystem)) — `.env` is not. Use the procedure below for every change you want to keep. A reflash also writes a fresh `.env`, so custom values must be re-applied after each reflash.
 
 ### Changing settings on a read-only Pi
 
@@ -78,11 +78,15 @@ The first-boot install waits `max(MPD_START_PERIOD, 180s) + 120s` for MPD to bin
    sudo nano /opt/snapmulti/.env        # Audio Player: /opt/snapclient/.env
    ```
 
-3. Apply it. Use `up -d`, not `restart` — `restart` does not re-read `.env`:
+   On a Pi Zero 2 W player there is no Docker: its settings are the `SNAPCLIENT_OPTS` line in `/etc/default/snapclient` (for example `--soundcard`).
+
+3. Apply it. Use `up -d`, not `restart` — `restart` does not re-read `.env`. For a memory limit (`*_MEM_LIMIT`), use `up -d --force-recreate`, which always recreates the containers with the new limit:
 
    ```bash
    cd /opt/snapmulti && sudo docker compose up -d     # Audio Player: cd /opt/snapclient
    ```
+
+   Pi Zero 2 W: `sudo systemctl restart snapclient`.
 
 4. Turn read-only mode back on and reboot:
 
@@ -90,7 +94,7 @@ The first-boot install waits `max(MPD_START_PERIOD, 180s) + 120s` for MPD to bin
    sudo ro-mode enable && sudo reboot
    ```
 
-`ro-mode status` shows the current state. If you turned read-only mode off in the `prepare-sd` advanced menu, skip steps 1 and 4.
+`ro-mode status` shows the current state. If you turned read-only mode off in the `prepare-sd` advanced menu, skip steps 1 and 4. If a container restarts in a loop after step 4, see [Troubleshooting](TROUBLESHOOTING.md#restart-loop-after-read-only).
 
 Per-source device names, for example (step 2):
 
@@ -137,13 +141,13 @@ You need a Pi 3/4/5 with **64-bit** Raspberry Pi OS and Docker (an existing Audi
    Then re-enable read-only mode (`sudo ro-mode enable && sudo reboot`). The containers restart on their own at every boot.
 3. In the Tidal app, cast to `<satellite hostname> Tidal` (or `TIDAL_NAME`). In Snapweb, put the rooms on the **Tidal** stream.
 
-**Check:** `docker logs tidal-relay` on the satellite shows `audio: connected to <server>:4954`; on the server, `docker logs tidal-relay` shows `audio sender connected`. While the server is unreachable the satellite discards the audio (the Tidal app keeps playing into silence) and reconnects every 2 s; a server that vanishes without closing the connection (power cut, cable pulled) is detected within about 2 s.
+**Check:** `docker logs tidal-relay` on the satellite shows `audio: connected to <server>:4954`; on the server, `docker logs tidal-relay` shows `audio sender connected`. While the server is unreachable the satellite discards the audio (the Tidal app keeps playing into silence) and retries every 2–5 s; a server that vanishes without closing the connection (power cut, cable pulled) is detected within about 2 s.
 
 Do not run `tidal-connect` on the server and a satellite at the same time: both would write the same `Tidal` stream.
 
 ## Read-only filesystem
 
-After install completes, the rootfs is mounted read-only via overlayroot + fuse-overlayfs. Edits to `/etc`, `/opt`, etc. survive until reboot, then get wiped. Toggle for maintenance with the `ro-mode` helper (installed at `/usr/local/bin/ro-mode` on every device):
+After install completes, the rootfs is mounted read-only via overlayroot + fuse-overlayfs. Edits to `/etc`, `/opt`, etc. survive until reboot, then get wiped. Toggle for maintenance with the `ro-mode` helper (installed at `/usr/local/bin/ro-mode` on every device installed with read-only mode on, the default):
 
 ```bash
 sudo ro-mode disable && sudo reboot   # writable from the next boot
@@ -154,7 +158,7 @@ ro-mode status                        # check the current state
 
 Step-by-step version for `.env` edits: [Changing settings on a read-only Pi](#changing-settings-on-a-read-only-pi).
 
-> **Exceptions — state that survives overlayroot wipes:** `snapmulti-state-backup.path` watches `myMPD state changes` (`/opt/snapmulti/mympd/workdir/state` — the change-frequent subdir myMPD writes to as the user touches playlists / settings / scripts). When the path unit triggers, the backup script snapshots the WHOLE myMPD workdir to `/boot/firmware/snapmulti-backup/` — state + config + smartpls + scripts + pics — not just the `state/` subdir it was triggered by, so user-customised smart playlists / themes / scripts survive a reflash. `snapmulti-state-backup.timer` is the safety net: it runs every 5 min and captures snapserver `server.json` (event-driven on that file is not viable — snapserver rewrites it every ~3 s to refresh client `lastSeen` heartbeats). `backup-snapmulti-state.sh` short-circuits on canonical equality (sort keys + strip `lastSeen` + sha256) so no-op ticks cost zero FAT32 writes. `snapmulti-backup.timer` separately backs up MPD `mpd.db` on boot/daily cadence. On every boot, `restore-snapmulti-state` (wired as `ExecStartPre` on `snapmulti-server.service`) copies the state backup back into `/opt/snapmulti/` before containers start. v0.7.9's `snapmulti-data-persistence.service` bind-mount approach was removed in v0.7.9.1 (see #527) — it was a no-op on tmpfs-mode overlayroot.
+> **Exceptions — state that survives overlayroot wipes:** `snapmulti-state-backup.path` watches `myMPD state changes` (`/opt/snapmulti/mympd/workdir/state` — the change-frequent subdir myMPD writes to as the user touches playlists / settings / scripts). When the path unit triggers, the backup script snapshots the WHOLE myMPD workdir to `/boot/firmware/snapmulti-backup/` — state + config + smartpls + scripts + pics — not just the `state/` subdir it was triggered by, so user-customised smart playlists / themes / scripts survive a reflash. `snapmulti-state-backup.timer` is the safety net: it runs every 5 min and captures snapserver `server.json` (event-driven on that file is not viable — snapserver rewrites it every ~3 s to refresh client `lastSeen` heartbeats). `backup-snapmulti-state.sh` short-circuits on canonical equality (sort keys + strip `lastSeen` + sha256) so no-op ticks cost zero FAT32 writes. `snapmulti-backup.timer` separately backs up MPD `mpd.db` on boot/daily cadence; it skips the write when the database is unchanged and never replaces a good backup with a damaged copy. On every boot, `restore-snapmulti-state` (wired as `ExecStartPre` on `snapmulti-server.service`) copies the state backup and `mpd.db` back into `/opt/snapmulti/` before containers start, so a reboot keeps the last scanned library instead of falling back to the one from install day. A damaged `mpd.db` backup is skipped and MPD rescans. v0.7.9's `snapmulti-data-persistence.service` bind-mount approach was removed in v0.7.9.1 (see #527) — it was a no-op on tmpfs-mode overlayroot.
 
 `/boot/firmware/cmdline.txt` is managed by `scripts/common/cmdline-manager.sh` (it adds and removes `overlayroot=tmpfs`, the memory-cgroup flags and other tokens). Don't rewrite or reorder the file by hand. To add a kernel flag, use the same helper, as shown for [`ipv6.disable=1`](#ipv6-enabled-by-default).
 

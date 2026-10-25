@@ -51,7 +51,7 @@ jobs:
             repo: mikebrady/shairport-sync
 
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Resolve latest upstream and pinned versions
         id: resolve
@@ -85,7 +85,8 @@ jobs:
               # Pinned as `:latest` — always flag the upstream tag as
               # informational so reviewer can decide if reproducibility
               # is worth pinning.
-              pinned=':latest'
+              pinned=$(sed -nE 's/^[[:space:]]*image:[[:space:]]*ghcr.io\/jcorporation\/mympd\/mympd:([^[:space:]]+).*/\1/p' docker-compose.yml | head -n 1)
+              [[ -n "$pinned" ]] || { echo 'Cannot resolve myMPD pin'; exit 1; }
               ;;
             shairport-sync)
               # Installed via Alpine apk — upstream tag rarely matches

@@ -25,7 +25,11 @@ ARG SNAPCAST_TAG=v0.35.0
 ARG SNAPCAST_SHA=latest
 WORKDIR /build
 RUN echo "snapcast repo: $SNAPCAST_REPO branch: ${SNAPCAST_TAG:-$SNAPCAST_BRANCH} sha: $SNAPCAST_SHA" && \
-    git clone --depth 1 --branch "${SNAPCAST_TAG:-$SNAPCAST_BRANCH}" "$SNAPCAST_REPO" snapcast
+    git init snapcast && cd snapcast && \
+    git remote add origin "$SNAPCAST_REPO" && \
+    git fetch --depth 1 origin "$SNAPCAST_SHA" && \
+    git checkout --detach FETCH_HEAD && \
+    test "$(git rev-parse HEAD)" = "$SNAPCAST_SHA"
 
 WORKDIR /build/snapcast
 RUN cmake -S . -B build \

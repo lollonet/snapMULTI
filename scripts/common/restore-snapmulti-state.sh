@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# restore-snapmulti-state — restore snapserver group state and myMPD
-# user settings from the boot partition into /opt/snapmulti/ before
-# the snapmulti-server.service compose-up starts the containers.
+# restore-snapmulti-state — restore snapserver group state, myMPD
+# user settings and the MPD database from the boot partition into
+# /opt/snapmulti/ before the snapmulti-server.service compose-up starts
+# the containers.
 #
 # Required because under overlayroot=tmpfs (the snapMULTI standard),
 # /opt/ lives in volatile RAM — every reboot wipes server.json (snapcast
@@ -160,6 +161,40 @@ if [[ -d "$BACKUP_DIR/mympd/workdir" ]]; then
     chown -R "$PUID:$PGID" "$INSTALL_DIR/mympd/workdir" 2>/dev/null || true
     _log "restored myMPD workdir: $INSTALL_DIR/mympd/workdir (full scope: state + config + smartpls + scripts + pics)"
     restored_any=1
+fi
+
+# 3. MPD database. Under overlayroot the live mpd.db is the copy written
+# to ext4 at install time, so without this every reboot rolls the library
+# back to install day: MPD rescans it (hours on a large network share) and
+# the next backup-mpd run copies that stale DB over the good one. The boot
+# partition copy is only ever written from the live DB that started from
+# it, so it is the newer one. Not fatal: a damaged backup costs a rescan,
+# not an outage.
+mpd_db_valid() {
+    [[ -s "$1" ]] || return 1
+    (( $(wc -c < "$1") >= 256 )) || return 1
+    gzip -t "$1" 2>/dev/null
+}
+
+MPD_DB_BACKUP="$BACKUP_DIR/mpd/data/mpd.db"
+MPD_DB_LIVE="$INSTALL_DIR/mpd/data/mpd.db"
+if [[ -e "$MPD_DB_BACKUP" ]]; then
+    if ! mpd_db_valid "$MPD_DB_BACKUP"; then
+        _log "WARN: $MPD_DB_BACKUP is damaged — keeping the installed MPD database"
+    elif cmp -s "$MPD_DB_BACKUP" "$MPD_DB_LIVE"; then
+        _log "MPD database already matches the backup"
+    else
+        mkdir -p "$INSTALL_DIR/mpd/data"
+        if cp "$MPD_DB_BACKUP" "$MPD_DB_LIVE.restore.$$" \
+            && mv "$MPD_DB_LIVE.restore.$$" "$MPD_DB_LIVE"; then
+            chown "$PUID:$PGID" "$MPD_DB_LIVE" 2>/dev/null || true
+            _log "restored MPD database: $MPD_DB_LIVE ($(wc -c < "$MPD_DB_LIVE") bytes)"
+            restored_any=1
+        else
+            rm -f "$MPD_DB_LIVE.restore.$$"
+            _log "WARN: could not copy $MPD_DB_BACKUP — keeping the installed MPD database"
+        fi
+    fi
 fi
 
 if (( restored_any == 0 )); then

@@ -189,7 +189,9 @@ jobs:
             REPO="https://github.com/badaix/snapcast.git"
             BRANCH="master"
             TAG="v0.35.0"  # pin stable release
-            REF="refs/tags/$TAG"
+            # ^{} peels the annotated tag to its commit; the Dockerfile
+            # checks out FETCH_HEAD and asserts HEAD == SNAPCAST_SHA
+            REF="refs/tags/$TAG^{}"
           fi
           SHA=$(git ls-remote "$REPO" "$REF" | cut -f1)
           if [[ -z "$SHA" ]]; then
@@ -361,9 +363,13 @@ jobs:
             REPO="https://github.com/badaix/snapcast.git"
             BRANCH="master"
             TAG="v0.35.0"
-            REF="refs/tags/$TAG"
+            REF="refs/tags/$TAG^{}"
           fi
           SHA=$(git ls-remote "$REPO" "$REF" | cut -f1)
+          if [[ -z "$SHA" ]]; then
+            echo "ERROR: Failed to fetch $REF from $REPO"
+            exit 1
+          fi
           echo "repo=$REPO" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
