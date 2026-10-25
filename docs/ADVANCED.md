@@ -141,7 +141,7 @@ You need a Pi 3/4/5 with **64-bit** Raspberry Pi OS and Docker (an existing Audi
    Then re-enable read-only mode (`sudo ro-mode enable && sudo reboot`). The containers restart on their own at every boot.
 3. In the Tidal app, cast to `<satellite hostname> Tidal` (or `TIDAL_NAME`). In Snapweb, put the rooms on the **Tidal** stream.
 
-**Check:** `docker logs tidal-relay` on the satellite shows `audio: connected to <server>:4954`; on the server, `docker logs tidal-relay` shows `audio sender connected`. While the server is unreachable the satellite discards the audio (the Tidal app keeps playing into silence) and reconnects every 2 s; a server that vanishes without closing the connection (power cut, cable pulled) is detected within about 2 s.
+**Check:** `docker logs tidal-relay` on the satellite shows `audio: connected to <server>:4954`; on the server, `docker logs tidal-relay` shows `audio sender connected`. While the server is unreachable the satellite discards the audio (the Tidal app keeps playing into silence) and retries every 2–5 s; a server that vanishes without closing the connection (power cut, cable pulled) is detected within about 2 s.
 
 Do not run `tidal-connect` on the server and a satellite at the same time: both would write the same `Tidal` stream.
 

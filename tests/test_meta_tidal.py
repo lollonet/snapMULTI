@@ -80,6 +80,14 @@ class TestApplyMetadata:
         assert meta_tidal.apply_metadata({"duration": 0}) is False
         assert meta_tidal.metadata["duration"] == 0.0
 
+    @pytest.mark.parametrize("duration", ["x", [1], {"s": 1}])
+    def test_malformed_duration_ignored(self, duration):
+        # A relay satellite forwards any JSON object; a bad field must not
+        # raise out of apply_metadata and kill the watch thread.
+        meta_tidal.apply_metadata({"title": "Song", "duration": duration})
+        assert meta_tidal.metadata["duration"] == 0.0
+        assert meta_tidal.metadata["title"] == "Song"
+
     def test_artist_string_wrapped_in_list(self):
         meta_tidal.apply_metadata({"artist": "Bjork"})
         assert meta_tidal.metadata["artist"] == ["Bjork"]
@@ -301,6 +309,22 @@ class TestFileWatchThread:
         assert delays[0] == pytest.approx(meta_tidal.POLL_INTERVAL * 2)
         assert delays[1] == pytest.approx(delays[0] * 2)
         assert delays[2] == pytest.approx(delays[1] * 2)
+
+    def test_missing_file_backoff_is_capped(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            meta_tidal, "METADATA_FILE", str(tmp_path / "nonexistent.json")
+        )
+        delays: list[float] = []
+
+        def _capture_sleep(seconds):
+            delays.append(seconds)
+            if len(delays) >= 12:
+                raise SystemExit("stop")
+
+        monkeypatch.setattr(time, "sleep", _capture_sleep)
+        with pytest.raises(SystemExit, match="stop"):
+            meta_tidal.file_watch_thread()
+        assert max(delays) == pytest.approx(meta_tidal.MISSING_FILE_MAX_DELAY)
 
     def test_invalid_json_continues(self, tmp_path, capture_stdout, monkeypatch):
         meta_file = tmp_path / "tidal-metadata.json"

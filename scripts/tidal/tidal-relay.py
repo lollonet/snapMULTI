@@ -30,7 +30,7 @@ Environment variables:
 import ipaddress
 import json
 import os
-import select
+import queue
 import socket
 import stat
 import sys
@@ -44,6 +44,7 @@ META_PATH = os.environ.get("TIDAL_RELAY_META_FILE", "/audio/tidal-metadata.json"
 HEARTBEAT_PATH = "/tmp/tidal-relay.alive"
 
 CHUNK = 4096  # ~23 ms of 44100:16:2
+QUEUE_CHUNKS = 16  # ~370 ms, what the 64 KiB pipe buffer holds
 META_MAX_BYTES = 64 * 1024
 CONNECT_TIMEOUT = 3.0
 # A send that makes no progress this long means the server is gone without
@@ -212,8 +213,12 @@ def handle_metadata(conn: socket.socket, addr: str, path: str) -> None:
             payload = read_limited(conn, META_MAX_BYTES)
         except OSError:
             return
-        with _meta_lock:
-            ok = payload is not None and write_metadata(path, payload)
+        try:
+            with _meta_lock:
+                ok = payload is not None and write_metadata(path, payload)
+        except OSError as e:
+            log(f"metadata from {addr}: cannot write {path}: {e}")
+            return
         if not ok:
             log(f"metadata from {addr}: rejected (too large or not a JSON object)")
 
@@ -268,19 +273,32 @@ def connect(host: str, port: int) -> socket.socket:
     return sock
 
 
-def drain(fd: int, seconds: float) -> None:
-    """Discard PCM for `seconds` so the Tidal app never blocks on the FIFO."""
-    deadline = time.monotonic() + seconds
+def read_fifo(fd: int, chunks: queue.Queue) -> None:
+    """Read the FIFO nonstop; drop PCM the network cannot take right now.
+
+    The Tidal app blocks as soon as the pipe buffer is full, so this loop
+    never waits on the network: a slow connect, a stalled send or a dead
+    server turns into dropped chunks here, never into back-pressure on the
+    FIFO.
+    """
     while True:
-        left = deadline - time.monotonic()
-        if left <= 0:
+        data = os.read(fd, CHUNK)
+        if data:
+            try:
+                chunks.put_nowait(data)
+            except queue.Full:
+                pass
+
+
+def discard_queued(chunks: queue.Queue) -> None:
+    while True:
+        try:
+            chunks.get_nowait()
+        except queue.Empty:
             return
-        ready, _, _ = select.select([fd], [], [], left)
-        if ready:
-            os.read(fd, CHUNK)
 
 
-def pump_audio(fd: int, host: str, port: int) -> None:
+def send_audio(chunks: queue.Queue, host: str, port: int) -> None:
     connected = False
     while True:
         try:
@@ -289,20 +307,26 @@ def pump_audio(fd: int, host: str, port: int) -> None:
             if connected:
                 log(f"audio: lost {host}:{port} ({e}), retrying")
             connected = False
-            drain(fd, RETRY_SECONDS)
+            time.sleep(RETRY_SECONDS)
             continue
         if not connected:
             log(f"audio: connected to {host}:{port}")
         connected = True
+        # PCM queued while disconnected is stale: resume with live audio.
+        discard_queued(chunks)
         try:
             while True:
-                data = os.read(fd, CHUNK)
-                if data:
-                    sock.sendall(data)
+                sock.sendall(chunks.get())
         except OSError as e:
             log(f"audio: send failed ({e}), reconnecting")
         finally:
             sock.close()
+
+
+def pump_audio(fd: int, host: str, port: int) -> None:
+    chunks = queue.Queue(maxsize=QUEUE_CHUNKS)
+    threading.Thread(target=read_fifo, args=(fd, chunks), daemon=True).start()
+    send_audio(chunks, host, port)
 
 
 def push_metadata(host: str, port: int, payload: bytes) -> None:
@@ -351,7 +375,19 @@ def run_send() -> None:
     pump_audio(fd, host, AUDIO_PORT)
 
 
+def exit_on_thread_crash(args: threading.ExceptHookArgs) -> None:
+    """A dead worker thread exits the process so Docker restarts it.
+
+    Without this the heartbeat thread keeps the container healthy while
+    the thread that moves audio or metadata is gone.
+    """
+    name = args.thread.name if args.thread else "?"
+    log(f"thread {name} died: {args.exc_type.__name__}: {args.exc_value}")
+    os._exit(1)
+
+
 def main() -> None:
+    threading.excepthook = exit_on_thread_crash
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode == "send":
         run_send()
