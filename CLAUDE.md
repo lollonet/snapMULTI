@@ -93,6 +93,8 @@ Full-screen TUI on `/dev/tty1` (HDMI console), no-op when run via SSH.
 ```
 snapMULTI/
   client/                    # Audio player (formerly snapclient-pi repo)
+  contrib/
+    tidal-satellite/         # Optional: Tidal on a Pi for non-ARM servers (compose + .env.example; not wired into prepare-sd)
   config/
     snapserver.conf          # Snapcast server config (5 active + 4 commented sources)
     mpd.conf                 # MPD config (FIFO + HTTP outputs)
@@ -113,6 +115,7 @@ snapMULTI/
       entrypoint.sh          # Container entrypoint (ALSA config, speaker controller, metadata bridge)
       common.sh              # Configuration helpers (adapted from GioF71's wrapper)
       tidal-meta-bridge.sh   # Metadata scraper (tmux TUI → JSON file)
+      tidal-relay.py         # Tidal satellite relay: Pi send / server receive (tidal-relay profile)
   docs/
     HARDWARE.md              # Hardware & network guide
     INSTALL.md               # First-time install (basic path)
