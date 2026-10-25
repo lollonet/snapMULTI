@@ -25,7 +25,10 @@ ARG SNAPCAST_TAG=v0.35.0
 ARG SNAPCAST_BRANCH=master
 ARG SNAPCAST_SHA=latest
 RUN echo "snapcast: $SNAPCAST_REPO ${SNAPCAST_TAG:-$SNAPCAST_BRANCH} sha:$SNAPCAST_SHA" && \
-    git clone --depth 1 --branch "${SNAPCAST_TAG:-$SNAPCAST_BRANCH}" "$SNAPCAST_REPO" . && \
+    git init . && git remote add origin "$SNAPCAST_REPO" && \
+    git fetch --depth 1 origin "$SNAPCAST_SHA" && \
+    git checkout --detach FETCH_HEAD && \
+    test "$(git rev-parse HEAD)" = "$SNAPCAST_SHA" && \
     mkdir build && cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
           -DBUILD_CLIENT=OFF ..

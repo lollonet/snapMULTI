@@ -11,6 +11,8 @@ quality:
     enforce: false
     line: 0
     branch: 0
+    mode: report-only
+    report: coverage.xml
 
   complexity:
     enforce: false
