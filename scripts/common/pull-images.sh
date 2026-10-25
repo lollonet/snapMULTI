@@ -52,9 +52,19 @@ _image_exists() {
     docker image inspect "$image" >/dev/null 2>&1
 }
 
+# _pull_rate_limited LOGFILE — true when a failed `docker compose pull`
+# log shows a registry rate limit. Match the registry's actual wording
+# (Docker Hub: "toomanyrequests: You have reached your pull rate limit",
+# HTTP "429 Too Many Requests"), not a bare "429": layer digests, byte
+# counts and progress lines routinely contain that digit sequence and
+# turned ordinary network failures into a fail-fast "rate limit".
+_pull_rate_limited() {
+    grep -qiE 'toomanyrequests|too many requests|rate limit' "$1" 2>/dev/null
+}
+
 # Pull a single service with 3-attempt retry.
 # Output suppressed on success, last 5 lines surfaced on failure.
-# Detects rate limit (429) and fails fast.
+# Detects a registry rate limit (_pull_rate_limited) and fails fast.
 # Requires: _pi_tmp (temp directory set by pull_compose_images)
 _pull_one() {
     local svc="$1"
@@ -68,7 +78,7 @@ _pull_one() {
             return 0
         fi
         # Detect Docker Hub rate limit — no point retrying
-        if grep -qi "too many requests\|rate limit\|429" "$log" 2>/dev/null; then
+        if _pull_rate_limited "$log"; then
             log_warn "Docker Hub rate limit hit — run 'sudo docker login' for higher limits"
             tail -3 "$log"
             rm -f "$log"

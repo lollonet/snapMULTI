@@ -102,8 +102,165 @@ export DEBIAN_FRONTEND=noninteractive
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 
+# ── Failure trap ─────────────────────────────────────────────────
+# Installed HERE, before install.conf is parsed and before any module is
+# sourced, so every abort — a missing $SNAP_BOOT, a malformed install.conf,
+# the Pi Zero 2W server guard, a module that fails to source — still
+# leaves the failure marker, a diagnostic bundle and a message on the HDMI
+# console. Everything below must therefore tolerate running before the
+# logger, progress display and install directories exist: every variable
+# carries a default (set -u) and log_error falls back to stderr + the log
+# file when unified-log.sh is not loaded yet.
+#
+# Nothing re-runs firstboot automatically (cloud-init runcmd is
+# once-per-instance), so the messages name the manual recovery instead of
+# promising a retry. FAIL_REFLASH_ONLY=true marks configuration errors
+# where re-running cannot help.
+FAIL_REFLASH_ONLY=false
+_fail_log() {
+    if declare -F log_error >/dev/null 2>&1; then
+        log_error "$*"
+    else
+        echo "[ERROR] [firstboot] $*" >&2
+        { echo "$(date '+%F %T') [ERROR] [firstboot] $*" >> "${UNIFIED_LOG:-/var/log/snapmulti-install.log}"; } 2>/dev/null || true
+    fi
+}
+cleanup_on_failure() {
+    local exit_code=$?
+    local module="${CURRENT_MODULE:-init}"
+    local log_file="${UNIFIED_LOG:-/var/log/snapmulti-install.log}"
+    # Always clean up subprocess tee logs (see Wave 4 N5) — the explicit
+    # rm -f calls handle the common path, but a SIGTERM/OOM between
+    # mktemp and the explicit rm would leak. /tmp is tmpfs so harmless,
+    # but keeps the contract clean.
+    rm -f -- "${deploy_log:-}" "${setup_log:-}" 2>/dev/null || true
+    if [[ $exit_code -ne 0 ]]; then
+        stop_progress_animation 2>/dev/null || true
+        _fail_log "Installation FAILED in module: $module (exit code: $exit_code)"
+        _fail_log "Check log: $log_file"
+
+        # Diagnostic snapshot — appended to install log for remote troubleshooting
+        {
+            echo ""
+            echo "=== DIAGNOSTIC DUMP (module: $module, exit: $exit_code) ==="
+            echo "--- Memory ---"
+            free -m 2>/dev/null || true
+            echo "--- Disk ---"
+            df -h / /opt 2>/dev/null || true
+            echo "--- Docker ---"
+            docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null || true
+            echo "--- Docker logs (last 10 lines per container) ---"
+            for ctr in $(docker ps -aq 2>/dev/null); do
+                echo ">> $(docker inspect --format '{{.Name}}' "$ctr" 2>/dev/null)"
+                docker logs --tail 10 "$ctr" 2>&1 || true
+            done
+            echo "--- dmesg (last 20 lines) ---"
+            dmesg | tail -20 2>/dev/null || true
+            echo "=== END DIAGNOSTIC DUMP ==="
+        } >> "$log_file" 2>/dev/null || true
+
+        # Bundle a recoverable diagnostic tarball on the boot partition.
+        # The boot partition is FAT32 — readable from any laptop after
+        # the SD card is removed. This is the one piece of state that
+        # survives an install failure on a headless appliance with no
+        # SSH access and no display: the user moves the SD to a PC and
+        # finds the bundle in the root of the bootfs partition.
+        # prepare-sd.sh copies diagnostic.sh to two SD-card locations:
+        # `$SNAP_BOOT/server/diagnostic.sh` (server profile) and
+        # `$SNAP_BOOT/client/scripts/diagnostic.sh` (client profile).
+        # These paths exist BEFORE deploy.sh/setup.sh run, so they are
+        # the only reliable sources for an early-failure bundle. The
+        # /opt/snap*/scripts paths are present only after a successful
+        # file-copy phase and are kept as fallbacks for late failures.
+        diag_path=""
+        for _diag in "$SNAP_BOOT/server/diagnostic.sh" \
+                     "$SNAP_BOOT/client/scripts/diagnostic.sh" \
+                     "${SERVER_DIR:-/opt/snapmulti}/scripts/diagnostic.sh" \
+                     "${CLIENT_DIR:-/opt/snapclient}/scripts/diagnostic.sh" \
+                     "$SCRIPT_DIR/diagnostic.sh"; do
+            [[ -x "$_diag" ]] && { diag_path="$_diag"; break; }
+        done
+        diag_bundle=""
+        if [[ -n "$diag_path" ]]; then
+            # Capture stdout (the bundle path) — diagnostic.sh prints
+            # `[diag] ...` lines to stderr which goes to journald.
+            diag_bundle=$("$diag_path" --reason install-failed --out-dir "$BOOT" 2>>"$log_file") || diag_bundle=""
+            if [[ -n "$diag_bundle" ]]; then
+                _fail_log "Diagnostic bundle saved: $diag_bundle"
+            fi
+        fi
+
+        # Manual recovery: firstboot is idempotent (checkpoints) and
+        # clears .install-failed itself when re-run.
+        local retry_hint="Not retried automatically. To resume from the last completed step:"
+        local retry_cmd="  sudo bash $SNAP_BOOT/firstboot.sh   (or reflash the SD card)"
+        if [[ "$FAIL_REFLASH_ONLY" == "true" ]]; then
+            retry_hint="Not retried automatically. Fix the configuration and reflash the SD card"
+            retry_cmd="  (re-run scripts/prepare-sd.sh on your computer)."
+        fi
+        _fail_log "$retry_hint"
+        _fail_log "$retry_cmd"
+
+        # Failure messages must be visible regardless of which VT is
+        # active. fb-display may have started already (post snapclient),
+        # in which case PROGRESS_TTY is no longer the visible VT — so
+        # write to both PROGRESS_TTY and /dev/tty1 as a belt+braces.
+        for _vt in "${PROGRESS_TTY:-}" /dev/tty1; do
+            [[ -c "$_vt" ]] || continue
+            echo "" > "$_vt" 2>/dev/null || true
+            echo "  --- Installation FAILED (module: $module) ---" > "$_vt" 2>/dev/null || true
+            echo "  Check log: $log_file" > "$_vt" 2>/dev/null || true
+            echo "  $retry_hint" > "$_vt" 2>/dev/null || true
+            echo "  $retry_cmd" > "$_vt" 2>/dev/null || true
+            if [[ -n "$diag_bundle" ]]; then
+                echo "  Diagnostic bundle on boot partition (move SD to PC):" > "$_vt" 2>/dev/null || true
+                echo "    $(basename "$diag_bundle")" > "$_vt" 2>/dev/null || true
+                echo "  Attach the .tar.gz to a GitHub issue:" > "$_vt" 2>/dev/null || true
+                echo "    https://github.com/lollonet/snapMULTI/issues/new" > "$_vt" 2>/dev/null || true
+            fi
+        done
+        chvt 1 2>/dev/null || true
+
+        # Atomic FAILED_MARKER write: same pattern as checkpoint_done.
+        # touch leaves a zero-byte file; if power loss strikes between
+        # the syscall and the fs flush, we may end up with an empty file
+        # that still satisfies `[[ -f "$FAILED_MARKER" ]]` but the
+        # diagnostic dump above may be lost. Atomic write guarantees
+        # the marker either has the timestamp or doesn't exist.
+        printf '%s\n' "$(date -u +%FT%TZ)" > "${FAILED_MARKER}.tmp" 2>/dev/null || true
+        sync -- "${FAILED_MARKER}.tmp" 2>/dev/null || true
+        mv -f -- "${FAILED_MARKER}.tmp" "$FAILED_MARKER" 2>/dev/null || true
+
+        _play_failure_tone
+    fi
+}
+# Audible failure cue for headless installs (no HDMI, no SSH): the staged
+# play-smoke-tone.sh plays the descending "fail" tone on the default ALSA
+# device. Best-effort and bounded — never blocks or fails the trap. The
+# helper reads its WAV from /usr/share/snapmulti/audio (installed late in
+# the install), so seed the one file it needs from the SD copy first.
+# It still honours TEST_TONE=false and the .env opt-out.
+_play_failure_tone() {
+    local tone_script="" wav_src="$SNAP_BOOT/common/audio/smoke-fail.wav"
+    local wav_dst="/usr/share/snapmulti/audio/smoke-fail.wav"
+    if [[ -x /usr/local/bin/snapmulti-play-smoke-tone ]]; then
+        tone_script=/usr/local/bin/snapmulti-play-smoke-tone
+    elif [[ -f "$SNAP_BOOT/common/play-smoke-tone.sh" ]]; then
+        tone_script="$SNAP_BOOT/common/play-smoke-tone.sh"
+    fi
+    [[ -n "$tone_script" ]] || return 0
+    command -v aplay >/dev/null 2>&1 || return 0
+    grep -qE '^ *[0-9]+ ' /proc/asound/cards 2>/dev/null || return 0
+    if [[ ! -f "$wav_dst" && -f "$wav_src" ]]; then
+        install -D -m 644 "$wav_src" "$wav_dst" 2>/dev/null || return 0
+    fi
+    timeout 15 bash "$tone_script" fail </dev/null >/dev/null 2>&1 || true
+}
+trap cleanup_on_failure EXIT
+
 if [[ ! -d "$SNAP_BOOT" ]]; then
-    echo "ERROR: $SNAP_BOOT not found on boot partition."
+    FAIL_REFLASH_ONLY=true
+    _fail_log "$SNAP_BOOT not found on boot partition."
     exit 1
 fi
 
@@ -306,6 +463,7 @@ if ! install_profile_is_valid "$INSTALL_TYPE"; then
     log_error "Unknown INSTALL_TYPE=$INSTALL_TYPE — install.conf is malformed."
     log_error "Valid types: client / client-native / server / both."
     log_error "Reflash this SD with the prepare-sd.sh menu."
+    FAIL_REFLASH_ONLY=true
     exit 1
 fi
 
@@ -334,6 +492,7 @@ _validate_profile_hardware() {
         log_error "INSTALL_TYPE=$INSTALL_TYPE requires a Pi 3B+, Pi 4, or Pi 5 (>=1 GB RAM)."
         log_error "Reflash this SD with INSTALL_TYPE=client (Audio Player) for Pi Zero 2W."
         log_error "See docs/HARDWARE.md for the supported hardware matrix."
+        FAIL_REFLASH_ONLY=true
         exit 1
     fi
 }
@@ -449,99 +608,6 @@ set_module() {
     LOG_SOURCE="$1"
 }
 set_module "init"
-cleanup_on_failure() {
-    local exit_code=$?
-    # Always clean up subprocess tee logs (see Wave 4 N5) — the explicit
-    # rm -f calls handle the common path, but a SIGTERM/OOM between
-    # mktemp and the explicit rm would leak. /tmp is tmpfs so harmless,
-    # but keeps the contract clean.
-    rm -f -- "${deploy_log:-}" "${setup_log:-}" 2>/dev/null || true
-    if [[ $exit_code -ne 0 ]]; then
-        stop_progress_animation 2>/dev/null || true
-        log_error "Installation FAILED in module: $CURRENT_MODULE (exit code: $exit_code)"
-        log_error "Check log: $UNIFIED_LOG"
-
-        # Diagnostic snapshot — appended to install log for remote troubleshooting
-        {
-            echo ""
-            echo "=== DIAGNOSTIC DUMP (module: $CURRENT_MODULE, exit: $exit_code) ==="
-            echo "--- Memory ---"
-            free -m 2>/dev/null || true
-            echo "--- Disk ---"
-            df -h / /opt 2>/dev/null || true
-            echo "--- Docker ---"
-            docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null || true
-            echo "--- Docker logs (last 10 lines per container) ---"
-            for ctr in $(docker ps -aq 2>/dev/null); do
-                echo ">> $(docker inspect --format '{{.Name}}' "$ctr" 2>/dev/null)"
-                docker logs --tail 10 "$ctr" 2>&1 || true
-            done
-            echo "--- dmesg (last 20 lines) ---"
-            dmesg | tail -20 2>/dev/null || true
-            echo "=== END DIAGNOSTIC DUMP ==="
-        } >> "$UNIFIED_LOG" 2>/dev/null || true
-
-        # Bundle a recoverable diagnostic tarball on the boot partition.
-        # The boot partition is FAT32 — readable from any laptop after
-        # the SD card is removed. This is the one piece of state that
-        # survives an install failure on a headless appliance with no
-        # SSH access and no display: the user moves the SD to a PC and
-        # finds the bundle in the root of the bootfs partition.
-        # prepare-sd.sh copies diagnostic.sh to two SD-card locations:
-        # `$SNAP_BOOT/server/diagnostic.sh` (server profile) and
-        # `$SNAP_BOOT/client/scripts/diagnostic.sh` (client profile).
-        # These paths exist BEFORE deploy.sh/setup.sh run, so they are
-        # the only reliable sources for an early-failure bundle. The
-        # /opt/snap*/scripts paths are present only after a successful
-        # file-copy phase and are kept as fallbacks for late failures.
-        diag_path=""
-        for _diag in "$SNAP_BOOT/server/diagnostic.sh" \
-                     "$SNAP_BOOT/client/scripts/diagnostic.sh" \
-                     "$SERVER_DIR/scripts/diagnostic.sh" \
-                     "$CLIENT_DIR/scripts/diagnostic.sh" \
-                     "$SCRIPT_DIR/diagnostic.sh"; do
-            [[ -x "$_diag" ]] && { diag_path="$_diag"; break; }
-        done
-        diag_bundle=""
-        if [[ -n "$diag_path" ]]; then
-            # Capture stdout (the bundle path) — diagnostic.sh prints
-            # `[diag] ...` lines to stderr which goes to journald.
-            diag_bundle=$("$diag_path" --reason install-failed --out-dir "$BOOT" 2>>"$UNIFIED_LOG") || diag_bundle=""
-            if [[ -n "$diag_bundle" ]]; then
-                log_error "Diagnostic bundle saved: $diag_bundle"
-            fi
-        fi
-
-        # Failure messages must be visible regardless of which VT is
-        # active. fb-display may have started already (post snapclient),
-        # in which case PROGRESS_TTY is no longer the visible VT — so
-        # write to both PROGRESS_TTY and /dev/tty1 as a belt+braces.
-        for _vt in "$PROGRESS_TTY" /dev/tty1; do
-            [[ -c "$_vt" ]] || continue
-            echo "" > "$_vt" 2>/dev/null || true
-            echo "  --- Installation FAILED (module: $CURRENT_MODULE) ---" > "$_vt" 2>/dev/null || true
-            echo "  Check log: $UNIFIED_LOG" > "$_vt" 2>/dev/null || true
-            if [[ -n "$diag_bundle" ]]; then
-                echo "  Diagnostic bundle on boot partition (move SD to PC):" > "$_vt" 2>/dev/null || true
-                echo "    $(basename "$diag_bundle")" > "$_vt" 2>/dev/null || true
-                echo "  Attach the .tar.gz to a GitHub issue:" > "$_vt" 2>/dev/null || true
-                echo "    https://github.com/lollonet/snapMULTI/issues/new" > "$_vt" 2>/dev/null || true
-            fi
-        done
-        chvt 1 2>/dev/null || true
-
-        # Atomic FAILED_MARKER write: same pattern as checkpoint_done.
-        # touch leaves a zero-byte file; if power loss strikes between
-        # the syscall and the fs flush, we may end up with an empty file
-        # that still satisfies `[[ -f "$FAILED_MARKER" ]]` but the
-        # diagnostic dump above may be lost. Atomic write guarantees
-        # the marker either has the timestamp or doesn't exist.
-        printf '%s\n' "$(date -u +%FT%TZ)" > "${FAILED_MARKER}.tmp" 2>/dev/null || true
-        sync -- "${FAILED_MARKER}.tmp" 2>/dev/null || true
-        mv -f -- "${FAILED_MARKER}.tmp" "$FAILED_MARKER" 2>/dev/null || true
-    fi
-}
-trap cleanup_on_failure EXIT
 
 # ── Step counter ─────────────────────────────────────────────────
 CURRENT_STEP=0
@@ -1049,7 +1115,7 @@ if install_profile_needs_server_stack "$INSTALL_TYPE"; then
     start_progress_animation "$CURRENT_STEP" "$(cumulative_pct "$CURRENT_STEP")" "$(current_weight)" 2>/dev/null || true
 
     if ! verify_compose_stack "$SERVER_DIR/docker-compose.yml" "server" 18 10; then
-        log_error "Server verify failed — will retry on next boot"
+        log_error "Server verify failed — containers not healthy within the install window"
         exit 1
     fi
     checkpoint_done "deploy"
@@ -1130,6 +1196,13 @@ if is_client_install; then
     export PROGRESS_MANAGED=1
     export PROGRESS_LOG
     export IMAGE_TAG
+    # setup.sh prepares Docker for read-only mode (fuse-overlayfs) but
+    # leaves arming overlayroot to the FINALIZE step below
+    # (setup_readonly_fs), which only runs after the client verify passed.
+    # Arming it inside setup.sh meant a failed pull/verify left the next
+    # boot on a tmpfs overlay (manual recovery written to RAM) with
+    # /boot/firmware already read-only (diagnostic bundle not saved).
+    export SNAPMULTI_DEFER_OVERLAYROOT=1
 
     # Build setup.sh args (flags before positional arg)
     setup_args=(--auto)
@@ -1312,7 +1385,7 @@ if is_client_install; then
             log_warn "snapclient.service enabled but not yet active — likely waiting for audio HAT after reboot"
             journalctl -u snapclient -n 10 --no-pager 2>&1 | sed 's/^/  journal: /' >&2 || true
         else
-            log_error "snapclient.service neither active nor enabled after setup-zero2w.sh — will retry on next boot"
+            log_error "snapclient.service neither active nor enabled after setup-zero2w.sh"
             exit 1
         fi
     else
@@ -1324,7 +1397,7 @@ if is_client_install; then
         # Verify only the unprofiled service set (just snapclient) — the
         # framebuffer services come up at the next boot.
         if ! COMPOSE_PROFILES="" verify_compose_stack "$CLIENT_DIR/docker-compose.yml" "client" 12 5; then
-            log_error "Client verify failed — will retry on next boot"
+            log_error "Client verify failed — snapclient not healthy within the install window"
             exit 1
         fi
         log_info "Client verify counts 1 container at firstboot — fb-display + audio-visualizer activate post-reboot when display-detect runs (3 total after reboot)"
@@ -1563,8 +1636,16 @@ case "$INSTALL_TYPE" in
         _tty "  Stream in:   tcp://${LOCAL_HOSTNAME}.local:4953  (push audio from Android/Termux/ffmpeg)"
         ;;
     client)
-        _tty "  Player auto-discovers your server. Browse the server's landing page:"
-        _tty "    http://<server-hostname>.local:8083/"
+        # SNAPSERVER_HOST is empty (mDNS autodiscovery) unless the operator
+        # pinned a server in snapclient.conf; show it when we know it.
+        _server_host=$(install_conf_get SNAPSERVER_HOST "$CLIENT_DIR/.env" 2>/dev/null || true)
+        if [[ -n "$_server_host" ]]; then
+            _tty "  Player connects to ${_server_host}. Browse the server's landing page:"
+            _tty "    http://${_server_host}:8083/"
+        else
+            _tty "  Player auto-discovers your server. Browse the server's landing page:"
+            _tty "    http://<server-hostname>.local:8083/"
+        fi
         ;;
 esac
 _tty ""

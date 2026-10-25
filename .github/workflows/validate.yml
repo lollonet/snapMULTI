@@ -139,6 +139,30 @@ jobs:
           fi
           echo "✓ prepare-sd scripts in sync"
 
+      - name: Check PowerShell scripts are Windows PowerShell 5.1 safe
+        run: |
+          # prepare-sd.ps1 declares `#Requires -Version 5.1`. PS 5.1 reads a
+          # BOM-less file as cp1252, so a UTF-8 em-dash (E2 80 94) turns into
+          # a closing smart quote and the whole script fails to parse.
+          # Keep every .ps1 pure ASCII.
+          FAILED=0
+          for f in scripts/*.ps1; do
+            [ -f "$f" ] || continue
+            if LC_ALL=C grep -nP '[^\x00-\x7F]' "$f"; then
+              echo "ERROR: $f contains non-ASCII bytes (lines above)"
+              FAILED=1
+            fi
+            # Join-Path with more than one child path is PowerShell 6+.
+            if grep -nE "Join-Path +[^ ()|]+ +'[^']*' +'" "$f"; then
+              echo "ERROR: $f uses multi-child Join-Path (PowerShell 6+ only)"
+              FAILED=1
+            fi
+          done
+          if [ "$FAILED" -eq 1 ]; then
+            exit 1
+          fi
+          echo "✓ PowerShell scripts are ASCII-only and PS 5.1 compatible"
+
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
