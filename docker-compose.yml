@@ -427,3 +427,49 @@ services:
           cpus: '${TIDAL_CPU_LIMIT:-0.5}'
         reservations:
           memory: ${TIDAL_MEM_RESERVE:-48M}
+
+  # Tidal from a Pi satellite, for servers that cannot run tidal-connect
+  # (x86_64). Opt-in: add `tidal-relay` to COMPOSE_PROFILES. Receives raw
+  # PCM on :4954 into audio/tidal_fifo and the metadata bridge JSON on :4955
+  # into audio/tidal-metadata.json, so the existing "Tidal" source (and
+  # meta_tidal.py) work unchanged. Accepts LAN peers only unless
+  # TIDAL_RELAY_ALLOW narrows it. The satellite side lives in
+  # contrib/tidal-satellite/. See docs/ADVANCED.md#tidal-on-a-non-arm-server.
+  tidal-relay:
+    image: lollonet/snapmulti-metadata:${IMAGE_TAG:-latest}
+    container_name: tidal-relay
+    profiles:
+      - tidal-relay
+    network_mode: host
+    restart: unless-stopped
+    <<: *default-security
+    read_only: true
+    tmpfs:
+      - /tmp:size=1M
+    user: "${PUID:-1000}:${PGID:-1000}"
+    init: true
+    stop_grace_period: 2s
+    entrypoint: ["python3", "/app/tidal-relay.py", "receive"]
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+      - TIDAL_RELAY_ALLOW=${TIDAL_RELAY_ALLOW:-}
+    volumes:
+      - ./audio:/audio
+      - ./scripts/tidal/tidal-relay.py:/app/tidal-relay.py:ro
+    depends_on:
+      snapserver:
+        condition: service_healthy
+    logging: *default-logging
+    # Overrides the image's metadata-service check (HTTP :8083): the relay
+    # touches /tmp/tidal-relay.alive every 15 s.
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os,sys,time; sys.exit(time.time() - os.stat('/tmp/tidal-relay.alive').st_mtime > 60)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 48M
+          cpus: '0.25'

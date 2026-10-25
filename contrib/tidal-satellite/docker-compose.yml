@@ -1,0 +1,101 @@
+# Tidal satellite — runs Tidal Connect on an ARM Pi (64-bit Raspberry Pi OS)
+# and relays it to a snapMULTI server that cannot run it (x86_64).
+#
+# The Pi announces "<TIDAL_NAME>" in the Tidal app; audio and track metadata
+# go to the server's existing "Tidal" source through the `tidal-relay`
+# service there (COMPOSE_PROFILES=tidal-relay on the server).
+#
+# Setup and troubleshooting: docs/ADVANCED.md#tidal-on-a-non-arm-server
+#   cp .env.example .env    # set TIDAL_RELAY_SERVER
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # Creates audio/tidal_fifo before Tidal starts (otherwise ALSA's file
+  # plugin writes a regular file that fills the SD card) and forwards it.
+  tidal-relay:
+    image: lollonet/snapmulti-metadata:${IMAGE_TAG:-latest}
+    container_name: tidal-relay
+    network_mode: host
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=1M
+    # root without capabilities: may create the FIFO in the root-owned
+    # ./audio directory Docker creates, nothing more.
+    user: "0:0"
+    init: true
+    stop_grace_period: 2s
+    entrypoint: ["python3", "/app/tidal-relay.py", "send"]
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+      - TIDAL_RELAY_SERVER=${TIDAL_RELAY_SERVER:?set TIDAL_RELAY_SERVER in .env}
+    volumes:
+      - ./audio:/audio
+      - ../../scripts/tidal/tidal-relay.py:/app/tidal-relay.py:ro
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os,stat,sys,time; sys.exit(not stat.S_ISFIFO(os.stat('/audio/tidal_fifo').st_mode) or time.time() - os.stat('/tmp/tidal-relay.alive').st_mtime > 60)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 48M
+          cpus: '0.25'
+
+  # Same container as on an ARM server (see the root docker-compose.yml).
+  tidal-connect:
+    image: lollonet/snapmulti-tidal:${IMAGE_TAG:-latest}
+    container_name: tidal-connect
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
+    tmpfs:
+      - /tmp:size=64M
+      - /config:size=1M
+    volumes:
+      - ./audio:/audio
+      - ../../config/tidal-asound.conf:/userconfig/asound.conf:ro
+      - ../../scripts/tidal/tidal-meta-bridge.sh:/tidal-meta-bridge.sh:ro
+      - /var/run/dbus:/var/run/dbus
+      - /etc/hostname:/etc/hostname:ro
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+      - FRIENDLY_NAME=${TIDAL_NAME:-}
+      - FORCE_PLAYBACK_DEVICE=default
+      - ALSA_CONFIG_PATH=/tmp/asound.conf
+    depends_on:
+      tidal-relay:
+        condition: service_healthy
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f '[t]idal_connect_application' >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: ${TIDAL_MEM_LIMIT:-96M}
+          cpus: '${TIDAL_CPU_LIMIT:-0.5}'
+        reservations:
+          memory: ${TIDAL_MEM_RESERVE:-48M}
