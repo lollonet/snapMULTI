@@ -62,7 +62,7 @@ The first-boot install waits `max(MPD_START_PERIOD, 180s) + 120s` for MPD to bin
 | `/opt/snapmulti/.env` | Server: hostname, music source, container resource limits, optional AirPlay / Spotify / Tidal name overrides |
 | `/opt/snapclient/.env` | Client: sound card override, latency, display profile, server hostname (for static-IP fallback) |
 
-> **Edits on a read-only Pi are lost at the next reboot.** Read-only mode is on by default after a `prepare-sd` install: the whole root filesystem, `/opt` included, runs from RAM. Only the myMPD workdir and snapserver's `server.json` are backed up to the boot partition and restored at boot ([details](#read-only-filesystem)) — `.env` is not. Use the procedure below for every change you want to keep. A reflash also writes a fresh `.env`, so custom values must be re-applied after each reflash.
+> **Edits on a read-only Pi are lost at the next reboot.** Read-only mode is on by default after a `prepare-sd` install: the whole root filesystem, `/opt` included, runs from RAM. Only the myMPD workdir, snapserver's `server.json` and the MPD database are backed up to the boot partition and restored at boot ([details](#read-only-filesystem)) — `.env` is not. Use the procedure below for every change you want to keep. A reflash also writes a fresh `.env`, so custom values must be re-applied after each reflash.
 
 ### Changing settings on a read-only Pi
 
@@ -78,11 +78,15 @@ The first-boot install waits `max(MPD_START_PERIOD, 180s) + 120s` for MPD to bin
    sudo nano /opt/snapmulti/.env        # Audio Player: /opt/snapclient/.env
    ```
 
-3. Apply it. Use `up -d`, not `restart` — `restart` does not re-read `.env`:
+   On a Pi Zero 2 W player there is no Docker: its settings are the `SNAPCLIENT_OPTS` line in `/etc/default/snapclient` (for example `--soundcard`).
+
+3. Apply it. Use `up -d`, not `restart` — `restart` does not re-read `.env`. For a memory limit (`*_MEM_LIMIT`), use `up -d --force-recreate`, which always recreates the containers with the new limit:
 
    ```bash
    cd /opt/snapmulti && sudo docker compose up -d     # Audio Player: cd /opt/snapclient
    ```
+
+   Pi Zero 2 W: `sudo systemctl restart snapclient`.
 
 4. Turn read-only mode back on and reboot:
 
@@ -90,7 +94,7 @@ The first-boot install waits `max(MPD_START_PERIOD, 180s) + 120s` for MPD to bin
    sudo ro-mode enable && sudo reboot
    ```
 
-`ro-mode status` shows the current state. If you turned read-only mode off in the `prepare-sd` advanced menu, skip steps 1 and 4.
+`ro-mode status` shows the current state. If you turned read-only mode off in the `prepare-sd` advanced menu, skip steps 1 and 4. If a container restarts in a loop after step 4, see [Troubleshooting](TROUBLESHOOTING.md#restart-loop-after-read-only).
 
 Per-source device names, for example (step 2):
 
@@ -143,7 +147,7 @@ Do not run `tidal-connect` on the server and a satellite at the same time: both 
 
 ## Read-only filesystem
 
-After install completes, the rootfs is mounted read-only via overlayroot + fuse-overlayfs. Edits to `/etc`, `/opt`, etc. survive until reboot, then get wiped. Toggle for maintenance with the `ro-mode` helper (installed at `/usr/local/bin/ro-mode` on every device):
+After install completes, the rootfs is mounted read-only via overlayroot + fuse-overlayfs. Edits to `/etc`, `/opt`, etc. survive until reboot, then get wiped. Toggle for maintenance with the `ro-mode` helper (installed at `/usr/local/bin/ro-mode` on every device installed with read-only mode on, the default):
 
 ```bash
 sudo ro-mode disable && sudo reboot   # writable from the next boot

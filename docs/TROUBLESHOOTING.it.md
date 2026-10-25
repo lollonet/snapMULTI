@@ -111,7 +111,7 @@ I segnali si attivano anche automaticamente dopo ogni boot (`snapmulti-auto-boot
 
 **Cosa provare.**
 1. Sul device client: `docker exec snapclient snapclient --list` (oppure `snapclient --list` sull'install nativa del Pi Zero 2 W) per elencare le card. Quella giusta è quella che corrisponde al tuo HAT (es. `sndrpihifiberry`).
-2. Imposta `SOUNDCARD` in `/opt/snapclient/.env` con quel nome (senza underscore — è il nome esatto dell'env-var che `docker-compose.yml` legge), poi `cd /opt/snapclient && sudo docker compose up -d` (NON `restart` — non rilegge `.env`). Per conservare la modifica dopo un riavvio, falla con la modalità read-only disattivata: [Modificare le impostazioni su un Pi read-only](ADVANCED.it.md#modificare-le-impostazioni-su-un-pi-read-only).
+2. Imposta `SOUNDCARD` in `/opt/snapclient/.env` con quel nome (senza underscore — è il nome esatto dell'env-var che `docker-compose.yml` legge), poi `cd /opt/snapclient && sudo docker compose up -d` (NON `restart` — non rilegge `.env`). Su un Pi Zero 2 W metti il nome della card dopo `--soundcard` nella riga `SNAPCLIENT_OPTS` di `/etc/default/snapclient`, poi `sudo systemctl restart snapclient`. Per conservare la modifica dopo un riavvio, falla con la modalità read-only disattivata: [Modificare le impostazioni su un Pi read-only](ADVANCED.it.md#modificare-le-impostazioni-su-un-pi-read-only).
 3. Controlla il mixer hardware: `alsamixer -c 0`, F6 per scegliere la card, alza il master e tutti i controlli "Digital" / "Speaker".
 4. Verifica che l'HAT sia rilevato: `aplay -l` deve mostrare il tuo DAC; `dmesg | grep -i 'snd\|hifiberry\|wm8'` deve mostrare il caricamento del driver.
 
@@ -253,6 +253,22 @@ docker exec mpd mpc status | head
 3. Se un container specifico fa danni: `docker compose logs <name>` per trovare il logger sfuggito di mano, poi `docker compose up -d --force-recreate <name>`.
 
 **Se è ancora bloccato.** Sul Pi Zero 2 W, la funzione `tune_pi_zero_2w_swap_safety()` disabilita zram swap proprio per evitare che riempa l'overlay — se hai riabilitato zram manualmente, è probabilmente quello. Riflashare applica il fix.
+
+## Un container si riavvia in loop dopo aver riattivato la modalità read-only <a id="loop-di-riavvio-dopo-read-only"></a>
+
+**Sintomi.** Dopo `sudo ro-mode enable && sudo reboot` un container (visto con `mpd` e `mympd`) continua a riavviarsi e `journalctl -u snapmulti-server` mostra `fuse-overlayfs: cannot read upper dir: No such file or directory`. La riga `unknown argument ignored: lazytime` stampata accanto è innocua.
+
+**Causa probabile.** Il livello scrivibile del container, creato mentre la modalità read-only era disattivata, non si trova più quando il filesystem root torna a girare in RAM.
+
+**Prova così.** Ricrea i container in loop con la modalità read-only disattivata, così la correzione resta: segui [Modificare le impostazioni su un Pi read-only](ADVANCED.it.md#modificare-le-impostazioni-su-un-pi-read-only) e al passo 3 esegui, con i nomi dei container in loop:
+
+```bash
+cd /opt/snapmulti
+sudo docker compose rm -sf mpd mympd
+sudo docker compose up -d
+```
+
+Musica, playlist e impostazioni stanno nei bind mount e non vengono toccate.
 
 ## Shutdown / reboot lento
 
