@@ -52,6 +52,19 @@ musicbrainzngs.set_useragent(
     "https://github.com/snapcast/snapcast",
 )
 
+# snapMULTI patch: the MusicBrainz album-art lookup is OFF by default.
+# It ran synchronously on the GLib main loop (musicbrainzngs has no socket
+# timeout and retries network errors with sleeps), so a slow or unreachable
+# musicbrainz.org froze MPD metadata/control for the whole stream, and a
+# NetworkError escaping into GLib removed the poll source for good. The
+# snapMULTI metadata-service ignores this artUrl for MPD anyway (it uses
+# embedded art + its own async lookup chain). Set META_MPD_MUSICBRAINZ=1 to
+# re-enable it; lookups then use a bounded socket timeout and every
+# musicbrainzngs error is caught.
+MUSICBRAINZ_LOOKUP = os.environ.get(
+    "META_MPD_MUSICBRAINZ", "").strip().lower() in ("1", "true", "yes")
+MUSICBRAINZ_TIMEOUT = 5.0
+
 using_gi_glib = False
 
 try:
@@ -185,6 +198,14 @@ urlhandlers = ['http://']
 def send(json_msg):
     print(json.dumps(json_msg))
     sys.stdout.flush()
+
+
+def mbrelease_hint(snapmeta):
+    """Human-readable album hint for log lines (never raises)."""
+    try:
+        return snapmeta.get('album') or snapmeta.get('title') or '?'
+    except Exception:
+        return '?'
 
 
 class MPDWrapper(object):
@@ -537,10 +558,15 @@ class MPDWrapper(object):
             else:
                 return album_art
 
-        if cached:
+        if cached or not MUSICBRAINZ_LOOKUP:
             return None
 
         self._album_art_map[track_key] = ''
+        # musicbrainzngs opens its sockets without a timeout; bound them for
+        # the duration of the lookup only (single-threaded GLib loop, and
+        # the MPD client socket already exists so it is not affected).
+        previous_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(MUSICBRAINZ_TIMEOUT)
         try:
             if not album_key in snapmeta:
                 mbartist = None
@@ -571,9 +597,14 @@ class MPDWrapper(object):
                         self._album_art_map[track_key] = album_art
                         break
 
-        except musicbrainzngs.musicbrainz.ResponseError as e:
+        except (musicbrainzngs.WebServiceError, KeyError, TypeError,
+                ValueError, OSError) as e:
+            # WebServiceError covers ResponseError AND NetworkError; the
+            # latter used to escape into GLib and kill the poll source.
             logger.error(
-                f'Error while getting cover for {snapmeta[album_key]}: {e}')
+                f'Error while getting cover for {snapmeta.get(album_key, mbrelease_hint(snapmeta))}: {e}')
+        finally:
+            socket.setdefaulttimeout(previous_timeout)
         album_art = self._album_art_map[track_key]
         if album_art == '':
             return None
@@ -756,9 +787,15 @@ class MPDWrapper(object):
         send({"jsonrpc": "2.0", "method": "Plugin.Stream.Player.Properties",
              "params": snapstatus})
 
-        # Fetch album art asynchronously for new songs
+        # Fetch album art for new songs (opt-in, see MUSICBRAINZ_LOOKUP).
+        # Never let a lookup failure propagate into the GLib callback: an
+        # exception there returns a falsy value and removes the poll source.
         if song_changed and 'artUrl' not in snapstatus.get('metadata', {}):
-            album_art = self.get_albumart(snapstatus['metadata'], False)
+            try:
+                album_art = self.get_albumart(snapstatus['metadata'], False)
+            except Exception as e:
+                logger.error(f'Album art lookup failed: {e}')
+                album_art = None
             if album_art is not None:
                 snapstatus['metadata']['artUrl'] = album_art
                 send({

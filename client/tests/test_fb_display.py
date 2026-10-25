@@ -869,3 +869,286 @@ class TestStandbyRenderLoop:
         assert len(offs) == 3
         assert offs[1] - offs[0] == pytest.approx(30, abs=1)
         assert offs[2] - offs[1] == pytest.approx(15, abs=1)
+
+
+# ---------------------------------------------------------------------------
+# Render robustness: band-count resize, bad artwork, per-frame exceptions,
+# clock box, status-line refresh, asset caches.
+# ---------------------------------------------------------------------------
+
+from PIL import Image  # noqa: E402
+
+
+@pytest.fixture
+def screen(monkeypatch):
+    """Small 32bpp little-endian render target with no real framebuffer."""
+    monkeypatch.setattr(fb_display, "WIDTH", 800)
+    monkeypatch.setattr(fb_display, "HEIGHT", 480)
+    monkeypatch.setattr(fb_display, "FB_WIDTH", 800)
+    monkeypatch.setattr(fb_display, "FB_HEIGHT", 480)
+    monkeypatch.setattr(fb_display, "fb_bpp", 32)
+    monkeypatch.setattr(fb_display, "fb_big_endian", False)
+    monkeypatch.setattr(fb_display, "fb_mmap", None)
+    # resize_bands() rebinds these module globals; register them so
+    # monkeypatch restores the originals after the test.
+    for name in (
+        "NUM_BANDS",
+        "bands",
+        "display_bands",
+        "peak_bands",
+        "peak_time",
+        "BAR_COLORS",
+        "PEAK_COLORS",
+        "BAR_COLORS_FB",
+        "PEAK_COLORS_FB",
+        "base_frame",
+        "base_frame_version",
+        "spectrum_bg_np",
+        "spectrum_bg_fb",
+        "_spectrum_work_buf",
+        "current_metadata",
+        "cached_artwork",
+        "cached_artwork_url",
+        "_failed_artwork",
+        "_status_text_drawn",
+        "_logo_img",
+        "_brand_img",
+    ):
+        monkeypatch.setattr(
+            fb_display, name, getattr(fb_display, name, None), raising=False
+        )
+    monkeypatch.setattr(fb_display, "NUM_BANDS", 21)
+    monkeypatch.setattr(fb_display, "bands", np.full(21, fb_display.NOISE_FLOOR))
+    monkeypatch.setattr(
+        fb_display, "display_bands", np.full(21, fb_display.NOISE_FLOOR)
+    )
+    monkeypatch.setattr(fb_display, "peak_bands", np.zeros(21))
+    monkeypatch.setattr(fb_display, "peak_time", np.zeros(21))
+    monkeypatch.setattr(fb_display, "_logo_img", None)
+    monkeypatch.setattr(fb_display, "_brand_img", None)
+    monkeypatch.setattr(fb_display, "current_metadata", None)
+    monkeypatch.setattr(fb_display, "cached_artwork", None)
+    monkeypatch.setattr(fb_display, "cached_artwork_url", "")
+    monkeypatch.setattr(fb_display, "_failed_artwork", ("", 0.0), raising=False)
+    monkeypatch.setattr(fb_display, "get_lan_ip", lambda: "192.168.1.50")
+    monkeypatch.setattr(fb_display, "get_vitals", lambda: "")
+    monkeypatch.setattr(
+        fb_display,
+        "_clock_cache",
+        {"time_str": None, "fb": None, "width": 0, "height": 0, "dirty": True},
+    )
+    monkeypatch.setattr(
+        fb_display, "_bg_cache", {"size": None, "img": None}, raising=False
+    )
+    monkeypatch.setattr(fb_display, "_art_resized_cache", {}, raising=False)
+    monkeypatch.setattr(fb_display, "_asset_resized_cache", {}, raising=False)
+    monkeypatch.setattr(fb_display, "layout", fb_display.compute_layout())
+    fb_display.precompute_colors()
+    fb_display.precompute_fb_colors()
+    return fb_display.layout
+
+
+def _jpeg_bytes(size=(64, 64)) -> bytes:
+    """Noisy JPEG: big enough that cutting it in half keeps the header intact
+    (Image.open succeeds, decoding fails) — the real truncated-download case."""
+    import io
+
+    rng = np.random.default_rng(0)
+    pixels = rng.integers(0, 255, (size[1], size[0], 3), dtype=np.uint8)
+    buf = io.BytesIO()
+    Image.fromarray(pixels, "RGB").save(buf, "JPEG")
+    return buf.getvalue()
+
+
+class _Resp:
+    def __init__(self, content: bytes, status_code: int = 200):
+        self.content = content
+        self.status_code = status_code
+
+
+class TestSpectrumResize:
+    """resize_bands() drops the spectrum background; nothing may crash or freeze."""
+
+    def test_render_spectrum_returns_none_without_background(self, screen):
+        fb_display.spectrum_bg_fb = None
+        assert fb_display.render_spectrum() is None
+        # Full frame path tolerates it too (fb_mmap is None → writes are no-ops)
+        fb_display._render_and_write_frame(True, True)
+
+    def test_resize_between_check_and_render_does_not_raise(self, screen):
+        fb_display.base_frame = fb_display.create_background()
+        fb_display.extract_spectrum_bg()
+        assert fb_display.render_spectrum() is not None
+        fb_display.resize_bands(31)  # what the spectrum WS reader can do mid-frame
+        assert fb_display.spectrum_bg_fb is None
+        fb_display._render_and_write_frame(True, True)  # used to AttributeError
+
+    def test_render_loop_reextracts_background_after_resize(self, screen, monkeypatch):
+        fb_display.base_frame = fb_display.create_background()
+        monkeypatch.setattr(
+            fb_display, "base_frame_version", fb_display.metadata_version
+        )
+        fb_display.spectrum_bg_np = None
+        fb_display.spectrum_bg_fb = None
+        monkeypatch.setattr(fb_display, "is_spectrum_active", lambda: False)
+        monkeypatch.setattr(fb_display, "STANDBY_SECONDS", 0)
+
+        async def stop_sleep(seconds):
+            raise _StopLoop
+
+        monkeypatch.setattr(fb_display.asyncio, "sleep", stop_sleep)
+        with pytest.raises(_StopLoop):
+            asyncio.run(fb_display.render_loop())
+        assert fb_display.spectrum_bg_fb is not None
+        assert fb_display.spectrum_bg_np is not None
+
+
+class TestBadArtwork:
+    """A truncated/corrupt cover must not crash-loop the display."""
+
+    def test_truncated_jpeg_rejected_at_fetch(self, screen, monkeypatch):
+        data = _jpeg_bytes()
+        calls = []
+
+        def fake_get(url, timeout):
+            calls.append(url)
+            return _Resp(data[: len(data) // 2])
+
+        monkeypatch.setattr(fb_display.requests, "get", fake_get)
+        assert fb_display.fetch_artwork("/art/bad.jpg") is None
+        assert fb_display.cached_artwork is None
+        # Not re-downloaded on every base-frame rebuild
+        assert fb_display.fetch_artwork("/art/bad.jpg") is None
+        assert len(calls) == 1
+
+    def test_valid_jpeg_cached_and_decoded(self, screen, monkeypatch):
+        monkeypatch.setattr(
+            fb_display.requests, "get", lambda url, timeout: _Resp(_jpeg_bytes())
+        )
+        img = fb_display.fetch_artwork("/art/good.jpg")
+        assert img is not None and img.size == (64, 64)
+        assert fb_display.cached_artwork is img
+
+    def test_render_base_frame_drops_unusable_cached_artwork(self, screen):
+        import io
+
+        data = _jpeg_bytes()
+        lazy = Image.open(io.BytesIO(data[: len(data) // 2]))  # not decoded yet
+        fb_display.cached_artwork = lazy
+        fb_display.cached_artwork_url = "/art/lazy.jpg"
+        fb_display.current_metadata = {
+            "playing": True,
+            "artwork": "/art/lazy.jpg",
+            "title": "T",
+            "artist": "A",
+        }
+        frame = fb_display.render_base_frame()  # used to raise OSError
+        assert frame.size == (fb_display.WIDTH, fb_display.HEIGHT)
+        assert fb_display.cached_artwork is None
+        assert fb_display.cached_artwork_url == ""
+
+
+class TestRenderLoopErrors:
+    def test_unexpected_exception_does_not_end_render_loop(self, screen, monkeypatch):
+        calls = {"render": 0, "sleep": 0}
+
+        def flaky_render():
+            calls["render"] += 1
+            if calls["render"] == 1:
+                raise KeyError("boom")  # not OSError/ValueError/RuntimeError
+            return fb_display.create_background()
+
+        async def fake_sleep(seconds):
+            calls["sleep"] += 1
+            if calls["sleep"] >= 3:
+                raise _StopLoop
+
+        monkeypatch.setattr(fb_display, "render_base_frame", flaky_render)
+        monkeypatch.setattr(fb_display, "base_frame_version", -1)
+        monkeypatch.setattr(fb_display, "is_spectrum_active", lambda: False)
+        monkeypatch.setattr(fb_display, "STANDBY_SECONDS", 0)
+        monkeypatch.setattr(fb_display.asyncio, "sleep", fake_sleep)
+        with pytest.raises(_StopLoop):
+            asyncio.run(fb_display.render_loop())
+        assert calls["render"] >= 2
+        assert fb_display.base_frame_version == fb_display.metadata_version
+
+
+class TestClockBox:
+    def test_clock_background_comes_from_base_frame(self, screen):
+        fb_display.base_frame = fb_display.create_background()
+        fb, w, h = fb_display.render_clock()
+        x = (fb_display.WIDTH - w) // 2
+        y = screen["clock_y"]
+        r, g, b = fb_display.base_frame.getpixel((x, y))
+        assert tuple(fb[0, 0, :3]) == (b, g, r)
+        top = fb_display.BG_TOP
+        assert tuple(fb[0, 0, :3]) != (top[2], top[1], top[0])
+
+    def test_clock_box_never_shrinks(self, screen, monkeypatch):
+        dates = iter(["WWW 28 MMM", "iii 11 iii"])
+        state = {"date": None}
+
+        def fake_strftime(fmt, *a):
+            if fmt == "%a %d %b":
+                state["date"] = next(dates)
+                return state["date"]
+            return "12:00:00"
+
+        monkeypatch.setattr(fb_display.time, "strftime", fake_strftime)
+        _, w1, h1 = fb_display.render_clock()
+        _, w2, h2 = fb_display.render_clock()
+        assert w2 == w1
+        assert h2 >= h1
+
+
+class TestStatusLineRefresh:
+    def test_changed_status_writes_only_the_strip(self, screen, monkeypatch):
+        fb_display.base_frame = fb_display.create_background()
+        monkeypatch.setattr(
+            fb_display, "base_frame_version", fb_display.metadata_version
+        )
+        fb_display._status_text_drawn = "10.0.0.1  →  srv"
+        new_frame = fb_display.create_background()
+        writes = []
+        monkeypatch.setattr(
+            fb_display, "_build_status_text", lambda: "10.0.0.2  →  srv"
+        )
+        monkeypatch.setattr(fb_display, "render_base_frame", lambda: new_frame)
+        monkeypatch.setattr(fb_display, "_write_status_strip", writes.append)
+        monkeypatch.setattr(
+            fb_display, "write_full_frame", lambda f: pytest.fail("full write")
+        )
+        assert asyncio.run(fb_display._refresh_status_line()) is True
+        assert writes == [new_frame]
+        assert fb_display.base_frame is new_frame
+
+    def test_unchanged_status_is_a_noop(self, screen, monkeypatch):
+        fb_display._status_text_drawn = "same"
+        monkeypatch.setattr(fb_display, "_build_status_text", lambda: "same")
+        monkeypatch.setattr(
+            fb_display, "render_base_frame", lambda: pytest.fail("re-rendered")
+        )
+        assert asyncio.run(fb_display._refresh_status_line()) is False
+
+    def test_render_base_frame_records_status_text(self, screen):
+        fb_display.render_base_frame()
+        assert fb_display._status_text_drawn.startswith("192.168.1.50")
+
+    def test_write_status_strip_without_framebuffer(self, screen):
+        fb_display._write_status_strip(fb_display.create_background())
+
+
+class TestAssetCaches:
+    def test_background_cached_but_returned_as_copy(self, screen):
+        a = fb_display.create_background()
+        a.putpixel((0, 0), (255, 0, 255))
+        b = fb_display.create_background()
+        assert b.getpixel((0, 0)) != (255, 0, 255)
+        assert fb_display._bg_cache["img"] is not None
+
+    def test_resized_asset_reused(self, screen):
+        logo = Image.new("RGBA", (40, 40), (1, 2, 3, 255))
+        r1 = fb_display._resized_asset(("logo", 1), logo, (20, 20))
+        r2 = fb_display._resized_asset(("logo", 1), logo, (20, 20))
+        assert r1 is r2 and r1.size == (20, 20)

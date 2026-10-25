@@ -261,3 +261,113 @@ class TestSendMetadata:
         msg = props[0]
         assert msg["jsonrpc"] == "2.0"
         assert msg["params"]["metadata"]["title"] == "Idioteque"
+
+
+# ---------------------------------------------------------------------------
+# Per-track cover handling (previous-track artwork regression)
+# ---------------------------------------------------------------------------
+
+MDST = "6d647374"
+MDEN = "6d64656e"
+PICT = "50494354"
+MINM = "6d696e6d"
+ASAR = "61736172"
+ASTM = "6173746d"
+
+
+def _props(sent: list[dict]) -> list[dict]:
+    return [
+        m["params"]["metadata"]
+        for m in sent
+        if m.get("method") == "Plugin.Stream.Player.Properties"
+    ]
+
+
+def _bundle(title: str, artist: str = "Artist", extra: list[bytes] = ()) -> None:
+    meta_shairport.parse_item(_xml_item(MDST))
+    meta_shairport.parse_item(_xml_item(MINM, _b64(title)))
+    meta_shairport.parse_item(_xml_item(ASAR, _b64(artist)))
+    for item in extra:
+        meta_shairport.parse_item(item)
+    meta_shairport.parse_item(_xml_item(MDEN))
+
+
+class TestCoverPerTrack:
+    def _setup(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(meta_shairport, "get_host_ip", lambda: "10.0.0.5")
+        monkeypatch.setattr(meta_shairport, "cover_art_path", str(tmp_path / "c.jpg"))
+
+    def test_new_track_drops_previous_cover_until_its_pict_arrives(
+        self, capture_stdout, monkeypatch, tmp_path
+    ):
+        self._setup(monkeypatch, tmp_path)
+        _bundle("Song A")
+        meta_shairport.parse_item(_xml_item(PICT, _b64_bytes(b"\xff\xd8A")))
+        url_a = meta_shairport.metadata["artUrl"]
+        assert url_a == "http://10.0.0.5:5858/cover.jpg?v=1"
+        # PICT outside a bundle publishes right away.
+        assert _props(capture_stdout)[-1]["artUrl"] == url_a
+
+        _bundle("Song B")
+        # Text for B goes out WITHOUT A's cover.
+        assert "artUrl" not in _props(capture_stdout)[-1]
+        assert _props(capture_stdout)[-1]["title"] == "Song B"
+        assert meta_shairport.cover_bytes_for_path("/cover.jpg?v=1") is None
+
+        meta_shairport.parse_item(_xml_item(PICT, _b64_bytes(b"\xff\xd8B")))
+        url_b = meta_shairport.metadata["artUrl"]
+        assert url_b == "http://10.0.0.5:5858/cover.jpg?v=2"
+        assert _props(capture_stdout)[-1]["artUrl"] == url_b
+        assert meta_shairport.cover_bytes_for_path("/cover.jpg?v=2") == b"\xff\xd8B"
+
+    def test_pict_inside_bundle_is_kept(self, capture_stdout, monkeypatch, tmp_path):
+        self._setup(monkeypatch, tmp_path)
+        _bundle("Song A", extra=[_xml_item(PICT, _b64_bytes(b"\xff\xd8A"))])
+        props = _props(capture_stdout)
+        assert len(props) == 1  # sent once, at mden
+        assert props[0]["artUrl"].endswith("/cover.jpg?v=1")
+
+    def test_same_track_resent_keeps_cover(self, capture_stdout, monkeypatch, tmp_path):
+        self._setup(monkeypatch, tmp_path)
+        _bundle("Song A")
+        meta_shairport.parse_item(_xml_item(PICT, _b64_bytes(b"\xff\xd8A")))
+        _bundle("Song A")
+        assert _props(capture_stdout)[-1]["artUrl"].endswith("?v=1")
+
+    def test_empty_pict_clears_cover(self, capture_stdout, monkeypatch, tmp_path):
+        self._setup(monkeypatch, tmp_path)
+        _bundle("Song A")
+        meta_shairport.parse_item(_xml_item(PICT, _b64_bytes(b"\xff\xd8A")))
+        meta_shairport.parse_item(_xml_item(PICT))
+        assert meta_shairport.metadata["artUrl"] == ""
+        assert "artUrl" not in _props(capture_stdout)[-1]
+        assert meta_shairport.cover_bytes_for_path("/cover.jpg") is None
+
+    def test_duration_not_carried_to_next_track(self, capture_stdout):
+        payload = struct.pack(">I", 200_000)
+        _bundle("Song A", extra=[_xml_item(ASTM, _b64_bytes(payload))])
+        assert meta_shairport.metadata["duration"] == 200.0
+        _bundle("Song B")
+        assert meta_shairport.metadata["duration"] == 0.0
+        assert "duration" not in _props(capture_stdout)[-1]
+
+    def test_cover_paths(self, monkeypatch, tmp_path):
+        self._setup(monkeypatch, tmp_path)
+        meta_shairport.parse_item(_xml_item(PICT, _b64_bytes(b"IMG")))
+        assert meta_shairport.cover_bytes_for_path("/cover.jpg?v=1") == b"IMG"
+        assert meta_shairport.cover_bytes_for_path("/cover.jpg") == b"IMG"
+        assert meta_shairport.cover_bytes_for_path("/cover.jpg?v=0") is None
+        assert meta_shairport.cover_bytes_for_path("/etc/passwd") is None
+
+
+class TestExtractItems:
+    def test_orphan_close_tag_does_not_strand_complete_items(self):
+        buf = bytearray(b"junk</item><item>A</item><item>B</item><item>par")
+        items, rest = meta_shairport.extract_items(buf)
+        assert items == [b"<item>A</item>", b"<item>B</item>"]
+        assert bytes(rest) == b"<item>par"
+
+    def test_returns_bytearray_remainder(self):
+        items, rest = meta_shairport.extract_items(bytearray(b"<item>x</item>"))
+        assert items == [b"<item>x</item>"]
+        assert isinstance(rest, bytearray) and not rest

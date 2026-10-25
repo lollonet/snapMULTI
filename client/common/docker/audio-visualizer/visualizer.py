@@ -120,6 +120,19 @@ _BAND_EDGES = np.array([lo for lo, _ in BAND_BINS], dtype=np.intp)
 _BAND_HI = np.array([hi for _, hi in BAND_BINS], dtype=np.intp)
 
 
+def reset_analysis_state() -> None:
+    """Forget buffered audio (ring buffer, write position, DC estimate, levels).
+
+    Called when the capture device is reopened so stale samples from before
+    the gap don't leak into the next FFT window.
+    """
+    global _ring_pos, _dc_estimate
+    audio_ring[:] = 0.0
+    _ring_pos = 0
+    _dc_estimate = 0.0
+    prev_db[:] = NOISE_FLOOR
+
+
 def analyze_pcm(new_samples: np.ndarray) -> str | None:
     """Compute octave-band levels in dBFS from PCM samples.
 
@@ -353,8 +366,9 @@ async def read_loopback_and_broadcast() -> None:
 
                     if not data:
                         logger.warning("ALSA read failed, reopening...")
-                        prev_db[:] = NOISE_FLOOR
-                        _ring_pos = 0
+                        # Module-level state: a bare `_ring_pos = 0` here
+                        # only created a local and never reset the buffer.
+                        reset_analysis_state()
                         zero_msg = ";".join(
                             str(NOISE_FLOOR) for _ in range(NUM_BANDS)
                         )

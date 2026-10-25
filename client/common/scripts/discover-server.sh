@@ -12,7 +12,9 @@
 # only on non-Zero-2W hosts; on Pi Zero 2W the file is absent and
 # snapclient-discover.timer is also absent (no caller exists).
 #
-# Boot mode:  ExecStartPre (no args) — picks initial server (or 127.0.0.1 in both mode).
+# Boot mode:  ExecStartPre (no args) — keeps the configured server while it
+#             answers or is still advertised; otherwise picks one (or
+#             127.0.0.1 in both mode).
 # Watch mode: timer (--watch) — only acts when the current server is unreachable,
 #             then prefers an mDNS-discovered server *different* from the dead one
 #             so flapping back to the original is impossible.
@@ -148,10 +150,13 @@ _discover_all_ipv4() {
 # all discovered IPs equal the (presumed dead) current — i.e. Avahi cache
 # stale entry is the only result. We return that single IP so the caller
 # can log a "no failover available" situation rather than failing silently.
+#
+# Optional $2: an already-fetched discovery list (avoids a second 10 s
+# avahi-browse when the caller has just scanned).
 _pick_failover_ipv4() {
     local current="$1"
-    local all
-    all=$(_discover_all_ipv4)
+    local all="${2:-}"
+    [[ -n "$all" ]] || all=$(_discover_all_ipv4)
     if [[ -z "$all" ]]; then
         _log "mDNS returned no servers"
         return 1
@@ -173,27 +178,93 @@ _pick_failover_ipv4() {
     echo "$first"
 }
 
+# Boot-mode server choice. Sticky: keep the configured server while it is
+# still usable, so with two snapservers advertised the client does not hop
+# to the other one on every reboot (_pick_failover_ipv4 deliberately
+# prefers a *different* IP — right for watch-mode failover, wrong at boot).
+#   1. current answers TCP             → keep it
+#   2. current still advertised (mDNS) → keep it (the server may still be
+#      booting; the 60 s watch timer fails over if it stays dead)
+#   3. otherwise                       → failover pick from the same scan
+# Prints the chosen IPv4; returns 1 when nothing usable was found.
+_choose_boot_server() {
+    local current="$1"
+    if [[ -n "$current" ]] && _tcp_alive "$current" "$SNAPSERVER_PORT"; then
+        _log "$current:$SNAPSERVER_PORT alive at boot, keeping current server"
+        echo "$current"
+        return 0
+    fi
+    local all
+    all=$(_discover_all_ipv4)
+    if [[ -n "$current" && -n "$all" ]] && grep -qxF "$current" <<< "$all"; then
+        _log "$current still advertised via mDNS (not answering yet), keeping current server"
+        echo "$current"
+        return 0
+    fi
+    _pick_failover_ipv4 "$current" "$all"
+}
+
+# True when the operator deliberately stopped the client stack:
+# `systemctl stop snapclient` leaves the oneshot unit "inactive" (its
+# ExecStop runs `compose stop`). "failed"/"activating" are not a stop —
+# Restart=on-failure owns those. A unit that is not installed (no
+# systemd, manual compose deploy) never counts as stopped.
+_snapclient_unit_stopped() {
+    command -v systemctl &>/dev/null || return 1
+    systemctl cat snapclient.service &>/dev/null || return 1
+    [[ "$(systemctl is-active snapclient.service 2>/dev/null || true)" == "inactive" ]]
+}
+
 # Reconcile container state with .env. Two failure modes covered:
 #   1. Env drift — container.Config.Env SNAPSERVER_HOST != .env SNAPSERVER_HOST
 #      (legacy `docker compose restart` bug, manual .env edit, out-of-band).
 #      Trust .env, recreate via up -d.
-#   2. Container exists but not running — e.g. previous up -d created the
-#      container then failed at start (transient docker glitch). Without this
-#      retry, the device is silently audio-dead while subsequent cycles see
-#      no env drift and exit early.
-# In both cases, trigger up -d and signal caller to skip remaining checks.
+#   2. Container exists but never came up or died abnormally — e.g. previous
+#      up -d created the container then failed at start (state "created"),
+#      or it was OOM-killed. Without this retry, the device is silently
+#      audio-dead while subsequent cycles see no env drift and exit early.
+# A deliberate stop is left alone: unit inactive (`systemctl stop
+# snapclient`), or a clean stop exit code — 0, or 143/137 (SIGTERM/SIGKILL
+# as sent by `docker compose stop` / `docker stop`). restart: unless-stopped
+# already restarts genuine crashes, so a non-OOM 137/143 that is still
+# "exited" here is far more likely a manual stop than a fault.
+# Whenever the container is not running, signal caller to skip remaining checks.
 _reconcile_container_env() {
-    local env_host container_host container_running
+    local env_host container_host state status exit_code oom
     env_host=$(_current_host)
     [[ -n "$env_host" ]] || return 0
 
-    container_running=$(docker inspect snapclient \
-        --format '{{.State.Running}}' 2>/dev/null)
-    if [[ "$container_running" == "false" ]]; then
-        _compose_up "container not running (state=$(docker inspect snapclient --format '{{.State.Status}}' 2>/dev/null))"
+    if _snapclient_unit_stopped; then
+        _log "snapclient.service inactive (stopped by operator) — not touching containers"
         return 1
     fi
-    [[ "$container_running" == "true" ]] || return 0  # missing entirely — caller will discover
+
+    state=$(docker inspect snapclient \
+        --format '{{.State.Status}} {{.State.ExitCode}} {{.State.OOMKilled}}' 2>/dev/null || true)
+    read -r status exit_code oom <<< "$state" || true
+    [[ -n "$status" ]] || return 0  # missing entirely — caller will discover
+
+    if [[ "$status" != "running" ]]; then
+        case "$status" in
+            created|dead)
+                _compose_up "container not running (state=$status)"
+                ;;
+            exited)
+                if [[ "$oom" == "true" ]]; then
+                    _compose_up "container OOM-killed (exit=$exit_code)"
+                elif [[ "$exit_code" == "0" || "$exit_code" == "137" || "$exit_code" == "143" ]]; then
+                    _log "container stopped cleanly (exit=$exit_code) — assuming deliberate stop, not restarting"
+                else
+                    _compose_up "container exited abnormally (exit=$exit_code)"
+                fi
+                ;;
+            *)
+                # restarting / paused / removing: docker (or the operator) owns it
+                _log "container state=$status — leaving it to docker"
+                ;;
+        esac
+        return 1
+    fi
 
     container_host=$(docker inspect snapclient \
         --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
@@ -222,9 +293,14 @@ if $WATCH_MODE; then
     _log "${current:-<none>} unreachable, scanning mDNS for alternative..."
 fi
 
-# Boot mode (or watch mode with current dead): scan and pick.
+# Boot mode: keep the current server while still usable, else pick one.
+# Watch mode (current dead): scan and pick a *different* server.
 current=$(_current_host)
-host=$(_pick_failover_ipv4 "$current") || true
+if $WATCH_MODE; then
+    host=$(_pick_failover_ipv4 "$current") || true
+else
+    host=$(_choose_boot_server "$current") || true
+fi
 if [[ -n "$host" && "$host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     if _apply_server "$host"; then
         $WATCH_MODE && _log "failover applied, snapclient recreated on $host"

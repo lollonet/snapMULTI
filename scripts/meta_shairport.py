@@ -15,6 +15,7 @@ import socket
 import struct
 import sys
 import time
+import urllib.parse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from threading import Thread
 from typing import Any
@@ -32,6 +33,22 @@ metadata: dict[str, str | list[str] | float] = {
     "composer": [],
 }
 cover_art_path = "/tmp/cover.jpg"
+
+# Per-track cover state. shairport-sync sends a track's text metadata as a
+# bundle (mdst ... mden) and its picture separately (pcst / PICT / pcen),
+# usually right after. The cover URL used to be the same /cover.jpg for every
+# track and was only cleared on `pend`, so the metadata-service fetched the
+# PREVIOUS track's picture under the new track's key. Now:
+#   - a new track (different title/artist/album at mden) clears artUrl
+#     unless its PICT already arrived inside this bundle;
+#   - each PICT bumps cover_version and publishes /cover.jpg?v=<n>, so every
+#     picture has a distinct URL (no cache aliasing downstream);
+#   - the HTTP server only serves the current version (stale ?v= -> 404).
+cover_version = 0
+cover_data: tuple[int, bytes] | None = None  # (version, bytes), swapped atomically
+_in_bundle = False
+_pict_in_bundle = False
+_last_track_id: tuple | None = None
 
 
 def send(msg: dict) -> None:
@@ -160,24 +177,8 @@ def parse_item(item_data: bytes) -> None:
         metadata["genre"] = [data]
     elif code == "ascp" and isinstance(data, str) and data:
         metadata["composer"] = [data]
-    elif code == "PICT" and isinstance(data, bytes) and len(data) > 0:
-        try:
-            tmp_path = str(cover_art_path) + ".tmp"
-            with open(tmp_path, "wb") as f:
-                f.write(data)
-            os.replace(tmp_path, cover_art_path)
-            # Cache host IP on first use
-            host = get_host_ip()
-            if host:
-                metadata["artUrl"] = f"http://{host}:{COVER_ART_PORT}/cover.jpg"
-            else:
-                log(
-                    "warning",
-                    "Cannot determine reachable host IP — cover art URL omitted",
-                )
-                metadata.pop("artUrl", None)
-        except Exception as e:
-            log("warning", f"Cover art error: {e}")
+    elif code == "PICT":
+        handle_picture(data if isinstance(data, bytes) else b"")
     elif code == "astm" and isinstance(data, bytes) and len(data) >= 4:
         # Song time in milliseconds (32-bit big-endian unsigned int)
         try:
@@ -185,12 +186,100 @@ def parse_item(item_data: bytes) -> None:
             metadata["duration"] = ms / 1000.0  # Convert to seconds
         except Exception:
             pass
+    elif code == "mdst":
+        start_bundle()
     elif code == "mden":
-        send_metadata()
+        end_bundle()
     elif code == "pend":
+        reset_track_state()
         metadata["artist"], metadata["album"] = [], ""
         metadata["title"], metadata["artUrl"], metadata["duration"] = "", "", 0.0
         metadata["genre"], metadata["composer"] = [], []
+        send_metadata()
+
+
+def _track_id() -> tuple:
+    artist = metadata["artist"]
+    return (
+        metadata["title"],
+        tuple(artist) if isinstance(artist, list) else artist,
+        metadata["album"],
+    )
+
+
+def reset_track_state() -> None:
+    """Forget per-track cover state (playback ended)."""
+    global cover_data, _in_bundle, _pict_in_bundle, _last_track_id
+    cover_data = None
+    _in_bundle = False
+    _pict_in_bundle = False
+    _last_track_id = None
+
+
+def start_bundle() -> None:
+    """mdst: a new metadata bundle begins.
+
+    Track-specific fields a sender may omit (no astm, no genre) must not
+    carry over from the previous track.
+    """
+    global _in_bundle, _pict_in_bundle
+    _in_bundle = True
+    _pict_in_bundle = False
+    metadata["duration"] = 0.0
+    metadata["genre"], metadata["composer"] = [], []
+
+
+def end_bundle() -> None:
+    """mden: publish the track; drop the old cover if the track changed."""
+    global _in_bundle, _pict_in_bundle, _last_track_id, cover_data
+    track = _track_id()
+    if track != _last_track_id and not _pict_in_bundle:
+        # New track and its picture hasn't arrived yet: publish text now,
+        # the PICT (if any) follows and re-publishes with its own URL.
+        metadata["artUrl"] = ""
+        cover_data = None
+    _last_track_id = track
+    _in_bundle = False
+    _pict_in_bundle = False
+    send_metadata()
+
+
+def handle_picture(data: bytes) -> None:
+    """PICT: store the cover under a fresh version and publish its URL.
+
+    An empty PICT means "this track has no artwork" and clears the URL.
+    Outside a metadata bundle the update is sent immediately; inside one it
+    goes out with the bundle's mden.
+    """
+    global cover_version, cover_data, _pict_in_bundle
+    if _in_bundle:
+        _pict_in_bundle = True
+    if not data:
+        cover_data = None
+        metadata["artUrl"] = ""
+    else:
+        cover_version += 1
+        cover_data = (cover_version, data)
+        try:
+            # On-disk copy kept for debugging / older tooling.
+            tmp_path = str(cover_art_path) + ".tmp"
+            with open(tmp_path, "wb") as f:
+                f.write(data)
+            os.replace(tmp_path, cover_art_path)
+        except Exception as e:
+            log("warning", f"Cover art error: {e}")
+        host = get_host_ip()
+        if host:
+            metadata["artUrl"] = (
+                f"http://{host}:{COVER_ART_PORT}/cover.jpg?v={cover_version}"
+            )
+        else:
+            log(
+                "warning",
+                "Cannot determine reachable host IP — cover art URL omitted",
+            )
+            metadata["artUrl"] = ""
+    if not _in_bundle:
         send_metadata()
 
 
@@ -226,17 +315,38 @@ def handle_stdin_line(line: str) -> None:
         log("error", f"stdin error: {e}")
 
 
+def cover_bytes_for_path(path: str) -> bytes | None:
+    """Bytes to serve for an HTTP path, or None for 404.
+
+    `/cover.jpg?v=N` is served only while N is the current picture, so a
+    late fetch of an old track's URL can never return the new track's
+    picture. Bare `/cover.jpg` returns the current picture (compatibility).
+    """
+    parsed = urllib.parse.urlsplit(path)
+    if parsed.path != "/cover.jpg":
+        return None
+    current = cover_data  # single read: (version, bytes) swapped atomically
+    if current is None:
+        return None
+    version, body = current
+    requested = urllib.parse.parse_qs(parsed.query).get("v")
+    if requested and requested[0] != str(version):
+        return None
+    return body
+
+
 class CoverHandler(SimpleHTTPRequestHandler):
     """Simple HTTP handler to serve cover art."""
 
     def do_GET(self) -> None:
-        if self.path == "/cover.jpg" and os.path.exists(cover_art_path):
+        body = cover_bytes_for_path(self.path)
+        if body is not None:
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-cache")
             self.end_headers()
-            with open(cover_art_path, "rb") as f:
-                self.wfile.write(f.read())
+            self.wfile.write(body)
         else:
             self.send_response(404)
             self.end_headers()
@@ -252,6 +362,32 @@ def start_cover_server() -> None:
         server.serve_forever()
     except Exception as e:
         log("error", f"Cover server error: {e}")
+
+
+def extract_items(pipe_buffer: bytearray) -> tuple[list[bytes], bytearray]:
+    """Split every complete <item>...</item> off pipe_buffer.
+
+    Returns (items, remaining buffer). A bytearray is used so a multi-MB
+    PICT arriving in 8 KB reads isn't re-copied on every read.
+    """
+    items: list[bytes] = []
+    while b"<item>" in pipe_buffer and b"</item>" in pipe_buffer:
+        start = pipe_buffer.find(b"<item>")
+        end = pipe_buffer.find(b"</item>") + 7
+        if 0 <= start < end:
+            items.append(bytes(pipe_buffer[start:end]))
+            del pipe_buffer[:end]
+        else:
+            # Orphan </item> appears BEFORE <item> (corrupt
+            # pipe / mid-stream startup). Without this slice
+            # the buffer kept the orphan forever, growing
+            # to MAX_PIPE_BUFFER (10 MB) before reset and
+            # losing all metadata in between. Drop the
+            # prefix up to the next <item> and keep going: complete
+            # items behind it must not wait for the next pipe read.
+            pipe_buffer = pipe_buffer[start:]
+            continue
+    return items, pipe_buffer
 
 
 def open_metadata_pipe() -> int | None:
@@ -281,7 +417,7 @@ def main() -> None:
 
     # Buffers with safety caps to prevent unbounded growth
     stdin_buffer = ""
-    pipe_buffer = b""
+    pipe_buffer = bytearray()
     MAX_STDIN_BUFFER = 65536  # 64 KB — snapserver sends small JSON-RPC messages
     MAX_PIPE_BUFFER = 10485760  # 10 MB — high-res ALAC embedded art can exceed 1 MB
     pipe_fd: int | None = None
@@ -381,35 +517,20 @@ def main() -> None:
                         log("info", "Pipe EOF, will reopen...")
                         os.close(pipe_fd)
                         pipe_fd = None
-                        pipe_buffer = b""
+                        pipe_buffer = bytearray()
                         continue
 
                     pipe_buffer += chunk
                     if len(pipe_buffer) > MAX_PIPE_BUFFER:
                         log("warning", "pipe buffer overflow, discarding")
-                        pipe_buffer = b""
+                        pipe_buffer = bytearray()
 
-                    # Process complete <item>...</item> tags
-                    while b"<item>" in pipe_buffer and b"</item>" in pipe_buffer:
-                        start = pipe_buffer.find(b"<item>")
-                        end = pipe_buffer.find(b"</item>") + 7
-                        if 0 <= start < end:
-                            item_data = pipe_buffer[start:end]
-                            pipe_buffer = pipe_buffer[end:]
-                            try:
-                                parse_item(item_data)
-                            except Exception as e:
-                                log("warning", f"Parse error: {e}")
-                        else:
-                            # Orphan </item> appears BEFORE <item> (corrupt
-                            # pipe / mid-stream startup). Without this slice
-                            # the buffer kept the orphan forever, growing
-                            # to MAX_PIPE_BUFFER (10 MB) before reset and
-                            # losing all metadata in between. Drop the
-                            # prefix up to the next <item> so the next
-                            # iteration finds a balanced pair.
-                            pipe_buffer = pipe_buffer[start:]
-                            break
+                    items, pipe_buffer = extract_items(pipe_buffer)
+                    for item_data in items:
+                        try:
+                            parse_item(item_data)
+                        except Exception as e:
+                            log("warning", f"Parse error: {e}")
                 except OSError as e:
                     log("warning", f"Pipe read error: {e}")
                     if pipe_fd is not None:
@@ -418,7 +539,7 @@ def main() -> None:
                         except Exception:
                             pass
                     pipe_fd = None
-                    pipe_buffer = b""
+                    pipe_buffer = bytearray()
 
 
 if __name__ == "__main__":

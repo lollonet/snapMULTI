@@ -129,6 +129,70 @@ assert_alsa "abc"  "4"  "150/4"   "non-numeric buffer"
 assert_alsa "150"  "x"  "150/4"   "non-numeric fragments"
 assert_alsa ""     ""   "150/4"   "empty values use defaults"
 
+# ── SOUNDCARD pass-through (real entrypoint.sh, snapclient stubbed) ──
+#
+# setup.sh writes SOUNDCARD=plughw:CARD=<id>,DEV=0 for headless installs.
+# Run the actual entrypoint with /usr/bin/snapclient swapped for a stub
+# that prints its argv, and check the value reaches --soundcard intact.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENTRYPOINT="$SCRIPT_DIR/../common/docker/snapclient/entrypoint.sh"
+EP_DIR=$(mktemp -d)
+trap 'rm -f "$VALIDATOR" "$ALSA_VALIDATOR"; rm -rf "$EP_DIR"' EXIT
+cat > "$EP_DIR/snapclient" << 'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$@"
+STUB
+chmod +x "$EP_DIR/snapclient"
+sed "s|/usr/bin/snapclient|$EP_DIR/snapclient|g" "$ENTRYPOINT" > "$EP_DIR/entrypoint.sh"
+
+# Mirror of snapcast alsa_player.cpp mixer-card derivation (DEC-006):
+# split the PCM name on the first ':' and read CARD=<id> up to ','.
+snapcast_mixer_card() {
+    local pcm="$1" rhs
+    [[ "$pcm" == *:* ]] || { echo ""; return; }
+    rhs="${pcm#*:}"
+    [[ "$rhs" == *CARD=* ]] || { echo ""; return; }
+    rhs="${rhs#*CARD=}"
+    echo "${rhs%%,*}"
+}
+
+assert_soundcard() {
+    local input="$1" expected="$2" desc="$3" out actual
+    out=$(SOUNDCARD="$input" HOST_ID=test bash "$EP_DIR/entrypoint.sh" 2>/dev/null) || out="REJECTED"
+    if [[ "$out" == *REJECTED* || "$out" == *"Invalid characters"* ]]; then
+        actual="REJECTED"
+    else
+        actual=$(printf '%s\n' "$out" | awk 'prev=="--soundcard"{print; exit} {prev=$0}')
+    fi
+    if [[ "$actual" == "$expected" ]]; then
+        echo "  PASS: $desc (${input} -> ${actual})"
+        pass=$((pass + 1))
+    else
+        echo "  FAIL: $desc (${input} -> ${actual}, expected ${expected})"
+        fail=$((fail + 1))
+    fi
+}
+
+echo ""
+echo "Testing SOUNDCARD pass-through..."
+assert_soundcard "plughw:CARD=sndrpihifiberry,DEV=0" "plughw:CARD=sndrpihifiberry,DEV=0" "plughw headless form"
+assert_soundcard "plughw:CARD=Device,DEV=0"          "plughw:CARD=Device,DEV=0"          "plughw USB DAC id"
+assert_soundcard "hw:CARD=sndrpihifiberry,DEV=0"     "hw:CARD=sndrpihifiberry,DEV=0"     "legacy hw form still accepted"
+assert_soundcard "default"                           "default"                           "display path default"
+assert_soundcard 'plughw:CARD=$(id),DEV=0'           "REJECTED"                          "cmd subst rejected"
+
+for pcm in "plughw:CARD=sndrpihifiberry,DEV=0" "hw:CARD=sndrpihifiberry,DEV=0"; do
+    card=$(snapcast_mixer_card "$pcm")
+    if [[ "$card" == "sndrpihifiberry" ]]; then
+        echo "  PASS: mixer card derivation for $pcm -> $card"
+        pass=$((pass + 1))
+    else
+        echo "  FAIL: mixer card derivation for $pcm -> '$card'"
+        fail=$((fail + 1))
+    fi
+done
+
 echo ""
 if [[ "$fail" -gt 0 ]]; then
     echo "FAILED: $fail tests failed, $pass passed"

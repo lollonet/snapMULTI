@@ -63,9 +63,24 @@ detect_hardware() {
     esac
 }
 
+# MemTotal thresholds for Pi 4 / Pi 5 RAM variants. MemTotal is always
+# below the nominal size (firmware, GPU/CMA and kernel reservations): a
+# 4 GB board reports ~3700-3900 MB, a 2 GB ~1800-1950 MB, a 1 GB
+# ~850-950 MB. The cut-offs sit between those bands so each variant
+# lands on its intended profile regardless of gpu_mem / kernel build.
+PI_RAM_4GB_MIN_MB=3000
+PI_RAM_2GB_MIN_MB=1500
+
 # Determine resource profile from detected hardware.
 # Call detect_hardware() first. Echoes: minimal|standard|performance
-# Args: [perf_threshold_mb] — RAM threshold for performance (default 4000, server uses 8000)
+#   Pi Zero 2 W, Pi 3             → minimal
+#   Pi 4 / Pi 5 (incl. 400 / 500): 4 GB+ → performance, 2 GB → standard,
+#                                  1 GB → minimal
+#   other / unknown: <2000 MB → minimal, < perf_threshold → standard,
+#                    else performance
+# Args: [perf_threshold_mb] — generic RAM threshold for performance
+#       (default 4000, server uses 8000). Not applied to Pi 4 / Pi 5,
+#       whose variants are matched by the nominal size above.
 detect_profile_from_hardware() {
     local perf_threshold="${1:-4000}"
     local ram="${DETECTED_RAM_MB:-0}"
@@ -75,11 +90,11 @@ detect_profile_from_hardware() {
         case "$model" in
             *"Zero 2"*) echo "minimal"; return ;;
             *"Pi 3"*)   echo "minimal"; return ;;
-            *"Pi 4"*)
-                if [[ $ram -ge 4000 ]]; then echo "performance"
-                else echo "standard"; fi
+            *"Pi 4"*|*"Pi 5"*)
+                if (( ram >= PI_RAM_4GB_MIN_MB )); then echo "performance"
+                elif (( ram >= PI_RAM_2GB_MIN_MB )); then echo "standard"
+                else echo "minimal"; fi
                 return ;;
-            *"Pi 5"*)   echo "performance"; return ;;
         esac
     fi
 

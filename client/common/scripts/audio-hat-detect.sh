@@ -12,6 +12,9 @@ set -euo pipefail
 #   validate_choice()         — validate numeric menu choice
 #   get_hat_config()          — map menu choice number to config name
 #   resolve_hat_config_name() — normalize aliases (usb -> usb-audio)
+#   detect_usb_card_id()      — ALSA card id of the first USB audio card
+#   detect_internal_card_name() — ALSA card id of the built-in jack/HDMI output
+#   resolve_hat_card_name()   — runtime card id for usb-audio / internal-audio
 #
 # Sets:
 #   HAT_DETECTION_SOURCE      — how detection succeeded (eeprom|alsa|i2c|usb|internal|none)
@@ -73,6 +76,51 @@ get_hat_config() {
         16) echo "hifiberry-dac-std" ;;
         *) echo "Invalid choice"; exit 1 ;;
     esac
+}
+
+# hat_from_i2c_scan SCAN → echoes the HAT profile for an `i2cdetect -y 1`
+# table, or returns 1 when no supported chip answers. Pure (no I/O besides
+# stderr logging) so it can be unit-tested with captured scans.
+# Known addresses:
+#   0x4C-0x4F  PCM5122. The overlay must match the address: upstream
+#              hifiberry-dacplus-std (also allo-boss-dac-pcm512x-audio,
+#              justboom-dac) hard-codes pcm5122@4d, while iqaudio-dacplus
+#              (and rpi-dacplus, which includes it) uses pcm5122@4c — an
+#              IQaudio / RPi DAC+-family board at 0x4c never binds under the
+#              HiFiBerry overlay. 0x4e/0x4f have no upstream overlay in this
+#              family; they keep the previous hifiberry-dac-std fallback.
+#              NOTE: shared with TMP112, ADS1x1x, PCA9685 and other non-DAC
+#              chips — may false-positive on mixed I2C buses.
+#   0x1A       WM8960  (Waveshare WM8960)
+#   0x3B       WM8804  (HiFiBerry Digi, JustBoom Digi, Allo DigiOne)
+# Cells showing "UU" (address claimed by a bound driver) do not match:
+# with the overlay already loaded the ALSA-name path identifies the card.
+hat_from_i2c_scan() {
+    local scan="$1" addr result
+    for addr in 4c 4d 4e 4f; do
+        if grep -qE "(^[[:space:]]*[0-9a-f]0:[[:space:]]|[[:space:]])${addr}([[:space:]]|$)" <<<"$scan"; then
+            if [[ "$addr" == "4c" ]]; then
+                result="iqaudio-dac"
+            else
+                result="hifiberry-dac-std"
+            fi
+            echo "I2C: PCM5122 at 0x${addr} → ${result}" >&2
+            printf '%s\n' "$result"
+            return 0
+        fi
+    done
+    if grep -qE "(^[[:space:]]*10:[[:space:]]|[[:space:]])1a([[:space:]]|$)" <<<"$scan"; then
+        echo "I2C: WM8960 at 0x1a" >&2
+        printf 'waveshare-wm8960\n'
+        return 0
+    fi
+    # I2C alone cannot distinguish Digi-class boards that share WM8804.
+    if grep -qE "(^[[:space:]]*30:[[:space:]]|[[:space:]])3b([[:space:]]|$)" <<<"$scan"; then
+        echo "I2C: WM8804 at 0x3b" >&2
+        printf 'hifiberry-digi\n'
+        return 0
+    fi
+    return 1
 }
 
 detect_hat() {
@@ -139,12 +187,7 @@ detect_hat() {
     # Many cheap HATs (InnoMaker, Waveshare, some Allo) ship without an EEPROM, so
     # the overlay is never loaded and aplay -l never shows the card. Raw I2C probing
     # identifies the chip regardless. modprobe i2c-dev persists until reboot.
-    # Known addresses:
-    #   0x4C-0x4F  PCM5122 (InnoMaker HiFi DAC, IQaudio DAC+, Allo Boss, JustBoom DAC, ...)
-    #              NOTE: shared with TMP112, ADS1x1x, PCA9685 and other non-DAC chips.
-    #              Safe on a bare Pi + DAC HAT; may false-positive on mixed I2C buses.
-    #   0x1A       WM8960  (Waveshare WM8960)
-    #   0x3B       WM8804  (HiFiBerry Digi, JustBoom Digi, Allo DigiOne — no EEPROM variants)
+    # Address → profile mapping lives in hat_from_i2c_scan (above).
     local i2cdetect_bin="" modprobe_bin=""
     i2cdetect_bin=$(command -v i2cdetect 2>/dev/null || true)
     [[ -z "$i2cdetect_bin" && -x /usr/sbin/i2cdetect ]] && i2cdetect_bin=/usr/sbin/i2cdetect
@@ -185,7 +228,7 @@ detect_hat() {
         sleep 1
     done
     if [[ -n "$i2cdetect_bin" ]]; then
-        local bus addr result="" found_bus=false
+        local bus result="" found_bus=false
         # Scan only bus 1 (GPIO header). Pi 4/400 have HDMI internal buses
         # (20, 21) and Pi 5 has buses (11, 12) with devices at 0x4C-0x4F
         # that false-positive as PCM5122 audio DACs.
@@ -196,23 +239,8 @@ detect_hat() {
             local scan
             scan=$(timeout 10 "$i2cdetect_bin" -y "$bus" 2>/dev/null) || continue
             echo "I2C bus $bus scan complete" >&2
-            # PCM5122 at 0x4C/0x4D/0x4E/0x4F → PCM5122-based DAC
-            for addr in 4c 4d 4e 4f; do
-                if echo "$scan" | grep -qE "(^[[:space:]]*[0-9a-f]0:[[:space:]]|[[:space:]])${addr}([[:space:]]|$)"; then
-                    echo "I2C: PCM5122 at 0x${addr} on bus ${bus} → hifiberry-dac-std" >&2
-                    result="hifiberry-dac-std"; break 2
-                fi
-            done
-            # WM8960 at 0x1A → Waveshare WM8960
-            if echo "$scan" | grep -qE "(^[[:space:]]*10:[[:space:]]|[[:space:]])1a([[:space:]]|$)"; then
-                echo "I2C: WM8960 at 0x1a on bus ${bus}" >&2
-                result="waveshare-wm8960"; break
-            fi
-            # WM8804 at 0x3B → generic digital HAT profile.
-            # I2C alone cannot distinguish Digi-class boards that share WM8804.
-            if echo "$scan" | grep -qE "(^[[:space:]]*30:[[:space:]]|[[:space:]])3b([[:space:]]|$)"; then
-                echo "I2C: WM8804 at 0x3b on bus ${bus}" >&2
-                result="hifiberry-digi"; break
+            if result=$(hat_from_i2c_scan "$scan"); then
+                break
             fi
         done
         $found_bus || echo "I2C: /dev/i2c-1 not available" >&2
@@ -270,61 +298,131 @@ resolve_hat_config_name() {
     esac
 }
 
-# detect_internal_card_name MODE → echoes the real ALSA card name for the
+# detect_usb_card_id → echoes the ALSA card id of the first USB audio card.
+#
+# `aplay -l` lines look like:
+#   card 1: Device [USB Audio Device], device 0: USB Audio [USB Audio]
+# The card *id* is the token between `card N:` and the bracketed long
+# name ("Device" above) — that, not the literal "USB", is what
+# `hw:CARD=<id>,DEV=0` needs.
+#
+# Returns 0 and prints the id, or 1 with no output.
+detect_usb_card_id() {
+    command -v aplay &>/dev/null || return 1
+    local id
+    id=$(aplay -l 2>/dev/null \
+        | awk -F'[ :]+' '/USB/ && /^card [0-9]+/ {print $3; exit}' || true)
+    [[ -n "$id" ]] || return 1
+    printf '%s\n' "$id"
+}
+
+# detect_internal_card_name MODE → echoes the real ALSA card id for the
 # built-in audio output. MODE is `hdmi` or `jack`.
 #
 # Why this exists: the `internal-audio.conf` profile hard-codes
-# HAT_CARD_NAME="Headphones" which is correct for Pi 3/4 with kernel ≤ 6.1
-# but wrong elsewhere. Recent kernels (Bookworm / Trixie, kernel 6.6+) name
-# HDMI outputs `vc4-hdmi-0` / `vc4-hdmi-1`, and Pi 5 has no analog jack at
-# all. `aplay -L` is the source of truth at runtime — this helper queries
-# it and returns the first matching card name, with a graceful fallback
-# chain.
+# HAT_CARD_NAME="Headphones", which only exists on boards with an analog
+# jack (Pi 3/4). Pi 5 and Pi Zero 2W have no jack at all, and the HDMI
+# card id depends on the kernel driver:
+#   KMS (Bookworm/Trixie)    Pi 4/5: vc4hdmi0, vc4hdmi1   Pi 3 / Zero 2W: vc4hdmi
+#   legacy bcm2835 (no KMS)  b1 (HDMI 1), b2 (HDMI 2 on Pi 4)
+# `vc4-hdmi-0` is the card's display name, not its id — ALSA rejects it
+# in `hw:CARD=...`.
+#
+# Card ids are taken from the `CARD=<id>` fields of `aplay -L` (e.g.
+# `hw:CARD=vc4hdmi0,DEV=0`, `sysdefault:CARD=Headphones`); bare card
+# names never appear there as whole lines. The returned value is used
+# verbatim as `CARD=<id>` / `hw:<id>,0` by setup.sh and setup-zero2w.sh.
 #
 # Returns:
-#   stdout: the resolved card name (e.g. "Headphones", "vc4-hdmi-0").
-#   exit 0: name resolved.
+#   stdout: the resolved card id (e.g. "Headphones", "vc4hdmi0").
+#   exit 0: id resolved.
 #   exit 1: no match found OR aplay unavailable (caller falls back).
 #
-# Resolution order:
-#   hdmi → vc4-hdmi-0 | vc4-hdmi-1 | vc4hdmi0 | vc4hdmi1 | HDMI
-#   jack → Headphones    (Pi 3/4 only — Pi 5 must use hdmi)
-#
-# We probe `aplay -L` (PCM names, what ALSA actually exposes) rather than
-# `aplay -l` (verbose card list) because snapclient uses the PCM name form
-# `hw:CARD=NAME,DEV=0` which matches the -L output directly.
+# Resolution order (first present wins):
+#   hdmi → vc4hdmi0 | vc4hdmi1 | vc4hdmi | b1 | b2 | HDMI
+#   jack → Headphones    (Pi 3/4 only — Pi 5 / Zero 2W must use hdmi)
 detect_internal_card_name() {
     local mode="${1:?detect_internal_card_name: mode required (hdmi|jack)}"
+    local candidates
+    case "$mode" in
+        hdmi) candidates="vc4hdmi0 vc4hdmi1 vc4hdmi b1 b2 HDMI" ;;
+        jack) candidates="Headphones" ;;
+        *)    return 1 ;;
+    esac
     local aplay_bin
     aplay_bin=$(command -v aplay 2>/dev/null) || return 1
     local aplay_out
     aplay_out=$("$aplay_bin" -L 2>/dev/null) || return 1
+    local ids
+    ids=$(grep -oE 'CARD=[^,[:space:]]+' <<<"$aplay_out" | cut -d= -f2 | awk '!seen[$0]++' || true)
+    [[ -n "$ids" ]] || return 1
     local candidate
-    case "$mode" in
-        hdmi)
-            # First-match wins. vc4-hdmi-0 covers Pi 4/5 with the modern KMS
-            # driver; vc4hdmi0 is the alternate spelling seen on some forks.
-            # Bare "HDMI" is the legacy bcm2835 name still present on older
-            # kernels and a useful last-resort fallback.
-            for candidate in vc4-hdmi-0 vc4-hdmi-1 vc4hdmi0 vc4hdmi1 HDMI; do
-                if grep -qE "^${candidate}$" <<<"$aplay_out"; then
-                    printf '%s\n' "$candidate"
-                    return 0
-                fi
-            done
-            ;;
-        jack)
-            # Headphones is the only canonical name. Pi 5 doesn't expose
-            # this card; the caller is expected to detect the empty output
-            # and fall back to hdmi (or warn the operator).
-            if grep -qE '^Headphones$' <<<"$aplay_out"; then
-                printf 'Headphones\n'
-                return 0
+    for candidate in $candidates; do
+        if grep -qxF "$candidate" <<<"$ids"; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# resolve_hat_card_name HAT_CONFIG DEFAULT_CARD [INTERNAL_MODE]
+#   → echoes the ALSA card id to use in asound.conf / SOUNDCARD.
+#
+# Shared by setup.sh (Docker client) and setup-zero2w.sh (native client)
+# so both install paths agree. audio-hats/*.conf can only carry a static
+# HAT_CARD_NAME; for two profiles the real id is only known at runtime:
+#   usb-audio      → USB_CARD_ID (exported by detect_hat), else an
+#                    `aplay -l` probe (menu / install.conf selection,
+#                    where detect_hat never ran its USB branch).
+#   internal-audio → detect_internal_card_name for INTERNAL_MODE
+#                    (AUDIO_INTERNAL_OUTPUT: jack|hdmi). jack falls back
+#                    to hdmi on boards without an analog jack; an empty
+#                    mode tries jack first, then hdmi.
+# Every other profile, and any probe miss, returns DEFAULT_CARD unchanged.
+# Diagnostics go to stderr; stdout carries only the card id.
+resolve_hat_card_name() {
+    local hat_config="$1" default_card="$2" internal_mode="${3:-}"
+    local card=""
+    case "$hat_config" in
+        usb-audio)
+            card="${USB_CARD_ID:-}"
+            if [[ -z "$card" ]]; then
+                card=$(detect_usb_card_id || true)
+                [[ -n "$card" ]] && echo "Probed USB ALSA card id: $card" >&2
             fi
             ;;
+        internal-audio)
+            case "$internal_mode" in
+                hdmi)
+                    card=$(detect_internal_card_name hdmi || true)
+                    ;;
+                jack|"")
+                    card=$(detect_internal_card_name jack || true)
+                    if [[ -z "$card" ]]; then
+                        card=$(detect_internal_card_name hdmi || true)
+                        if [[ -n "$card" && "$internal_mode" == "jack" ]]; then
+                            echo "[WARN] AUDIO_INTERNAL_OUTPUT=jack requested but no Headphones card found (no analog jack on Pi 5 / Zero 2W). Falling back to HDMI." >&2
+                        fi
+                    fi
+                    ;;
+                *)
+                    echo "[WARN] Unknown AUDIO_INTERNAL_OUTPUT='$internal_mode' (expected jack|hdmi)" >&2
+                    ;;
+            esac
+            ;;
         *)
-            return 1
+            printf '%s\n' "$default_card"
+            return 0
             ;;
     esac
-    return 1
+    if [[ -n "$card" ]]; then
+        if [[ "$card" != "$default_card" ]]; then
+            echo "Overriding HAT_CARD_NAME=$default_card with detected ALSA card id: $card ($hat_config)" >&2
+        fi
+        printf '%s\n' "$card"
+    else
+        echo "[WARN] Could not probe the ALSA card id for $hat_config — keeping profile default '$default_card'" >&2
+        printf '%s\n' "$default_card"
+    fi
 }
