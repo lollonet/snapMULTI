@@ -361,9 +361,12 @@ class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
         _resolve_public_ip(newurl)
         new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
         if new_req is not None:
-            # A pinned-IP first hop sets an explicit Host header; it must not
-            # leak onto a different host.
-            new_req.remove_header("Host")
+            # A pinned-IP first hop sets an explicit Host header. Keep it on a
+            # redirect that stays on that address (a relative Location);
+            # it must not leak onto a different host.
+            old_netloc = urllib.parse.urlparse(req.full_url).netloc
+            if urllib.parse.urlparse(newurl).netloc != old_netloc:
+                new_req.remove_header("Host")
         return new_req
 
 

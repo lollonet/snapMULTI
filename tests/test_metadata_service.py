@@ -90,6 +90,11 @@ def metadata_service_module(monkeypatch, tmp_path):
 @pytest.fixture()
 def service(metadata_service_module, monkeypatch):
     monkeypatch.setattr(metadata_service_module, "_mb_rate_limit", lambda: None)
+    # Artwork URLs embed the external host; the real lookup (getfqdn) can
+    # take ~30 s on a dev machine with a stale resolver.
+    monkeypatch.setattr(
+        metadata_service_module, "get_external_host", lambda: "snapmulti.test"
+    )
     return metadata_service_module.MetadataService()
 
 
@@ -1599,6 +1604,29 @@ class TestSSRFRedirects:
         assert new.get_header("Host") is None
         assert handler.max_redirections == module._MAX_REDIRECTS
 
+    def test_relative_redirect_keeps_pinned_host_header(
+        self, metadata_service_module, monkeypatch
+    ):
+        # A relative Location resolves against the pinned IP; without the
+        # original Host a virtual-hosted server answers 404 for the image.
+        import urllib.request
+
+        module = metadata_service_module
+        monkeypatch.setattr(
+            module.socket,
+            "getaddrinfo",
+            lambda host, *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))],
+        )
+        handler = module.SafeRedirectHandler()
+        req = urllib.request.Request(
+            "http://93.184.216.34/a.png", headers={"Host": "cdn.example"}
+        )
+        new = handler.redirect_request(
+            req, None, 302, "Found", {}, "http://93.184.216.34/b.png"
+        )
+        assert new is not None
+        assert new.get_header("Host") == "cdn.example"
+
     def test_real_redirect_into_lan_is_not_followed(self, service, monkeypatch):
         """End to end: the first hop is a trusted local address (allowed, like
         the AirPlay cover), but its 302 to another local URL is refused."""
@@ -1624,6 +1652,9 @@ class TestSSRFRedirects:
             def log_message(self, *a):
                 pass
 
+        # HTTPServer.server_bind() calls socket.getfqdn(), ~30 s on a dev
+        # machine with a stale resolver.
+        monkeypatch.setattr(http.server.socket, "getfqdn", lambda *a: "localhost")
         srv = http.server.HTTPServer(("127.0.0.1", 0), Handler)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:
