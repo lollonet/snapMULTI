@@ -251,7 +251,7 @@ check_system() {
 
     local floor_warn floor_fail expected_class
     if (( total_mb >= 3500 )); then
-        floor_warn=1024; floor_fail=800;  expected_class="≥4 GB Pi"
+        floor_warn=1024; floor_fail=800;  expected_class="≥4 GB RAM"
     elif (( total_mb >= 900 )); then
         # Pi 3B+ 1 GB on a clean reflash gets 191 MB (~20% of 955 MB MemTotal);
         # boot-tune.sh does not remount /run (only the overlayroot tmpfs) and

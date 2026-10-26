@@ -23,6 +23,7 @@ metadata         server
 shairport-sync   server
 librespot        server
 tidal-connect    server
+tidal-relay      server
 
 snapclient       client
 audio-visualizer client

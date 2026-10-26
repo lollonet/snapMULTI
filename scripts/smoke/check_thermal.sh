@@ -29,7 +29,11 @@
 #   2. `/sys/class/thermal/thermal_zone0/temp` — generic Linux fallback
 #      (millidegrees Celsius). Works on x86 dev boxes and on Pi when
 #      vcgencmd is missing for whatever reason.
-#   3. No sensor available — emit a single info line and return. Not a
+#   3. hwmon CPU sensor (k10temp on AMD, coretemp on Intel, zenpower) —
+#      x86 servers often have no thermal_zone0. These parts throttle near
+#      95-105 °C, so this source uses its own thresholds: warn at 85 °C,
+#      fail at 95 °C, and the line reads "CPU" instead of "SoC".
+#   4. No sensor available — emit a single info line and return. Not a
 #      fail: snapMULTI may run in a sandbox / VM where no thermal info
 #      is exposed.
 #
@@ -39,10 +43,13 @@
 
 # shellcheck disable=SC2154
 
+_HWMON_DIR=/sys/class/hwmon
+_HWMON_CPU_SENSORS=" k10temp coretemp zenpower "
+
 check_thermal() {
     section "Thermal"
 
-    local temp_milli="" source=""
+    local temp_milli="" source="" label="SoC" warn_milli=75000 fail_milli=80000
 
     if command -v vcgencmd >/dev/null 2>&1; then
         # `|| true` so a vcgencmd that exists but fails (missing VideoCore
@@ -72,7 +79,24 @@ check_thermal() {
     fi
 
     if [[ -z "$temp_milli" ]]; then
-        info "No thermal sensor accessible (no vcgencmd, no /sys/class/thermal) — skipping"
+        local hw name raw
+        for hw in "$_HWMON_DIR"/hwmon*; do
+            name=$(cat "$hw/name" 2>/dev/null || true)
+            [[ -n "$name" && "$_HWMON_CPU_SENSORS" == *" $name "* ]] || continue
+            raw=$(cat "$hw/temp1_input" 2>/dev/null || echo "")
+            if [[ "$raw" =~ ^[0-9]+$ ]] && (( raw <= 150000 )); then
+                temp_milli="$raw"
+                source="hwmon $name"
+                label="CPU"
+                warn_milli=85000
+                fail_milli=95000
+                break
+            fi
+        done
+    fi
+
+    if [[ -z "$temp_milli" ]]; then
+        info "No thermal sensor accessible (no vcgencmd, no /sys/class/thermal, no hwmon CPU sensor) — skipping"
         return
     fi
 
@@ -81,11 +105,12 @@ check_thermal() {
     temp_c=$(( temp_milli / 1000 ))
     temp_dec=$(( (temp_milli % 1000) / 100 ))
 
-    if (( temp_milli >= 80000 )); then
-        fail_check "SoC ${temp_c}.${temp_dec}°C via ${source} — at/over 80°C throttle threshold (check enclosure / airflow / ambient)"
-    elif (( temp_milli >= 75000 )); then
-        warn "SoC ${temp_c}.${temp_dec}°C via ${source} — within 5°C of the 80°C throttle (consider better cooling under sustained load)"
+    local warn_c=$(( warn_milli / 1000 )) fail_c=$(( fail_milli / 1000 ))
+    if (( temp_milli >= fail_milli )); then
+        fail_check "$label ${temp_c}.${temp_dec}°C via ${source} — at/over ${fail_c}°C throttle threshold (check enclosure / airflow / ambient)"
+    elif (( temp_milli >= warn_milli )); then
+        warn "$label ${temp_c}.${temp_dec}°C via ${source} — within $(( fail_c - warn_c ))°C of the ${fail_c}°C throttle (consider better cooling under sustained load)"
     else
-        pass_check "SoC ${temp_c}.${temp_dec}°C via ${source} (below 75°C warn floor)"
+        pass_check "$label ${temp_c}.${temp_dec}°C via ${source} (below ${warn_c}°C warn floor)"
     fi
 }

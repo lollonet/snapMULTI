@@ -6,7 +6,8 @@
 #      non-zero, so `$(systemctl is-enabled u || echo missing)` held two
 #      lines and a missing timer was reported as a garbled warning instead
 #      of "NOT installed". check_timers / check_mounts must classify them.
-#   2. Boot-partition timers are N/A where /boot/firmware does not exist.
+#   2. Boot-partition timers and the state backup are N/A where
+#      /boot/firmware does not exist.
 #   3. WiFi exclusivity on a host with neither eth0 nor wlan0 checks the
 #      default-route interface instead of failing.
 #   4. check_system still runs to the end under `set -u` after the split.
@@ -18,6 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CHECK_TIMERS="$REPO_ROOT/scripts/smoke/check_timers.sh"
 CHECK_SYSTEM="$REPO_ROOT/scripts/smoke/check_system.sh"
+CHECK_STATE_BACKUP="$REPO_ROOT/scripts/smoke/check_state_backup.sh"
 
 pass=0
 fail=0
@@ -90,6 +92,15 @@ out=$(run_timers "$SBX/no-such-boot")
 check "boot-partition timers reported N/A" has "$out" "[INFO] Boot-partition timers skipped (N/A on this host"
 check "backup timer not checked" lacks "$out" "snapmulti-backup.timer NOT installed"
 check "status timer still checked" has "$out" "Timer snapmulti-status.timer enabled and active"
+
+run_state_backup() {
+    MODE=server SNAPMULTI_BACKUP_DIR="$1" bash -c "$helpers"'
+        source "$1"; check_state_backup' _ "$CHECK_STATE_BACKUP" 2>&1
+}
+out=$(run_state_backup "$SBX/no-such-boot/snapmulti-backup")
+check "state backup N/A without a boot partition" has "$out" "[INFO] State backup check skipped (N/A on this host"
+out=$(run_state_backup "$SBX/boot/snapmulti-backup")
+check "state backup not yet present on a boot partition" has "$out" "[INFO] State backup not yet present"
 
 # check_system reads interfaces under /sys/class/net; point it at $SBX/net.
 run_net() {
