@@ -170,7 +170,7 @@ check_mounts() {
     # confirm the mount source matches what's in the unit so a stale
     # /etc/fstab line is not winning the race.
     if systemctl is-active --quiet "$mount_name" 2>/dev/null; then
-        local what_from_unit what_from_mount
+        local what_from_unit what_from_mount mount_out
         what_from_unit=$(grep -E '^What=' "/etc/systemd/system/$mount_name" 2>/dev/null | head -1 | cut -d= -f2- || true)
         # mount(1) format: SOURCE on TARGET type FSTYPE (OPTIONS).
         # Filter on $5 (filesystem type) explicitly — using a free
@@ -179,7 +179,10 @@ check_mounts() {
         # default /media/nfs-music) and would pick up the autofs
         # watcher line ("systemd-1 on /media/nfs-music type autofs")
         # instead of the actual NFS / CIFS mount.
-        what_from_mount=$(mount 2>/dev/null | awk -v p="$music_path" '$3 == p && $5 ~ /^(nfs|nfs4|cifs)$/ {print $1; exit}' || true)
+        # Captured first: piping mount(1) into an awk that exits early
+        # returns 141 (SIGPIPE) under pipefail once the output is long.
+        mount_out=$(mount 2>/dev/null || true)
+        what_from_mount=$(awk -v p="$music_path" '$3 == p && $5 ~ /^(nfs|nfs4|cifs)$/ {print $1; exit}' <<< "$mount_out")
         if [[ -n "$what_from_unit" && "$what_from_unit" == "$what_from_mount" ]]; then
             pass_check "$mount_name is active and source matches unit ($what_from_unit)"
         elif [[ -n "$what_from_mount" ]]; then

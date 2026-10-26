@@ -297,7 +297,7 @@ check_system() {
     # no recovery short of reflash). boot-tune.sh logs WARN at 70 % and
     # CRIT at 90 % but only in journald — surface it in smoke so the
     # fleet-smoke aggregator sees it. Skip on writable-root systems.
-    if mount | grep -q ' on / type overlay'; then
+    if [[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" == overlay ]]; then
         local root_pcent root_used root_total
         root_pcent=$(df / --output=pcent 2>/dev/null | tail -1 | tr -cd '0-9')
         root_used=$(df -m / --output=used 2>/dev/null | tail -1 | tr -cd '0-9')

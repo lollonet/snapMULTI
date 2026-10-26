@@ -35,19 +35,19 @@ SBX="$(mktemp -d)"
 trap 'rm -rf "$SBX"' EXIT
 mkdir -p "$SBX/bin"
 
-# mount with no args: report an overlay root when $STUB/overlay exists.
 # mount -o remount,{rw,ro} <dir>: record the call, flip the findmnt state.
 cat > "$SBX/bin/mount" <<'EOF'
 #!/usr/bin/env bash
-if [[ $# -eq 0 ]]; then
-    [[ -e "$STUB/overlay" ]] && echo 'overlayroot on / type overlay (rw)'
-    exit 0
-fi
 echo "mount $*" >> "$STUB/calls"
 case "$*" in *remount,rw*) echo rw > "$STUB/mountstate" ;; *remount,ro*) echo ro > "$STUB/mountstate" ;; esac
 EOF
+# findmnt -o FSTYPE /: overlay when $STUB/overlay exists; anything else: boot options.
 cat > "$SBX/bin/findmnt" <<'EOF'
 #!/usr/bin/env bash
+if [[ "$*" == "-n -o FSTYPE /" ]]; then
+    if [[ -e "$STUB/overlay" ]]; then echo overlay; else echo ext4; fi
+    exit 0
+fi
 echo "$(cat "$STUB/mountstate"),relatime"
 EOF
 cat > "$SBX/bin/logger" <<'EOF'

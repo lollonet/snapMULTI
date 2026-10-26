@@ -352,9 +352,9 @@ info "Mode: $MODE"
 info "Hostname: $(hostname 2>/dev/null || echo unknown)"
 info "Uptime: $(uptime -p 2>/dev/null || echo unknown)"
 
-root_mount="$(mount | awk '$3 == "/" {print; exit}')"
+root_mount="$(findmnt -n -o SOURCE,FSTYPE,OPTIONS / 2>/dev/null)"
 overlay_active=false
-if mount | grep -q ' on / type overlay'; then
+if [[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" == overlay ]]; then
     overlay_active=true
 fi
 info "Root mount: ${root_mount:-unknown}"

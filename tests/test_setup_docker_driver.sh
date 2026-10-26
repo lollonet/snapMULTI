@@ -36,8 +36,8 @@ readonly_body="$(sed -n '/^_configure_readonly()/,/^}/p' "$CLIENT_SETUP_SH")"
 echo "Testing Docker storage driver selection..."
 
 # setup_docker() should detect overlayroot the same way as the rest of the codebase:
-# system-tune.sh:is_overlayroot() and ro-mode.sh both use "on / type overlay"
-assert_contains "$setup_docker_body" ' on / type overlay' "setup_docker detects overlayroot via mount (matches is_overlayroot)"
+# system-tune.sh:is_overlayroot() and ro-mode.sh both read findmnt's FSTYPE for /
+assert_contains "$setup_docker_body" 'findmnt -n -o FSTYPE /' "setup_docker detects overlayroot via findmnt (matches is_overlayroot)"
 # Check that ENABLE_READONLY is not used in executable code (comments are OK)
 setup_docker_code=$(echo "$setup_docker_body" | grep -v '^\s*#')
 assert_not_contains "$setup_docker_code" 'ENABLE_READONLY' "setup_docker code does not use ENABLE_READONLY flag"

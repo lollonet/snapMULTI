@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Smoke check and root-filesystem checks no longer die on hosts with many mounts**. `device-smoke.sh` read the root mount with `mount | awk '... exit'`: when the mount table is longer than one write (an x86 server with many Docker mounts), `mount` gets SIGPIPE and, under `set -euo pipefail`, the smoke check stopped after "Host" with exit 141 and no message. Ten other overlay checks used `mount | grep -q`, which can read "not overlay" on an overlay root the same way. All of them now read `findmnt -n -o FSTYPE /`; `check_mounts.sh` captures `mount` output before parsing it. New `tests/test_no_mount_pipe.sh` rejects any script that pipes `mount`.
+
 ## [0.8.8] — 2026-10-25
 
 > Container-changing release; new image set `0.8.8` (rebuilt for the snapserver AirPlay/MPD metadata plugins and the MPD entrypoint). Reflash to install. Highlights: Windows `prepare-sd.ps1` works on stock PowerShell 5.1 and Git-for-Windows clones no longer break first boot; Imager `user-data` stays valid; audio fixes for USB DACs on Pi Zero 2 W, "No HAT" HDMI/jack and headless DACs; RAM-aware resource profiles for Pi 4/5; truncated MPD covers and stale AirPlay covers fixed; Tidal on non-ARM servers through a Pi satellite (draft, opt-in).

@@ -134,7 +134,7 @@ cat /proc/asound/cards > "$SNAPSHOT/asound-cards.log" 2>/dev/null || true
     cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null \
         | awk '{printf "%.1f°C\n", $1/1000}' || echo "N/A"
     echo "=== overlayroot ==="
-    if mount | grep -q 'overlayroot'; then
+    if [[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" == overlay ]]; then
         echo "active"
     else
         echo "inactive"
