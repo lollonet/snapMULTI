@@ -39,6 +39,45 @@ if ! declare -F env_get >/dev/null 2>&1; then
     unset _CS_DIR
 fi
 
+# WiFi exclusivity. boot-tune.sh disables WiFi when eth0 has carrier, to
+# avoid dual mDNS publication. If both UP, mDNS clients see two routes to
+# the same hostname and snapclient-discover may bounce. A host with
+# neither eth0 nor wlan0 (x86 server: br0, enp*) has nothing to keep
+# exclusive; there the check only needs the default-route interface up.
+_SYS_CLASS_NET=/sys/class/net
+
+_check_net_exclusivity() {
+    local eth_state wlan_state def_iface def_state
+    eth_state=$(cat "$_SYS_CLASS_NET/eth0/operstate" 2>/dev/null || echo "missing")
+    wlan_state=$(cat "$_SYS_CLASS_NET/wlan0/operstate" 2>/dev/null || echo "missing")
+    case "$eth_state:$wlan_state" in
+        up:up)
+            warn "Both eth0 and wlan0 are UP — boot-tune.sh should have disabled WiFi (dual mDNS risk)"
+            ;;
+        up:down|up:missing)
+            pass_check "Ethernet carrier UP, WiFi down (correct exclusivity)"
+            ;;
+        down:up|missing:up)
+            pass_check "WiFi UP, no Ethernet carrier (WiFi-only mode)"
+            ;;
+        missing:missing)
+            def_iface=$(ip route show default 2>/dev/null | awk '!f {print $5; f=1}')
+            def_state=$(cat "$_SYS_CLASS_NET/${def_iface:-none}/operstate" 2>/dev/null || echo "missing")
+            if [[ -n "$def_iface" && "$def_state" == "up" ]]; then
+                pass_check "Network UP on $def_iface (no eth0/wlan0 — WiFi exclusivity N/A)"
+            else
+                fail_check "No active network interface (eth0, wlan0 missing; default route ${def_iface:-none} is $def_state)"
+            fi
+            ;;
+        down:down|down:missing|missing:down)
+            fail_check "No active network interface (eth0=$eth_state, wlan0=$wlan_state)"
+            ;;
+        *)
+            info "Network state: eth0=$eth_state, wlan0=$wlan_state"
+            ;;
+    esac
+}
+
 check_system() {
     section "System"
 
@@ -265,30 +304,8 @@ check_system() {
         fi
     fi
 
-    # 4. WiFi exclusivity. boot-tune.sh disables WiFi when eth0 has
-    # carrier, to avoid dual mDNS publication. If both UP, mDNS clients
-    # see two routes to the same hostname and snapclient-discover may
-    # bounce. INFO-only on small headless devices that are WiFi-only.
-    local eth_state wlan_state
-    eth_state=$(cat /sys/class/net/eth0/operstate 2>/dev/null || echo "missing")
-    wlan_state=$(cat /sys/class/net/wlan0/operstate 2>/dev/null || echo "missing")
-    case "$eth_state:$wlan_state" in
-        up:up)
-            warn "Both eth0 and wlan0 are UP — boot-tune.sh should have disabled WiFi (dual mDNS risk)"
-            ;;
-        up:down|up:missing)
-            pass_check "Ethernet carrier UP, WiFi down (correct exclusivity)"
-            ;;
-        down:up|missing:up)
-            pass_check "WiFi UP, no Ethernet carrier (WiFi-only mode)"
-            ;;
-        down:down|down:missing|missing:down|missing:missing)
-            fail_check "No active network interface (eth0=$eth_state, wlan0=$wlan_state)"
-            ;;
-        *)
-            info "Network state: eth0=$eth_state, wlan0=$wlan_state"
-            ;;
-    esac
+    # 4. WiFi exclusivity (see _check_net_exclusivity).
+    _check_net_exclusivity
 
     # 5. Overlayroot tmpfs usage. The root overlay's writable layer is
     # on tmpfs (overlayroot=tmpfs in cmdline); when it fills, Docker
@@ -382,6 +399,8 @@ check_system() {
     #   4-10        → warn (noisy mesh / aggressive AP rekey)
     #   >10         → warn (sustained — points at BCM43430 + mesh,
     #                       consider pinning bssid in wpa_supplicant.conf)
+    local wlan_state
+    wlan_state=$(cat "$_SYS_CLASS_NET/wlan0/operstate" 2>/dev/null || echo "missing")
     if [[ "$wlan_state" == "up" ]] && command -v journalctl >/dev/null 2>&1; then
         local disconnect_count
         disconnect_count=$(journalctl -u wpa_supplicant.service \

@@ -20,6 +20,10 @@
 
 # shellcheck disable=SC2154
 
+# The backup and diagnostics timers write to the boot partition; a host
+# without one (x86 manual deploy) does not get them.
+_TIMERS_BOOT_FW=/boot/firmware
+
 _check_timer() {
     local timer="$1" desc="$2" mode_filter="$3"
 
@@ -34,8 +38,12 @@ _check_timer() {
     # is-enabled is the source of truth for whether the install set
     # up the timer at all. is-active confirms it's currently armed.
     local enabled active
-    enabled=$(systemctl is-enabled "$timer" 2>/dev/null || echo "missing")
-    active=$(systemctl is-active "$timer" 2>/dev/null || echo "inactive")
+    # systemctl prints the state (not-found, disabled, inactive) AND
+    # exits non-zero, so "|| echo" would append a second line.
+    enabled=$(systemctl is-enabled "$timer" 2>/dev/null) || true
+    active=$(systemctl is-active "$timer" 2>/dev/null) || true
+    enabled=${enabled:-missing}
+    active=${active:-inactive}
 
     case "$enabled" in
         enabled|enabled-runtime|static)
@@ -68,8 +76,12 @@ _check_path() {
     esac
 
     local enabled active
-    enabled=$(systemctl is-enabled "$path_unit" 2>/dev/null || echo "missing")
-    active=$(systemctl is-active "$path_unit" 2>/dev/null || echo "inactive")
+    # systemctl prints the state (not-found, disabled, inactive) AND
+    # exits non-zero, so "|| echo" would append a second line.
+    enabled=$(systemctl is-enabled "$path_unit" 2>/dev/null) || true
+    active=$(systemctl is-active "$path_unit" 2>/dev/null) || true
+    enabled=${enabled:-missing}
+    active=${active:-inactive}
 
     case "$enabled" in
         enabled|enabled-runtime|static)
@@ -96,10 +108,14 @@ check_timers() {
 
     # Server-side scheduled features.
     _check_timer "snapmulti-status.timer"       "5-min status snapshot for /status web" server
-    _check_timer "snapmulti-diagnostics.timer"  "30-min diagnostic snapshots for /var/lib/snapmulti-diagnostics" server
-    _check_timer "snapmulti-backup.timer"       "daily MPD database backup to boot partition (cross-reflash continuity)" server
-    _check_path  "snapmulti-state-backup.path"  "myMPD state backup on change — server.json excluded (lastSeen heartbeat loop)" server
-    _check_timer "snapmulti-state-backup.timer" "5-min server.json backup + safety net for myMPD writes (canonical-equal short-circuit skips no-op publishes)" server
+    if [[ -d "$_TIMERS_BOOT_FW" ]]; then
+        _check_timer "snapmulti-diagnostics.timer"  "15-min diagnostic snapshots to the boot partition" server
+        _check_timer "snapmulti-backup.timer"       "daily MPD database backup to boot partition (cross-reflash continuity)" server
+        _check_path  "snapmulti-state-backup.path"  "myMPD state backup on change — server.json excluded (lastSeen heartbeat loop)" server
+        _check_timer "snapmulti-state-backup.timer" "5-min server.json backup + safety net for myMPD writes (canonical-equal short-circuit skips no-op publishes)" server
+    elif [[ "$MODE" == "server" || "$MODE" == "both" ]]; then
+        info "Boot-partition timers skipped (N/A on this host — $_TIMERS_BOOT_FW not present): snapmulti-diagnostics, snapmulti-backup, snapmulti-state-backup"
+    fi
 
     # Client-side scheduled features. snapclient-discover.timer drives
     # the multi-server failover mechanism (PR #285); without it, a
