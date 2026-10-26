@@ -241,6 +241,21 @@ docker exec mpd mpc status | head
 
 **If still broken.** If `docker exec mpd mpc status` does NOT show `Updating DB` AND mpd remains `unhealthy` for more than an hour, you have a real problem — check `docker logs mpd` and the NAS reachability ([NAS library empty or never mounts](#nas-library-empty-or-never-mounts-nfs--smb)).
 
+## An MPD app stays empty or keeps reloading on a large library <a id="mpd-app-large-library"></a>
+
+**Symptoms.** An MPD client that loads the whole library (Rigelian, some other phone apps) is very slow, never shows the library, or reconnects every few seconds. Small libraries work.
+
+**Cause.** The app asks for the full library in one reply. MPD caps a reply at `max_output_buffer_size`; above it MPD drops the client and the app tries again. snapMULTI sets 128 MiB, enough for roughly 150 k tracks. A larger library, or an older install, hits the cap.
+
+**How to confirm.**
+
+```bash
+docker logs --since 1h mpd 2>&1 | grep "Output buffer is full"
+# Lines with the phone's address: the reply is over the cap
+```
+
+**Try this.** Raise `max_output_buffer_size` (in KiB) in `/opt/snapmulti/config/mpd.conf`, then `docker restart mpd`. On a read-only Pi follow [Changing settings on a read-only Pi](ADVANCED.md#changing-settings-on-a-read-only-pi). Keep it below the MPD memory limit (`MPD_MEM_LIMIT` in `.env`): a reply larger than the limit gets MPD killed instead. The minimal profile sets that limit to 128M, below the 128 MiB default; on those boards lower the value (for example `65536`) if an app loads a large library.
+
 ## Docker / "no space left on device"
 
 **Symptoms.** Containers fail to start with `no space left on device` in `docker compose logs`. `df -h` shows the rootfs nearly full or shows the overlay tmpfs full.
