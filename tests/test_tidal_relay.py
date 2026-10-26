@@ -23,6 +23,13 @@ relay = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(relay)
 
 
+@pytest.fixture(autouse=True)
+def _fast_pcm_clock(monkeypatch):
+    # Real-time pacing would make each MiB written here take ~6 s; tests
+    # other than TestRealTimePacing are about the network, not the clock.
+    monkeypatch.setattr(relay, "BYTES_PER_SECOND", 64 * 1024 * 1024)
+
+
 def _listener() -> socket.socket:
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.bind(("127.0.0.1", 0))
@@ -230,10 +237,73 @@ def _longest_write_stall(fifo: Path, total_chunks: int = 256) -> float:
     return worst
 
 
-class TestWriterNeverStalls:
-    # The pipe buffer holds ~0.37 s of PCM. Any network wait longer than
-    # that in the FIFO reader blocks the Tidal app; these servers make the
-    # network wait for 1 s and the writer must not notice.
+def _drain(conn: socket.socket, stop: threading.Event) -> None:
+    conn.settimeout(0.2)
+    while not stop.is_set():
+        try:
+            if not conn.recv(65536):
+                return
+        except TimeoutError:
+            continue
+
+
+def _timed_write(fifo: Path, nbytes: int) -> float:
+    wfd = os.open(fifo, os.O_WRONLY)
+    start = time.monotonic()
+    try:
+        for _ in range(nbytes // 4096):
+            os.write(wfd, b"\x00" * 4096)
+    finally:
+        os.close(wfd)
+    return time.monotonic() - start
+
+
+class TestRealTimePacing:
+    # The ALSA FIFO output has no clock of its own: if the relay drains the
+    # FIFO faster than real time, the Tidal app plays a track in seconds.
+    RATE = 100_000  # bytes/s; low enough to measure, high enough to be quick
+
+    def _start(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(relay, "BYTES_PER_SECOND", self.RATE)
+        fifo = tmp_path / "tidal_fifo"
+        relay.ensure_fifo(str(fifo))
+        fd = os.open(fifo, os.O_RDWR)
+        srv = _listener()
+        threading.Thread(
+            target=relay.pump_audio,
+            args=(fd, "127.0.0.1", srv.getsockname()[1]),
+            daemon=True,
+        ).start()
+        conn, _ = srv.accept()
+        stop = threading.Event()
+        threading.Thread(target=_drain, args=(conn, stop), daemon=True).start()
+        return fifo, stop
+
+    def test_fifo_drained_at_pcm_rate(self, tmp_path, monkeypatch):
+        fifo, stop = self._start(tmp_path, monkeypatch)
+        try:
+            # 2 s of PCM; the 64 KiB pipe buffer absorbs ~0.65 s of it.
+            assert _timed_write(fifo, 2 * self.RATE) > 1.0
+        finally:
+            stop.set()
+
+    def test_burst_after_a_pause_is_bounded(self, tmp_path, monkeypatch):
+        fifo, stop = self._start(tmp_path, monkeypatch)
+        try:
+            _timed_write(fifo, 8192)
+            time.sleep(3.0)  # playback paused: no PCM for 3 s
+            # 4 s of PCM: the pipe buffer takes ~0.65 s and the catch-up at
+            # most JITTER_BUFFER_SECONDS; an unbounded reader would owe 3 s
+            # of credit and take nearly all of it at full speed.
+            limit = 4 - 0.65 - relay.JITTER_BUFFER_SECONDS
+            assert _timed_write(fifo, 4 * self.RATE) > limit - 0.3
+        finally:
+            stop.set()
+
+
+class TestWriterStallIsBounded:
+    # The pipe buffer holds ~0.37 s of PCM. Without a link the FIFO reader
+    # never waits on the network; with one it waits at most SEND_TIMEOUT.
 
     def test_slow_connect_does_not_block_the_writer(self, tmp_path, monkeypatch):
         def blackholed(host, port):
@@ -250,8 +320,10 @@ class TestWriterNeverStalls:
         ).start()
         assert _longest_write_stall(fifo) < 0.3
 
-    def test_stalled_send_does_not_block_the_writer(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(relay, "SEND_TIMEOUT", 1.0)
+    def test_stalled_send_blocks_the_writer_at_most_send_timeout(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(relay, "SEND_TIMEOUT", 0.5)
         monkeypatch.setattr(relay, "RETRY_SECONDS", 0.1)
         fifo = tmp_path / "tidal_fifo"
         relay.ensure_fifo(str(fifo))
@@ -272,9 +344,45 @@ class TestWriterNeverStalls:
 
         threading.Thread(target=accept_and_hold, daemon=True).start()
         try:
-            assert _longest_write_stall(fifo, total_chunks=2048) < 0.3
+            assert _longest_write_stall(fifo, total_chunks=512) < 0.5 + 0.4
         finally:
             srv.close()
+
+    def test_slow_server_loses_no_audio(self, tmp_path):
+        # WiFi jitter or a busy server: sends are slow but progress. The
+        # writer waits instead of the reader dropping PCM.
+        fifo = tmp_path / "tidal_fifo"
+        relay.ensure_fifo(str(fifo))
+        fd = os.open(fifo, os.O_RDWR)
+        srv = _listener()
+        threading.Thread(
+            target=relay.pump_audio,
+            args=(fd, "127.0.0.1", srv.getsockname()[1]),
+            daemon=True,
+        ).start()
+        conn, _ = srv.accept()
+        pcm = os.urandom(512 * 1024)
+        got = bytearray()
+
+        def slow_reader():
+            conn.settimeout(5)
+            while len(got) < len(pcm):
+                chunk = conn.recv(4096)
+                if not chunk:
+                    return
+                got.extend(chunk)
+                time.sleep(0.002)  # ~2 MB/s, far below the writer's speed
+
+        reader = threading.Thread(target=slow_reader, daemon=True)
+        reader.start()
+        wfd = os.open(fifo, os.O_WRONLY)
+        for i in range(0, len(pcm), 4096):
+            os.write(wfd, pcm[i : i + 4096])
+        os.close(wfd)
+        reader.join(10)
+        conn.close()
+        srv.close()
+        assert bytes(got) == pcm
 
     def test_queued_audio_is_dropped_on_reconnect(self):
         chunks = relay.queue.Queue(maxsize=relay.QUEUE_CHUNKS)
@@ -335,6 +443,9 @@ class TestDeadServer:
         sock = relay.connect("127.0.0.1", srv.getsockname()[1])
         try:
             assert sock.gettimeout() == relay.SEND_TIMEOUT
+            # Linux reports double the requested size (bookkeeping overhead).
+            sndbuf = sock.getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
+            assert relay.SEND_BUFFER_BYTES <= sndbuf <= 2 * relay.SEND_BUFFER_BYTES
             if hasattr(socket, "TCP_USER_TIMEOUT"):
                 got = sock.getsockopt(socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT)
                 assert got == int(relay.SEND_TIMEOUT * 1000)

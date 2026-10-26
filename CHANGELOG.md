@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Tidal through a Pi satellite plays at normal speed, without dropouts**. The ALSA FIFO output has no clock of its own and the satellite's `tidal-relay` read the FIFO as fast as it could, dropping what the network could not take: the Tidal app raced through a 4-minute track in seconds and the server played fragments. The relay now never reads faster than the PCM rate (44100:16:2); while connected it waits for the server instead of dropping, so WiFi jitter costs no audio, and after a pause or a stall it refills up to 1 s of server-side buffer. The kernel send buffer is capped at 64 KiB so app controls stay responsive. Pull `scripts/tidal/tidal-relay.py` on the satellite and restart `tidal-relay`. New tests in `tests/test_tidal_relay.py`.
+
 ## [0.8.8] — 2026-10-26
 
 > Container-changing release; new image set `0.8.8` (rebuilt for the snapserver AirPlay/MPD metadata plugins and the MPD entrypoint). Reflash to install. Highlights: Windows `prepare-sd.ps1` works on stock PowerShell 5.1 and Git-for-Windows clones no longer break first boot; Imager `user-data` stays valid; audio fixes for USB DACs on Pi Zero 2 W, "No HAT" HDMI/jack and headless DACs; RAM-aware resource profiles for Pi 4/5; truncated MPD covers and stale AirPlay covers fixed; Tidal on non-ARM servers through a Pi satellite (draft, opt-in).
