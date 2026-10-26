@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Smoke check and root-filesystem checks no longer die on hosts with many mounts**. `device-smoke.sh` read the root mount with `mount | awk '... exit'`: when the mount table is longer than one write (an x86 server with many Docker mounts), `mount` gets SIGPIPE and, under `set -euo pipefail`, the smoke check stopped after "Host" with exit 141 and no message. Ten other overlay checks used `mount | grep -q`, which can read "not overlay" on an overlay root the same way. All of them now read `findmnt -n -o FSTYPE /`; `check_mounts.sh` captures `mount` output before parsing it. New `tests/test_no_mount_pipe.sh` rejects any script that pipes `mount`.
+- **MPD apps that load the whole library work on large libraries** (#736). MPD caps one reply at 8 MiB by default; Rigelian asks for the whole library at once (about 65 MiB for 78k tracks), got "Output buffer is full", was dropped and retried every few seconds without ever showing the library. `config/mpd.conf` raises `max_output_buffer_size` to 128 MiB; on the minimal profile (`MPD_MEM_LIMIT=128M`) lower it if a client loads a big library. TROUBLESHOOTING covers the symptom. Bind-mounted: applies on reflash or `docker restart mpd`.
 
 ## [0.8.8] — 2026-10-25
 
