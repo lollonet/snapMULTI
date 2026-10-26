@@ -254,7 +254,7 @@ docker logs --since 1h mpd 2>&1 | grep "Output buffer is full"
 # Righe con l'indirizzo del telefono: la risposta supera il limite
 ```
 
-**Cosa provare.** Alza `max_output_buffer_size` (in KiB) in `/opt/snapmulti/config/mpd.conf`, poi `docker restart mpd`. Su un Pi in sola lettura segui [Modificare le impostazioni su un Pi read-only](ADVANCED.it.md#modificare-le-impostazioni-su-un-pi-read-only). Tienilo sotto il limite di memoria di MPD (`MPD_MEM_LIMIT` in `.env`): una risposta più grande del limite fa chiudere MPD dal sistema.
+**Cosa provare.** Alza `max_output_buffer_size` (in KiB) in `/opt/snapmulti/config/mpd.conf`, poi `docker restart mpd`. Su un Pi in sola lettura segui [Modificare le impostazioni su un Pi read-only](ADVANCED.it.md#modificare-le-impostazioni-su-un-pi-read-only). Tienilo sotto il limite di memoria di MPD (`MPD_MEM_LIMIT` in `.env`): una risposta più grande del limite fa chiudere MPD dal sistema. Il profilo minimal fissa quel limite a 128M, sotto i 128 MiB predefiniti; su quelle schede abbassa il valore (per esempio `65536`) se un'app carica una libreria grande.
 
 ## Docker / "no space left on device"
 

@@ -254,7 +254,7 @@ docker logs --since 1h mpd 2>&1 | grep "Output buffer is full"
 # Lines with the phone's address: the reply is over the cap
 ```
 
-**Try this.** Raise `max_output_buffer_size` (in KiB) in `/opt/snapmulti/config/mpd.conf`, then `docker restart mpd`. On a read-only Pi follow [Changing settings on a read-only Pi](ADVANCED.md#changing-settings-on-a-read-only-pi). Keep it below the MPD memory limit (`MPD_MEM_LIMIT` in `.env`): a reply larger than the limit gets MPD killed instead.
+**Try this.** Raise `max_output_buffer_size` (in KiB) in `/opt/snapmulti/config/mpd.conf`, then `docker restart mpd`. On a read-only Pi follow [Changing settings on a read-only Pi](ADVANCED.md#changing-settings-on-a-read-only-pi). Keep it below the MPD memory limit (`MPD_MEM_LIMIT` in `.env`): a reply larger than the limit gets MPD killed instead. The minimal profile sets that limit to 128M, below the 128 MiB default; on those boards lower the value (for example `65536`) if an app loads a large library.
 
 ## Docker / "no space left on device"
 
