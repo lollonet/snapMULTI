@@ -75,7 +75,7 @@ load_owner_from_env
 # fresher live state with a stale backup if the .path unit ever
 # stopped firing during a maintenance window. The natural ext4
 # persistence is the truth in that mode — defer to it.
-if ! mount 2>/dev/null | grep -q ' on / type overlay'; then
+if ! [[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" == overlay ]]; then
     _log "overlayroot inactive — ext4 is already persistent, skipping restore"
     if ! mark_restore_complete; then
         exit 1

@@ -169,7 +169,7 @@ find /opt/snapmulti/artwork -type f -mtime +30 -delete 2>/dev/null || true
 # Default tmpfs is 50% of RAM. On 2GB Pi that's 1GB — tight for Docker
 # runtime state + logs. Size to 25% of RAM (Docker images are baked to
 # the lower layer, so tmpfs only holds runtime writes).
-if mount | grep -q ' on / type overlay'; then
+if [[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" == overlay ]]; then
     total_mb=$(awk '/MemTotal/ {printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null) || total_mb=0
     if [ "$total_mb" -gt 0 ] 2>/dev/null; then
         target_mb=$((total_mb / 4))

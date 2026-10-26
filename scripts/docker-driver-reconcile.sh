@@ -6,7 +6,7 @@ set -euo pipefail
 command -v python3 &>/dev/null || exit 0
 mkdir -p /etc/docker
 
-if mount 2>/dev/null | grep -q ' on / type overlay'; then
+if [[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" == overlay ]]; then
     # Overlayroot active: Docker needs fuse-overlayfs
     if ! grep -q '"fuse-overlayfs"' /etc/docker/daemon.json 2>/dev/null; then
         python3 -c "

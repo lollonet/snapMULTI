@@ -79,10 +79,10 @@ setup_docker() {
     # (no FUSE userspace overhead).
     #
     # Detection uses the same pattern as system-tune.sh:is_overlayroot()
-    # and ro-mode.sh: "on / type overlay" in mount output.
+    # and ro-mode.sh: findmnt reports FSTYPE overlay for /.
     # NOT gated on ENABLE_READONLY — that flag expresses intent (will be
     # readonly after reboot), not current state.
-    if ! mount 2>/dev/null | grep -q ' on / type overlay'; then
+    if ! [[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" == overlay ]]; then
         log_info "Docker ready (overlay2, writable root filesystem)"
         return 0
     fi

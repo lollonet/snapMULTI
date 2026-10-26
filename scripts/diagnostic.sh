@@ -397,7 +397,8 @@ fi
         | sed -E 's|(Serial[[:space:]]+:[[:space:]]+).*|\1[REDACTED]|' || true
     echo ""
     echo "=== overlayroot status ==="
-    mount 2>/dev/null | grep -E ' on (/|/var) ' | head -5 || true
+    findmnt -n / 2>/dev/null || true
+    findmnt -n /var 2>/dev/null || true
     echo ""
     echo "=== df / overlay tmpfs usage ==="
     df -h / /var 2>/dev/null | head -5 || true

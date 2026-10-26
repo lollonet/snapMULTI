@@ -42,7 +42,7 @@ fi
 
 # ── Overlayroot detection ─────────────────────────────────────────
 is_overlayroot() {
-    mount 2>/dev/null | grep -q " on / type overlay"
+    [[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" == overlay ]]
 }
 
 # Backwards-compat alias — historical name, kept so external callers

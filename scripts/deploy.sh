@@ -573,7 +573,7 @@ install_docker() {
     #      images would silently disappear.
     local _tune_args=(--live-restore)
     if docker info --format '{{.Driver}}' 2>/dev/null | grep -q fuse-overlayfs \
-       || mount 2>/dev/null | grep -q ' on / type overlay'; then
+       || [[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" == overlay ]]; then
         _tune_args+=(--fuse-overlayfs)
     fi
     tune_docker_daemon "${_tune_args[@]}"

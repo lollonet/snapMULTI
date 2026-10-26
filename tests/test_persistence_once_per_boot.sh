@@ -24,11 +24,11 @@ assert() {
 }
 
 mkdir -p "$SBX/bin"
-cat > "$SBX/bin/mount" <<'EOF'
+cat > "$SBX/bin/findmnt" <<'EOF'
 #!/bin/sh
-echo 'overlay on / type overlay (rw)'
+echo overlay
 EOF
-chmod +x "$SBX/bin/mount"
+chmod +x "$SBX/bin/findmnt"
 
 write_valid_server_json() {
     local path="$1" name="$2"

@@ -100,15 +100,18 @@ exit 0
 MOCK
 chmod +x "$MOCK_BIN/systemctl"
 
-cat > "$MOCK_BIN/mount" <<'MOCK'
+# findmnt on /: overlay when MOCK_OVERLAY=1, else ext4; any other target unmounted.
+cat > "$MOCK_BIN/findmnt" <<'MOCK'
 #!/usr/bin/env bash
-if [[ "${MOCK_OVERLAY:-0}" == "1" ]]; then
-    echo "overlayroot on / type overlay (rw,noatime)"
-else
-    echo "/dev/mmcblk0p2 on / type ext4 (rw,noatime)"
-fi
+[[ "${*: -1}" == "/" ]] || exit 1
+if [[ "${MOCK_OVERLAY:-0}" == "1" ]]; then fs=overlay src=overlayroot; else fs=ext4 src=/dev/mmcblk0p2; fi
+case "$*" in
+    *SOURCE*) echo "$src $fs rw,noatime" ;;
+    *FSTYPE*) echo "$fs" ;;
+    *) echo "/ $src $fs rw,noatime" ;;
+esac
 MOCK
-chmod +x "$MOCK_BIN/mount"
+chmod +x "$MOCK_BIN/findmnt"
 
 cat > "$MOCK_BIN/hostname" <<'MOCK'
 #!/usr/bin/env bash

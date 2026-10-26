@@ -73,7 +73,7 @@ check_root() {
 get_status() {
     # Check if root is mounted as overlayfs
     # raspi-config uses overlayroot: "overlayroot on / type overlay"
-    if mount | grep -q " on / type overlay"; then
+    if [[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" == overlay ]]; then
         echo "enabled"
     else
         echo "disabled"
