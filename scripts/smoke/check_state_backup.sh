@@ -38,6 +38,11 @@ check_state_backup() {
         return 0
     fi
 
+    if [[ ! -d "$(dirname "$_BACKUP_DIR")" ]]; then
+        info "State backup check skipped (N/A on this host — $(dirname "$_BACKUP_DIR") not present)"
+        return 0
+    fi
+
     if [[ ! -d "$_BACKUP_DIR" ]]; then
         info "State backup not yet present at $_BACKUP_DIR (snapmulti-state-backup.path creates it after the first state change)"
         return 0

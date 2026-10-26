@@ -1104,6 +1104,19 @@ class TestSystemVitals:
         assert ">7<" in html
         assert "—" not in html
 
+    def test_extract_vitals_cpu_temperature_on_x86(self, metadata_service_module):
+        # check_thermal labels an hwmon reading "CPU"; "CPU load:" has no °C.
+        html = metadata_service_module._extract_vitals(
+            self._records(
+                [
+                    "CPU load: 3.92 3.28 2.23 (16 cores)",
+                    "CPU 62.1°C via hwmon k10temp (below 85°C warn floor)",
+                ]
+            )
+        )
+        assert "62.1" in html
+        assert "3.92" in html
+
     def test_extract_vitals_missing_render_dash(self, metadata_service_module):
         html = metadata_service_module._extract_vitals(
             self._records(["CPU load: 1.20 1.10 0.90 (4 cores)"])

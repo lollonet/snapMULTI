@@ -135,7 +135,10 @@ check_mounts() {
     # 2. The .automount must be enabled. The .mount must NOT be —
     # eager .mount enable is the regression PR #334 closed.
     local am_state mount_state
-    am_state=$(systemctl is-enabled "$automount_name" 2>/dev/null || echo "missing")
+    # systemctl prints the state AND exits non-zero for not-found or
+    # disabled, so "|| echo" would append a second line.
+    am_state=$(systemctl is-enabled "$automount_name" 2>/dev/null) || true
+    am_state=${am_state:-missing}
     case "$am_state" in
         enabled|enabled-runtime)
             pass_check "$automount_name is enabled (lazy mount path)"
@@ -144,9 +147,10 @@ check_mounts() {
             fail_check "$automount_name is '$am_state' (expected enabled)"
             ;;
     esac
-    mount_state=$(systemctl is-enabled "$mount_name" 2>/dev/null || echo "static")
+    mount_state=$(systemctl is-enabled "$mount_name" 2>/dev/null) || true
+    mount_state=${mount_state:-static}
     case "$mount_state" in
-        static|disabled|missing)
+        static|disabled|missing|not-found)
             pass_check "$mount_name is '$mount_state' (NOT eager-enabled — correct)"
             ;;
         enabled|enabled-runtime)

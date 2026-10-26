@@ -3564,7 +3564,7 @@ def _extract_vitals(records: list[dict]) -> str:
     resync: str | None = None
     for r in records:
         msg = r.get("msg", "")
-        if temp is None and "SoC" in msg:
+        if temp is None and (msg.startswith("SoC ") or msg.startswith("CPU ")):
             m = re.search(r"(\d+(?:\.\d+)?)\s*°C", msg)
             if m:
                 temp = m.group(1)

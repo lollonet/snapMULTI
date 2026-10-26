@@ -15,6 +15,9 @@
 #      and produces the same set the manifest declares
 #   3. the Python loader exposes the same name→role mapping as the
 #      manifest declares
+#   1b. every container_name in the server and client compose files is
+#      in the manifest with the matching role (a new service otherwise
+#      runs unchecked by the smoke and unlabelled on /status)
 #   4. no second hardcoded duplicate of the full list survives in
 #      either consumer (the inline fallbacks are intentional and
 #      bounded; this check guards against a future "back to two
@@ -99,6 +102,17 @@ for i in "${!manifest_names[@]}"; do
     done
 done
 assert_eq "$dup_count" "0" "no duplicate container names in manifest"
+
+# ── (1b) Compose services are all in the manifest ───────────────
+echo
+echo "== compose container_name coverage =="
+for pair in "$REPO_ROOT/docker-compose.yml:server" "$REPO_ROOT/client/common/docker-compose.yml:client"; do
+    compose="${pair%:*}" role="${pair##*:}"
+    for cname in $(awk '/^[[:space:]]+container_name:/ {print $2}' "$compose"); do
+        assert "grep -qE '^${cname}[[:space:]]+${role}([[:space:]]|\$)' '$MANIFEST'" \
+            "$cname ($role compose) is in the manifest as $role"
+    done
+done
 
 # ── (2) Bash loader: smoke list matches manifest ────────────────
 echo

@@ -17,6 +17,8 @@
 #   5. neither sensor available        → info, no fail
 #   6. sysfs malformed value           → info, no fail
 #   7. function is sourced and exported by name (device-smoke wiring)
+#   8. no vcgencmd / sysfs, hwmon CPU sensor (x86) → CPU thresholds 85/95 °C
+#   9. hwmon with only non-CPU sensors (nvme, NIC) → info, no reading
 
 set -euo pipefail
 
@@ -65,8 +67,19 @@ info()      { printf '[INFO] %s\n' "$*"; }
 # `test -r` semantics via PATH redirection only when needed. We use a
 # different strategy: redirect via a temporary copy of the function with
 # the sysfs path swapped at source time.
+# $3 (optional): hwmon sensors as "name:millidegrees" words, e.g.
+# "nvme:41850 k10temp:62125". Always a fake dir, so a Linux runner's real
+# sensors never leak into the cases.
 run_check_thermal() {
-    local vcgen_value="$1" sysfs_value="$2"
+    local vcgen_value="$1" sysfs_value="$2" hwmon_spec="${3:-}"
+    rm -rf "$FAKE_SYS/hwmon"; mkdir -p "$FAKE_SYS/hwmon"
+    local i=0 entry
+    for entry in $hwmon_spec; do
+        mkdir -p "$FAKE_SYS/hwmon/hwmon$i"
+        printf '%s\n' "${entry%%:*}" > "$FAKE_SYS/hwmon/hwmon$i/name"
+        printf '%s\n' "${entry#*:}" > "$FAKE_SYS/hwmon/hwmon$i/temp1_input"
+        i=$((i + 1))
+    done
 
     # Build a per-invocation MOCK_BIN containing vcgencmd. PATH search
     # picks our stub before the real binary on the host. On a Pi runner
@@ -116,6 +129,7 @@ EOF
         warn()      { printf '[WARN] %s\\n' \"\$*\"; }
         info()      { printf '[INFO] %s\\n' \"\$*\"; }
         source '$rewritten'
+        _HWMON_DIR='$FAKE_SYS/hwmon'
         check_thermal
     " 2>&1
 }
@@ -151,6 +165,18 @@ assert_not_contains "$out" "[WARN]" "no sensor → no warn"
 # 6. Sysfs malformed value → info, no fail
 out=$(run_check_thermal "ABSENT" "not-a-number")
 assert_contains "$out" "[INFO] No thermal sensor accessible" "malformed sysfs → info (rejected by sanity check)"
+
+# 6b. x86: hwmon CPU sensor, skipping a non-CPU sensor listed first
+out=$(run_check_thermal "ABSENT" "ABSENT" "nvme:41850 k10temp:62125")
+assert_contains "$out" "[OK] CPU 62.1°C via hwmon k10temp (below 85°C warn floor)" "hwmon k10temp (62.1°C) → pass with x86 floor"
+out=$(run_check_thermal "ABSENT" "ABSENT" "coretemp:88000")
+assert_contains "$out" "[WARN] CPU 88.0°C via hwmon coretemp — within 10°C of the 95°C throttle" "hwmon coretemp (88°C) → warn"
+out=$(run_check_thermal "ABSENT" "ABSENT" "k10temp:96500")
+assert_contains "$out" "[ERROR] CPU 96.5°C via hwmon k10temp — at/over 95°C" "hwmon k10temp (96.5°C) → fail"
+out=$(run_check_thermal "ABSENT" "ABSENT" "nvme:41850 r8169_0_100:00:52000")
+assert_contains "$out" "[INFO] No thermal sensor accessible" "only non-CPU hwmon sensors → info"
+out=$(run_check_thermal "ABSENT" "55300" "k10temp:90000")
+assert_contains "$out" "[OK] SoC 55.3°C via sysfs" "sysfs wins over hwmon"
 
 # 7. Function name + section header for the dispatcher.
 src="$(cat "$CHECK_THERMAL")"
