@@ -14,8 +14,11 @@ by meta_tidal.py). snapserver.conf is unchanged; the stream is still "Tidal".
   receive  server:    :4954 -> /audio/tidal_fifo, :4955 -> tidal-metadata.json
 
 Audio is raw 44100:16:2 (what config/tidal-asound.conf writes); nothing is
-re-encoded. Real-time semantics: while the server is unreachable the sender
-discards PCM instead of stalling the Tidal app.
+re-encoded. Real-time semantics: the FIFO is the Tidal app's only clock.
+While the server takes the audio, the sender waits for it, so the app plays
+at snapserver's pace and nothing is lost; while the server is unreachable,
+the sender reads at the PCM rate and discards the audio instead of stalling
+the app.
 
 Environment variables:
     TIDAL_RELAY_SERVER      send: server host name or IP (required)
@@ -44,6 +47,12 @@ META_PATH = os.environ.get("TIDAL_RELAY_META_FILE", "/audio/tidal-metadata.json"
 HEARTBEAT_PATH = "/tmp/tidal-relay.alive"
 
 CHUNK = 4096  # ~23 ms of 44100:16:2
+BYTES_PER_SECOND = 44100 * 2 * 2
+# How far behind real time the FIFO reader may catch up at full speed,
+# after playback paused or the network stalled. The burst refills the
+# server-side buffers, the cushion that absorbs WiFi jitter; anything older
+# is dropped from the schedule, not replayed.
+JITTER_BUFFER_SECONDS = 1.0
 QUEUE_CHUNKS = 16  # ~370 ms, what the 64 KiB pipe buffer holds
 META_MAX_BYTES = 64 * 1024
 CONNECT_TIMEOUT = 3.0
@@ -51,6 +60,10 @@ CONNECT_TIMEOUT = 3.0
 # a RST (power loss, cable pull): reconnect and drain instead of letting the
 # FIFO fill and stall the Tidal app.
 SEND_TIMEOUT = 2.0
+# Kernel send buffer (~0.37 s of PCM). Left to autotuning it grows to
+# megabytes under back-pressure: seconds between a tap in the app and the
+# speakers. The jitter buffer is the server's receive buffer, past the WiFi.
+SEND_BUFFER_BYTES = 64 * 1024
 RETRY_SECONDS = 2.0
 META_POLL_SECONDS = 1.0
 META_RESEND_SECONDS = 60.0  # re-push unchanged metadata after a server restart
@@ -269,6 +282,7 @@ def run_receive() -> None:
 
 def connect(host: str, port: int) -> socket.socket:
     sock = socket.create_connection((host, port), timeout=CONNECT_TIMEOUT)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, SEND_BUFFER_BYTES)
     sock.settimeout(SEND_TIMEOUT)
     sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
@@ -279,21 +293,29 @@ def connect(host: str, port: int) -> socket.socket:
     return sock
 
 
-def read_fifo(fd: int, chunks: queue.Queue) -> None:
-    """Read the FIFO nonstop; drop PCM the network cannot take right now.
+def read_fifo(fd: int, chunks: queue.Queue, link: threading.Event) -> None:
+    """Read the FIFO, never faster than the PCM rate.
 
-    The Tidal app blocks as soon as the pipe buffer is full, so this loop
-    never waits on the network: a slow connect, a stalled send or a dead
-    server turns into dropped chunks here, never into back-pressure on the
-    FIFO.
+    The ALSA FIFO output has no clock: the Tidal app plays exactly as fast
+    as this loop reads. While `link` is set the loop waits for the network,
+    so the server's consumption paces the app and WiFi jitter costs no
+    audio; the wait is bounded by SEND_TIMEOUT, after which send_audio drops
+    the link. Without a link the chunks are dropped and the local clock
+    alone keeps the app in real time.
     """
+    due = time.monotonic()
     while True:
         data = os.read(fd, CHUNK)
-        if data:
-            try:
-                chunks.put_nowait(data)
-            except queue.Full:
-                pass
+        if not data:
+            continue
+        try:
+            chunks.put(data, block=link.is_set(), timeout=SEND_TIMEOUT)
+        except queue.Full:
+            pass
+        now = time.monotonic()
+        due = max(due, now - JITTER_BUFFER_SECONDS) + len(data) / BYTES_PER_SECOND
+        if due > now:
+            time.sleep(due - now)
 
 
 def discard_queued(chunks: queue.Queue) -> None:
@@ -304,7 +326,9 @@ def discard_queued(chunks: queue.Queue) -> None:
             return
 
 
-def send_audio(chunks: queue.Queue, host: str, port: int) -> None:
+def send_audio(
+    chunks: queue.Queue, host: str, port: int, link: threading.Event
+) -> None:
     connected = False
     while True:
         try:
@@ -320,21 +344,24 @@ def send_audio(chunks: queue.Queue, host: str, port: int) -> None:
         connected = True
         # PCM queued while disconnected is stale: resume with live audio.
         discard_queued(chunks)
+        link.set()
         try:
             while True:
                 sock.sendall(chunks.get())
         except OSError as e:
             log(f"audio: send failed ({e}), reconnecting")
         finally:
+            link.clear()
             sock.close()
 
 
 def pump_audio(fd: int, host: str, port: int) -> None:
     chunks = queue.Queue(maxsize=QUEUE_CHUNKS)
+    link = threading.Event()
     threading.Thread(
-        target=read_fifo, args=(fd, chunks), name="fifo-reader", daemon=True
+        target=read_fifo, args=(fd, chunks, link), name="fifo-reader", daemon=True
     ).start()
-    send_audio(chunks, host, port)
+    send_audio(chunks, host, port, link)
 
 
 def push_metadata(host: str, port: int, payload: bytes) -> None:
