@@ -1011,7 +1011,8 @@ if [[ -f "$CMDLINE" ]]; then
         # NetworkManager-wait-online stalls up to 75s when Imager-staged
         # WiFi credentials don't authenticate (profile in need-auth, no
         # secret agent). snapMULTI doesn't need wait-online: NFS uses
-        # lazy automount, containers self-retry.
+        # lazy automount, containers self-retry, and docker.service waits
+        # for a nameserver itself (setup-docker.sh).
         NetworkManager-wait-online.service
     )
     for _boot_mask_unit in "${BOOT_MASK_UNITS[@]}"; do
