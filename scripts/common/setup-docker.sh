@@ -40,8 +40,29 @@ if ! declare -F install_docker_apt &>/dev/null; then
     fi
 fi
 
+# A host-network container gets a copy of /etc/resolv.conf taken when it
+# starts, never refreshed. prepare-sd masks NetworkManager-wait-online, so
+# on WiFi docker.service can start before NetworkManager has written a
+# nameserver: tidal-connect, go-librespot and metadata-service then run
+# without DNS until restarted. Docker waits for one, at most 20 s, so a Pi
+# whose WiFi never connects still boots.
+DOCKER_DNS_WAIT_DROPIN="${DOCKER_DNS_WAIT_DROPIN:-/etc/systemd/system/docker.service.d/snapmulti-wait-dns.conf}"
+
+install_docker_dns_wait() {
+    mkdir -p "$(dirname "$DOCKER_DNS_WAIT_DROPIN")"
+    # No '$' in the command: systemd would expand it as an environment variable.
+    cat > "$DOCKER_DNS_WAIT_DROPIN" <<'DROPIN'
+[Service]
+ExecStartPre=-/usr/bin/timeout 20 /bin/sh -c 'until grep -qs "^nameserver" /etc/resolv.conf; do sleep 1; done'
+DROPIN
+    systemctl daemon-reload
+}
+
 setup_docker() {
     # Prerequisite: system dependencies installed (curl, ca-certificates)
+
+    # Before Docker's first start, and on re-runs where it is already installed.
+    install_docker_dns_wait
 
     if ! command -v docker &>/dev/null; then
         log_info "Setting up Docker repository..."
