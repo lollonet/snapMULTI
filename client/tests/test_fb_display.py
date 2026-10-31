@@ -1003,6 +1003,42 @@ class TestSpectrumResize:
         assert fb_display.spectrum_bg_np is not None
 
 
+class TestBaseFrameVersion:
+    """A metadata update that lands while the base frame renders is drawn next."""
+
+    def test_update_during_render_triggers_second_render(self, monkeypatch):
+        renders = []
+        sleeps = {"n": 0}
+
+        def fake_render():
+            renders.append(fb_display.metadata_version)
+            if len(renders) == 1:
+                # What _handle_metadata_message does while the executor renders
+                fb_display.metadata_version += 1
+            return None
+
+        async def fake_sleep(seconds):
+            sleeps["n"] += 1
+            if sleeps["n"] > 3:
+                raise _StopLoop
+
+        monkeypatch.setattr(fb_display, "metadata_version", 5)
+        monkeypatch.setattr(fb_display, "base_frame_version", -1)
+        monkeypatch.setattr(fb_display, "current_metadata", None)
+        monkeypatch.setattr(fb_display, "spectrum_bg_np", None)
+        monkeypatch.setattr(fb_display, "STANDBY_SECONDS", 0)
+        monkeypatch.setattr(fb_display, "is_spectrum_active", lambda: False)
+        monkeypatch.setattr(fb_display, "render_base_frame", fake_render)
+        monkeypatch.setattr(fb_display, "extract_spectrum_bg", lambda: None)
+        monkeypatch.setattr(fb_display, "write_full_frame", lambda frame: None)
+        monkeypatch.setattr(fb_display.asyncio, "sleep", fake_sleep)
+
+        with pytest.raises(_StopLoop):
+            asyncio.run(fb_display.render_loop())
+        assert renders == [5, 6]
+        assert fb_display.base_frame_version == 6
+
+
 class TestBadArtwork:
     """A truncated/corrupt cover must not crash-loop the display."""
 
