@@ -317,12 +317,15 @@ ENABLE_READONLY="true"
 SKIP_UPGRADE="false"
 IMAGE_TAG="latest"
 VERBOSE_INSTALL="false"
+TIDAL_SATELLITE_SERVER=""
 if [[ -f "$SNAP_BOOT/install.conf" ]]; then
     local_val=$(install_conf_get ENABLE_READONLY "$SNAP_BOOT/install.conf"); [[ -n "$local_val" ]] && ENABLE_READONLY="$local_val"
     local_val=$(install_conf_get SKIP_UPGRADE    "$SNAP_BOOT/install.conf"); [[ -n "$local_val" ]] && SKIP_UPGRADE="$local_val"
     local_val=$(install_conf_get VERBOSE_INSTALL "$SNAP_BOOT/install.conf"); [[ -n "$local_val" ]] && VERBOSE_INSTALL="$local_val"
+    TIDAL_SATELLITE_SERVER=$(sanitize_hostname "$(install_conf_get TIDAL_SATELLITE_SERVER "$SNAP_BOOT/install.conf")")
     unset local_val
 fi
+SATELLITE_DIR="/opt/tidal-satellite"
 
 # ── Release identity (release-manifest.json on SD is the single SSOT) ──
 # release-manifest.json is the only source of SNAPMULTI_RELEASE and
@@ -497,6 +500,19 @@ _validate_profile_hardware() {
     fi
 }
 _validate_profile_hardware
+
+# The Tidal satellite runs as two Docker containers next to snapclient,
+# so it needs the Docker client profile. On a Pi Zero 2W (client-native,
+# no Docker) or a server/both install it cannot run: stop now instead of
+# finishing an install that silently lacks the Tidal the user asked for.
+# A server Pi runs Tidal Connect itself (the `tidal` profile).
+if [[ -n "$TIDAL_SATELLITE_SERVER" && "$INSTALL_TYPE" != "client" ]]; then
+    log_error "TIDAL_SATELLITE_SERVER is set, but INSTALL_TYPE=$INSTALL_TYPE cannot run the Tidal satellite."
+    log_error "The satellite needs an Audio Player install on a Pi 3, Pi 4 or Pi 5 (Docker)."
+    log_error "Reflash without the Tidal satellite, or use a Pi 3/4/5 as the satellite."
+    FAIL_REFLASH_ONLY=true
+    exit 1
+fi
 
 # Configure progress steps based on install type
 # shellcheck disable=SC2034
@@ -1404,6 +1420,52 @@ if is_client_install; then
     fi
     checkpoint_done "setup"
   fi  # checkpoint guard
+fi
+
+# ══════════════════════════════════════════════════════════════════
+# TIDAL SATELLITE (client + TIDAL_SATELLITE_SERVER)
+# ══════════════════════════════════════════════════════════════════
+# prepare-sd stages the satellite tree on every client SD; it becomes
+# /opt/tidal-satellite (the documented manual-install path) only when
+# the user named a server. Pull and start happen here, before the
+# finalize step arms overlayroot, so the images land on the persistent
+# layer. Both containers must be healthy: a satellite that is not up
+# fails the install rather than leaving the player without Tidal.
+if is_client_install; then
+  if [[ -z "$TIDAL_SATELLITE_SERVER" ]]; then
+    rm -rf "$CLIENT_DIR/tidal-satellite"
+  elif checkpoint_reached "tidal-satellite"; then
+    log_info "Tidal satellite already set up (checkpoint), skipping"
+  else
+    set_module "tidal-satellite"
+    if [[ -d "$CLIENT_DIR/tidal-satellite" ]]; then
+        rm -rf "$SATELLITE_DIR"
+        mv "$CLIENT_DIR/tidal-satellite" "$SATELLITE_DIR"
+    fi
+    _sat_compose_dir="$SATELLITE_DIR/contrib/tidal-satellite"
+    if [[ ! -f "$_sat_compose_dir/docker-compose.yml" ]]; then
+        log_error "Tidal satellite files missing: $_sat_compose_dir/docker-compose.yml"
+        FAIL_REFLASH_ONLY=true
+        exit 1
+    fi
+    _sat_tz=$(cat /etc/timezone 2>/dev/null || true)
+    printf 'TIDAL_RELAY_SERVER=%s\nIMAGE_TAG=%s\nTZ=%s\n' \
+        "$TIDAL_SATELLITE_SERVER" "$IMAGE_TAG" "${_sat_tz:-Europe/Berlin}" \
+        > "$_sat_compose_dir/.env"
+    log_info "Starting Tidal satellite (server $TIDAL_SATELLITE_SERVER, images $IMAGE_TAG)..."
+    if ! ( cd "$_sat_compose_dir" && docker compose pull && docker compose up -d ); then
+        log_error "Tidal satellite failed to start (docker compose pull/up in $_sat_compose_dir)"
+        exit 1
+    fi
+    # tidal-connect waits for a healthy tidal-relay and runs its first
+    # healthcheck 30 s after start: allow 2 min.
+    if ! verify_compose_stack "$_sat_compose_dir/docker-compose.yml" "tidal-satellite" 24 5; then
+        log_error "Tidal satellite not healthy within the install window"
+        exit 1
+    fi
+    unset _sat_compose_dir _sat_tz
+    checkpoint_done "tidal-satellite"
+  fi
 fi
 
 # ══════════════════════════════════════════════════════════════════

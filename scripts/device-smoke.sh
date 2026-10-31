@@ -435,6 +435,11 @@ case "$MODE" in
         elif [[ -n "$CLIENT_DIR" ]]; then
             check_compose_stack "$CLIENT_DIR/docker-compose.yml" "client"
         fi
+        # Tidal satellite: firstboot writes its .env only when install.conf
+        # named a server, so the file records the install-time intent.
+        if [[ -f /opt/tidal-satellite/contrib/tidal-satellite/.env ]]; then
+            check_compose_stack /opt/tidal-satellite/contrib/tidal-satellite/docker-compose.yml "tidal-satellite"
+        fi
         ;;
     both)
         [[ -n "$SERVER_DIR" ]] && check_compose_stack "$SERVER_DIR/docker-compose.yml" "server"

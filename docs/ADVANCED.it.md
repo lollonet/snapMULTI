@@ -123,12 +123,14 @@ Un reflash riattiva Tidal Connect; ripeti questi passi dopo.
 
 ### Tidal su un server non ARM
 
-Il binario di Tidal Connect esiste solo per ARM, quindi un server x86_64 non può eseguire `tidal-connect`. Può farlo al suo posto un Raspberry Pi in LAN, che lo inoltra: il Pi compare nell'app Tidal e il server lo riproduce come la sua normale sorgente **Tidal**, con i metadati del brano. Funzione in bozza — non integrata in `prepare-sd`.
+Il binario di Tidal Connect esiste solo per ARM, quindi un server x86_64 non può eseguire `tidal-connect`. Può farlo al suo posto un Raspberry Pi in LAN, che lo inoltra: il Pi compare nell'app Tidal e il server lo riproduce come la sua normale sorgente **Tidal**, con i metadati del brano.
 
 Serve un Pi 3/4/5 con Raspberry Pi OS **a 64 bit** e Docker (va bene un Audio Player esistente). Invia PCM grezzo 44,1 kHz/16 bit (~1,4 Mbit/s) al server sulla porta TCP 4954 e i metadati sulla 4955.
 
 1. **Server** — segui [Modificare le impostazioni su un Pi read-only](#modificare-le-impostazioni-su-un-pi-read-only) e nei passi 2–3 aggiungi `tidal-relay` a `COMPOSE_PROFILES` in `/opt/snapmulti/.env` (es. `COMPOSE_PROFILES=tidal-relay`), poi `cd /opt/snapmulti && sudo docker compose up -d`. Il relay accetta connessioni solo da indirizzi della LAN; per accettare soltanto il satellite imposta anche `TIDAL_RELAY_ALLOW=<IP del satellite>`.
-2. **Pi satellite** — con la modalità read-only disattivata (`sudo ro-mode disable && sudo reboot` se è un dispositivo snapMULTI), scarica i file della release e avvia i due container:
+2. **Pi satellite** — su un nuovo player, scegli **Audio Player** in `prepare-sd` e scrivi il nome host o l'IP del server alla domanda **Tidal satellite**. Il primo avvio installa i due container in `/opt/tidal-satellite`, con l'image set del player (il server deve avere la stessa release), e fa fallire l'installazione se non sono healthy.
+
+   Su un player esistente, con la modalità read-only disattivata (`sudo ro-mode disable && sudo reboot` se è un dispositivo snapMULTI), scarica i file della release e avvia i due container:
 
    ```bash
    sudo git clone https://github.com/lollonet/snapMULTI.git /opt/tidal-satellite
