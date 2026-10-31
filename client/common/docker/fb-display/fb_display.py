@@ -1951,11 +1951,15 @@ async def render_loop() -> None:
 
             # Rebuild base frame if metadata changed
             if base_frame_version != metadata_version:
+                # Snapshot before rendering: a metadata message handled while
+                # the executor renders bumps metadata_version, and recording
+                # the post-render value would mark that update as drawn.
+                version = metadata_version
                 base_frame = await asyncio.get_event_loop().run_in_executor(
                     None, render_base_frame
                 )
                 extract_spectrum_bg()
-                base_frame_version = metadata_version
+                base_frame_version = version
                 await asyncio.get_event_loop().run_in_executor(
                     None, write_full_frame, base_frame
                 )
