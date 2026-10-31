@@ -104,6 +104,7 @@ Client / both mode (Pi 3 / 4 / 5). Steps:
 - mDNS server discovery (or `SNAPSERVER_HOST` override).
 - Read-only prep: with `ENABLE_READONLY=true` it installs `fuse-overlayfs` and switches Docker to it before the image pull. Under firstboot (`--auto`, `SNAPMULTI_DEFER_OVERLAYROOT=1`) it stops there: overlayroot is armed by firstboot's finalize (phase 6) after the client verify, so a failed pull / verify leaves a writable root and a writable `/boot/firmware`. A standalone `setup.sh` run still arms overlayroot itself.
 - During firstboot, `docker compose up -d` starts ONLY `snapclient` with `COMPOSE_PROFILES=""`. The `framebuffer` profile (audio-visualizer + fb-display) is deferred to the post-reboot `snapclient.service`, so the install TUI on `/dev/tty3` is not stomped by fb-display drawing on `/dev/fb0`. After the reboot, `snapclient.service` reads `.env` with `COMPOSE_PROFILES=framebuffer` and the full client stack comes up.
+- Tidal satellite (client mode, `TIDAL_SATELLITE_SERVER` set in `install.conf`): after the client verify, firstboot moves the staged `tidal-satellite/` tree to `/opt/tidal-satellite`, writes its `.env` (server, the client's `IMAGE_TAG`, time zone), pulls and starts `tidal-relay` + `tidal-connect`, and requires both healthy before finalize. A non-empty `TIDAL_SATELLITE_SERVER` on any other profile (including client-native) stops the install at the start. Empty: the staged tree is removed. See [ADVANCED.md](ADVANCED.md#tidal-on-a-non-arm-server).
 
 ### 5. Pi: native-client path — `setup-zero2w.sh`
 

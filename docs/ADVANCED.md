@@ -123,12 +123,14 @@ A reflash turns Tidal Connect back on; repeat these steps afterwards.
 
 ### Tidal on a non-ARM server
 
-The Tidal Connect binary exists only for ARM, so an x86_64 server cannot run `tidal-connect`. A Raspberry Pi on the LAN can run it instead and relay it: the Pi appears in the Tidal app, and the server plays it as its normal **Tidal** source, with track metadata. Draft feature — not wired into `prepare-sd`.
+The Tidal Connect binary exists only for ARM, so an x86_64 server cannot run `tidal-connect`. A Raspberry Pi on the LAN can run it instead and relay it: the Pi appears in the Tidal app, and the server plays it as its normal **Tidal** source, with track metadata.
 
 You need a Pi 3/4/5 with **64-bit** Raspberry Pi OS and Docker (an existing Audio Player works). It sends raw 44.1 kHz/16-bit PCM (~1.4 Mbit/s) to the server on TCP 4954 and metadata on 4955.
 
 1. **Server** — follow [Changing settings on a read-only Pi](#changing-settings-on-a-read-only-pi) and in steps 2–3 add `tidal-relay` to `COMPOSE_PROFILES` in `/opt/snapmulti/.env` (e.g. `COMPOSE_PROFILES=tidal-relay`), then `cd /opt/snapmulti && sudo docker compose up -d`. The relay accepts connections from LAN addresses only; to accept just the satellite, also set `TIDAL_RELAY_ALLOW=<satellite IP>`.
-2. **Satellite Pi** — with read-only mode off (`sudo ro-mode disable && sudo reboot` if it is a snapMULTI device), get the release files and start the two containers:
+2. **Satellite Pi** — on a new player, choose **Audio Player** in `prepare-sd` and type the server's host name or IP at the **Tidal satellite** question. The first boot installs the two containers in `/opt/tidal-satellite`, with the player's image set (the server must run the same release), and fails the install if they are not healthy.
+
+   On an existing player, with read-only mode off (`sudo ro-mode disable && sudo reboot` if it is a snapMULTI device), get the release files and start the two containers:
 
    ```bash
    sudo git clone https://github.com/lollonet/snapMULTI.git /opt/tidal-satellite

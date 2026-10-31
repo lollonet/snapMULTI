@@ -113,15 +113,28 @@ STAGING_SERVER_SPECIAL_INLINE=(
 # ─── Client bundle ─────────────────────────────────────────────────
 # copy_client_files() target: $DEST/client/. PARALLEL _DESTS arrays as
 # above; non-empty dest = subdirectory under client/.
+#
+# The tidal-satellite/ subtree keeps the repo layout the satellite
+# compose file bind-mounts from (../../scripts/tidal, ../../config), so
+# firstboot can run it unchanged from /opt/tidal-satellite/contrib/
+# tidal-satellite when install.conf sets TIDAL_SATELLITE_SERVER.
 STAGING_CLIENT_REQUIRED=(
     "client/install/snapclient.conf"
     "client/common/scripts/setup.sh"
     "client/common/docker-compose.yml"
+    "contrib/tidal-satellite"
+    "scripts/tidal/tidal-relay.py"
+    "scripts/tidal/tidal-meta-bridge.sh"
+    "config/tidal-asound.conf"
 )
 STAGING_CLIENT_REQUIRED_DESTS=(
     ""
     "scripts"
     ""
+    "tidal-satellite/contrib"
+    "tidal-satellite/scripts/tidal"
+    "tidal-satellite/scripts/tidal"
+    "tidal-satellite/config"
 )
 STAGING_CLIENT_OPTIONAL=(
     "client/common/.env.example"

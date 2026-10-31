@@ -367,6 +367,9 @@ function Assert-PreparedSdCard {
             # env_get helper SSOT -- same client-side staging requirement
             # as the manifests above.
             'client/scripts/common/env-reader.sh',
+            'client/tidal-satellite/contrib/tidal-satellite/docker-compose.yml',
+            'client/tidal-satellite/scripts/tidal/tidal-relay.py',
+            'client/tidal-satellite/config/tidal-asound.conf',
             'client/snapclient.conf'
         )) {
             $path = Join-Path $Dest $file
@@ -944,6 +947,40 @@ function Copy-ClientFiles {
         $systemdDest = Join-Path $clientDest 'systemd'
         Copy-Item $systemdSrc -Destination $systemdDest -Recurse -Force
     }
+
+    # Tidal satellite tree -- mirrors the tidal-satellite/ entries of
+    # STAGING_CLIENT_REQUIRED in staging-manifest.sh. Keeps the repo
+    # layout the satellite compose bind-mounts from (../../scripts/tidal,
+    # ../../config); firstboot uses it only when TIDAL_SATELLITE_SERVER is set.
+    $satDest = Join-Path $clientDest 'tidal-satellite'
+    $satCompose = Join-Path $satDest 'contrib\tidal-satellite'
+    $satTidal = Join-Path $satDest 'scripts\tidal'
+    $satConfig = Join-Path $satDest 'config'
+    foreach ($dir in @($satCompose, $satTidal, $satConfig)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    Copy-Item (Join-Path $ProjectDir 'contrib\tidal-satellite\*') -Destination $satCompose -Recurse -Force
+    Copy-Item (Join-Path $ProjectDir 'contrib\tidal-satellite\.env.example') -Destination $satCompose -Force
+    Copy-Item (Join-Path $ScriptDir 'tidal\tidal-relay.py') -Destination $satTidal
+    Copy-Item (Join-Path $ScriptDir 'tidal\tidal-meta-bridge.sh') -Destination $satTidal
+    Copy-Item (Join-Path $ProjectDir 'config\tidal-asound.conf') -Destination $satConfig
+}
+
+# -- Tidal satellite (client only) ---------------------------------
+# Mirrors get_tidal_satellite_config in prepare-sd.sh. Empty = no satellite.
+function Get-TidalSatelliteConfig {
+    Write-Host ''
+    Write-Host '  Tidal satellite (optional)'
+    Write-Host '  Only for a snapMULTI server that is not a Raspberry Pi (e.g. x86).'
+    Write-Host '  This player then shows up in the Tidal app and relays to that server,'
+    Write-Host '  which needs COMPOSE_PROFILES=tidal-relay. Pi 3/4/5 only.'
+    while ($true) {
+        Write-Host ''
+        $raw = Read-Host '  Server hostname or IP (Enter to skip)'
+        $server = Sanitize-Hostname $raw
+        if (-not $raw -or $server -eq $raw) { return $server }
+        Write-Host '  Invalid hostname. Use only letters, numbers, dots, hyphens.'
+    }
 }
 
 # -- Main ----------------------------------------------------------
@@ -1018,6 +1055,17 @@ if ($InstallType -in @('client', 'both')) {
     Write-Host ''
 }
 
+$TidalSatelliteServer = ''
+if ($InstallType -eq 'client') {
+    $TidalSatelliteServer = Get-TidalSatelliteConfig
+    if ($TidalSatelliteServer) {
+        Write-Host "Tidal satellite: $TidalSatelliteServer"
+    } else {
+        Write-Host 'Tidal satellite: off'
+    }
+    Write-Host ''
+}
+
 # -- Music source (server/both only) -----------------------------
 $MusicSource = ''
 $NfsServer = ''
@@ -1072,6 +1120,9 @@ SMB_SHARE=$SmbShare
 # Audio output (client/both only -- server installs ignore these)
 AUDIO_HAT=$AudioHat
 AUDIO_INTERNAL_OUTPUT=$AudioInternalOutput
+# Tidal satellite (client only): server running the tidal-relay profile.
+# Empty = no satellite.
+TIDAL_SATELLITE_SERVER=$TidalSatelliteServer
 # Release identity comes from release-manifest.json on the SD (single SSOT,
 # staged below). Do not duplicate SNAPMULTI_RELEASE / SNAPMULTI_IMAGE_SET here.
 # Advanced options

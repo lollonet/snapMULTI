@@ -52,6 +52,12 @@ AUDIO_HAT=auto
 # Leave empty for non-internal AUDIO_HAT values.
 AUDIO_INTERNAL_OUTPUT=
 #
+# TIDAL_SATELLITE_SERVER (client only, Pi 3/4/5): host name or IP of a
+# snapMULTI server that cannot run Tidal Connect (x86_64) and runs the
+# tidal-relay profile. This player then announces itself in the Tidal app
+# and relays the audio there. Leave empty for no satellite.
+TIDAL_SATELLITE_SERVER=
+#
 # Advanced options (defaults are production-safe)
 #
 # ENABLE_READONLY: Enable read-only filesystem (overlayroot).

@@ -55,10 +55,10 @@ for cp in deps docker; do
 done
 
 echo
-echo "=== Non-migration: 4 remaining checkpoints stay inline ==="
-# fuse-overlayfs-switched, deploy, setup, music have multi-exit-path
-# bodies or nested checkpoints — left inline by design (PR5 description).
-for cp in fuse-overlayfs-switched deploy setup music; do
+echo "=== Non-migration: 5 remaining checkpoints stay inline ==="
+# fuse-overlayfs-switched, deploy, setup, music, tidal-satellite have
+# multi-exit-path bodies or nested checkpoints — left inline by design (PR5 description).
+for cp in fuse-overlayfs-switched deploy setup music tidal-satellite; do
     if grep -qE "checkpoint_reached \"${cp}\"" "$FIRSTBOOT"; then
         echo "  PASS: $cp checkpoint still inline (not migrated, intentional)"
         pass=$((pass + 1))
@@ -75,11 +75,12 @@ deps
 docker
 fuse-overlayfs-switched
 music
-setup"
+setup
+tidal-satellite"
 actual=$(grep -oE 'checkpoint_(reached|done) "[a-z-]+"|run_checkpointed_phase "[a-z-]+"' "$FIRSTBOOT" | \
     sed -E 's|.*"([a-z-]+)"|\1|' | sort -u)
 if [[ "$actual" == "$expected" ]]; then
-    echo "  PASS: checkpoint name set is exactly {deploy, deps, docker, fuse-overlayfs-switched, music, setup}"
+    echo "  PASS: checkpoint name set is exactly {deploy, deps, docker, fuse-overlayfs-switched, music, setup, tidal-satellite}"
     pass=$((pass + 1))
 else
     echo "  FAIL: checkpoint name set drifted"

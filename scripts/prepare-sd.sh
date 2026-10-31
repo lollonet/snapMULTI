@@ -583,6 +583,25 @@ get_smb_config() {
     echo "  Will mount: //$SMB_SERVER/$SMB_SHARE"
 }
 
+# ── Tidal satellite (client only) ─────────────────────────────────
+# A player can run Tidal Connect for a server that cannot (x86_64) and
+# relay it there. Empty answer = no satellite.
+get_tidal_satellite_config() {
+    local raw_server
+    echo ""
+    echo "  Tidal satellite (optional)"
+    echo "  Only for a snapMULTI server that is not a Raspberry Pi (e.g. x86)."
+    echo "  This player then shows up in the Tidal app and relays to that server,"
+    echo "  which needs COMPOSE_PROFILES=tidal-relay. Pi 3/4/5 only."
+    while true; do
+        echo ""
+        read -rp "  Server hostname or IP (Enter to skip): " raw_server
+        TIDAL_SATELLITE_SERVER=$(sanitize_hostname "$raw_server")
+        if [[ -z "$raw_server" || "$TIDAL_SATELLITE_SERVER" == "$raw_server" ]]; then break; fi
+        echo "  Invalid hostname. Use only letters, numbers, dots, hyphens."
+    done
+}
+
 # ── Copy server files ─────────────────────────────────────────────
 copy_server_files() {
     local dest="$1/server"
@@ -798,6 +817,13 @@ if install_profile_needs_client_stack "$INSTALL_TYPE"; then
     echo ""
 fi
 
+TIDAL_SATELLITE_SERVER=""
+if [[ "$INSTALL_TYPE" == "client" ]]; then
+    get_tidal_satellite_config
+    echo "Tidal satellite: ${TIDAL_SATELLITE_SERVER:-off}"
+    echo ""
+fi
+
 # ── Music source (server/both only) ─────────────────────────────
 MUSIC_SOURCE=""
 NFS_SERVER=""
@@ -865,6 +891,9 @@ SMB_SHARE=$SMB_SHARE
 #   jack → bind to "Headphones" card (Pi 3/4 only — Pi 5 falls back to HDMI)
 AUDIO_HAT=$AUDIO_HAT
 AUDIO_INTERNAL_OUTPUT=$AUDIO_INTERNAL_OUTPUT
+# Tidal satellite (client only): server running the tidal-relay profile.
+# Empty = no satellite.
+TIDAL_SATELLITE_SERVER=$TIDAL_SATELLITE_SERVER
 # Release identity comes from release-manifest.json on the SD (single SSOT,
 # staged below). SNAPMULTI_RELEASE / SNAPMULTI_IMAGE_SET are deliberately NOT
 # written here — duplicating them in install.conf shadows the manifest and
@@ -1226,6 +1255,9 @@ if install_profile_needs_client_stack "$INSTALL_TYPE"; then
              client/scripts/common/install-conf-reader.sh \
              client/scripts/common/container-manifest.txt \
              client/scripts/common/env-reader.sh \
+             client/tidal-satellite/contrib/tidal-satellite/docker-compose.yml \
+             client/tidal-satellite/scripts/tidal/tidal-relay.py \
+             client/tidal-satellite/config/tidal-asound.conf \
              client/snapclient.conf; do
         if [[ -f "$DEST/$f" ]]; then
             echo "  [OK] snapmulti/$f"
